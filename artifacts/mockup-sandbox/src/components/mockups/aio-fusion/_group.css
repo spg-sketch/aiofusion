@@ -1,0 +1,20 @@
+:root {
+  --aio-navy: #0a1628;
+  --aio-navy-light: #1a2a45;
+  --aio-navy-mid: #122038;
+  --aio-accent: #4f8fff;
+  --aio-accent-hover: #3a7aee;
+  --aio-green: #22c55e;
+  --aio-amber: #f59e0b;
+  --aio-red: #ef4444;
+  --aio-white: #ffffff;
+  --aio-gray-50: #f8fafc;
+  --aio-gray-100: #f1f5f9;
+  --aio-gray-200: #e2e8f0;
+  --aio-gray-300: #cbd5e1;
+  --aio-gray-400: #94a3b8;
+  --aio-gray-500: #64748b;
+  --aio-gray-600: #475569;
+  --aio-border: rgba(255,255,255,0.08);
+  --aio-border-light: rgba(255,255,255,0.12);
+}
