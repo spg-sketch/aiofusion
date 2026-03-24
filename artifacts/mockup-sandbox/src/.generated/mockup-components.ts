@@ -5,6 +5,7 @@ export const modules: ModuleMap = {
   "./components/mockups/aio-fusion/ContentOptimiser.tsx": () => import("../components/mockups/aio-fusion/ContentOptimiser.tsx"),
   "./components/mockups/aio-fusion/Dashboard.tsx": () => import("../components/mockups/aio-fusion/Dashboard.tsx"),
   "./components/mockups/aio-fusion/GeoDiagnostic.tsx": () => import("../components/mockups/aio-fusion/GeoDiagnostic.tsx"),
+  "./components/mockups/aio-fusion-demo/FullDemo.tsx": () => import("../components/mockups/aio-fusion-demo/FullDemo.tsx"),
   "./components/mockups/aio-fusion-light/AuthorityPlanner.tsx": () => import("../components/mockups/aio-fusion-light/AuthorityPlanner.tsx"),
   "./components/mockups/aio-fusion-light/ContentOptimiser.tsx": () => import("../components/mockups/aio-fusion-light/ContentOptimiser.tsx"),
   "./components/mockups/aio-fusion-light/Dashboard.tsx": () => import("../components/mockups/aio-fusion-light/Dashboard.tsx"),
