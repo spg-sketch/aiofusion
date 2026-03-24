@@ -1,25 +1,17 @@
 import { ReactNode, useState } from "react";
 import {
-  LayoutDashboard,
-  Search,
-  FileEdit,
-  BarChart3,
-  Archive,
-  Send,
-  LineChart,
   ChevronRight,
   Lock,
-  Zap,
 } from "lucide-react";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", id: "dashboard", active: true },
-  { icon: Search, label: "GEO Diagnostic", id: "diagnostic", active: true },
-  { icon: FileEdit, label: "Content Optimiser", id: "optimiser", active: true },
-  { icon: BarChart3, label: "Authority Planner", id: "planner", active: true },
-  { icon: Archive, label: "Archive", id: "archive", locked: true },
-  { icon: Send, label: "Release Gateway", id: "gateway", locked: true },
-  { icon: LineChart, label: "Measure & Report", id: "measure", locked: true },
+  { label: "Dashboard", id: "dashboard", active: true },
+  { label: "GEO Diagnostic", id: "diagnostic", active: true },
+  { label: "Content Optimiser", id: "optimiser", active: true },
+  { label: "Authority Planner", id: "planner", active: true },
+  { label: "Archive", id: "archive", locked: true },
+  { label: "Release Gateway", id: "gateway", locked: true },
+  { label: "Measure & Report", id: "measure", locked: true },
 ];
 
 interface AppLayoutProps {
@@ -36,16 +28,6 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
         style={{ borderColor: "var(--aio-gray-200)", background: "white" }}
       >
         <div className="flex items-center gap-2.5 px-5 py-5 border-b" style={{ borderColor: "var(--aio-gray-200)" }}>
-          <div
-            className="flex items-center justify-center rounded-lg"
-            style={{
-              width: 32,
-              height: 32,
-              background: "linear-gradient(135deg, var(--aio-accent), #7c5cff)",
-            }}
-          >
-            <Zap size={18} color="white" />
-          </div>
           <div className="flex flex-col">
             <span className="text-sm font-semibold tracking-tight" style={{ color: "var(--aio-navy)" }}>AIO Fusion</span>
             <span className="text-[10px] font-medium tracking-widest uppercase" style={{ color: "var(--aio-gray-400)" }}>
@@ -70,7 +52,6 @@ export function AppLayout({ children, currentPage, onNavigate }: AppLayoutProps)
                   opacity: isLocked ? 0.55 : 1,
                 }}
               >
-                <item.icon size={18} />
                 <span className="flex-1 text-left">{item.label}</span>
                 {isLocked && (
                   <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
