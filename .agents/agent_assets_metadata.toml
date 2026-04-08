@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "epTCa_t7Z4honvy8uHpVo"
+uri = "file://attached_assets/Meeting-Notes-Patrick-Spencer-Mar27-Clean.md"
+type = "text"
+title = "Meeting Notes — Patrick & Spencer, 27 March"
