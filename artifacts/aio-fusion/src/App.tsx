@@ -49,7 +49,81 @@ import {
   Mail,
   Shield,
   Eye,
+  Building2,
+  ArrowLeft,
+  Users,
+  Activity,
 } from "lucide-react";
+
+type Client = {
+  id: string;
+  name: string;
+  sector: string;
+  initials: string;
+  color: string;
+  contentCount: number;
+  avgScore: number;
+  activePlans: number;
+  lastActive: string;
+};
+
+const clients: Client[] = [
+  {
+    id: "bluhalo",
+    name: "Bluhalo",
+    sector: "Agency Advisory & Intelligence",
+    initials: "BH",
+    color: "#4f8fff",
+    contentCount: 24,
+    avgScore: 73,
+    activePlans: 3,
+    lastActive: "Today",
+  },
+  {
+    id: "greenfield",
+    name: "Greenfield Organics",
+    sector: "Food & Beverage",
+    initials: "GO",
+    color: "#22c55e",
+    contentCount: 18,
+    avgScore: 61,
+    activePlans: 2,
+    lastActive: "Yesterday",
+  },
+  {
+    id: "novatech",
+    name: "NovaTech Solutions",
+    sector: "B2B SaaS",
+    initials: "NT",
+    color: "#7c5cff",
+    contentCount: 12,
+    avgScore: 54,
+    activePlans: 1,
+    lastActive: "3 days ago",
+  },
+  {
+    id: "meridian",
+    name: "Meridian Property Group",
+    sector: "Commercial Real Estate",
+    initials: "MP",
+    color: "#f59e0b",
+    contentCount: 9,
+    avgScore: 48,
+    activePlans: 1,
+    lastActive: "5 days ago",
+  },
+  {
+    id: "arclight",
+    name: "Arclight Finance",
+    sector: "Financial Services",
+    initials: "AF",
+    color: "#ef4444",
+    contentCount: 6,
+    avgScore: 39,
+    activePlans: 0,
+    lastActive: "1 week ago",
+  },
+];
 
 const navItems = [
   { label: "Dashboard", id: "dashboard" },
@@ -80,9 +154,13 @@ const vars = {
 function Sidebar({
   currentPage,
   onNavigate,
+  activeClient,
+  onBackToClients,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
+  activeClient: Client;
+  onBackToClients: () => void;
 }) {
   return (
     <aside
@@ -108,6 +186,30 @@ function Sidebar({
           </span>
         </div>
       </div>
+      <button
+        onClick={onBackToClients}
+        className="flex items-center gap-2.5 px-4 py-3 border-b text-left transition-colors hover:bg-slate-50"
+        style={{ borderColor: vars.g200 }}
+      >
+        <ArrowLeft size={14} style={{ color: vars.g400 }} />
+        <div
+          className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+          style={{ background: activeClient.color }}
+        >
+          {activeClient.initials}
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span
+            className="text-xs font-semibold truncate"
+            style={{ color: vars.navy }}
+          >
+            {activeClient.name}
+          </span>
+          <span className="text-[10px] truncate" style={{ color: vars.g400 }}>
+            Switch client
+          </span>
+        </div>
+      </button>
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = currentPage === item.id;
@@ -174,10 +276,239 @@ function Sidebar({
   );
 }
 
+function ClientSelectorPage({
+  onSelectClient,
+}: {
+  onSelectClient: (client: Client) => void;
+}) {
+  const totalContent = clients.reduce((s, c) => s + c.contentCount, 0);
+  const avgScore = Math.round(
+    clients.reduce((s, c) => s + c.avgScore, 0) / clients.length,
+  );
+
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+      <header
+        className="border-b px-8 py-5 flex items-center justify-between"
+        style={{ background: "white", borderColor: vars.g200 }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}
+          >
+            <Sparkles size={18} color="white" />
+          </div>
+          <div>
+            <span
+              className="text-base font-semibold tracking-tight"
+              style={{ color: vars.navy }}
+            >
+              AIO Fusion
+            </span>
+            <span
+              className="text-[10px] font-medium tracking-widest uppercase ml-2"
+              style={{ color: vars.g400 }}
+            >
+              GEO Platform
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}
+          >
+            SP
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-medium" style={{ color: vars.navy }}>
+              Simpatico PR
+            </span>
+            <span className="text-[10px]" style={{ color: vars.g400 }}>
+              Intelligence Tier
+            </span>
+          </div>
+        </div>
+      </header>
+      <div className="px-8 py-8 max-w-5xl mx-auto">
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-2">
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
+              style={{ background: "rgba(79,143,255,0.08)", color: "#4f8fff" }}
+            >
+              <Building2 size={12} /> Client Hub
+            </div>
+          </div>
+          <h1
+            className="text-2xl font-bold tracking-tight"
+            style={{ color: vars.navy }}
+          >
+            Your Clients
+          </h1>
+          <p className="text-sm mt-1" style={{ color: vars.g500 }}>
+            Select a client to manage their GEO content and authority planning.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div
+            className="rounded-xl p-5 border"
+            style={{ background: "white", borderColor: vars.g200 }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(79,143,255,0.08)" }}
+              >
+                <Users size={20} color="#4f8fff" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
+                  {clients.length}
+                </p>
+                <p className="text-xs" style={{ color: vars.g500 }}>
+                  Active Clients
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            className="rounded-xl p-5 border"
+            style={{ background: "white", borderColor: vars.g200 }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(124,92,255,0.08)" }}
+              >
+                <FileText size={20} color="#7c5cff" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
+                  {totalContent}
+                </p>
+                <p className="text-xs" style={{ color: vars.g500 }}>
+                  Total Content
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            className="rounded-xl p-5 border"
+            style={{ background: "white", borderColor: vars.g200 }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(34,197,94,0.08)" }}
+              >
+                <Activity size={20} color="#22c55e" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
+                  {avgScore}
+                </p>
+                <p className="text-xs" style={{ color: vars.g500 }}>
+                  Avg Authority Score
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {clients.map((client) => (
+            <div
+              key={client.id}
+              onClick={() => onSelectClient(client)}
+              className="rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 group"
+              style={{ background: "white", borderColor: vars.g200 }}
+            >
+              <div className="p-5 flex items-center gap-5">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{ background: client.color }}
+                >
+                  {client.initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h3
+                      className="text-base font-semibold"
+                      style={{ color: vars.navy }}
+                    >
+                      {client.name}
+                    </h3>
+                    <span className="text-[11px]" style={{ color: vars.g400 }}>
+                      · {client.lastActive}
+                    </span>
+                  </div>
+                  <p className="text-sm" style={{ color: vars.g500 }}>
+                    {client.sector}
+                  </p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <p
+                      className="text-lg font-bold"
+                      style={{ color: vars.navy }}
+                    >
+                      {client.contentCount}
+                    </p>
+                    <p className="text-[10px]" style={{ color: vars.g400 }}>
+                      Content
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p
+                      className="text-lg font-bold"
+                      style={{
+                        color:
+                          client.avgScore >= 70
+                            ? "#22c55e"
+                            : client.avgScore >= 50
+                              ? "#f59e0b"
+                              : "#ef4444",
+                      }}
+                    >
+                      {client.avgScore}
+                    </p>
+                    <p className="text-[10px]" style={{ color: vars.g400 }}>
+                      Authority
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p
+                      className="text-lg font-bold"
+                      style={{ color: vars.navy }}
+                    >
+                      {client.activePlans}
+                    </p>
+                    <p className="text-[10px]" style={{ color: vars.g400 }}>
+                      Plans
+                    </p>
+                  </div>
+                  <ArrowRight
+                    size={16}
+                    className="transition-transform group-hover:translate-x-1"
+                    style={{ color: vars.g300 }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage({
   onNavigate,
+  activeClient,
 }: {
   onNavigate: (p: string) => void;
+  activeClient: Client;
 }) {
   const activeModules = [
     {
@@ -262,7 +593,7 @@ function DashboardPage({
           className="text-2xl font-bold tracking-tight"
           style={{ color: vars.navy }}
         >
-          Welcome back, Simpatico
+          {activeClient.name} — Overview
         </h1>
         <p className="text-sm mt-1" style={{ color: vars.g500 }}>
           Optimise your PR content for AI visibility and citation across
@@ -2226,14 +2557,31 @@ function PlannerPage() {
 }
 
 function App() {
+  const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+
+  if (!activeClient) {
+    return (
+      <ClientSelectorPage
+        onSelectClient={(client) => {
+          setActiveClient(client);
+          setCurrentPage("dashboard");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={setCurrentPage}
+        activeClient={activeClient}
+        onBackToClients={() => setActiveClient(null)}
+      />
       <main className="flex-1 overflow-y-auto" style={{ background: vars.g50 }}>
         {currentPage === "dashboard" && (
-          <DashboardPage onNavigate={setCurrentPage} />
+          <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
         {currentPage === "diagnostic" && (
           <DiagnosticPage onNavigate={setCurrentPage} />
