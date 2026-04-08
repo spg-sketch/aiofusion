@@ -42,6 +42,13 @@ import {
   Lightbulb,
   ClipboardPaste,
   Upload,
+  Calendar,
+  Check,
+  Circle,
+  Zap,
+  Mail,
+  Shield,
+  Eye,
 } from "lucide-react";
 
 const navItems = [
@@ -219,21 +226,21 @@ function DashboardPage({
       icon: Archive,
       title: "Content Archive",
       description:
-        "Search, tag and retrieve all optimised content with full version history.",
+        "House all PR content with version history, approval workflow and metadata tagging — message, spokesperson and purpose on every piece.",
     },
     {
       id: "gateway",
       icon: Send,
       title: "Release Gateway",
       description:
-        "Route optimised content to wire services, social channels and CMS platforms.",
+        "Route approved content to wire services, client websites and agent-ready publishing channels. Includes PR Agent outreach option.",
     },
     {
       id: "measure",
       icon: LineChart,
       title: "Measure & Report",
       description:
-        "Track AI citation performance across LLMs with automated reporting.",
+        "Track AI citation performance across ChatGPT, Perplexity, Claude and Gemini with automated client reporting.",
     },
   ];
 
@@ -1048,21 +1055,40 @@ function OptimiserPage({
                 </div>
               </div>
             </div>
-            <div className="mb-5">
-              <label
-                className="text-xs font-medium mb-1.5 block"
-                style={{ color: vars.g500 }}
-              >
-                Key Message
-              </label>
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg border"
-                style={{ borderColor: vars.g200 }}
-              >
-                <Tag size={14} style={{ color: vars.g400 }} />
-                <span className="text-sm" style={{ color: vars.g400 }}>
-                  Core message to optimise around...
-                </span>
+            <div className="grid grid-cols-2 gap-4 mb-5">
+              <div>
+                <label
+                  className="text-xs font-medium mb-1.5 block"
+                  style={{ color: vars.g500 }}
+                >
+                  Key Message
+                </label>
+                <div
+                  className="flex items-center gap-2 p-3 rounded-lg border"
+                  style={{ borderColor: vars.g200 }}
+                >
+                  <Tag size={14} style={{ color: vars.g400 }} />
+                  <span className="text-sm" style={{ color: vars.g400 }}>
+                    Core message to optimise around...
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label
+                  className="text-xs font-medium mb-1.5 block"
+                  style={{ color: vars.g500 }}
+                >
+                  Purpose
+                </label>
+                <div
+                  className="flex items-center gap-2 p-3 rounded-lg border"
+                  style={{ borderColor: vars.g200 }}
+                >
+                  <Target size={14} style={{ color: vars.g400 }} />
+                  <span className="text-sm" style={{ color: vars.g400 }}>
+                    e.g. Product launch, Thought leadership...
+                  </span>
+                </div>
               </div>
             </div>
             <div className="mb-6">
@@ -1128,7 +1154,7 @@ function OptimiserPage({
           <Download size={16} /> Export Optimised
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-3 mb-6">
         <div
           className="rounded-xl border p-4"
           style={{ background: "white", borderColor: vars.g200 }}
@@ -1185,6 +1211,72 @@ function OptimiserPage({
             </span>
             <ChevronDown size={14} style={{ color: vars.g400 }} />
           </div>
+        </div>
+        <div
+          className="rounded-xl border p-4"
+          style={{ background: "white", borderColor: vars.g200 }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Target size={14} style={{ color: vars.g400 }} />
+            <span
+              className="text-xs font-medium"
+              style={{ color: vars.g500 }}
+            >
+              Purpose
+            </span>
+          </div>
+          <p className="text-sm font-medium" style={{ color: vars.navy }}>
+            Product Launch
+          </p>
+        </div>
+      </div>
+      <div
+        className="rounded-xl border p-4 mb-6"
+        style={{ background: "white", borderColor: vars.g200 }}
+      >
+        <p
+          className="text-[10px] font-semibold uppercase tracking-wider mb-3"
+          style={{ color: vars.g400 }}
+        >
+          Content Workflow
+        </p>
+        <div className="flex items-center justify-between">
+          {[
+            { icon: PenLine, label: "Write", done: true },
+            { icon: Sparkles, label: "Optimise", done: true },
+            { icon: Tag, label: "Tag", done: true },
+            { icon: Eye, label: "Client Approval", done: false },
+            { icon: Send, label: "Distribute", done: false },
+          ].map((step, i, arr) => (
+            <div key={i} className="flex items-center gap-2 flex-1">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{
+                    background: step.done ? "#dcfce7" : vars.g100,
+                  }}
+                >
+                  {step.done ? (
+                    <Check size={14} color="#16a34a" />
+                  ) : (
+                    <step.icon size={14} style={{ color: vars.g400 }} />
+                  )}
+                </div>
+                <span
+                  className="text-[10px] font-medium"
+                  style={{ color: step.done ? "#16a34a" : vars.g400 }}
+                >
+                  {step.label}
+                </span>
+              </div>
+              {i < arr.length - 1 && (
+                <div
+                  className="flex-1 h-px mx-1"
+                  style={{ background: step.done ? "#bbf7d0" : vars.g200 }}
+                />
+              )}
+            </div>
+          ))}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 mb-6">
@@ -1398,6 +1490,73 @@ function OptimiserPage({
         </div>
       </div>
       <div
+        className="rounded-xl border overflow-hidden mb-6"
+        style={{ background: "white", borderColor: vars.g200 }}
+      >
+        <div
+          className="px-5 py-3 border-b flex items-center gap-2"
+          style={{ background: vars.g50, borderColor: vars.g200 }}
+        >
+          <Zap size={14} color="#7c5cff" />
+          <h2
+            className="text-sm font-semibold"
+            style={{ color: vars.navy }}
+          >
+            Next Step — What would you like to do with this content?
+          </h2>
+        </div>
+        <div className="p-5 grid grid-cols-2 gap-4">
+          <button
+            className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
+            style={{ borderColor: "rgba(124,92,255,0.3)", background: "rgba(124,92,255,0.02)" }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(124,92,255,0.08)" }}
+              >
+                <Bot size={20} color="#7c5cff" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: vars.navy }}>
+                  Send to PR Agent
+                </p>
+                <p className="text-[11px]" style={{ color: vars.g400 }}>
+                  Automated outreach
+                </p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: vars.g500 }}>
+              Hand off to the AI PR Agent for journalist identification, personalised pitch drafting and monitored outreach.
+            </p>
+          </button>
+          <button
+            className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
+            style={{ borderColor: vars.g200 }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className="w-10 h-10 rounded-lg flex items-center justify-center"
+                style={{ background: vars.g100 }}
+              >
+                <Mail size={20} style={{ color: vars.g500 }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: vars.navy }}>
+                  Pitch Manually
+                </p>
+                <p className="text-[11px]" style={{ color: vars.g400 }}>
+                  Download &amp; distribute yourself
+                </p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: vars.g500 }}>
+              Export the optimised content and handle journalist outreach, wire distribution and client sign-off through your existing process.
+            </p>
+          </button>
+        </div>
+      </div>
+      <div
         className="rounded-xl border p-5 flex items-center justify-between"
         style={{
           background: "rgba(124,92,255,0.03)",
@@ -1429,6 +1588,55 @@ function OptimiserPage({
 }
 
 function PlannerPage() {
+  const [selectedQuarter, setSelectedQuarter] = useState("Q2 2026");
+  const quarters = ["Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026"];
+  const scheduledItems = [
+    {
+      title: "Agency Agentic Collective Launch",
+      category: "Press Release",
+      date: "14 Apr 2026",
+      message: "AI-powered professional network for agencies",
+      spokesperson: "Spencer Gallagher",
+      purpose: "Product Launch",
+      status: "optimised" as const,
+    },
+    {
+      title: "Agency Benchmark Report 2026",
+      category: "Original Research",
+      date: "28 Apr 2026",
+      message: "Independent agency performance benchmarks",
+      spokesperson: "Mark Sainthill",
+      purpose: "Thought Leadership",
+      status: "draft" as const,
+    },
+    {
+      title: "AI Visibility for PR Agencies",
+      category: "Speaking",
+      date: "15 May 2026",
+      message: "GEO as competitive advantage for PR",
+      spokesperson: "Spencer Gallagher",
+      purpose: "Industry Education",
+      status: "planned" as const,
+    },
+    {
+      title: "PR Week Agency Growth Feature",
+      category: "Press Release",
+      date: "2 Jun 2026",
+      message: "Simpatico growth strategy and client wins",
+      spokesperson: "Patrick O'Neill",
+      purpose: "Agency Profile",
+      status: "planned" as const,
+    },
+    {
+      title: "How AI Agents Are Changing Media Relations",
+      category: "LinkedIn / Blog",
+      date: "10 Jun 2026",
+      message: "AI agent utility for PR outreach",
+      spokesperson: "Spencer Gallagher",
+      purpose: "Thought Leadership",
+      status: "draft" as const,
+    },
+  ];
   const categories = [
     {
       id: "press",
@@ -1541,16 +1749,32 @@ function PlannerPage() {
             </h1>
           </div>
           <p className="text-sm" style={{ color: vars.g500 }}>
-            Score your forward PR plan for predicted AI authority impact.
-            Q2 2026 Plan.
+            Plan and score your PR schedule for predicted AI authority impact.
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#22c55e" }}
-        >
-          <Download size={16} /> Export Plan Report
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 p-1 rounded-lg border" style={{ borderColor: vars.g200, background: "white" }}>
+            {quarters.map((q) => (
+              <button
+                key={q}
+                onClick={() => setSelectedQuarter(q)}
+                className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  background: selectedQuarter === q ? "#22c55e" : "transparent",
+                  color: selectedQuarter === q ? "white" : vars.g500,
+                }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <button
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
+            style={{ background: "#22c55e" }}
+          >
+            <Download size={16} /> Export Plan
+          </button>
+        </div>
       </div>
       <div
         className="rounded-xl border overflow-hidden mb-6"
@@ -1758,6 +1982,81 @@ function PlannerPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+      <div
+        className="rounded-xl border overflow-hidden mb-6"
+        style={{ background: "white", borderColor: vars.g200 }}
+      >
+        <div
+          className="px-5 py-3 border-b flex items-center justify-between"
+          style={{ background: vars.g50, borderColor: vars.g200 }}
+        >
+          <div className="flex items-center gap-2">
+            <Calendar size={14} color="#22c55e" />
+            <h2
+              className="text-sm font-semibold"
+              style={{ color: vars.navy }}
+            >
+              Scheduled Activations
+            </h2>
+          </div>
+          <span className="text-xs" style={{ color: vars.g400 }}>
+            {scheduledItems.length} items in {selectedQuarter}
+          </span>
+        </div>
+        <div className="divide-y" style={{ borderColor: vars.g100 }}>
+          {scheduledItems.map((item, i) => (
+            <div key={i} className="px-5 py-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: "rgba(34,197,94,0.06)" }}
+                  >
+                    <Calendar size={14} color="#22c55e" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: vars.navy }}>
+                      {item.title}
+                    </p>
+                    <p className="text-[11px]" style={{ color: vars.g400 }}>
+                      {item.category} · {item.date}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                  style={{
+                    background: item.status === "optimised" ? "#dcfce7" : item.status === "draft" ? "#fef3c7" : vars.g100,
+                    color: item.status === "optimised" ? "#16a34a" : item.status === "draft" ? "#d97706" : vars.g500,
+                  }}
+                >
+                  {item.status}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 ml-11">
+                <div className="flex items-center gap-1.5">
+                  <Tag size={11} style={{ color: vars.g400 }} />
+                  <span className="text-[11px]" style={{ color: vars.g500 }}>
+                    {item.message}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <User size={11} style={{ color: vars.g400 }} />
+                  <span className="text-[11px]" style={{ color: vars.g500 }}>
+                    {item.spokesperson}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Target size={11} style={{ color: vars.g400 }} />
+                  <span className="text-[11px]" style={{ color: vars.g500 }}>
+                    {item.purpose}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4 mb-6">
