@@ -63,8 +63,10 @@ type Client = {
   color: string;
   contentCount: number;
   avgScore: number;
+  scoreTrend: number;
   activePlans: number;
   lastActive: string;
+  recentActivity: string;
 };
 
 const clients: Client[] = [
@@ -76,8 +78,10 @@ const clients: Client[] = [
     color: "#4f8fff",
     contentCount: 24,
     avgScore: 73,
+    scoreTrend: 12,
     activePlans: 3,
     lastActive: "Today",
+    recentActivity: "Press release optimised",
   },
   {
     id: "greenfield",
@@ -87,8 +91,10 @@ const clients: Client[] = [
     color: "#22c55e",
     contentCount: 18,
     avgScore: 61,
+    scoreTrend: 8,
     activePlans: 2,
     lastActive: "Yesterday",
+    recentActivity: "Diagnostic run on blog",
   },
   {
     id: "novatech",
@@ -98,8 +104,10 @@ const clients: Client[] = [
     color: "#7c5cff",
     contentCount: 12,
     avgScore: 54,
+    scoreTrend: 3,
     activePlans: 1,
     lastActive: "3 days ago",
+    recentActivity: "Q2 plan updated",
   },
   {
     id: "meridian",
@@ -109,8 +117,10 @@ const clients: Client[] = [
     color: "#f59e0b",
     contentCount: 9,
     avgScore: 48,
+    scoreTrend: -2,
     activePlans: 1,
     lastActive: "5 days ago",
+    recentActivity: "Case study drafted",
   },
   {
     id: "arclight",
@@ -120,10 +130,42 @@ const clients: Client[] = [
     color: "#ef4444",
     contentCount: 6,
     avgScore: 39,
+    scoreTrend: 0,
     activePlans: 0,
     lastActive: "1 week ago",
+    recentActivity: "Onboarded — no content yet",
   },
 ];
+
+function MiniDonut({ score, color, size = 56 }: { score: number; color: string; size?: number }) {
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const scoreColor = score >= 70 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={vars.g100} strokeWidth="5" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={scoreColor}
+          strokeWidth="5"
+          strokeDasharray={`${(score / 100) * circ} ${circ}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <span
+        className="absolute text-sm font-bold"
+        style={{ color: scoreColor }}
+      >
+        {score}
+      </span>
+    </div>
+  );
+}
 
 const navItems = [
   { label: "Dashboard", id: "dashboard" },
@@ -351,152 +393,103 @@ function ClientSelectorPage({
             Select a client to manage their GEO content and authority planning.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-4 mb-8">
-          <div
-            className="rounded-xl p-5 border"
-            style={{ background: "white", borderColor: vars.g200 }}
-          >
-            <div className="flex items-center gap-3 mb-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+          {clients.map((client) => {
+            const scoreColor = client.avgScore >= 70 ? "#22c55e" : client.avgScore >= 50 ? "#f59e0b" : "#ef4444";
+            return (
               <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(79,143,255,0.08)" }}
+                key={client.id}
+                onClick={() => onSelectClient(client)}
+                className="rounded-2xl border overflow-hidden cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 group"
+                style={{ background: "white", borderColor: vars.g200 }}
               >
-                <Users size={20} color="#4f8fff" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
-                  {clients.length}
-                </p>
-                <p className="text-xs" style={{ color: vars.g500 }}>
-                  Active Clients
-                </p>
-              </div>
-            </div>
-          </div>
-          <div
-            className="rounded-xl p-5 border"
-            style={{ background: "white", borderColor: vars.g200 }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(124,92,255,0.08)" }}
-              >
-                <FileText size={20} color="#7c5cff" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
-                  {totalContent}
-                </p>
-                <p className="text-xs" style={{ color: vars.g500 }}>
-                  Total Content
-                </p>
-              </div>
-            </div>
-          </div>
-          <div
-            className="rounded-xl p-5 border"
-            style={{ background: "white", borderColor: vars.g200 }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(34,197,94,0.08)" }}
-              >
-                <Activity size={20} color="#22c55e" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold" style={{ color: vars.navy }}>
-                  {avgScore}
-                </p>
-                <p className="text-xs" style={{ color: vars.g500 }}>
-                  Avg Authority Score
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {clients.map((client) => (
-            <div
-              key={client.id}
-              onClick={() => onSelectClient(client)}
-              className="rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 group"
-              style={{ background: "white", borderColor: vars.g200 }}
-            >
-              <div className="p-5 flex items-center gap-5">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                  style={{ background: client.color }}
-                >
-                  {client.initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3
-                      className="text-base font-semibold"
-                      style={{ color: vars.navy }}
-                    >
-                      {client.name}
-                    </h3>
-                    <span className="text-[11px]" style={{ color: vars.g400 }}>
-                      · {client.lastActive}
+                <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
+                <div className="p-5">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-11 h-11 rounded-xl flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                        style={{ background: client.color }}
+                      >
+                        {client.initials}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold" style={{ color: vars.navy }}>
+                          {client.name}
+                        </h3>
+                        <span
+                          className="text-[10px] font-medium px-1.5 py-0.5 rounded mt-0.5 inline-block"
+                          style={{ background: `${client.color}10`, color: client.color }}
+                        >
+                          {client.sector}
+                        </span>
+                      </div>
+                    </div>
+                    <ArrowRight
+                      size={14}
+                      className="mt-1 transition-transform group-hover:translate-x-1"
+                      style={{ color: vars.g300 }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 mb-4">
+                    <MiniDonut score={client.avgScore} color={client.color} size={52} />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px]" style={{ color: vars.g400 }}>Authority Score</span>
+                        {client.scoreTrend !== 0 && (
+                          <span
+                            className="flex items-center gap-0.5 text-[10px] font-semibold"
+                            style={{ color: client.scoreTrend > 0 ? "#22c55e" : "#ef4444" }}
+                          >
+                            <TrendingUp size={10} style={{ transform: client.scoreTrend < 0 ? "rotate(180deg)" : "none" }} />
+                            {client.scoreTrend > 0 ? "+" : ""}{client.scoreTrend}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div
+                          className="rounded-md px-2 py-1.5 text-center"
+                          style={{ background: vars.g50 }}
+                        >
+                          <p className="text-sm font-bold" style={{ color: vars.navy }}>
+                            {client.contentCount}
+                          </p>
+                          <p className="text-[9px] uppercase tracking-wider" style={{ color: vars.g400 }}>
+                            Content
+                          </p>
+                        </div>
+                        <div
+                          className="rounded-md px-2 py-1.5 text-center"
+                          style={{ background: vars.g50 }}
+                        >
+                          <p className="text-sm font-bold" style={{ color: vars.navy }}>
+                            {client.activePlans}
+                          </p>
+                          <p className="text-[9px] uppercase tracking-wider" style={{ color: vars.g400 }}>
+                            Plans
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className="flex items-center justify-between pt-3 border-t"
+                    style={{ borderColor: vars.g100 }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Activity size={11} style={{ color: vars.g400 }} />
+                      <span className="text-[11px]" style={{ color: vars.g500 }}>
+                        {client.recentActivity}
+                      </span>
+                    </div>
+                    <span className="text-[10px]" style={{ color: vars.g400 }}>
+                      {client.lastActive}
                     </span>
                   </div>
-                  <p className="text-sm" style={{ color: vars.g500 }}>
-                    {client.sector}
-                  </p>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <p
-                      className="text-lg font-bold"
-                      style={{ color: vars.navy }}
-                    >
-                      {client.contentCount}
-                    </p>
-                    <p className="text-[10px]" style={{ color: vars.g400 }}>
-                      Content
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className="text-lg font-bold"
-                      style={{
-                        color:
-                          client.avgScore >= 70
-                            ? "#22c55e"
-                            : client.avgScore >= 50
-                              ? "#f59e0b"
-                              : "#ef4444",
-                      }}
-                    >
-                      {client.avgScore}
-                    </p>
-                    <p className="text-[10px]" style={{ color: vars.g400 }}>
-                      Authority
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p
-                      className="text-lg font-bold"
-                      style={{ color: vars.navy }}
-                    >
-                      {client.activePlans}
-                    </p>
-                    <p className="text-[10px]" style={{ color: vars.g400 }}>
-                      Plans
-                    </p>
-                  </div>
-                  <ArrowRight
-                    size={16}
-                    className="transition-transform group-hover:translate-x-1"
-                    style={{ color: vars.g300 }}
-                  />
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
