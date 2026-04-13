@@ -90,10 +90,10 @@ const clients: Client[] = [
     recentActivity: "Press release optimised",
   },
   {
-    id: "smg",
-    name: "SMG",
-    sector: "Retail Media",
-    initials: "SM",
+    id: "merkle",
+    name: "Merkle",
+    sector: "Customer Experience (dentsu)",
+    initials: "MK",
     color: "#2B8C8C",
     contentCount: 18,
     avgScore: 61,
@@ -129,10 +129,10 @@ const clients: Client[] = [
     recentActivity: "Case study drafted",
   },
   {
-    id: "theforge",
-    name: "The Forge",
-    sector: "FMCG Innovation",
-    initials: "TF",
+    id: "fjord",
+    name: "Fjord",
+    sector: "Design Innovation (Accenture Song)",
+    initials: "FJ",
     color: "#C94A3E",
     contentCount: 6,
     avgScore: 39,
@@ -2572,8 +2572,8 @@ const llmLogos = [
 ];
 
 const agencyBrands = [
-  "Simpatico PR", "Bluhalo", "SMG", "Merkle",
-  "Kepler", "the7stars", "Kinetic", "The Forge",
+  "Simpatico PR", "Bluhalo", "Merkle", "Kepler",
+  "the7stars", "Fjord", "Mindshare", "OMD UK",
 ];
 
 const blogPosts = [
