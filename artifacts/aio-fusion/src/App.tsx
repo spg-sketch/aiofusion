@@ -139,7 +139,7 @@ const clients: Client[] = [
     scoreTrend: 0,
     activePlans: 0,
     lastActive: "1 week ago",
-    recentActivity: "Onboarded — no content yet",
+    recentActivity: "Onboarded, no content yet",
   },
 ];
 
@@ -557,7 +557,7 @@ function DashboardPage({
       icon: Archive,
       title: "Content Archive",
       description:
-        "House all PR content with version history, approval workflow and metadata tagging — message, spokesperson and purpose on every piece.",
+        "House all PR content with version history, approval workflow and metadata tagging: message, spokesperson and purpose on every piece.",
     },
     {
       id: "gateway",
@@ -593,7 +593,7 @@ function DashboardPage({
           className="text-2xl tracking-tight"
           style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
         >
-          {activeClient.name} — Overview
+          {activeClient.name}: Overview
         </h1>
         <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>
           Optimise your PR content for AI visibility and citation across
@@ -1041,7 +1041,7 @@ function DiagnosticPage({
               className="text-sm font-medium"
               style={{ color: vars.navy }}
             >
-              simpatico-pr.co.uk — Services Page
+              simpatico-pr.co.uk / Services Page
             </p>
             <p className="text-xs" style={{ color: vars.g400 }}>
               Pasted content · 2,340 words · Analysed just now
@@ -1293,7 +1293,7 @@ function OptimiserPage({
       original:
         "The platform launches with Bluhalo's proprietary benchmarking dataset as its intelligence backbone.",
       revised:
-        "The platform launches with Bluhalo's proprietary agency benchmarking dataset covering 75 performance metrics — including gross profit margin, revenue per head, and utilisation rates — drawn from 196 live advisory engagements.",
+        "The platform launches with Bluhalo's proprietary agency benchmarking dataset covering 75 performance metrics including gross profit margin, revenue per head, and utilisation rates, drawn from 196 live advisory engagements.",
       annotation:
         "Expanded with high-relevance semantic phrases. Key metrics named explicitly to increase likelihood of citation in LLM responses about agency benchmarks.",
     },
@@ -1833,7 +1833,7 @@ function OptimiserPage({
             className="text-sm font-semibold"
             style={{ color: vars.navy }}
           >
-            Next Step — What would you like to do with this content?
+            Next Step: What would you like to do with this content?
           </h2>
         </div>
         <div className="p-5 grid grid-cols-2 gap-4">
@@ -2483,7 +2483,7 @@ function PlannerPage() {
                 className="text-xs leading-relaxed"
                 style={{ color: vars.g600 }}
               >
-                6 posts planned — already at maximum impact for this
+                6 posts planned, already at maximum impact for this
                 category. Additional posts offer diminishing returns for
                 AI authority.
               </p>
@@ -2534,8 +2534,8 @@ function PlannerPage() {
               >
                 Your plan has no whitepapers scheduled, yet this is the
                 second-highest weighted category for AI authority (9/10).
-                A single whitepaper on a core topic — such as "How
-                Independent Agencies Can Measure AI Visibility" — would
+                A single whitepaper on a core topic, such as "How
+                Independent Agencies Can Measure AI Visibility", would
                 increase your plan score by approximately 15 points and
                 provide the most impactful single addition to your Q2
                 strategy.
@@ -2605,7 +2605,7 @@ function GuideDownload() {
               The B2B Marketer's Fast Guide to Winning AI Authority
             </h2>
             <p className="text-[15px] font-light leading-[1.8] mb-8" style={{ color: vars.g500 }}>
-              Everything you need to know about Generative Engine Optimisation — why earned media dominates AI citations, how to structure content for retrieval, and the framework behind AIO Fusion.
+              Everything you need to know about Generative Engine Optimisation: why earned media dominates AI citations, how to structure content for retrieval, and the framework behind AIO Fusion.
             </p>
             <div className="space-y-4">
               {[
@@ -2831,7 +2831,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             </div>
             <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Three tools, one AI authority strategy</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              AIO Fusion provides a complete GEO workflow — from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
+              AIO Fusion provides a complete GEO workflow, from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-10">
@@ -2860,7 +2860,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>How AIO Fusion works</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              A managed service model — Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
+              A managed service model. Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
             </p>
           </div>
           <div className="grid md:grid-cols-4 gap-10">
@@ -2972,7 +2972,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                   "Dedicated client workspaces with your branding",
                   "Diagnostic, optimisation and planning tools in one platform",
                   "Measurable AI citation and visibility metrics",
-                  "Managed service model — we train your team",
+                  "Managed service model: we train your team",
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0" style={{ background: `${vars.accent}12` }}>
@@ -3012,7 +3012,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               Agents that understand<br />your brand authority.
             </h2>
             <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light">
-              AIO Fusion structures your brand's authority data so AI agents — ChatGPT, Perplexity, Claude, Gemini — can discover, cite, and recommend your business with confidence.
+              AIO Fusion structures your brand's authority data so AI agents (ChatGPT, Perplexity, Claude, Gemini) can discover, cite, and recommend your business with confidence.
             </p>
           </div>
 
@@ -3020,13 +3020,13 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             {[
               {
                 title: "Structured authority signals",
-                desc: "AIO Fusion analyses your content across 6 signal categories and outputs structured data that AI agents can parse — entity relationships, expertise markers, and citation-ready claims.",
+                desc: "AIO Fusion analyses your content across 6 signal categories and outputs structured data that AI agents can parse: entity relationships, expertise markers, and citation-ready claims.",
                 endpoint: "GET /api/authority-signals",
                 color: vars.accent,
               },
               {
                 title: "AI-optimised content delivery",
-                desc: "Content optimised through AIO Fusion is formatted for LLM retrieval — clear assertions, attributed data, semantic structure. Your brand becomes the answer, not just a search result.",
+                desc: "Content optimised through AIO Fusion is formatted for LLM retrieval: clear assertions, attributed data, semantic structure. Your brand becomes the answer, not just a search result.",
                 endpoint: "POST /api/content-optimise",
                 color: vars.teal,
               },
@@ -3062,7 +3062,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 A structured file at the root of your domain that tells AI agents what your business does, what your expertise is, and how to access your authority data. The GEO equivalent of robots.txt.
               </p>
               <div className="rounded-xl p-5 font-mono text-[12px] leading-relaxed" style={{ background: "rgba(0,0,0,0.3)" }}>
-                <div style={{ color: vars.g400 }}># AIO Fusion — Agent Instructions</div>
+                <div style={{ color: vars.g400 }}># AIO Fusion: Agent Instructions</div>
                 <div className="mt-2" style={{ color: vars.teal }}>name: AIO Fusion by Simpatico PR</div>
                 <div style={{ color: vars.teal }}>type: GEO Platform</div>
                 <div style={{ color: vars.teal }}>expertise: Generative Engine Optimisation</div>
@@ -3083,7 +3083,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 </div>
               </div>
               <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">
-                Programmatic access to your brand's authority data. AI agents can query your expertise signals, retrieve optimised content, and check citation status — all through authenticated REST endpoints.
+                Programmatic access to your brand's authority data. AI agents can query your expertise signals, retrieve optimised content, and check citation status, all through authenticated REST endpoints.
               </p>
               <div className="space-y-3">
                 {[
