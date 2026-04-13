@@ -2582,6 +2582,136 @@ const blogPosts = [
   { title: "How GEO is Reshaping B2B Discovery", date: "14 February 2026", tag: "Analysis" },
 ];
 
+function GuideDownload() {
+  const [submitted, setSubmitted] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name && email) setSubmitted(true);
+  };
+
+  return (
+    <section id="guide" className="py-32" style={{ background: "#F5F3F0" }}>
+      <div className="max-w-6xl mx-auto px-8">
+        <div className="grid md:grid-cols-2 gap-16 items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.08)", color: vars.accent }}>
+              <Download size={12} /> Free Guide
+            </div>
+            <h2 className="text-3xl md:text-4xl mb-6 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+              The B2B Marketer's Fast Guide to Winning AI Authority
+            </h2>
+            <p className="text-[15px] font-light leading-[1.8] mb-8" style={{ color: vars.g500 }}>
+              Everything you need to know about Generative Engine Optimisation — why earned media dominates AI citations, how to structure content for retrieval, and the framework behind AIO Fusion.
+            </p>
+            <div className="space-y-4">
+              {[
+                "Why 82% of AI-cited content comes from earned media",
+                "The 6 GEO signal categories that drive AI visibility",
+                "A practical roadmap for B2B authority building",
+              ].map((point) => (
+                <div key={point} className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(232,71,42,0.1)" }}>
+                    <Check size={12} color={vars.accent} />
+                  </div>
+                  <span className="text-[14px] font-light" style={{ color: vars.g600 }}>{point}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="h-3" style={{ background: `linear-gradient(90deg, ${vars.accent}, ${vars.teal})` }} />
+            {!submitted ? (
+              <form onSubmit={handleSubmit} className="p-10">
+                <h3 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                  Download the guide
+                </h3>
+                <p className="text-[13px] font-light mb-8" style={{ color: vars.g500 }}>
+                  Enter your details to receive the PDF instantly.
+                </p>
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>Full name *</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-lg border text-[14px] outline-none transition-colors focus:ring-2"
+                      style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                      placeholder="Jane Smith"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>Work email *</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-lg border text-[14px] outline-none transition-colors focus:ring-2"
+                      style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                      placeholder="jane@company.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>Company</label>
+                    <input
+                      type="text"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      className="w-full px-4 py-3 rounded-lg border text-[14px] outline-none transition-colors focus:ring-2"
+                      style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                      placeholder="Acme Corp"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2.5 mt-8 px-8 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110"
+                  style={{ background: vars.accent }}
+                >
+                  <Download size={18} /> Get the Guide
+                </button>
+                <p className="text-[11px] font-light text-center mt-4" style={{ color: vars.g400 }}>
+                  We respect your privacy. No spam, ever.
+                </p>
+              </form>
+            ) : (
+              <div className="p-10 text-center">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "rgba(61,155,107,0.1)" }}>
+                  <CheckCircle2 size={32} color={vars.green} />
+                </div>
+                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                  Your guide is ready
+                </h3>
+                <p className="text-[14px] font-light mb-8" style={{ color: vars.g500 }}>
+                  Thanks, {name.split(" ")[0]}. Click below to download your copy of the AI Authority Guide.
+                </p>
+                <a
+                  href={`${import.meta.env.BASE_URL}Simpatico_PR_B2B_AI_Authority_Guide_2026.pdf`}
+                  download
+                  className="inline-flex items-center justify-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110"
+                  style={{ background: vars.accent }}
+                >
+                  <Download size={18} /> Download PDF
+                </a>
+                <p className="text-[12px] font-light mt-6" style={{ color: vars.g400 }}>
+                  A copy has also been sent to {email}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LandingPage({ onLogin }: { onLogin: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -2600,6 +2730,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Stories</a>
+            <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
             <button
               onClick={onLogin}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
@@ -2618,6 +2749,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 py-2">Stories</a>
+            <a href="#guide" className="text-[13px] font-light text-white/60 py-2">Guide</a>
             <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Admin Login
             </button>
@@ -2819,6 +2951,8 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           </div>
         </div>
       </section>
+
+      <GuideDownload />
 
       <section className="py-32" style={{ background: vars.navy }}>
         <div className="max-w-3xl mx-auto px-8 text-center">
