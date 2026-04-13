@@ -213,22 +213,22 @@ function Sidebar({
 }) {
   return (
     <aside
-      className="flex flex-col border-r w-[240px] flex-shrink-0 h-screen sticky top-0"
+      className="flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0"
       style={{ borderColor: vars.g200, background: "white" }}
     >
       <div
-        className="flex items-center gap-2.5 px-5 py-5 border-b"
+        className="flex items-center gap-3 px-6 py-6 border-b"
         style={{ borderColor: vars.g200 }}
       >
         <div className="flex flex-col">
           <span
-            className="text-sm font-semibold tracking-tight"
-            style={{ color: vars.navy }}
+            className="text-[15px] tracking-tight"
+            style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
           >
             AIO Fusion
           </span>
           <span
-            className="text-[10px] font-medium tracking-widest uppercase"
+            className="text-[9px] font-medium tracking-[0.2em] uppercase"
             style={{ color: vars.g400 }}
           >
             GEO Platform
@@ -237,29 +237,29 @@ function Sidebar({
       </div>
       <button
         onClick={onBackToClients}
-        className="flex items-center gap-2.5 px-4 py-3 border-b text-left transition-colors hover:bg-slate-50"
+        className="flex items-center gap-3 px-5 py-4 border-b text-left transition-colors hover:bg-slate-50"
         style={{ borderColor: vars.g200 }}
       >
         <ArrowLeft size={14} style={{ color: vars.g400 }} />
         <div
-          className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
           style={{ background: activeClient.color }}
         >
           {activeClient.initials}
         </div>
         <div className="flex flex-col min-w-0">
           <span
-            className="text-xs font-semibold truncate"
+            className="text-[13px] font-medium truncate"
             style={{ color: vars.navy }}
           >
             {activeClient.name}
           </span>
-          <span className="text-[10px] truncate" style={{ color: vars.g400 }}>
+          <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>
             Switch client
           </span>
         </div>
       </button>
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = currentPage === item.id;
           const isLocked = !!("locked" in item && item.locked);
@@ -267,7 +267,7 @@ function Sidebar({
             <button
               key={item.id}
               onClick={() => !isLocked && onNavigate(item.id)}
-              className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+              className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-[13px] font-medium transition-colors"
               style={{
                 background: isActive
                   ? "rgba(232,71,42,0.06)"
@@ -338,69 +338,69 @@ function ClientSelectorPage({
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <header
-        className="border-b px-8 py-5 flex items-center justify-between"
+        className="border-b px-10 py-6 flex items-center justify-between"
         style={{ background: "white", borderColor: vars.g200 }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3.5">
           <div
-            className="w-9 h-9 rounded-lg flex items-center justify-center"
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
           >
             <Sparkles size={18} color="white" />
           </div>
           <div>
             <span
-              className="text-base font-semibold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-lg tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               AIO Fusion
             </span>
             <span
-              className="text-[10px] font-medium tracking-widest uppercase ml-2"
+              className="text-[10px] font-medium tracking-[0.2em] uppercase ml-3"
               style={{ color: vars.g400 }}
             >
               GEO Platform
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3.5">
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
           >
             SP
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-medium" style={{ color: vars.navy }}>
+            <span className="text-[13px] font-medium" style={{ color: vars.navy }}>
               Simpatico PR
             </span>
-            <span className="text-[10px]" style={{ color: vars.g400 }}>
+            <span className="text-[11px] font-light" style={{ color: vars.g400 }}>
               Intelligence Tier
             </span>
           </div>
         </div>
       </header>
-      <div className="px-8 py-8 max-w-5xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
+      <div className="px-10 py-10 max-w-5xl mx-auto">
+        <div className="mb-10">
+          <div className="flex items-center gap-2 mb-3">
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
               style={{ background: "rgba(232,71,42,0.06)", color: "#E8472A" }}
             >
               <Building2 size={12} /> Client Hub
             </div>
           </div>
           <h1
-            className="text-2xl font-bold tracking-tight"
-            style={{ color: vars.navy }}
+            className="text-3xl tracking-tight"
+            style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
           >
             Your Clients
           </h1>
-          <p className="text-sm mt-1" style={{ color: vars.g500 }}>
+          <p className="text-[15px] font-light mt-2" style={{ color: vars.g500 }}>
             Select a client to manage their GEO content and authority planning.
           </p>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-7">
           {clients.map((client) => {
             const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
             return (
@@ -410,23 +410,23 @@ function ClientSelectorPage({
                 className="rounded-2xl border overflow-hidden cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 group"
                 style={{ background: "white", borderColor: vars.g200 }}
               >
-                <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
+                <div className="h-1" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}66)` }} />
+                <div className="p-7">
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-center gap-4">
                       <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                        className="w-12 h-12 rounded-xl flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
                         style={{ background: client.color }}
                       >
                         {client.initials}
                       </div>
                       <div>
-                        <h3 className="text-sm font-semibold" style={{ color: vars.navy }}>
+                        <h3 className="text-[15px] font-semibold" style={{ color: vars.navy }}>
                           {client.name}
                         </h3>
                         <span
-                          className="text-[10px] font-medium px-1.5 py-0.5 rounded mt-0.5 inline-block"
-                          style={{ background: `${client.color}10`, color: client.color }}
+                          className="text-[11px] font-medium px-2 py-0.5 rounded mt-1 inline-block"
+                          style={{ background: `${client.color}08`, color: client.color }}
                         >
                           {client.sector}
                         </span>
@@ -434,18 +434,18 @@ function ClientSelectorPage({
                     </div>
                     <ArrowRight
                       size={14}
-                      className="mt-1 transition-transform group-hover:translate-x-1"
+                      className="mt-1.5 transition-transform group-hover:translate-x-1"
                       style={{ color: vars.g300 }}
                     />
                   </div>
-                  <div className="flex items-center gap-4 mb-4">
-                    <MiniDonut score={client.avgScore} color={client.color} size={52} />
-                    <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-5 mb-5">
+                    <MiniDonut score={client.avgScore} color={client.color} size={56} />
+                    <div className="flex-1 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px]" style={{ color: vars.g400 }}>Authority Score</span>
+                        <span className="text-[12px] font-light" style={{ color: vars.g400 }}>Authority Score</span>
                         {client.scoreTrend !== 0 && (
                           <span
-                            className="flex items-center gap-0.5 text-[10px] font-semibold"
+                            className="flex items-center gap-0.5 text-[11px] font-semibold"
                             style={{ color: client.scoreTrend > 0 ? "#4A6FA5" : "#C94A3E" }}
                           >
                             <TrendingUp size={10} style={{ transform: client.scoreTrend < 0 ? "rotate(180deg)" : "none" }} />
@@ -453,26 +453,26 @@ function ClientSelectorPage({
                           </span>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-3">
                         <div
-                          className="rounded-md px-2 py-1.5 text-center"
+                          className="rounded-lg px-3 py-2.5 text-center"
                           style={{ background: vars.g50 }}
                         >
-                          <p className="text-sm font-bold" style={{ color: vars.navy }}>
+                          <p className="text-[15px] font-bold" style={{ color: vars.navy }}>
                             {client.contentCount}
                           </p>
-                          <p className="text-[9px] uppercase tracking-wider" style={{ color: vars.g400 }}>
+                          <p className="text-[9px] uppercase tracking-[0.15em] font-medium mt-0.5" style={{ color: vars.g400 }}>
                             Content
                           </p>
                         </div>
                         <div
-                          className="rounded-md px-2 py-1.5 text-center"
+                          className="rounded-lg px-3 py-2.5 text-center"
                           style={{ background: vars.g50 }}
                         >
-                          <p className="text-sm font-bold" style={{ color: vars.navy }}>
+                          <p className="text-[15px] font-bold" style={{ color: vars.navy }}>
                             {client.activePlans}
                           </p>
-                          <p className="text-[9px] uppercase tracking-wider" style={{ color: vars.g400 }}>
+                          <p className="text-[9px] uppercase tracking-[0.15em] font-medium mt-0.5" style={{ color: vars.g400 }}>
                             Plans
                           </p>
                         </div>
@@ -480,16 +480,16 @@ function ClientSelectorPage({
                     </div>
                   </div>
                   <div
-                    className="flex items-center justify-between pt-3 border-t"
+                    className="flex items-center justify-between pt-4 border-t"
                     style={{ borderColor: vars.g100 }}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <Activity size={11} style={{ color: vars.g400 }} />
-                      <span className="text-[11px]" style={{ color: vars.g500 }}>
+                    <div className="flex items-center gap-2">
+                      <Activity size={12} style={{ color: vars.g400 }} />
+                      <span className="text-[12px] font-light" style={{ color: vars.g500 }}>
                         {client.recentActivity}
                       </span>
                     </div>
-                    <span className="text-[10px]" style={{ color: vars.g400 }}>
+                    <span className="text-[11px] font-light" style={{ color: vars.g400 }}>
                       {client.lastActive}
                     </span>
                   </div>
@@ -590,17 +590,17 @@ function DashboardPage({
           </div>
         </div>
         <h1
-          className="text-2xl font-bold tracking-tight"
-          style={{ color: vars.navy }}
+          className="text-2xl tracking-tight"
+          style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
         >
           {activeClient.name} — Overview
         </h1>
-        <p className="text-sm mt-1" style={{ color: vars.g500 }}>
+        <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>
           Optimise your PR content for AI visibility and citation across
           ChatGPT, Perplexity, Claude and Gemini.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-5 mb-10">
         <div
           className="rounded-xl p-5 border"
           style={{ background: "white", borderColor: vars.g200 }}
@@ -908,13 +908,13 @@ function DiagnosticPage({
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#E8472A" />
             <h1
-              className="text-xl font-bold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               GEO Diagnostic
             </h1>
           </div>
-          <p className="text-sm" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Analyse how your content is structured for AI visibility across
             six signal categories.
           </p>
@@ -1000,13 +1000,13 @@ function DiagnosticPage({
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#E8472A" />
             <h1
-              className="text-xl font-bold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               GEO Diagnostic
             </h1>
           </div>
-          <p className="text-sm" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Analyse how your content is structured for AI visibility across
             six signal categories.
           </p>
@@ -1306,13 +1306,13 @@ function OptimiserPage({
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2B8C8C" />
             <h1
-              className="text-xl font-bold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               Content Optimiser
             </h1>
           </div>
-          <p className="text-sm" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Transform PR content for maximum AI citation and retrieval
             across large language models.
           </p>
@@ -1467,13 +1467,13 @@ function OptimiserPage({
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2B8C8C" />
             <h1
-              className="text-xl font-bold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               Content Optimiser
             </h1>
           </div>
-          <p className="text-sm" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Transform PR content for maximum AI citation and retrieval
             across large language models.
           </p>
@@ -2073,13 +2073,13 @@ function PlannerPage() {
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={20} color="#4A6FA5" />
             <h1
-              className="text-xl font-bold tracking-tight"
-              style={{ color: vars.navy }}
+              className="text-xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
               Authority Planner
             </h1>
           </div>
-          <p className="text-sm" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Plan and score your PR schedule for predicted AI authority impact.
           </p>
         </div>
@@ -2588,21 +2588,21 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(26,26,46,0.92)" }}>
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-8 h-[72px] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
               <Sparkles size={16} color="#fff" />
             </div>
-            <span className="text-white font-bold text-lg tracking-tight">AIO Fusion</span>
+            <span className="text-white font-serif text-xl tracking-tight" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>AIO Fusion</span>
           </div>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-white/70 hover:text-white transition-colors">Features</a>
-            <a href="#how-it-works" className="text-sm text-white/70 hover:text-white transition-colors">How It Works</a>
-            <a href="#llms" className="text-sm text-white/70 hover:text-white transition-colors">LLM Coverage</a>
-            <a href="#stories" className="text-sm text-white/70 hover:text-white transition-colors">Stories</a>
+          <div className="hidden md:flex items-center gap-10">
+            <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
+            <a href="#how-it-works" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">How It Works</a>
+            <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">LLM Coverage</a>
+            <a href="#stories" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Stories</a>
             <button
               onClick={onLogin}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
               style={{ background: vars.accent }}
             >
               <LogIn size={14} /> Admin Login
@@ -2613,12 +2613,12 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           </button>
         </div>
         {menuOpen && (
-          <div className="md:hidden px-6 pb-4 flex flex-col gap-3" style={{ background: "rgba(26,26,46,0.98)" }}>
-            <a href="#features" className="text-sm text-white/70 py-2">Features</a>
-            <a href="#how-it-works" className="text-sm text-white/70 py-2">How It Works</a>
-            <a href="#llms" className="text-sm text-white/70 py-2">LLM Coverage</a>
-            <a href="#stories" className="text-sm text-white/70 py-2">Stories</a>
-            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+          <div className="md:hidden px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(26,26,46,0.98)" }}>
+            <a href="#features" className="text-[13px] font-light text-white/60 py-2">Features</a>
+            <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
+            <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
+            <a href="#stories" className="text-[13px] font-light text-white/60 py-2">Stories</a>
+            <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Admin Login
             </button>
           </div>
@@ -2637,49 +2637,49 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
           @keyframes float3 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-20px, -30px) scale(0.9); } }
         `}</style>
-        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-white/90 mb-6" style={{ background: "rgba(232,71,42,0.3)", border: "1px solid rgba(232,71,42,0.4)" }}>
+        <div className="relative z-10 max-w-4xl mx-auto px-8 text-center">
+          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(232,71,42,0.2)", border: "1px solid rgba(232,71,42,0.3)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold text-white leading-tight mb-6 tracking-tight">
+          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
             Win AI Authority<br />
             <span style={{ color: vars.accent }}>for Your Brand</span>
           </h1>
-          <p className="text-lg md:text-xl text-white/75 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-14 leading-relaxed font-light">
             AIO Fusion by Simpatico PR helps B2B businesses become the source AI cites.
             Diagnose, optimise, and plan your content for visibility across ChatGPT, Perplexity, Claude and Gemini.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <button
               onClick={onLogin}
-              className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:brightness-110 hover:scale-105"
+              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]"
               style={{ background: vars.accent }}
             >
               <LogIn size={18} /> Platform Login
             </button>
             <a
               href="#features"
-              className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:bg-white/15"
-              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}
+              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
             >
               Learn More <ArrowRight size={16} />
             </a>
           </div>
-          <div className="mt-16 flex items-center justify-center gap-2 text-white/40 text-sm">
+          <div className="mt-20 flex items-center justify-center gap-2.5 text-white/30 text-[13px] font-light tracking-wide">
             <span>Powering GEO for leading agencies</span>
             <ChevronDown size={14} className="animate-bounce" />
           </div>
         </div>
       </section>
 
-      <section className="py-12 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest mb-8" style={{ color: vars.g400 }}>
+      <section className="py-16 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <p className="text-center text-[11px] font-medium uppercase tracking-[0.25em] mb-10" style={{ color: vars.g400 }}>
             Trusted by forward-thinking agencies and brands
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-14 gap-y-5">
             {agencyBrands.map((brand) => (
-              <span key={brand} className="text-base font-semibold tracking-tight" style={{ color: vars.g400 }}>
+              <span key={brand} className="text-[15px] font-medium tracking-tight" style={{ color: vars.g300 }}>
                 {brand}
               </span>
             ))}
@@ -2687,31 +2687,31 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="features" className="py-24" style={{ background: "#FAFAFA" }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+      <section id="features" className="py-32" style={{ background: "#FAFAFA" }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="text-center mb-20">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
               <Target size={12} /> Core Platform
             </div>
-            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>Three tools, one AI authority strategy</h2>
-            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Three tools, one AI authority strategy</h2>
+            <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               AIO Fusion provides a complete GEO workflow — from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-10">
             {[
               { title: "GEO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #E8472A, #C93A20)", icon: FileText },
               { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2B8C8C, #237474)", icon: FileEdit },
               { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)", icon: BarChart3 },
             ].map((tool) => (
               <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="h-2" style={{ background: tool.gradient }} />
-                <div className="p-8">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: `${tool.color}12` }}>
-                    <tool.icon size={24} color={tool.color} />
+                <div className="h-1.5" style={{ background: tool.gradient }} />
+                <div className="p-10">
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6" style={{ background: `${tool.color}0A` }}>
+                    <tool.icon size={26} color={tool.color} />
                   </div>
-                  <h3 className="text-xl font-bold mb-3" style={{ color: vars.navy }}>{tool.title}</h3>
-                  <p className="text-sm leading-relaxed" style={{ color: vars.g500 }}>{tool.desc}</p>
+                  <h3 className="text-2xl mb-4" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{tool.title}</h3>
+                  <p className="text-[15px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
                 </div>
               </div>
             ))}
@@ -2719,15 +2719,15 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="how-it-works" className="py-24" style={{ background: "#fff" }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>How AIO Fusion works</h2>
-            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+      <section id="how-it-works" className="py-32" style={{ background: "#fff" }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>How AIO Fusion works</h2>
+            <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               A managed service model — Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
             </p>
           </div>
-          <div className="grid md:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-4 gap-10">
             {[
               { step: "01", title: "Onboard", desc: "Client data, messaging and content are loaded into a dedicated workspace." },
               { step: "02", title: "Diagnose", desc: "Run the GEO Diagnostic to benchmark how AI currently perceives the brand." },
@@ -2735,20 +2735,20 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               { step: "04", title: "Plan & Measure", desc: "Build a forward plan scored for authority impact and track results over time." },
             ].map((item) => (
               <div key={item.step} className="text-center">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold text-white" style={{ background: vars.navy }}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-lg font-light text-white" style={{ background: vars.navy }}>
                   {item.step}
                 </div>
-                <h3 className="text-lg font-bold mb-2" style={{ color: vars.navy }}>{item.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: vars.g500 }}>{item.desc}</p>
+                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.title}</h3>
+                <p className="text-[14px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20" style={{ background: vars.navy }}>
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <div className="grid grid-cols-4 gap-8">
+      <section className="py-24" style={{ background: vars.navy }}>
+        <div className="max-w-5xl mx-auto px-8 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
             {[
               { value: "82%", label: "of AI-cited content comes from earned media" },
               { value: "95%", label: "of AI citations use non-paid sources" },
@@ -2756,63 +2756,63 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               { value: "30%+", label: "visibility boost via GEO methods" },
             ].map((stat) => (
               <div key={stat.value}>
-                <div className="text-3xl md:text-4xl font-bold mb-2" style={{ color: vars.accent }}>{stat.value}</div>
-                <p className="text-xs text-white/60 leading-relaxed">{stat.label}</p>
+                <div className="text-4xl md:text-5xl mb-3" style={{ color: vars.accent, fontFamily: "'DM Serif Display', Georgia, serif" }}>{stat.value}</div>
+                <p className="text-[13px] text-white/50 leading-relaxed font-light">{stat.label}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="llms" className="py-24" style={{ background: "#FAFAFA" }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+      <section id="llms" className="py-32" style={{ background: "#FAFAFA" }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="text-center mb-20">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
               <Globe size={12} /> Coverage
             </div>
-            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>Optimise for every major LLM</h2>
-            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Optimise for every major LLM</h2>
+            <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               AIO Fusion analyses and scores your content against the retrieval and citation patterns of the four dominant answer engines.
             </p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {llmLogos.map((llm) => (
-              <div key={llm.name} className="bg-white rounded-2xl border p-8 flex flex-col items-center gap-4 transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${llm.color}12`, color: llm.color }}>
+              <div key={llm.name} className="bg-white rounded-2xl border p-10 flex flex-col items-center gap-5 transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+                <div className="w-18 h-18 rounded-2xl flex items-center justify-center" style={{ width: 72, height: 72, background: `${llm.color}0A`, color: llm.color }}>
                   {llm.icon}
                 </div>
-                <span className="font-bold text-lg" style={{ color: vars.navy }}>{llm.name}</span>
+                <span className="text-xl" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{llm.name}</span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="stories" className="py-24" style={{ background: "#fff" }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex items-end justify-between mb-12">
+      <section id="stories" className="py-32" style={{ background: "#fff" }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="flex items-end justify-between mb-16">
             <div>
-              <h2 className="text-4xl font-bold mb-3" style={{ color: vars.navy }}>Latest stories</h2>
-              <p className="text-lg" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR from the Simpatico team.</p>
+              <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Latest stories</h2>
+              <p className="text-lg font-light" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR from the Simpatico team.</p>
             </div>
-            <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-1.5 text-sm font-semibold hover:underline" style={{ color: vars.accent }}>
-              View all on simpaticopr.co.uk <ExternalLink size={14} />
+            <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-2 text-[13px] font-medium hover:underline" style={{ color: vars.accent }}>
+              View all on simpaticopr.co.uk <ExternalLink size={13} />
             </a>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-10">
             {blogPosts.map((post) => (
               <a key={post.title} href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="h-48 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${vars.navy}, #2a2a48)` }}>
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.2)" }}>
+                <div className="h-52 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${vars.navy}, #2a2a48)` }}>
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.15)" }}>
                     <BookOpen size={28} color="#fff" />
                   </div>
                 </div>
-                <div className="p-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase" style={{ background: "rgba(232,71,42,0.08)", color: vars.accent }}>{post.tag}</span>
-                    <span className="text-xs" style={{ color: vars.g400 }}>{post.date}</span>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>{post.tag}</span>
+                    <span className="text-[13px] font-light" style={{ color: vars.g400 }}>{post.date}</span>
                   </div>
-                  <h3 className="font-bold leading-snug group-hover:underline" style={{ color: vars.navy }}>{post.title}</h3>
+                  <h3 className="text-lg leading-snug group-hover:underline" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{post.title}</h3>
                 </div>
               </a>
             ))}
@@ -2820,38 +2820,38 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section className="py-24" style={{ background: vars.navy }}>
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-4xl font-bold text-white mb-5">Ready to win AI authority?</h2>
-          <p className="text-lg text-white/65 mb-10 leading-relaxed">
+      <section className="py-32" style={{ background: vars.navy }}>
+        <div className="max-w-3xl mx-auto px-8 text-center">
+          <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>Ready to win AI authority?</h2>
+          <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
             Get in touch with Simpatico PR to discuss how AIO Fusion can help your business become the source AI cites and recommends.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+            <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
               <Mail size={18} /> Contact Simpatico PR
             </a>
-            <button onClick={onLogin} className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}>
+            <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}>
               <LogIn size={16} /> Admin Login
             </button>
           </div>
         </div>
       </section>
 
-      <footer className="py-10 border-t" style={{ background: "#fff", borderColor: vars.g200 }}>
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="py-14 border-t" style={{ background: "#fff", borderColor: vars.g200 }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
-                <Sparkles size={13} color="#fff" />
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
+                <Sparkles size={14} color="#fff" />
               </div>
-              <span className="font-bold" style={{ color: vars.navy }}>AIO Fusion</span>
-              <span className="text-xs" style={{ color: vars.g400 }}>by Simpatico PR</span>
+              <span className="text-lg" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>AIO Fusion</span>
+              <span className="text-[13px] font-light" style={{ color: vars.g400 }}>by Simpatico PR</span>
             </div>
-            <div className="flex items-center gap-6 text-sm" style={{ color: vars.g400 }}>
+            <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
               <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hover:underline">simpaticopr.co.uk</a>
               <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="hover:underline">Contact</a>
             </div>
-            <p className="text-xs" style={{ color: vars.g400 }}>&copy; Simpatico PR Ltd. All rights reserved.</p>
+            <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; Simpatico PR Ltd. All rights reserved.</p>
           </div>
         </div>
       </footer>
