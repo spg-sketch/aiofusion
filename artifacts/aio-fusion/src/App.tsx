@@ -1036,7 +1036,7 @@ function DiagnosticPage({
         </button>
       </div>
 
-      <div className="rounded-xl border overflow-hidden mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="rounded-xl border overflow-hidden mb-8" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="px-6 py-4 text-center" style={{ background: vars.accent }}>
           <h2 className="text-lg font-semibold text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
             Authority and Visibility Diagnostic
@@ -1066,192 +1066,20 @@ function DiagnosticPage({
         </div>
       </div>
 
-      <div
-        className="rounded-xl border overflow-hidden mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <div
-          className="p-6 flex items-center gap-8 rounded-t-xl"
-          style={{
-            background: "linear-gradient(135deg, #FAFAFA, #F3F3F3)",
-          }}
-        >
-          <div className="flex flex-col items-center">
-            <div className="relative">
-              <svg width="120" height="120" viewBox="0 0 120 120">
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="52"
-                  fill="none"
-                  stroke="#E5E5E5"
-                  strokeWidth="8"
-                />
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="52"
-                  fill="none"
-                  stroke="#D4922A"
-                  strokeWidth="8"
-                  strokeDasharray={`${(overallScore / 100) * 327} 327`}
-                  strokeLinecap="round"
-                  transform="rotate(-90 60 60)"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span
-                  className="text-3xl font-bold"
-                  style={{ color: vars.navy }}
-                >
-                  {overallScore}
-                </span>
-                <span
-                  className="text-[10px] uppercase tracking-wider"
-                  style={{ color: vars.g400 }}
-                >
-                  out of 100
-                </span>
-              </div>
-            </div>
-            <p
-              className="text-sm font-medium mt-3"
-              style={{ color: vars.navy }}
-            >
-              Authority Index
-            </p>
-          </div>
-          <div className="flex-1 grid grid-cols-3 gap-4">
-            {(["green", "amber", "red"] as Rating[]).map((rating) => {
-              const count = signals.filter(
-                (s) => s.rating === rating,
-              ).length;
-              const config = ratingConfig[rating];
-              return (
-                <div
-                  key={rating}
-                  className="rounded-lg p-3 border"
-                  style={{ background: "white", borderColor: vars.g200 }}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <config.icon size={16} color={config.color} />
-                    <span
-                      className="text-xs font-medium"
-                      style={{ color: config.color }}
-                    >
-                      {config.label}
-                    </span>
-                  </div>
-                  <p
-                    className="text-2xl font-bold"
-                    style={{ color: vars.navy }}
-                  >
-                    {count}
-                  </p>
-                  <p className="text-[11px]" style={{ color: vars.g400 }}>
-                    signal{count !== 1 ? "s" : ""}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <div className="space-y-3 mb-8">
-        {signals.map((signal) => {
-          const config = ratingConfig[signal.rating];
-          return (
-            <div
-              key={signal.id}
-              className="rounded-xl border p-5"
-              style={{ background: "white", borderColor: vars.g200 }}
-            >
-              <div className="flex items-start gap-4">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${config.color}10` }}
-                >
-                  <signal.icon size={20} color={config.color} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3
-                      className="text-sm font-semibold"
-                      style={{ color: vars.navy }}
-                    >
-                      Signal {signal.id}: {signal.title}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-sm font-bold"
-                        style={{ color: config.color }}
-                      >
-                        {signal.score}/10
-                      </span>
-                      <span
-                        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                        style={{
-                          background: config.bg,
-                          color: config.color,
-                        }}
-                      >
-                        <config.icon size={10} /> {config.label}
-                      </span>
-                    </div>
-                  </div>
-                  <p
-                    className="text-sm mb-2"
-                    style={{ color: vars.g500 }}
-                  >
-                    {signal.finding}
-                  </p>
-                  <div
-                    className="flex items-start gap-2 p-3 rounded-lg"
-                    style={{ background: vars.g50 }}
-                  >
-                    <Info
-                      size={14}
-                      className="mt-0.5 flex-shrink-0"
-                      style={{ color: vars.accent }}
-                    />
-                    <p
-                      className="text-xs font-medium"
-                      style={{ color: vars.navy }}
-                    >
-                      {signal.action}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div
-        className="rounded-xl border p-5 flex items-center justify-between"
-        style={{
-          background: "rgba(232,71,42,0.03)",
-          borderColor: "rgba(232,71,42,0.12)",
-        }}
-      >
-        <div>
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: vars.navy }}
-          >
-            Ready to improve your score?
-          </h3>
-          <p className="text-xs mt-0.5" style={{ color: vars.g500 }}>
-            Take your diagnostic findings into the Content Optimiser to
-            start addressing each signal.
-          </p>
-        </div>
+      <div className="flex items-center gap-4">
         <button
           onClick={() => onNavigate("optimiser")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white"
           style={{ background: "#E8472A" }}
         >
-          Open Content Optimiser <ArrowRight size={14} />
+          Open Optimization Tools <ArrowRight size={14} />
+        </button>
+        <button
+          onClick={() => setShowResults(false)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border"
+          style={{ borderColor: vars.g200, color: vars.g600 }}
+        >
+          Run New Diagnostic
         </button>
       </div>
     </div>
