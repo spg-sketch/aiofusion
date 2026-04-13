@@ -90,10 +90,10 @@ const clients: Client[] = [
     recentActivity: "Press release optimised",
   },
   {
-    id: "greenfield",
-    name: "Greenfield Organics",
-    sector: "Food & Beverage",
-    initials: "GO",
+    id: "smg",
+    name: "SMG",
+    sector: "Retail Media",
+    initials: "SM",
     color: "#2B8C8C",
     contentCount: 18,
     avgScore: 61,
@@ -103,10 +103,10 @@ const clients: Client[] = [
     recentActivity: "Diagnostic run on blog",
   },
   {
-    id: "novatech",
-    name: "NovaTech Solutions",
-    sector: "B2B SaaS",
-    initials: "NT",
+    id: "kepler",
+    name: "Kepler",
+    sector: "Digital Marketing",
+    initials: "KP",
     color: "#4A6FA5",
     contentCount: 12,
     avgScore: 54,
@@ -116,10 +116,10 @@ const clients: Client[] = [
     recentActivity: "Q2 plan updated",
   },
   {
-    id: "meridian",
-    name: "Meridian Property Group",
-    sector: "Commercial Real Estate",
-    initials: "MP",
+    id: "the7stars",
+    name: "the7stars",
+    sector: "Media Agency",
+    initials: "7S",
     color: "#D4922A",
     contentCount: 9,
     avgScore: 48,
@@ -129,10 +129,10 @@ const clients: Client[] = [
     recentActivity: "Case study drafted",
   },
   {
-    id: "arclight",
-    name: "Arclight Finance",
-    sector: "Financial Services",
-    initials: "AF",
+    id: "theforge",
+    name: "The Forge",
+    sector: "FMCG Innovation",
+    initials: "TF",
     color: "#C94A3E",
     contentCount: 6,
     avgScore: 39,
@@ -2572,8 +2572,8 @@ const llmLogos = [
 ];
 
 const agencyBrands = [
-  "Simpatico PR", "Bluhalo", "Greenfield Organics", "NovaTech Solutions",
-  "Meridian Property Group", "Arclight Finance", "Haven Digital", "Crestline Partners",
+  "Simpatico PR", "Bluhalo", "SMG", "Merkle",
+  "Kepler", "the7stars", "Kinetic", "The Forge",
 ];
 
 const blogPosts = [
