@@ -2867,7 +2867,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               { step: "04", title: "Plan & Measure", desc: "Build a forward plan scored for authority impact and track results over time." },
             ].map((item) => (
               <div key={item.step} className="text-center">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 text-lg font-light text-white" style={{ background: vars.navy }}>
+                <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 text-xl font-light border-2" style={{ borderColor: vars.navy, color: vars.navy }}>
                   {item.step}
                 </div>
                 <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.title}</h3>
