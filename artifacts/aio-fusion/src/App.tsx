@@ -2731,6 +2731,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Stories</a>
             <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
+            <a href="#for-agents" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agents</a>
             <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
             <button
               onClick={onLogin}
@@ -2751,6 +2752,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 py-2">Stories</a>
             <a href="#for-agencies" className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
+            <a href="#for-agents" className="text-[13px] font-light text-white/60 py-2">For Agents</a>
             <a href="#guide" className="text-[13px] font-light text-white/60 py-2">Guide</a>
             <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Admin Login
@@ -3000,7 +3002,127 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section className="py-32" style={{ background: vars.navy }}>
+      <section id="for-agents" className="py-32" style={{ background: vars.navy }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(43,140,140,0.1)", color: vars.teal }}>
+              <Bot size={12} /> For AI Agents
+            </div>
+            <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
+              Agents that understand<br />your brand authority.
+            </h2>
+            <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light">
+              AIO Fusion structures your brand's authority data so AI agents — ChatGPT, Perplexity, Claude, Gemini — can discover, cite, and recommend your business with confidence.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            {[
+              {
+                title: "Structured authority signals",
+                desc: "AIO Fusion analyses your content across 6 signal categories and outputs structured data that AI agents can parse — entity relationships, expertise markers, and citation-ready claims.",
+                endpoint: "GET /api/authority-signals",
+                color: vars.accent,
+              },
+              {
+                title: "AI-optimised content delivery",
+                desc: "Content optimised through AIO Fusion is formatted for LLM retrieval — clear assertions, attributed data, semantic structure. Your brand becomes the answer, not just a search result.",
+                endpoint: "POST /api/content-optimise",
+                color: vars.teal,
+              },
+              {
+                title: "Real-time citation tracking",
+                desc: "Monitor when and how AI agents cite your brand. Track citation frequency, context accuracy, and competitive positioning across all major LLMs in real time.",
+                endpoint: "GET /api/citations",
+                color: vars.slate,
+              },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl p-8 border" style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}>
+                <h3 className="text-xl text-white mb-4" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.title}</h3>
+                <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">{item.desc}</p>
+                <code className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-mono" style={{ background: "rgba(255,255,255,0.05)", color: item.color }}>
+                  <Code2 size={12} /> {item.endpoint}
+                </code>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 mb-16">
+            <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(43,140,140,0.15)" }}>
+                  <Scroll size={18} color={vars.teal} />
+                </div>
+                <div>
+                  <h3 className="text-lg text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>Agent instructions</h3>
+                  <p className="text-[12px] text-white/40 font-light">llms.txt</p>
+                </div>
+              </div>
+              <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">
+                A structured file at the root of your domain that tells AI agents what your business does, what your expertise is, and how to access your authority data. The GEO equivalent of robots.txt.
+              </p>
+              <div className="rounded-xl p-5 font-mono text-[12px] leading-relaxed" style={{ background: "rgba(0,0,0,0.3)" }}>
+                <div style={{ color: vars.g400 }}># AIO Fusion — Agent Instructions</div>
+                <div className="mt-2" style={{ color: vars.teal }}>name: AIO Fusion by Simpatico PR</div>
+                <div style={{ color: vars.teal }}>type: GEO Platform</div>
+                <div style={{ color: vars.teal }}>expertise: Generative Engine Optimisation</div>
+                <div className="mt-2" style={{ color: vars.g400 }}># Endpoints</div>
+                <div style={{ color: vars.accent }}>authority_signals: /api/authority-signals</div>
+                <div style={{ color: vars.accent }}>content_optimise: /api/content-optimise</div>
+                <div style={{ color: vars.accent }}>citations: /api/citations</div>
+              </div>
+            </div>
+            <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.15)" }}>
+                  <ShieldCheck size={18} color={vars.accent} />
+                </div>
+                <div>
+                  <h3 className="text-lg text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>API reference</h3>
+                  <p className="text-[12px] text-white/40 font-light">Structured data endpoints</p>
+                </div>
+              </div>
+              <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">
+                Programmatic access to your brand's authority data. AI agents can query your expertise signals, retrieve optimised content, and check citation status — all through authenticated REST endpoints.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { method: "GET", path: "/api/authority-signals", desc: "Retrieve authority score and signal breakdown" },
+                  { method: "POST", path: "/api/content-optimise", desc: "Submit content for AI citation optimisation" },
+                  { method: "GET", path: "/api/citations", desc: "Track AI citations across LLMs" },
+                  { method: "GET", path: "/api/competitors", desc: "Competitive authority benchmarking" },
+                ].map((api) => (
+                  <div key={api.path} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,0.2)" }}>
+                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded mt-0.5 flex-shrink-0" style={{ background: api.method === "POST" ? "rgba(232,71,42,0.15)" : "rgba(43,140,140,0.15)", color: api.method === "POST" ? vars.accent : vars.teal }}>
+                      {api.method}
+                    </span>
+                    <div>
+                      <code className="text-[12px] font-mono text-white/70">{api.path}</code>
+                      <p className="text-[11px] text-white/35 font-light mt-0.5">{api.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[
+              { stat: "6", label: "Signal categories analysed" },
+              { stat: "4", label: "Major LLMs tracked" },
+              { stat: "100+", label: "Authority data points per client" },
+              { stat: "Real-time", label: "Citation monitoring" },
+            ].map((item) => (
+              <div key={item.label} className="text-center py-6 rounded-2xl border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                <div className="text-3xl text-white mb-1" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.stat}</div>
+                <p className="text-[12px] text-white/40 font-light">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-32" style={{ background: vars.navy, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div className="max-w-3xl mx-auto px-8 text-center">
           <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>Ready to win AI authority?</h2>
           <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
