@@ -2763,15 +2763,24 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 
       <section className="relative min-h-[100vh] flex items-center justify-center overflow-hidden" style={{ background: vars.navy }}>
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute w-[600px] h-[600px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #E8472A 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
-          <div className="absolute w-[500px] h-[500px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #2B8C8C 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
-          <div className="absolute w-[400px] h-[400px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #4A6FA5 0%, transparent 70%)", top: "40%", left: "30%", animation: "float3 30s ease-in-out infinite" }} />
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute w-full h-full object-cover opacity-30"
+            style={{ filter: "brightness(0.6) saturate(0.5)" }}
+          >
+            <source src={`${import.meta.env.BASE_URL}videos/hero-backdrop.mp4`} type="video/mp4" />
+          </video>
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(26,26,46,0.4) 0%, rgba(26,26,46,0.7) 50%, rgba(26,26,46,0.95) 100%)" }} />
+          <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #E8472A 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
+          <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2B8C8C 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
           <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
         </div>
         <style>{`
           @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
-          @keyframes float3 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-20px, -30px) scale(0.9); } }
         `}</style>
         <div className="relative z-10 max-w-4xl mx-auto px-8 text-center">
           <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(232,71,42,0.2)", border: "1px solid rgba(232,71,42,0.3)" }}>
