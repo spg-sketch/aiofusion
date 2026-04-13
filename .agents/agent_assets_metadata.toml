@@ -1,5 +1,22 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "K4DuggoB0lqbs2o5RY-oJ"
+uri = "file://artifacts/aio-fusion/public/images/story-ai-authority.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "GrO5FXQP8vwt-AS9m50RT"
+uri = "file://artifacts/aio-fusion/public/images/story-earned-media.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "TniZbMlhbNKHhtsVlNAGJ"
+uri = "file://artifacts/aio-fusion/public/images/story-geo-reshaping.png"
+type = "image"
+title = "generated_image"
 
 [[outputs]]
 id = "epTCa_t7Z4honvy8uHpVo"

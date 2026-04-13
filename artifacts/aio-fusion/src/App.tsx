@@ -2577,9 +2577,9 @@ const agencyBrands = [
 ];
 
 const blogPosts = [
-  { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", date: "10 March 2026", tag: "Guide" },
-  { title: "Why Earned Media is the Key to AI Citation", date: "28 February 2026", tag: "Insight" },
-  { title: "How GEO is Reshaping B2B Discovery", date: "14 February 2026", tag: "Analysis" },
+  { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", date: "10 March 2026", tag: "Guide", image: "/images/story-ai-authority.png" },
+  { title: "Why Earned Media is the Key to AI Citation", date: "28 February 2026", tag: "Insight", image: "/images/story-earned-media.png" },
+  { title: "How GEO is Reshaping B2B Discovery", date: "14 February 2026", tag: "Analysis", image: "/images/story-geo-reshaping.png" },
 ];
 
 function GuideDownload() {
@@ -2730,6 +2730,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Stories</a>
+            <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
             <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
             <button
               onClick={onLogin}
@@ -2749,6 +2750,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
             <a href="#stories" className="text-[13px] font-light text-white/60 py-2">Stories</a>
+            <a href="#for-agencies" className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
             <a href="#guide" className="text-[13px] font-light text-white/60 py-2">Guide</a>
             <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Admin Login
@@ -2934,10 +2936,8 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="grid md:grid-cols-3 gap-10">
             {blogPosts.map((post) => (
               <a key={post.title} href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="h-52 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${vars.navy}, #2a2a48)` }}>
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.15)" }}>
-                    <BookOpen size={28} color="#fff" />
-                  </div>
+                <div className="h-52 overflow-hidden">
+                  <img src={post.image} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                 </div>
                 <div className="p-8">
                   <div className="flex items-center gap-3 mb-4">
@@ -2953,6 +2953,52 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <GuideDownload />
+
+      <section id="for-agencies" className="py-32" style={{ background: vars.g50 }}>
+        <div className="max-w-6xl mx-auto px-8">
+          <div className="grid md:grid-cols-2 gap-20 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+                <Building2 size={12} /> For PR & Marketing Agencies
+              </div>
+              <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Add GEO to your service offering</h2>
+              <p className="text-lg font-light leading-relaxed mb-8" style={{ color: vars.g500 }}>
+                AIO Fusion is built for agencies who want to offer Generative Engine Optimisation as a managed service. White-label the platform for your clients and deliver measurable AI authority results.
+              </p>
+              <div className="space-y-5">
+                {[
+                  "Dedicated client workspaces with your branding",
+                  "Diagnostic, optimisation and planning tools in one platform",
+                  "Measurable AI citation and visibility metrics",
+                  "Managed service model — we train your team",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0" style={{ background: `${vars.accent}12` }}>
+                      <Check size={12} color={vars.accent} />
+                    </div>
+                    <span className="text-[15px] font-light" style={{ color: vars.g600 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+              <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white mt-10 transition-all hover:brightness-110" style={{ background: vars.accent }}>
+                <Mail size={16} /> Partner with Simpatico PR
+              </a>
+            </div>
+            <div className="space-y-6">
+              {[
+                { stat: "6x", label: "Average increase in AI citation rate for agency clients" },
+                { stat: "73%", label: "Of B2B buyers now use AI tools in their purchase research" },
+                { stat: "8", label: "Authority categories tracked and scored per client" },
+              ].map((item) => (
+                <div key={item.stat} className="bg-white rounded-2xl p-8 border" style={{ borderColor: vars.g200 }}>
+                  <div className="text-4xl mb-2" style={{ color: vars.accent, fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.stat}</div>
+                  <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="py-32" style={{ background: vars.navy }}>
         <div className="max-w-3xl mx-auto px-8 text-center">
