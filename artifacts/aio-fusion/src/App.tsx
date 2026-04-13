@@ -75,7 +75,7 @@ const clients: Client[] = [
     name: "Bluhalo",
     sector: "Agency Advisory & Intelligence",
     initials: "BH",
-    color: "#7c9cf5",
+    color: "#E8472A",
     contentCount: 24,
     avgScore: 73,
     scoreTrend: 12,
@@ -88,7 +88,7 @@ const clients: Client[] = [
     name: "Greenfield Organics",
     sector: "Food & Beverage",
     initials: "GO",
-    color: "#6ecf97",
+    color: "#2B8C8C",
     contentCount: 18,
     avgScore: 61,
     scoreTrend: 8,
@@ -101,7 +101,7 @@ const clients: Client[] = [
     name: "NovaTech Solutions",
     sector: "B2B SaaS",
     initials: "NT",
-    color: "#a78bfa",
+    color: "#4A6FA5",
     contentCount: 12,
     avgScore: 54,
     scoreTrend: 3,
@@ -114,7 +114,7 @@ const clients: Client[] = [
     name: "Meridian Property Group",
     sector: "Commercial Real Estate",
     initials: "MP",
-    color: "#e8b86d",
+    color: "#D4922A",
     contentCount: 9,
     avgScore: 48,
     scoreTrend: -2,
@@ -127,7 +127,7 @@ const clients: Client[] = [
     name: "Arclight Finance",
     sector: "Financial Services",
     initials: "AF",
-    color: "#e88a80",
+    color: "#C94A3E",
     contentCount: 6,
     avgScore: 39,
     scoreTrend: 0,
@@ -140,7 +140,7 @@ const clients: Client[] = [
 function MiniDonut({ score, color, size = 56 }: { score: number; color: string; size?: number }) {
   const r = (size - 8) / 2;
   const circ = 2 * Math.PI * r;
-  const scoreColor = score >= 70 ? "#6ecf97" : score >= 50 ? "#e8b86d" : "#e88a80";
+  const scoreColor = score >= 70 ? "#3D9B6B" : score >= 50 ? "#D4922A" : "#C94A3E";
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -178,19 +178,20 @@ const navItems = [
 ];
 
 const vars = {
-  navy: "#1e293b",
-  accent: "#7c9cf5",
-  purple: "#a78bfa",
-  green: "#6ecf97",
-  amber: "#e8b86d",
-  red: "#e88a80",
-  g50: "#fafbfc",
-  g100: "#f1f4f8",
-  g200: "#e4e8ef",
-  g300: "#cdd3de",
-  g400: "#94a0b4",
-  g500: "#6b7a8d",
-  g600: "#4a5567",
+  navy: "#1A1A2E",
+  accent: "#E8472A",
+  teal: "#2B8C8C",
+  slate: "#4A6FA5",
+  green: "#3D9B6B",
+  amber: "#D4922A",
+  red: "#C94A3E",
+  g50: "#FAFAFA",
+  g100: "#F3F3F3",
+  g200: "#E5E5E5",
+  g300: "#D4D4D4",
+  g400: "#9CA3AF",
+  g500: "#6B7280",
+  g600: "#374151",
 };
 
 function Sidebar({
@@ -263,7 +264,7 @@ function Sidebar({
               className="flex items-center gap-3 w-full rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
               style={{
                 background: isActive
-                  ? "rgba(124,156,245,0.08)"
+                  ? "rgba(232,71,42,0.06)"
                   : "transparent",
                 color: isActive
                   ? vars.accent
@@ -296,7 +297,7 @@ function Sidebar({
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{
-              background: "linear-gradient(135deg, #7c9cf5, #a78bfa)",
+              background: "linear-gradient(135deg, #E8472A, #C93A20)",
             }}
           >
             SP
@@ -337,7 +338,7 @@ function ClientSelectorPage({
         <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #7c9cf5, #a78bfa)" }}
+            style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
           >
             <Sparkles size={18} color="white" />
           </div>
@@ -359,7 +360,7 @@ function ClientSelectorPage({
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #7c9cf5, #a78bfa)" }}
+            style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
           >
             SP
           </div>
@@ -378,7 +379,7 @@ function ClientSelectorPage({
           <div className="flex items-center gap-2 mb-2">
             <div
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
-              style={{ background: "rgba(124,156,245,0.08)", color: "#7c9cf5" }}
+              style={{ background: "rgba(232,71,42,0.06)", color: "#E8472A" }}
             >
               <Building2 size={12} /> Client Hub
             </div>
@@ -395,7 +396,7 @@ function ClientSelectorPage({
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
           {clients.map((client) => {
-            const scoreColor = client.avgScore >= 70 ? "#6ecf97" : client.avgScore >= 50 ? "#e8b86d" : "#e88a80";
+            const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
             return (
               <div
                 key={client.id}
@@ -439,7 +440,7 @@ function ClientSelectorPage({
                         {client.scoreTrend !== 0 && (
                           <span
                             className="flex items-center gap-0.5 text-[10px] font-semibold"
-                            style={{ color: client.scoreTrend > 0 ? "#6ecf97" : "#e88a80" }}
+                            style={{ color: client.scoreTrend > 0 ? "#4A6FA5" : "#C94A3E" }}
                           >
                             <TrendingUp size={10} style={{ transform: client.scoreTrend < 0 ? "rotate(180deg)" : "none" }} />
                             {client.scoreTrend > 0 ? "+" : ""}{client.scoreTrend}
@@ -510,8 +511,8 @@ function DashboardPage({
       title: "GEO Diagnostic",
       description:
         "Analyse how well your content is structured for AI visibility. Get a scored report with specific actions.",
-      color: "#7c9cf5",
-      gradient: "linear-gradient(135deg, #7c9cf5, #6889e0)",
+      color: "#E8472A",
+      gradient: "linear-gradient(135deg, #E8472A, #C93A20)",
       stats: {
         label: "6 Signal Categories",
         sub: "Authority Index Score /100",
@@ -523,8 +524,8 @@ function DashboardPage({
       title: "Content Optimiser",
       description:
         "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance.",
-      color: "#a78bfa",
-      gradient: "linear-gradient(135deg, #a78bfa, #9578e8)",
+      color: "#2B8C8C",
+      gradient: "linear-gradient(135deg, #2B8C8C, #237474)",
       stats: {
         label: "Before/After Scoring",
         sub: "Semantic Phrase Extraction",
@@ -536,8 +537,8 @@ function DashboardPage({
       title: "Authority Planner",
       description:
         "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity.",
-      color: "#6ecf97",
-      gradient: "linear-gradient(135deg, #6ecf97, #4db87e)",
+      color: "#4A6FA5",
+      gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)",
       stats: {
         label: "8 Activity Categories",
         sub: "Priority Recommendations",
@@ -575,8 +576,8 @@ function DashboardPage({
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
             style={{
-              background: "rgba(124,156,245,0.08)",
-              color: "#7c9cf5",
+              background: "rgba(232,71,42,0.06)",
+              color: "#E8472A",
             }}
           >
             <Sparkles size={12} /> GEO Platform
@@ -601,9 +602,9 @@ function DashboardPage({
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(124,156,245,0.08)" }}
+              style={{ background: "rgba(232,71,42,0.06)" }}
             >
-              <FileText size={20} color="#7c9cf5" />
+              <FileText size={20} color="#E8472A" />
             </div>
             <div>
               <p
@@ -631,9 +632,9 @@ function DashboardPage({
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(124,92,255,0.08)" }}
+              style={{ background: "rgba(43,140,140,0.08)" }}
             >
-              <Target size={20} color="#a78bfa" />
+              <Target size={20} color="#2B8C8C" />
             </div>
             <div>
               <p
@@ -661,9 +662,9 @@ function DashboardPage({
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(34,197,94,0.08)" }}
+              style={{ background: "rgba(74,111,165,0.08)" }}
             >
-              <BarChart3 size={20} color="#6ecf97" />
+              <BarChart3 size={20} color="#4A6FA5" />
             </div>
             <div>
               <p
@@ -799,20 +800,20 @@ function DashboardPage({
 type Rating = "green" | "amber" | "red";
 const ratingConfig = {
   green: {
-    bg: "#e8f7ef",
-    color: "#4db87e",
+    bg: "#EFF7F2",
+    color: "#3D9B6B",
     icon: CheckCircle2,
     label: "Strong",
   },
   amber: {
-    bg: "#faf3e4",
-    color: "#c99a4e",
+    bg: "#FDF6ED",
+    color: "#B8821F",
     icon: AlertTriangle,
     label: "Needs Work",
   },
   red: {
-    bg: "#fbeae8",
-    color: "#d47872",
+    bg: "#FBEEEC",
+    color: "#B03D33",
     icon: XCircle,
     label: "Critical",
   },
@@ -899,7 +900,7 @@ function DiagnosticPage({
       <div className="px-8 py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#7c9cf5" />
+            <Search size={20} color="#E8472A" />
             <h1
               className="text-xl font-bold tracking-tight"
               style={{ color: vars.navy }}
@@ -969,7 +970,7 @@ function DiagnosticPage({
               <button
                 onClick={() => setShowResults(true)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
-                style={{ background: "#7c9cf5" }}
+                style={{ background: "#E8472A" }}
               >
                 <Search size={16} /> Run Diagnostic
               </button>
@@ -991,7 +992,7 @@ function DiagnosticPage({
       <div className="flex items-start justify-between mb-8">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#7c9cf5" />
+            <Search size={20} color="#E8472A" />
             <h1
               className="text-xl font-bold tracking-tight"
               style={{ color: vars.navy }}
@@ -1006,7 +1007,7 @@ function DiagnosticPage({
         </div>
         <button
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#7c9cf5" }}
+          style={{ background: "#E8472A" }}
         >
           <Download size={16} /> Download Report
         </button>
@@ -1049,7 +1050,7 @@ function DiagnosticPage({
         <div
           className="p-6 flex items-center gap-8 rounded-t-xl"
           style={{
-            background: "linear-gradient(135deg, #fafbfc, #f1f4f8)",
+            background: "linear-gradient(135deg, #FAFAFA, #F3F3F3)",
           }}
         >
           <div className="flex flex-col items-center">
@@ -1060,7 +1061,7 @@ function DiagnosticPage({
                   cy="60"
                   r="52"
                   fill="none"
-                  stroke="#e4e8ef"
+                  stroke="#E5E5E5"
                   strokeWidth="8"
                 />
                 <circle
@@ -1068,7 +1069,7 @@ function DiagnosticPage({
                   cy="60"
                   r="52"
                   fill="none"
-                  stroke="#e8b86d"
+                  stroke="#D4922A"
                   strokeWidth="8"
                   strokeDasharray={`${(overallScore / 100) * 327} 327`}
                   strokeLinecap="round"
@@ -1206,8 +1207,8 @@ function DiagnosticPage({
       <div
         className="rounded-xl border p-5 flex items-center justify-between"
         style={{
-          background: "rgba(79,143,255,0.03)",
-          borderColor: "rgba(79,143,255,0.15)",
+          background: "rgba(232,71,42,0.03)",
+          borderColor: "rgba(232,71,42,0.12)",
         }}
       >
         <div>
@@ -1225,7 +1226,7 @@ function DiagnosticPage({
         <button
           onClick={() => onNavigate("optimiser")}
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#7c9cf5" }}
+          style={{ background: "#E8472A" }}
         >
           Open Content Optimiser <ArrowRight size={14} />
         </button>
@@ -1297,7 +1298,7 @@ function OptimiserPage({
       <div className="px-8 py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#a78bfa" />
+            <FileEdit size={20} color="#2B8C8C" />
             <h1
               className="text-xl font-bold tracking-tight"
               style={{ color: vars.navy }}
@@ -1443,7 +1444,7 @@ function OptimiserPage({
             <button
               onClick={() => setShowResults(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
-              style={{ background: "#a78bfa" }}
+              style={{ background: "#2B8C8C" }}
             >
               <Sparkles size={16} /> Optimise Content
             </button>
@@ -1458,7 +1459,7 @@ function OptimiserPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#a78bfa" />
+            <FileEdit size={20} color="#2B8C8C" />
             <h1
               className="text-xl font-bold tracking-tight"
               style={{ color: vars.navy }}
@@ -1473,7 +1474,7 @@ function OptimiserPage({
         </div>
         <button
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#a78bfa" }}
+          style={{ background: "#2B8C8C" }}
         >
           <Download size={16} /> Export Optimised
         </button>
@@ -1577,18 +1578,18 @@ function OptimiserPage({
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center"
                   style={{
-                    background: step.done ? "#e8f7ef" : vars.g100,
+                    background: step.done ? "#EFF7F2" : vars.g100,
                   }}
                 >
                   {step.done ? (
-                    <Check size={14} color="#4db87e" />
+                    <Check size={14} color="#3D9B6B" />
                   ) : (
                     <step.icon size={14} style={{ color: vars.g400 }} />
                   )}
                 </div>
                 <span
                   className="text-[10px] font-medium"
-                  style={{ color: step.done ? "#4db87e" : vars.g400 }}
+                  style={{ color: step.done ? "#3D9B6B" : vars.g400 }}
                 >
                   {step.label}
                 </span>
@@ -1596,7 +1597,7 @@ function OptimiserPage({
               {i < arr.length - 1 && (
                 <div
                   className="flex-1 h-px mx-1"
-                  style={{ background: step.done ? "#c8ebd8" : vars.g200 }}
+                  style={{ background: step.done ? "#C2E5D2" : vars.g200 }}
                 />
               )}
             </div>
@@ -1617,7 +1618,7 @@ function OptimiserPage({
           <div className="flex items-center justify-center gap-2">
             <span
               className="text-3xl font-bold"
-              style={{ color: "#e88a80" }}
+              style={{ color: "#C94A3E" }}
             >
               42
             </span>
@@ -1642,7 +1643,7 @@ function OptimiserPage({
           <div className="flex items-center justify-center gap-2">
             <span
               className="text-3xl font-bold"
-              style={{ color: "#6ecf97" }}
+              style={{ color: "#4A6FA5" }}
             >
               78
             </span>
@@ -1651,7 +1652,7 @@ function OptimiserPage({
             </span>
             <span
               className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: "#e8f7ef", color: "#4db87e" }}
+              style={{ background: "#EFF7F2", color: "#3D9B6B" }}
             >
               <TrendingUp size={12} /> +36
             </span>
@@ -1670,7 +1671,7 @@ function OptimiserPage({
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
           <div className="flex items-center gap-2">
-            <Sparkles size={16} color="#a78bfa" />
+            <Sparkles size={16} color="#2B8C8C" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -1691,12 +1692,12 @@ function OptimiserPage({
                   style={{
                     background:
                       change.type === "addition"
-                        ? "#e8f7ef"
-                        : "#e4ecfa",
+                        ? "#EFF7F2"
+                        : "#E8F0F8",
                     color:
                       change.type === "addition"
-                        ? "#4db87e"
-                        : "#6889e0",
+                        ? "#3D9B6B"
+                        : "#3D5D8C",
                   }}
                 >
                   {change.type === "addition" ? (
@@ -1717,11 +1718,11 @@ function OptimiserPage({
                 {change.original && (
                   <div
                     className="p-3 rounded-lg text-sm leading-relaxed"
-                    style={{ background: "#fbeae8", color: "#b06b65" }}
+                    style={{ background: "#FBEEEC", color: "#8B3328" }}
                   >
                     <p
                       className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
-                      style={{ color: "#d47872" }}
+                      style={{ color: "#B03D33" }}
                     >
                       Original
                     </p>
@@ -1730,11 +1731,11 @@ function OptimiserPage({
                 )}
                 <div
                   className={`p-3 rounded-lg text-sm leading-relaxed ${!change.original ? "col-span-2" : ""}`}
-                  style={{ background: "#eef8f2", color: "#3d8a5e" }}
+                  style={{ background: "#EFF7F2", color: "#2D7A4F" }}
                 >
                   <p
                     className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
-                    style={{ color: "#4db87e" }}
+                    style={{ color: "#3D9B6B" }}
                   >
                     {change.original ? "Optimised" : "New Content"}
                   </p>
@@ -1748,7 +1749,7 @@ function OptimiserPage({
                 <MessageSquare
                   size={13}
                   className="mt-0.5 flex-shrink-0"
-                  color="#a78bfa"
+                  color="#2B8C8C"
                 />
                 <p className="text-xs" style={{ color: vars.g600 }}>
                   {change.annotation}
@@ -1790,7 +1791,7 @@ function OptimiserPage({
                   </span>
                   <span
                     className="text-xs font-semibold"
-                    style={{ color: "#a78bfa" }}
+                    style={{ color: "#2B8C8C" }}
                   >
                     {(phrase.relevance * 100).toFixed(0)}%
                   </span>
@@ -1804,7 +1805,7 @@ function OptimiserPage({
                     style={{
                       width: `${phrase.relevance * 100}%`,
                       background:
-                        "linear-gradient(90deg, #a78bfa, #7c9cf5)",
+                        "linear-gradient(90deg, #2B8C8C, #E8472A)",
                     }}
                   />
                 </div>
@@ -1821,7 +1822,7 @@ function OptimiserPage({
           className="px-5 py-3 border-b flex items-center gap-2"
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
-          <Zap size={14} color="#a78bfa" />
+          <Zap size={14} color="#2B8C8C" />
           <h2
             className="text-sm font-semibold"
             style={{ color: vars.navy }}
@@ -1832,14 +1833,14 @@ function OptimiserPage({
         <div className="p-5 grid grid-cols-2 gap-4">
           <button
             className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-            style={{ borderColor: "rgba(124,92,255,0.3)", background: "rgba(124,92,255,0.02)" }}
+            style={{ borderColor: "rgba(43,140,140,0.25)", background: "rgba(43,140,140,0.02)" }}
           >
             <div className="flex items-center gap-3 mb-3">
               <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(124,92,255,0.08)" }}
+                style={{ background: "rgba(43,140,140,0.08)" }}
               >
-                <Bot size={20} color="#a78bfa" />
+                <Bot size={20} color="#2B8C8C" />
               </div>
               <div>
                 <p className="text-sm font-semibold" style={{ color: vars.navy }}>
@@ -1883,8 +1884,8 @@ function OptimiserPage({
       <div
         className="rounded-xl border p-5 flex items-center justify-between"
         style={{
-          background: "rgba(124,92,255,0.03)",
-          borderColor: "rgba(124,92,255,0.15)",
+          background: "rgba(43,140,140,0.03)",
+          borderColor: "rgba(43,140,140,0.12)",
         }}
       >
         <div>
@@ -1902,7 +1903,7 @@ function OptimiserPage({
         <button
           onClick={() => onNavigate("planner")}
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#a78bfa" }}
+          style={{ background: "#2B8C8C" }}
         >
           Add to Planner <ArrowRight size={14} />
         </button>
@@ -2064,7 +2065,7 @@ function PlannerPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <BarChart3 size={20} color="#6ecf97" />
+            <BarChart3 size={20} color="#4A6FA5" />
             <h1
               className="text-xl font-bold tracking-tight"
               style={{ color: vars.navy }}
@@ -2084,7 +2085,7 @@ function PlannerPage() {
                 onClick={() => setSelectedQuarter(q)}
                 className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
                 style={{
-                  background: selectedQuarter === q ? "#6ecf97" : "transparent",
+                  background: selectedQuarter === q ? "#4A6FA5" : "transparent",
                   color: selectedQuarter === q ? "white" : vars.g500,
                 }}
               >
@@ -2094,7 +2095,7 @@ function PlannerPage() {
           </div>
           <button
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-            style={{ background: "#6ecf97" }}
+            style={{ background: "#4A6FA5" }}
           >
             <Download size={16} /> Export Plan
           </button>
@@ -2107,7 +2108,7 @@ function PlannerPage() {
         <div
           className="p-6 flex items-center gap-8"
           style={{
-            background: "linear-gradient(135deg, #fafbfc, #f1f4f8)",
+            background: "linear-gradient(135deg, #FAFAFA, #F3F3F3)",
           }}
         >
           <div className="flex flex-col items-center">
@@ -2118,7 +2119,7 @@ function PlannerPage() {
                   cy="70"
                   r="60"
                   fill="none"
-                  stroke="#e4e8ef"
+                  stroke="#E5E5E5"
                   strokeWidth="10"
                 />
                 <circle
@@ -2126,7 +2127,7 @@ function PlannerPage() {
                   cy="70"
                   r="60"
                   fill="none"
-                  stroke="#e8b86d"
+                  stroke="#D4922A"
                   strokeWidth="10"
                   strokeDasharray={`${(scorePercent / 100) * 377} 377`}
                   strokeLinecap="round"
@@ -2197,7 +2198,7 @@ function PlannerPage() {
               </p>
               <p
                 className="text-2xl font-bold"
-                style={{ color: "#e8b86d" }}
+                style={{ color: "#D4922A" }}
               >
                 {gaps.length}
               </p>
@@ -2234,13 +2235,13 @@ function PlannerPage() {
                   style={{
                     background:
                       cat.count > 0
-                        ? "rgba(34,197,94,0.06)"
+                        ? "rgba(74,111,165,0.06)"
                         : vars.g100,
                   }}
                 >
                   <cat.icon
                     size={18}
-                    color={cat.count > 0 ? "#6ecf97" : "#94a0b4"}
+                    color={cat.count > 0 ? "#4A6FA5" : "#9CA3AF"}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2263,15 +2264,15 @@ function PlannerPage() {
                         style={{
                           background:
                             cat.weight >= 8
-                              ? "#e8f7ef"
+                              ? "#EFF7F2"
                               : cat.weight >= 5
-                                ? "#faf3e4"
+                                ? "#FDF6ED"
                                 : vars.g100,
                           color:
                             cat.weight >= 8
-                              ? "#4db87e"
+                              ? "#3D9B6B"
                               : cat.weight >= 5
-                                ? "#c99a4e"
+                                ? "#B8821F"
                                 : vars.g500,
                         }}
                       >
@@ -2289,10 +2290,10 @@ function PlannerPage() {
                         width: `${fillPercent}%`,
                         background:
                           fillPercent >= 70
-                            ? "linear-gradient(90deg, #6ecf97, #4db87e)"
+                            ? "linear-gradient(90deg, #3D9B6B, #2D7A4F)"
                             : fillPercent > 0
-                              ? "linear-gradient(90deg, #e8b86d, #d4a85e)"
-                              : "#e4e8ef",
+                              ? "linear-gradient(90deg, #D4922A, #B8821F)"
+                              : "#E5E5E5",
                       }}
                     />
                   </div>
@@ -2317,7 +2318,7 @@ function PlannerPage() {
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
           <div className="flex items-center gap-2">
-            <Calendar size={14} color="#6ecf97" />
+            <Calendar size={14} color="#4A6FA5" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -2336,9 +2337,9 @@ function PlannerPage() {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: "rgba(34,197,94,0.06)" }}
+                    style={{ background: "rgba(74,111,165,0.06)" }}
                   >
-                    <Calendar size={14} color="#6ecf97" />
+                    <Calendar size={14} color="#4A6FA5" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold" style={{ color: vars.navy }}>
@@ -2352,8 +2353,8 @@ function PlannerPage() {
                 <span
                   className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
                   style={{
-                    background: item.status === "optimised" ? "#e8f7ef" : item.status === "draft" ? "#faf3e4" : vars.g100,
-                    color: item.status === "optimised" ? "#4db87e" : item.status === "draft" ? "#c99a4e" : vars.g500,
+                    background: item.status === "optimised" ? "#EFF7F2" : item.status === "draft" ? "#FDF6ED" : vars.g100,
+                    color: item.status === "optimised" ? "#3D9B6B" : item.status === "draft" ? "#B8821F" : vars.g500,
                   }}
                 >
                   {item.status}
@@ -2392,7 +2393,7 @@ function PlannerPage() {
             className="px-5 py-3 border-b flex items-center gap-2"
             style={{ background: vars.g50, borderColor: vars.g200 }}
           >
-            <AlertTriangle size={14} color="#c99a4e" />
+            <AlertTriangle size={14} color="#B8821F" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -2408,8 +2409,8 @@ function PlannerPage() {
                 style={{
                   background:
                     gap.severity === "critical"
-                      ? "#fbeae8"
-                      : "#faf6ed",
+                      ? "#FBEEEC"
+                      : "#FDF6ED",
                 }}
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -2418,12 +2419,12 @@ function PlannerPage() {
                     style={{
                       background:
                         gap.severity === "critical"
-                          ? "#fbeae8"
-                          : "#faf3e4",
+                          ? "#FBEEEC"
+                          : "#FDF6ED",
                       color:
                         gap.severity === "critical"
-                          ? "#d47872"
-                          : "#c99a4e",
+                          ? "#B03D33"
+                          : "#B8821F",
                     }}
                   >
                     {gap.severity}
@@ -2453,7 +2454,7 @@ function PlannerPage() {
             className="px-5 py-3 border-b flex items-center gap-2"
             style={{ background: vars.g50, borderColor: vars.g200 }}
           >
-            <TrendingUp size={14} color="#4db87e" />
+            <TrendingUp size={14} color="#3D9B6B" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -2462,9 +2463,9 @@ function PlannerPage() {
             </h2>
           </div>
           <div className="p-4">
-            <div className="p-3 rounded-lg" style={{ background: "#eef8f2" }}>
+            <div className="p-3 rounded-lg" style={{ background: "#EFF7F2" }}>
               <div className="flex items-center gap-2 mb-1">
-                <CheckCircle2 size={12} color="#4db87e" />
+                <CheckCircle2 size={12} color="#3D9B6B" />
                 <span
                   className="text-xs font-semibold"
                   style={{ color: vars.navy }}
@@ -2492,11 +2493,11 @@ function PlannerPage() {
           className="px-5 py-3 border-b flex items-center gap-2"
           style={{
             background:
-              "linear-gradient(135deg, rgba(34,197,94,0.04), rgba(79,143,255,0.04))",
+              "linear-gradient(135deg, rgba(74,111,165,0.04), rgba(232,71,42,0.04))",
             borderColor: vars.g200,
           }}
         >
-          <Lightbulb size={16} color="#6ecf97" />
+          <Lightbulb size={16} color="#4A6FA5" />
           <h2
             className="text-sm font-semibold"
             style={{ color: vars.navy }}
@@ -2509,7 +2510,7 @@ function PlannerPage() {
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{
-                background: "linear-gradient(135deg, #6ecf97, #4db87e)",
+                background: "linear-gradient(135deg, #4A6FA5, #3D5D8C)",
               }}
             >
               <Target size={24} color="white" />
@@ -2536,7 +2537,7 @@ function PlannerPage() {
               <div className="flex items-center gap-2 mt-3">
                 <span
                   className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full"
-                  style={{ background: "#e8f7ef", color: "#4db87e" }}
+                  style={{ background: "#EFF7F2", color: "#3D9B6B" }}
                 >
                   <ArrowUpRight size={12} /> +15% predicted plan score
                 </span>

@@ -21,7 +21,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   ├── aio-fusion/         # AIO Fusion GEO Platform — interactive clickable demo (React + Vite, meeting feedback incorporated)
+│   ├── aio-fusion/         # AIO Fusion GEO Platform — interactive clickable demo (React + Vite, Simpatico PR branded)
 │   └── api-server/         # Express API server
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config

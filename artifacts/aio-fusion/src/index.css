@@ -13,7 +13,7 @@
 
   body {
     @apply font-sans antialiased;
-    background: #f8fafc;
-    color: #0a1628;
+    background: #FAFAFA;
+    color: #1C1C1C;
   }
 }
