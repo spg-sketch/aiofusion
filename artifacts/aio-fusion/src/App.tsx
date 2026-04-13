@@ -2768,8 +2768,8 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             muted
             loop
             playsInline
-            className="absolute w-full h-full object-cover opacity-30"
-            style={{ filter: "brightness(0.6) saturate(0.5)" }}
+            className="absolute w-full h-full object-cover opacity-50"
+            style={{ filter: "brightness(0.8) saturate(0.7)" }}
           >
             <source src={`${import.meta.env.BASE_URL}videos/hero-backdrop.mp4`} type="video/mp4" />
           </video>
