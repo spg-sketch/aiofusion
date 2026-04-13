@@ -175,7 +175,7 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
 
 const navItems = [
   { label: "Dashboard", id: "dashboard" },
-  { label: "GEO Diagnostic", id: "diagnostic" },
+  { label: "AIO Diagnostic", id: "diagnostic" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "Authority Planner", id: "planner" },
   { label: "Archive", id: "archive", locked: true },
@@ -514,7 +514,7 @@ function DashboardPage({
     {
       id: "diagnostic",
       icon: Search,
-      title: "GEO Diagnostic",
+      title: "AIO Diagnostic",
       description:
         "Analyse how well your content is structured for AI visibility. Get a scored report with specific actions.",
       color: "#E8472A",
@@ -901,6 +901,25 @@ function DiagnosticPage({
   ];
   const overallScore = 58;
 
+  const diagnosticRows = [
+    {
+      action: "Authority Audit in Earned Media",
+      output: "Coverage quality score, citation-readiness of press mentions, journalist attribution patterns, and media outlet authority signals.",
+    },
+    {
+      action: "Authority Audit in Owned Media",
+      output: "Website content structure score, schema markup status, FAQ optimisation, answer-first copy assessment, and AI crawler accessibility.",
+    },
+    {
+      action: "Key competitor comparison",
+      output: "Side-by-side authority benchmarking across competitors, showing citation frequency, signal category scores, and share of AI voice.",
+    },
+    {
+      action: "Priority Actions",
+      output: "Ranked list of high-impact recommendations with estimated effort and projected score improvement per action.",
+    },
+  ];
+
   if (!showResults) {
     return (
       <div className="px-8 py-8 max-w-5xl mx-auto">
@@ -911,12 +930,11 @@ function DiagnosticPage({
               className="text-xl tracking-tight"
               style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
-              GEO Diagnostic
+              AIO Diagnostic
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Analyse how your content is structured for AI visibility across
-            six signal categories.
+            Authority and Visibility Diagnostic for AI engines.
           </p>
         </div>
         <div
@@ -1003,12 +1021,11 @@ function DiagnosticPage({
               className="text-xl tracking-tight"
               style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
             >
-              GEO Diagnostic
+              AIO Diagnostic
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Analyse how your content is structured for AI visibility across
-            six signal categories.
+            Authority and Visibility Diagnostic for AI engines.
           </p>
         </div>
         <button
@@ -1018,37 +1035,37 @@ function DiagnosticPage({
           <Download size={16} /> Download Report
         </button>
       </div>
-      <div
-        className="rounded-xl border p-6 mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Globe size={16} style={{ color: vars.g400 }} />
-          <span
-            className="text-sm font-medium"
-            style={{ color: vars.g500 }}
-          >
-            Analysing
-          </span>
+
+      <div className="rounded-xl border overflow-hidden mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="px-6 py-4 text-center" style={{ background: vars.accent }}>
+          <h2 className="text-lg font-semibold text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
+            Authority and Visibility Diagnostic
+          </h2>
         </div>
-        <div
-          className="flex items-center gap-3 p-3 rounded-lg"
-          style={{ background: vars.g50 }}
-        >
-          <FileText size={18} style={{ color: vars.g400 }} />
-          <div>
-            <p
-              className="text-sm font-medium"
-              style={{ color: vars.navy }}
-            >
-              simpatico-pr.co.uk / Services Page
-            </p>
-            <p className="text-xs" style={{ color: vars.g400 }}>
-              Pasted content · 2,340 words · Analysed just now
-            </p>
+        <div className="grid grid-cols-2">
+          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(232,71,42,0.75)" }}>
+            Action
+          </div>
+          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(232,71,42,0.75)" }}>
+            Output
           </div>
         </div>
+        {diagnosticRows.map((row, i) => (
+          <div key={i} className="grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
+            <div className="px-6 py-5 flex items-center justify-center text-center border-r" style={{ borderColor: vars.g200 }}>
+              <span className="text-sm font-medium" style={{ color: vars.navy }}>{row.action}</span>
+            </div>
+            <div className="px-6 py-5 flex items-center">
+              <span className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>{row.output}</span>
+            </div>
+          </div>
+        ))}
+        <div className="grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
+          <div className="px-6 py-5 border-r" style={{ borderColor: vars.g200 }}></div>
+          <div className="px-6 py-5"></div>
+        </div>
       </div>
+
       <div
         className="rounded-xl border overflow-hidden mb-6"
         style={{ background: "white", borderColor: vars.g200 }}
@@ -2845,7 +2862,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           </div>
           <div className="grid md:grid-cols-3 gap-10">
             {[
-              { title: "GEO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #E8472A, #C93A20)", icon: FileText },
+              { title: "AIO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #E8472A, #C93A20)", icon: FileText },
               { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2B8C8C, #237474)", icon: FileEdit },
               { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)", icon: BarChart3 },
             ].map((tool) => (
@@ -2875,7 +2892,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="grid md:grid-cols-4 gap-10">
             {[
               { step: "01", title: "Onboard", desc: "Client data, messaging and content are loaded into a dedicated workspace." },
-              { step: "02", title: "Diagnose", desc: "Run the GEO Diagnostic to benchmark how AI currently perceives the brand." },
+              { step: "02", title: "Diagnose", desc: "Run the AIO Diagnostic to benchmark how AI currently perceives the brand." },
               { step: "03", title: "Optimise", desc: "Use the Content Optimiser to rewrite PR content for AI citation and visibility." },
               { step: "04", title: "Plan & Measure", desc: "Build a forward plan scored for authority impact and track results over time." },
             ].map((item) => (
