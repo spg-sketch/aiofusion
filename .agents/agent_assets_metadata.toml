@@ -23,3 +23,9 @@ id = "epTCa_t7Z4honvy8uHpVo"
 uri = "file://attached_assets/Meeting-Notes-Patrick-Spencer-Mar27-Clean.md"
 type = "text"
 title = "Meeting Notes — Patrick & Spencer, 27 March"
+
+[[outputs]]
+id = "f6JwjGiEskUjCpL7HrBS3"
+uri = "file://AIO_Fusion_Logo_Brief.md"
+type = "text"
+title = "AIO Fusion Logo Design Brief"
