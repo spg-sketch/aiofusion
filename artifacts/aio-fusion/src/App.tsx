@@ -53,6 +53,12 @@ import {
   ArrowLeft,
   Users,
   Activity,
+  Play,
+  ChevronUp,
+  ExternalLink,
+  Menu,
+  X,
+  LogIn,
 } from "lucide-react";
 
 type Client = {
@@ -2550,9 +2556,317 @@ function PlannerPage() {
   );
 }
 
+const llmLogos = [
+  { name: "ChatGPT", color: "#10A37F", icon: (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>
+  )},
+  { name: "Perplexity", color: "#1FB8CD", icon: (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 1L4 5v6.5L1.5 13v5L4 19.5V23l8-4 8 4v-3.5L22.5 18v-5L20 11.5V5L12 1zm0 2.2l6 3v5.3l-6 3-6-3V6.2l6-3zM3.5 14.2l1.5-.8v2.1l4 2v2.3l-5.5-2.7v-2.9zm17 0v2.9l-5.5 2.7v-2.3l4-2v-2.1l1.5.8z"/></svg>
+  )},
+  { name: "Claude", color: "#D97757", icon: (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5v-3.07c-3.39-.49-6-3.4-6-6.93h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2c0 3.53-2.61 6.44-6 6.93V17.5h3v2H8v-2h3z"/></svg>
+  )},
+  { name: "Gemini", color: "#4285F4", icon: (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15h-2v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3l-.5 3H13v6.95c5.05-.5 9-4.76 9-9.95 0-5.52-4.48-10-10-10z"/></svg>
+  )},
+];
+
+const agencyBrands = [
+  "Simpatico PR", "Bluhalo", "Greenfield Organics", "NovaTech Solutions",
+  "Meridian Property Group", "Arclight Finance", "Haven Digital", "Crestline Partners",
+];
+
+const blogPosts = [
+  { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", date: "10 March 2026", tag: "Guide" },
+  { title: "Why Earned Media is the Key to AI Citation", date: "28 February 2026", tag: "Insight" },
+  { title: "How GEO is Reshaping B2B Discovery", date: "14 February 2026", tag: "Analysis" },
+];
+
+function LandingPage({ onLogin }: { onLogin: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(26,26,46,0.92)" }}>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
+              <Sparkles size={16} color="#fff" />
+            </div>
+            <span className="text-white font-bold text-lg tracking-tight">AIO Fusion</span>
+          </div>
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#features" className="text-sm text-white/70 hover:text-white transition-colors">Features</a>
+            <a href="#how-it-works" className="text-sm text-white/70 hover:text-white transition-colors">How It Works</a>
+            <a href="#llms" className="text-sm text-white/70 hover:text-white transition-colors">LLM Coverage</a>
+            <a href="#stories" className="text-sm text-white/70 hover:text-white transition-colors">Stories</a>
+            <button
+              onClick={onLogin}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
+              style={{ background: vars.accent }}
+            >
+              <LogIn size={14} /> Admin Login
+            </button>
+          </div>
+          <button className="md:hidden text-white" onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+        {menuOpen && (
+          <div className="md:hidden px-6 pb-4 flex flex-col gap-3" style={{ background: "rgba(26,26,46,0.98)" }}>
+            <a href="#features" className="text-sm text-white/70 py-2">Features</a>
+            <a href="#how-it-works" className="text-sm text-white/70 py-2">How It Works</a>
+            <a href="#llms" className="text-sm text-white/70 py-2">LLM Coverage</a>
+            <a href="#stories" className="text-sm text-white/70 py-2">Stories</a>
+            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+              <LogIn size={14} /> Admin Login
+            </button>
+          </div>
+        )}
+      </nav>
+
+      <section className="relative min-h-[100vh] flex items-center justify-center overflow-hidden" style={{ background: vars.navy }}>
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute w-[600px] h-[600px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #E8472A 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
+          <div className="absolute w-[500px] h-[500px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #2B8C8C 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
+          <div className="absolute w-[400px] h-[400px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #4A6FA5 0%, transparent 70%)", top: "40%", left: "30%", animation: "float3 30s ease-in-out infinite" }} />
+          <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+        </div>
+        <style>{`
+          @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
+          @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
+          @keyframes float3 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-20px, -30px) scale(0.9); } }
+        `}</style>
+        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-white/90 mb-6" style={{ background: "rgba(232,71,42,0.3)", border: "1px solid rgba(232,71,42,0.4)" }}>
+            <Sparkles size={12} /> Generative Engine Optimisation
+          </div>
+          <h1 className="text-5xl md:text-7xl font-bold text-white leading-tight mb-6 tracking-tight">
+            Win AI Authority<br />
+            <span style={{ color: vars.accent }}>for Your Brand</span>
+          </h1>
+          <p className="text-lg md:text-xl text-white/75 max-w-2xl mx-auto mb-10 leading-relaxed">
+            AIO Fusion by Simpatico PR helps B2B businesses become the source AI cites.
+            Diagnose, optimise, and plan your content for visibility across ChatGPT, Perplexity, Claude and Gemini.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button
+              onClick={onLogin}
+              className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:brightness-110 hover:scale-105"
+              style={{ background: vars.accent }}
+            >
+              <LogIn size={18} /> Platform Login
+            </button>
+            <a
+              href="#features"
+              className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:bg-white/15"
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}
+            >
+              Learn More <ArrowRight size={16} />
+            </a>
+          </div>
+          <div className="mt-16 flex items-center justify-center gap-2 text-white/40 text-sm">
+            <span>Powering GEO for leading agencies</span>
+            <ChevronDown size={14} className="animate-bounce" />
+          </div>
+        </div>
+      </section>
+
+      <section className="py-12 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest mb-8" style={{ color: vars.g400 }}>
+            Trusted by forward-thinking agencies and brands
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+            {agencyBrands.map((brand) => (
+              <span key={brand} className="text-base font-semibold tracking-tight" style={{ color: vars.g400 }}>
+                {brand}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className="py-24" style={{ background: "#FAFAFA" }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+              <Target size={12} /> Core Platform
+            </div>
+            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>Three tools, one AI authority strategy</h2>
+            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+              AIO Fusion provides a complete GEO workflow — from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { title: "GEO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #E8472A, #C93A20)", icon: FileText },
+              { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2B8C8C, #237474)", icon: FileEdit },
+              { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)", icon: BarChart3 },
+            ].map((tool) => (
+              <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+                <div className="h-2" style={{ background: tool.gradient }} />
+                <div className="p-8">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: `${tool.color}12` }}>
+                    <tool.icon size={24} color={tool.color} />
+                  </div>
+                  <h3 className="text-xl font-bold mb-3" style={{ color: vars.navy }}>{tool.title}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: vars.g500 }}>{tool.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" className="py-24" style={{ background: "#fff" }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>How AIO Fusion works</h2>
+            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+              A managed service model — Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { step: "01", title: "Onboard", desc: "Client data, messaging and content are loaded into a dedicated workspace." },
+              { step: "02", title: "Diagnose", desc: "Run the GEO Diagnostic to benchmark how AI currently perceives the brand." },
+              { step: "03", title: "Optimise", desc: "Use the Content Optimiser to rewrite PR content for AI citation and visibility." },
+              { step: "04", title: "Plan & Measure", desc: "Build a forward plan scored for authority impact and track results over time." },
+            ].map((item) => (
+              <div key={item.step} className="text-center">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold text-white" style={{ background: vars.navy }}>
+                  {item.step}
+                </div>
+                <h3 className="text-lg font-bold mb-2" style={{ color: vars.navy }}>{item.title}</h3>
+                <p className="text-sm leading-relaxed" style={{ color: vars.g500 }}>{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20" style={{ background: vars.navy }}>
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <div className="grid grid-cols-4 gap-8">
+            {[
+              { value: "82%", label: "of AI-cited content comes from earned media" },
+              { value: "95%", label: "of AI citations use non-paid sources" },
+              { value: "40%", label: "of search queries now handled by AI" },
+              { value: "30%+", label: "visibility boost via GEO methods" },
+            ].map((stat) => (
+              <div key={stat.value}>
+                <div className="text-3xl md:text-4xl font-bold mb-2" style={{ color: vars.accent }}>{stat.value}</div>
+                <p className="text-xs text-white/60 leading-relaxed">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="llms" className="py-24" style={{ background: "#FAFAFA" }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider mb-4" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+              <Globe size={12} /> Coverage
+            </div>
+            <h2 className="text-4xl font-bold mb-4" style={{ color: vars.navy }}>Optimise for every major LLM</h2>
+            <p className="text-lg max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+              AIO Fusion analyses and scores your content against the retrieval and citation patterns of the four dominant answer engines.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {llmLogos.map((llm) => (
+              <div key={llm.name} className="bg-white rounded-2xl border p-8 flex flex-col items-center gap-4 transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${llm.color}12`, color: llm.color }}>
+                  {llm.icon}
+                </div>
+                <span className="font-bold text-lg" style={{ color: vars.navy }}>{llm.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="stories" className="py-24" style={{ background: "#fff" }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex items-end justify-between mb-12">
+            <div>
+              <h2 className="text-4xl font-bold mb-3" style={{ color: vars.navy }}>Latest stories</h2>
+              <p className="text-lg" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR from the Simpatico team.</p>
+            </div>
+            <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-1.5 text-sm font-semibold hover:underline" style={{ color: vars.accent }}>
+              View all on simpaticopr.co.uk <ExternalLink size={14} />
+            </a>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {blogPosts.map((post) => (
+              <a key={post.title} href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+                <div className="h-48 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${vars.navy}, #2a2a48)` }}>
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.2)" }}>
+                    <BookOpen size={28} color="#fff" />
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase" style={{ background: "rgba(232,71,42,0.08)", color: vars.accent }}>{post.tag}</span>
+                    <span className="text-xs" style={{ color: vars.g400 }}>{post.date}</span>
+                  </div>
+                  <h3 className="font-bold leading-snug group-hover:underline" style={{ color: vars.navy }}>{post.title}</h3>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24" style={{ background: vars.navy }}>
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <h2 className="text-4xl font-bold text-white mb-5">Ready to win AI authority?</h2>
+          <p className="text-lg text-white/65 mb-10 leading-relaxed">
+            Get in touch with Simpatico PR to discuss how AIO Fusion can help your business become the source AI cites and recommends.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+              <Mail size={18} /> Contact Simpatico PR
+            </a>
+            <button onClick={onLogin} className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-base font-semibold text-white transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}>
+              <LogIn size={16} /> Admin Login
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <footer className="py-10 border-t" style={{ background: "#fff", borderColor: vars.g200 }}>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
+                <Sparkles size={13} color="#fff" />
+              </div>
+              <span className="font-bold" style={{ color: vars.navy }}>AIO Fusion</span>
+              <span className="text-xs" style={{ color: vars.g400 }}>by Simpatico PR</span>
+            </div>
+            <div className="flex items-center gap-6 text-sm" style={{ color: vars.g400 }}>
+              <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hover:underline">simpaticopr.co.uk</a>
+              <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="hover:underline">Contact</a>
+            </div>
+            <p className="text-xs" style={{ color: vars.g400 }}>&copy; Simpatico PR Ltd. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 function App() {
+  const [view, setView] = useState<"landing" | "platform">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+
+  if (view === "landing") {
+    return <LandingPage onLogin={() => setView("platform")} />;
+  }
 
   if (!activeClient) {
     return (
