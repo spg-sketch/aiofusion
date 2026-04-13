@@ -1,0 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --navy: #1A1A2E;
+  --accent: #E8472A;
+  --teal: #2B8C8C;
+  --slate: #4A6FA5;
+  --g50: #F8F9FA;
+  --g100: #F1F3F5;
+  --g200: #E9ECEF;
+  --g300: #DEE2E6;
+  --g400: #ADB5BD;
+  --g500: #6C757D;
+  --g600: #495057;
+}
