@@ -2780,7 +2780,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <span style={{ color: vars.accent }}>for Your Brand</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-14 leading-relaxed font-light">
-            AIO Fusion by Simpatico PR helps B2B businesses become the source AI cites.
+            AIO Fusion by Simpatico PR helps agencies and B2B businesses become the source AI cites.
             Diagnose, optimise, and plan your content for visibility across ChatGPT, Perplexity, Claude and Gemini.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
