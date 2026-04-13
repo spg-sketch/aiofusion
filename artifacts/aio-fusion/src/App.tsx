@@ -2768,12 +2768,12 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             muted
             loop
             playsInline
-            className="absolute w-full h-full object-cover opacity-50"
-            style={{ filter: "brightness(0.8) saturate(0.7)" }}
+            className="absolute w-full h-full object-cover opacity-65"
+            style={{ filter: "brightness(0.9) saturate(0.8)" }}
           >
             <source src={`${import.meta.env.BASE_URL}videos/hero-backdrop.mp4`} type="video/mp4" />
           </video>
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(26,26,46,0.4) 0%, rgba(26,26,46,0.7) 50%, rgba(26,26,46,0.95) 100%)" }} />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(26,26,46,0.25) 0%, rgba(26,26,46,0.55) 50%, rgba(26,26,46,0.92) 100%)" }} />
           <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #E8472A 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
           <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2B8C8C 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
           <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
