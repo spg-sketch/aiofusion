@@ -2750,15 +2750,15 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="flex items-end justify-between mb-16">
             <div>
               <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Latest stories</h2>
-              <p className="text-lg font-light" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR from the Simpatico team.</p>
+              <p className="text-lg font-light" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR.</p>
             </div>
-            <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-2 text-[13px] font-medium hover:underline" style={{ color: vars.accent }}>
-              View all on simpaticopr.co.uk <ExternalLink size={13} />
+            <a href="#" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-2 text-[13px] font-medium hover:underline" style={{ color: vars.accent }}>
+              View all <ExternalLink size={13} />
             </a>
           </div>
           <div className="grid md:grid-cols-3 gap-10">
             {blogPosts.map((post) => (
-              <a key={post.title} href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+              <a key={post.title} href="#" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
                 <div className="h-52 overflow-hidden">
                   <img src={post.image} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                 </div>
@@ -2786,7 +2786,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <p className="text-lg font-light leading-relaxed mb-10" style={{ color: vars.g500 }}>
             Add Generative Engine Optimisation to your service offering. AIO Fusion gives your team the tools to deliver measurable AI authority results for every client.
           </p>
-          <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+          <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
             <Mail size={16} /> Get in Touch
           </a>
         </div>
@@ -2801,7 +2801,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light mb-10">
             AIO Fusion structures your brand's authority data so AI agents can discover, cite, and recommend your business with confidence. Access structured signals, optimised content, and citation tracking.
           </p>
-          <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+          <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
             <Mail size={16} /> Get in Touch
           </a>
         </div>
@@ -2814,7 +2814,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             Get in touch to discuss how AIO Fusion can help your business become the source AI cites and recommends.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
-            <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+            <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
               <Mail size={18} /> Contact Us
             </a>
             <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -2831,8 +2831,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
-              <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hover:underline">simpaticopr.co.uk</a>
-              <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="hover:underline">Contact</a>
+              <a href="#" className="hover:underline">Contact</a>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
