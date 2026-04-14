@@ -302,7 +302,7 @@ function Sidebar({
               className="text-xs font-medium"
               style={{ color: vars.navy }}
             >
-              Simpatico PR
+              Admin
             </span>
             <span className="text-[10px]" style={{ color: vars.g400 }}>
               Intelligence Tier
@@ -342,7 +342,7 @@ function ClientSelectorPage({
           </div>
           <div className="flex flex-col">
             <span className="text-[13px] font-medium" style={{ color: vars.navy }}>
-              Simpatico PR
+              Admin
             </span>
             <span className="text-[11px] font-light" style={{ color: vars.g400 }}>
               Intelligence Tier
@@ -2387,7 +2387,7 @@ const llmLogos = [
 ];
 
 const agencyBrands = [
-  "Simpatico PR", "Bluhalo", "Merkle", "Kepler",
+  "Bluhalo", "Merkle", "Kepler", "Havas",
   "the7stars", "Fjord", "Mindshare", "OMD UK",
 ];
 
@@ -2603,7 +2603,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <span style={{ color: vars.accent }}>for Your Brand</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-14 leading-relaxed font-light">
-            AIO Fusion by Simpatico PR helps agencies and B2B businesses become the source AI cites.
+            AIO Fusion helps agencies and B2B businesses become the source AI cites.
             Diagnose, optimise, and plan your content for visibility across ChatGPT, Perplexity, Claude and Gemini.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
@@ -2681,7 +2681,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              A managed service model. Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
+              A managed service model. The platform is operated on behalf of clients, delivering GEO as part of a retained engagement.
             </p>
           </div>
           <div className="grid md:grid-cols-4 gap-10">
@@ -2787,7 +2787,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             Add Generative Engine Optimisation to your service offering. AIO Fusion gives your team the tools to deliver measurable AI authority results for every client.
           </p>
           <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
-            <Mail size={16} /> Partner with Simpatico PR
+            <Mail size={16} /> Get in Touch
           </a>
         </div>
       </section>
@@ -2811,11 +2811,11 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="max-w-3xl mx-auto px-8 text-center">
           <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
           <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
-            Get in touch with Simpatico PR to discuss how AIO Fusion can help your business become the source AI cites and recommends.
+            Get in touch to discuss how AIO Fusion can help your business become the source AI cites and recommends.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
-              <Mail size={18} /> Contact Simpatico PR
+              <Mail size={18} /> Contact Us
             </a>
             <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}>
               <LogIn size={16} /> Admin Login
@@ -2829,13 +2829,12 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
-              <span className="text-[13px] font-light" style={{ color: vars.g400 }}>by Simpatico PR</span>
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
               <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hover:underline">simpaticopr.co.uk</a>
               <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="hover:underline">Contact</a>
             </div>
-            <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; Simpatico PR Ltd. All rights reserved.</p>
+            <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
         </div>
       </footer>
