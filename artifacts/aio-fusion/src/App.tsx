@@ -222,7 +222,7 @@ function Sidebar({
         className="flex items-center gap-3 px-6 py-6 border-b"
         style={{ borderColor: vars.g200 }}
       >
-        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
+        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
       </div>
       <button
         onClick={onBackToClients}
@@ -331,7 +331,7 @@ function ClientSelectorPage({
         style={{ background: "white", borderColor: vars.g200 }}
       >
         <div className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-24" />
         </div>
         <div className="flex items-center gap-3.5">
           <div
@@ -2535,7 +2535,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
         <div className="max-w-7xl mx-auto px-8 h-[72px] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-10" />
+            <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20" />
           </div>
           <div className="hidden md:flex items-center gap-10">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
@@ -2964,7 +2964,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="max-w-6xl mx-auto px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex items-center gap-3">
-              <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
+              <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
               <span className="text-[13px] font-light" style={{ color: vars.g400 }}>by Simpatico PR</span>
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
