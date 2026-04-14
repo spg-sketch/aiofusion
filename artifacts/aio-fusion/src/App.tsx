@@ -1,3 +1,4 @@
+import IntakePage from "./IntakeForm";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -176,6 +177,7 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
 
 const navItems = [
   { label: "Dashboard", id: "dashboard" },
+  { label: "Client Intake", id: "intake" },
   { label: "AIO Diagnostic", id: "diagnostic" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "Authority Planner", id: "planner" },
@@ -2767,6 +2769,7 @@ function App() {
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
+        {currentPage === "intake" && <IntakePage />}
         {currentPage === "diagnostic" && (
           <DiagnosticPage onNavigate={setCurrentPage} />
         )}
