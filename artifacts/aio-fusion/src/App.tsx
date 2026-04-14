@@ -2533,7 +2533,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
-        <div className="max-w-7xl mx-auto px-8 h-[72px] flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-8 h-[96px] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20" />
           </div>
@@ -2594,7 +2594,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
         `}</style>
-        <div className="relative z-10 max-w-4xl mx-auto px-8 text-center">
+        <div className="relative z-10 max-w-4xl mx-auto px-8 text-center pt-16">
           <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(31,116,143,0.2)", border: "1px solid rgba(31,116,143,0.3)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
