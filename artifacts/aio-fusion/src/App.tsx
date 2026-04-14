@@ -81,7 +81,7 @@ const clients: Client[] = [
     name: "Bluhalo",
     sector: "Agency Advisory & Intelligence",
     initials: "BH",
-    color: "#E8472A",
+    color: "#1f748f",
     contentCount: 24,
     avgScore: 73,
     scoreTrend: 12,
@@ -94,7 +94,7 @@ const clients: Client[] = [
     name: "Merkle",
     sector: "Customer Experience (dentsu)",
     initials: "MK",
-    color: "#2B8C8C",
+    color: "#2896b9",
     contentCount: 18,
     avgScore: 61,
     scoreTrend: 8,
@@ -107,7 +107,7 @@ const clients: Client[] = [
     name: "Kepler",
     sector: "Digital Marketing",
     initials: "KP",
-    color: "#4A6FA5",
+    color: "#165265",
     contentCount: 12,
     avgScore: 54,
     scoreTrend: 3,
@@ -184,13 +184,15 @@ const navItems = [
 ];
 
 const vars = {
-  navy: "#1A1A2E",
-  accent: "#E8472A",
-  teal: "#2B8C8C",
-  slate: "#4A6FA5",
+  navy: "#165265",
+  accent: "#1f748f",
+  teal: "#2896b9",
+  slate: "#1f748f",
   green: "#3D9B6B",
   amber: "#D4922A",
   red: "#C94A3E",
+  lightBg: "#e0f2f7",
+  lightAccent: "#b7e1ed",
   g50: "#FAFAFA",
   g100: "#F3F3F3",
   g200: "#E5E5E5",
@@ -220,20 +222,7 @@ function Sidebar({
         className="flex items-center gap-3 px-6 py-6 border-b"
         style={{ borderColor: vars.g200 }}
       >
-        <div className="flex flex-col">
-          <span
-            className="text-[15px] tracking-tight"
-            style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
-          >
-            AIO Fusion
-          </span>
-          <span
-            className="text-[9px] font-medium tracking-[0.2em] uppercase"
-            style={{ color: vars.g400 }}
-          >
-            GEO Platform
-          </span>
-        </div>
+        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
       </div>
       <button
         onClick={onBackToClients}
@@ -270,7 +259,7 @@ function Sidebar({
               className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-[13px] font-medium transition-colors"
               style={{
                 background: isActive
-                  ? "rgba(232,71,42,0.06)"
+                  ? "rgba(31,116,143,0.06)"
                   : "transparent",
                 color: isActive
                   ? vars.accent
@@ -303,7 +292,7 @@ function Sidebar({
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{
-              background: "linear-gradient(135deg, #E8472A, #C93A20)",
+              background: "linear-gradient(135deg, #1f748f, #165265)",
             }}
           >
             SP
@@ -344,14 +333,14 @@ function ClientSelectorPage({
         <div className="flex items-center gap-3.5">
           <div
             className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
+            style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}
           >
             <Sparkles size={18} color="white" />
           </div>
           <div>
             <span
               className="text-lg tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               AIO Fusion
             </span>
@@ -359,14 +348,14 @@ function ClientSelectorPage({
               className="text-[10px] font-medium tracking-[0.2em] uppercase ml-3"
               style={{ color: vars.g400 }}
             >
-              GEO Platform
+              The AI Authority Platform
             </span>
           </div>
         </div>
         <div className="flex items-center gap-3.5">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #E8472A, #C93A20)" }}
+            style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}
           >
             SP
           </div>
@@ -385,14 +374,14 @@ function ClientSelectorPage({
           <div className="flex items-center gap-2 mb-3">
             <div
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
-              style={{ background: "rgba(232,71,42,0.06)", color: "#E8472A" }}
+              style={{ background: "rgba(31,116,143,0.06)", color: "#1f748f" }}
             >
               <Building2 size={12} /> Client Hub
             </div>
           </div>
           <h1
             className="text-3xl tracking-tight"
-            style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+            style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
           >
             Your Clients
           </h1>
@@ -446,7 +435,7 @@ function ClientSelectorPage({
                         {client.scoreTrend !== 0 && (
                           <span
                             className="flex items-center gap-0.5 text-[11px] font-semibold"
-                            style={{ color: client.scoreTrend > 0 ? "#4A6FA5" : "#C94A3E" }}
+                            style={{ color: client.scoreTrend > 0 ? "#1f748f" : "#C94A3E" }}
                           >
                             <TrendingUp size={10} style={{ transform: client.scoreTrend < 0 ? "rotate(180deg)" : "none" }} />
                             {client.scoreTrend > 0 ? "+" : ""}{client.scoreTrend}
@@ -517,8 +506,8 @@ function DashboardPage({
       title: "AIO Diagnostic",
       description:
         "Analyse how well your content is structured for AI visibility. Get a scored report with specific actions.",
-      color: "#E8472A",
-      gradient: "linear-gradient(135deg, #E8472A, #C93A20)",
+      color: "#1f748f",
+      gradient: "linear-gradient(135deg, #1f748f, #165265)",
       stats: {
         label: "6 Signal Categories",
         sub: "Authority Index Score /100",
@@ -530,8 +519,8 @@ function DashboardPage({
       title: "Content Optimiser",
       description:
         "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance.",
-      color: "#2B8C8C",
-      gradient: "linear-gradient(135deg, #2B8C8C, #237474)",
+      color: "#2896b9",
+      gradient: "linear-gradient(135deg, #2896b9, #237474)",
       stats: {
         label: "Before/After Scoring",
         sub: "Semantic Phrase Extraction",
@@ -543,8 +532,8 @@ function DashboardPage({
       title: "Authority Planner",
       description:
         "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity.",
-      color: "#4A6FA5",
-      gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)",
+      color: "#1f748f",
+      gradient: "linear-gradient(135deg, #1f748f, #165265)",
       stats: {
         label: "8 Activity Categories",
         sub: "Priority Recommendations",
@@ -582,16 +571,16 @@ function DashboardPage({
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
             style={{
-              background: "rgba(232,71,42,0.06)",
-              color: "#E8472A",
+              background: "rgba(31,116,143,0.06)",
+              color: "#1f748f",
             }}
           >
-            <Sparkles size={12} /> GEO Platform
+            <Sparkles size={12} /> The AI Authority Platform
           </div>
         </div>
         <h1
           className="text-2xl tracking-tight"
-          style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+          style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
         >
           {activeClient.name}: Overview
         </h1>
@@ -608,9 +597,9 @@ function DashboardPage({
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(232,71,42,0.06)" }}
+              style={{ background: "rgba(31,116,143,0.06)" }}
             >
-              <FileText size={20} color="#E8472A" />
+              <FileText size={20} color="#1f748f" />
             </div>
             <div>
               <p
@@ -638,9 +627,9 @@ function DashboardPage({
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(43,140,140,0.08)" }}
+              style={{ background: "rgba(40,150,185,0.08)" }}
             >
-              <Target size={20} color="#2B8C8C" />
+              <Target size={20} color="#2896b9" />
             </div>
             <div>
               <p
@@ -670,7 +659,7 @@ function DashboardPage({
               className="w-10 h-10 rounded-lg flex items-center justify-center"
               style={{ background: "rgba(74,111,165,0.08)" }}
             >
-              <BarChart3 size={20} color="#4A6FA5" />
+              <BarChart3 size={20} color="#1f748f" />
             </div>
             <div>
               <p
@@ -925,10 +914,10 @@ function DiagnosticPage({
       <div className="px-8 py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#E8472A" />
+            <Search size={20} color="#1f748f" />
             <h1
               className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               AIO Diagnostic
             </h1>
@@ -994,7 +983,7 @@ function DiagnosticPage({
               <button
                 onClick={() => setShowResults(true)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
-                style={{ background: "#E8472A" }}
+                style={{ background: "#1f748f" }}
               >
                 <Search size={16} /> Run Diagnostic
               </button>
@@ -1016,10 +1005,10 @@ function DiagnosticPage({
       <div className="flex items-start justify-between mb-8">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#E8472A" />
+            <Search size={20} color="#1f748f" />
             <h1
               className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               AIO Diagnostic
             </h1>
@@ -1030,7 +1019,7 @@ function DiagnosticPage({
         </div>
         <button
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#E8472A" }}
+          style={{ background: "#1f748f" }}
         >
           <Download size={16} /> Download Report
         </button>
@@ -1038,15 +1027,15 @@ function DiagnosticPage({
 
       <div className="rounded-xl border overflow-hidden mb-8" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="px-6 py-4 text-center" style={{ background: vars.accent }}>
-          <h2 className="text-lg font-semibold text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
+          <h2 className="text-lg font-semibold text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>
             Authority and Visibility Diagnostic
           </h2>
         </div>
         <div className="grid grid-cols-2">
-          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(232,71,42,0.75)" }}>
+          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(31,116,143,0.75)" }}>
             Action
           </div>
-          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(232,71,42,0.75)" }}>
+          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(31,116,143,0.75)" }}>
             Output
           </div>
         </div>
@@ -1070,7 +1059,7 @@ function DiagnosticPage({
         <button
           onClick={() => onNavigate("optimiser")}
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#E8472A" }}
+          style={{ background: "#1f748f" }}
         >
           Open Optimization Tools <ArrowRight size={14} />
         </button>
@@ -1149,10 +1138,10 @@ function OptimiserPage({
       <div className="px-8 py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#2B8C8C" />
+            <FileEdit size={20} color="#2896b9" />
             <h1
               className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
             </h1>
@@ -1295,7 +1284,7 @@ function OptimiserPage({
             <button
               onClick={() => setShowResults(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
-              style={{ background: "#2B8C8C" }}
+              style={{ background: "#2896b9" }}
             >
               <Sparkles size={16} /> Optimise Content
             </button>
@@ -1310,10 +1299,10 @@ function OptimiserPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#2B8C8C" />
+            <FileEdit size={20} color="#2896b9" />
             <h1
               className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
             </h1>
@@ -1325,7 +1314,7 @@ function OptimiserPage({
         </div>
         <button
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#2B8C8C" }}
+          style={{ background: "#2896b9" }}
         >
           <Download size={16} /> Export Optimised
         </button>
@@ -1494,7 +1483,7 @@ function OptimiserPage({
           <div className="flex items-center justify-center gap-2">
             <span
               className="text-3xl font-bold"
-              style={{ color: "#4A6FA5" }}
+              style={{ color: "#1f748f" }}
             >
               78
             </span>
@@ -1522,7 +1511,7 @@ function OptimiserPage({
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
           <div className="flex items-center gap-2">
-            <Sparkles size={16} color="#2B8C8C" />
+            <Sparkles size={16} color="#2896b9" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -1548,7 +1537,7 @@ function OptimiserPage({
                     color:
                       change.type === "addition"
                         ? "#3D9B6B"
-                        : "#3D5D8C",
+                        : "#165265",
                   }}
                 >
                   {change.type === "addition" ? (
@@ -1600,7 +1589,7 @@ function OptimiserPage({
                 <MessageSquare
                   size={13}
                   className="mt-0.5 flex-shrink-0"
-                  color="#2B8C8C"
+                  color="#2896b9"
                 />
                 <p className="text-xs" style={{ color: vars.g600 }}>
                   {change.annotation}
@@ -1642,7 +1631,7 @@ function OptimiserPage({
                   </span>
                   <span
                     className="text-xs font-semibold"
-                    style={{ color: "#2B8C8C" }}
+                    style={{ color: "#2896b9" }}
                   >
                     {(phrase.relevance * 100).toFixed(0)}%
                   </span>
@@ -1656,7 +1645,7 @@ function OptimiserPage({
                     style={{
                       width: `${phrase.relevance * 100}%`,
                       background:
-                        "linear-gradient(90deg, #2B8C8C, #E8472A)",
+                        "linear-gradient(90deg, #2896b9, #1f748f)",
                     }}
                   />
                 </div>
@@ -1673,7 +1662,7 @@ function OptimiserPage({
           className="px-5 py-3 border-b flex items-center gap-2"
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
-          <Zap size={14} color="#2B8C8C" />
+          <Zap size={14} color="#2896b9" />
           <h2
             className="text-sm font-semibold"
             style={{ color: vars.navy }}
@@ -1684,14 +1673,14 @@ function OptimiserPage({
         <div className="p-5 grid grid-cols-2 gap-4">
           <button
             className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-            style={{ borderColor: "rgba(43,140,140,0.25)", background: "rgba(43,140,140,0.02)" }}
+            style={{ borderColor: "rgba(40,150,185,0.25)", background: "rgba(40,150,185,0.02)" }}
           >
             <div className="flex items-center gap-3 mb-3">
               <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(43,140,140,0.08)" }}
+                style={{ background: "rgba(40,150,185,0.08)" }}
               >
-                <Bot size={20} color="#2B8C8C" />
+                <Bot size={20} color="#2896b9" />
               </div>
               <div>
                 <p className="text-sm font-semibold" style={{ color: vars.navy }}>
@@ -1735,8 +1724,8 @@ function OptimiserPage({
       <div
         className="rounded-xl border p-5 flex items-center justify-between"
         style={{
-          background: "rgba(43,140,140,0.03)",
-          borderColor: "rgba(43,140,140,0.12)",
+          background: "rgba(40,150,185,0.03)",
+          borderColor: "rgba(40,150,185,0.12)",
         }}
       >
         <div>
@@ -1754,7 +1743,7 @@ function OptimiserPage({
         <button
           onClick={() => onNavigate("planner")}
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#2B8C8C" }}
+          style={{ background: "#2896b9" }}
         >
           Add to Planner <ArrowRight size={14} />
         </button>
@@ -1916,10 +1905,10 @@ function PlannerPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <BarChart3 size={20} color="#4A6FA5" />
+            <BarChart3 size={20} color="#1f748f" />
             <h1
               className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Authority Planner
             </h1>
@@ -1936,7 +1925,7 @@ function PlannerPage() {
                 onClick={() => setSelectedQuarter(q)}
                 className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
                 style={{
-                  background: selectedQuarter === q ? "#4A6FA5" : "transparent",
+                  background: selectedQuarter === q ? "#1f748f" : "transparent",
                   color: selectedQuarter === q ? "white" : vars.g500,
                 }}
               >
@@ -1946,7 +1935,7 @@ function PlannerPage() {
           </div>
           <button
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
-            style={{ background: "#4A6FA5" }}
+            style={{ background: "#1f748f" }}
           >
             <Download size={16} /> Export Plan
           </button>
@@ -2092,7 +2081,7 @@ function PlannerPage() {
                 >
                   <cat.icon
                     size={18}
-                    color={cat.count > 0 ? "#4A6FA5" : "#9CA3AF"}
+                    color={cat.count > 0 ? "#1f748f" : "#9CA3AF"}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2169,7 +2158,7 @@ function PlannerPage() {
           style={{ background: vars.g50, borderColor: vars.g200 }}
         >
           <div className="flex items-center gap-2">
-            <Calendar size={14} color="#4A6FA5" />
+            <Calendar size={14} color="#1f748f" />
             <h2
               className="text-sm font-semibold"
               style={{ color: vars.navy }}
@@ -2190,7 +2179,7 @@ function PlannerPage() {
                     className="w-8 h-8 rounded-lg flex items-center justify-center"
                     style={{ background: "rgba(74,111,165,0.06)" }}
                   >
-                    <Calendar size={14} color="#4A6FA5" />
+                    <Calendar size={14} color="#1f748f" />
                   </div>
                   <div>
                     <p className="text-sm font-semibold" style={{ color: vars.navy }}>
@@ -2344,11 +2333,11 @@ function PlannerPage() {
           className="px-5 py-3 border-b flex items-center gap-2"
           style={{
             background:
-              "linear-gradient(135deg, rgba(74,111,165,0.04), rgba(232,71,42,0.04))",
+              "linear-gradient(135deg, rgba(74,111,165,0.04), rgba(31,116,143,0.04))",
             borderColor: vars.g200,
           }}
         >
-          <Lightbulb size={16} color="#4A6FA5" />
+          <Lightbulb size={16} color="#1f748f" />
           <h2
             className="text-sm font-semibold"
             style={{ color: vars.navy }}
@@ -2361,7 +2350,7 @@ function PlannerPage() {
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{
-                background: "linear-gradient(135deg, #4A6FA5, #3D5D8C)",
+                background: "linear-gradient(135deg, #1f748f, #165265)",
               }}
             >
               <Target size={24} color="white" />
@@ -2443,10 +2432,10 @@ function GuideDownload() {
       <div className="max-w-6xl mx-auto px-8">
         <div className="grid md:grid-cols-2 gap-16 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.08)", color: vars.accent }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
               <Download size={12} /> Free Guide
             </div>
-            <h2 className="text-3xl md:text-4xl mb-6 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+            <h2 className="text-3xl md:text-4xl mb-6 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               The B2B Marketer's Fast Guide to Winning AI Authority
             </h2>
             <p className="text-[15px] font-light leading-[1.8] mb-8" style={{ color: vars.g500 }}>
@@ -2459,7 +2448,7 @@ function GuideDownload() {
                 "A practical roadmap for B2B authority building",
               ].map((point) => (
                 <div key={point} className="flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(232,71,42,0.1)" }}>
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(31,116,143,0.1)" }}>
                     <Check size={12} color={vars.accent} />
                   </div>
                   <span className="text-[14px] font-light" style={{ color: vars.g600 }}>{point}</span>
@@ -2472,7 +2461,7 @@ function GuideDownload() {
             <div className="h-3" style={{ background: `linear-gradient(90deg, ${vars.accent}, ${vars.teal})` }} />
             {!submitted ? (
               <form onSubmit={handleSubmit} className="p-10">
-                <h3 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                <h3 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                   Download the guide
                 </h3>
                 <p className="text-[13px] font-light mb-8" style={{ color: vars.g500 }}>
@@ -2531,7 +2520,7 @@ function GuideDownload() {
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "rgba(61,155,107,0.1)" }}>
                   <CheckCircle2 size={32} color={vars.green} />
                 </div>
-                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                   Your guide is ready
                 </h3>
                 <p className="text-[14px] font-light mb-8" style={{ color: vars.g500 }}>
@@ -2562,13 +2551,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(26,26,46,0.92)" }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
         <div className="max-w-7xl mx-auto px-8 h-[72px] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
-              <Sparkles size={16} color="#fff" />
-            </div>
-            <span className="text-white font-serif text-xl tracking-tight" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>AIO Fusion</span>
+            <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-10" />
           </div>
           <div className="hidden md:flex items-center gap-10">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
@@ -2591,7 +2577,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           </button>
         </div>
         {menuOpen && (
-          <div className="md:hidden px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(26,26,46,0.98)" }}>
+          <div className="md:hidden px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" className="text-[13px] font-light text-white/60 py-2">Features</a>
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
@@ -2618,9 +2604,9 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           >
             <source src={`${import.meta.env.BASE_URL}videos/hero-backdrop.mp4`} type="video/mp4" />
           </video>
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(26,26,46,0.25) 0%, rgba(26,26,46,0.55) 50%, rgba(26,26,46,0.92) 100%)" }} />
-          <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #E8472A 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
-          <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2B8C8C 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,0.25) 0%, rgba(22,82,101,0.55) 50%, rgba(22,82,101,0.92) 100%)" }} />
+          <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #1f748f 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
+          <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
           <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
         </div>
         <style>{`
@@ -2628,10 +2614,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
         `}</style>
         <div className="relative z-10 max-w-4xl mx-auto px-8 text-center">
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(232,71,42,0.2)", border: "1px solid rgba(232,71,42,0.3)" }}>
+          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(31,116,143,0.2)", border: "1px solid rgba(31,116,143,0.3)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
+          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'Alice', Georgia, serif" }}>
             Win AI Authority<br />
             <span style={{ color: vars.accent }}>for Your Brand</span>
           </h1>
@@ -2680,19 +2666,19 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section id="features" className="py-32" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-8">
           <div className="text-center mb-20">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
               <Target size={12} /> Core Platform
             </div>
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Three tools, one AI authority strategy</h2>
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Three tools, one AI authority strategy</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               AIO Fusion provides a complete GEO workflow, from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-10">
             {[
-              { title: "AIO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #E8472A, #C93A20)", icon: FileText },
-              { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2B8C8C, #237474)", icon: FileEdit },
-              { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #4A6FA5, #3D5D8C)", icon: BarChart3 },
+              { title: "AIO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: FileText },
+              { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: FileEdit },
+              { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: BarChart3 },
             ].map((tool) => (
               <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
                 <div className="h-1.5" style={{ background: tool.gradient }} />
@@ -2700,7 +2686,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                   <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6" style={{ background: `${tool.color}0A` }}>
                     <tool.icon size={26} color={tool.color} />
                   </div>
-                  <h3 className="text-2xl mb-4" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{tool.title}</h3>
+                  <h3 className="text-2xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{tool.title}</h3>
                   <p className="text-[15px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
                 </div>
               </div>
@@ -2712,7 +2698,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section id="how-it-works" className="py-32" style={{ background: "#fff" }}>
         <div className="max-w-6xl mx-auto px-8">
           <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>How AIO Fusion works</h2>
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               A managed service model. Simpatico PR operates the platform on behalf of clients, delivering GEO as part of a retained engagement.
             </p>
@@ -2728,7 +2714,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 text-xl font-light border-2" style={{ borderColor: vars.navy, color: vars.navy }}>
                   {item.step}
                 </div>
-                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.title}</h3>
+                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{item.title}</h3>
                 <p className="text-[14px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{item.desc}</p>
               </div>
             ))}
@@ -2746,7 +2732,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               { value: "30%+", label: "visibility boost via GEO methods" },
             ].map((stat) => (
               <div key={stat.value}>
-                <div className="text-4xl md:text-5xl mb-3" style={{ color: vars.accent, fontFamily: "'DM Serif Display', Georgia, serif" }}>{stat.value}</div>
+                <div className="text-4xl md:text-5xl mb-3" style={{ color: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{stat.value}</div>
                 <p className="text-[13px] text-white/50 leading-relaxed font-light">{stat.label}</p>
               </div>
             ))}
@@ -2757,10 +2743,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section id="llms" className="py-32" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-8">
           <div className="text-center mb-20">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
               <Globe size={12} /> Coverage
             </div>
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Optimise for every major LLM</h2>
+            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Optimise for every major LLM</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
               AIO Fusion analyses and scores your content against the retrieval and citation patterns of the four dominant answer engines.
             </p>
@@ -2771,7 +2757,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 <div className="w-18 h-18 rounded-2xl flex items-center justify-center" style={{ width: 72, height: 72, background: `${llm.color}0A`, color: llm.color }}>
                   {llm.icon}
                 </div>
-                <span className="text-xl" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{llm.name}</span>
+                <span className="text-xl" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{llm.name}</span>
               </div>
             ))}
           </div>
@@ -2782,7 +2768,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="max-w-6xl mx-auto px-8">
           <div className="flex items-end justify-between mb-16">
             <div>
-              <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Latest stories</h2>
+              <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Latest stories</h2>
               <p className="text-lg font-light" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR from the Simpatico team.</p>
             </div>
             <a href="https://www.simpaticopr.co.uk/" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-2 text-[13px] font-medium hover:underline" style={{ color: vars.accent }}>
@@ -2797,10 +2783,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 </div>
                 <div className="p-8">
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>{post.tag}</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>{post.tag}</span>
                     <span className="text-[13px] font-light" style={{ color: vars.g400 }}>{post.date}</span>
                   </div>
-                  <h3 className="text-lg leading-snug group-hover:underline" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>{post.title}</h3>
+                  <h3 className="text-lg leading-snug group-hover:underline" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{post.title}</h3>
                 </div>
               </a>
             ))}
@@ -2814,10 +2800,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="max-w-6xl mx-auto px-8">
           <div className="grid md:grid-cols-2 gap-20 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(232,71,42,0.06)", color: vars.accent }}>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
                 <Building2 size={12} /> For PR & Marketing Agencies
               </div>
-              <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>Add GEO to your service offering</h2>
+              <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add GEO to your service offering</h2>
               <p className="text-lg font-light leading-relaxed mb-8" style={{ color: vars.g500 }}>
                 AIO Fusion is built for agencies who want to offer Generative Engine Optimisation as a managed service. White-label the platform for your clients and deliver measurable AI authority results.
               </p>
@@ -2847,7 +2833,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                 { stat: "8", label: "Authority categories tracked and scored per client" },
               ].map((item) => (
                 <div key={item.stat} className="bg-white rounded-2xl p-8 border" style={{ borderColor: vars.g200 }}>
-                  <div className="text-4xl mb-2" style={{ color: vars.accent, fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.stat}</div>
+                  <div className="text-4xl mb-2" style={{ color: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{item.stat}</div>
                   <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.label}</p>
                 </div>
               ))}
@@ -2859,10 +2845,10 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section id="for-agents" className="py-32" style={{ background: vars.navy }}>
         <div className="max-w-6xl mx-auto px-8">
           <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(43,140,140,0.1)", color: vars.teal }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
               <Bot size={12} /> For AI Agents
             </div>
-            <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>
+            <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>
               Agents that understand<br />your brand authority.
             </h2>
             <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light">
@@ -2892,7 +2878,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               },
             ].map((item) => (
               <div key={item.title} className="rounded-2xl p-8 border" style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}>
-                <h3 className="text-xl text-white mb-4" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.title}</h3>
+                <h3 className="text-xl text-white mb-4" style={{ fontFamily: "'Alice', Georgia, serif" }}>{item.title}</h3>
                 <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">{item.desc}</p>
                 <code className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-mono" style={{ background: "rgba(255,255,255,0.05)", color: item.color }}>
                   <Code2 size={12} /> {item.endpoint}
@@ -2904,11 +2890,11 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="grid md:grid-cols-2 gap-8 mb-16">
             <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(43,140,140,0.15)" }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(40,150,185,0.15)" }}>
                   <Scroll size={18} color={vars.teal} />
                 </div>
                 <div>
-                  <h3 className="text-lg text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>Agent instructions</h3>
+                  <h3 className="text-lg text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Agent instructions</h3>
                   <p className="text-[12px] text-white/40 font-light">llms.txt</p>
                 </div>
               </div>
@@ -2918,7 +2904,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               <div className="rounded-xl p-5 font-mono text-[12px] leading-relaxed" style={{ background: "rgba(0,0,0,0.3)" }}>
                 <div style={{ color: vars.g400 }}># AIO Fusion: Agent Instructions</div>
                 <div className="mt-2" style={{ color: vars.teal }}>name: AIO Fusion by Simpatico PR</div>
-                <div style={{ color: vars.teal }}>type: GEO Platform</div>
+                <div style={{ color: vars.teal }}>type: The AI Authority Platform</div>
                 <div style={{ color: vars.teal }}>expertise: Generative Engine Optimisation</div>
                 <div className="mt-2" style={{ color: vars.g400 }}># Endpoints</div>
                 <div style={{ color: vars.accent }}>authority_signals: /api/authority-signals</div>
@@ -2928,11 +2914,11 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             </div>
             <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(232,71,42,0.15)" }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.15)" }}>
                   <ShieldCheck size={18} color={vars.accent} />
                 </div>
                 <div>
-                  <h3 className="text-lg text-white" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>API reference</h3>
+                  <h3 className="text-lg text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>API reference</h3>
                   <p className="text-[12px] text-white/40 font-light">Structured data endpoints</p>
                 </div>
               </div>
@@ -2947,7 +2933,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
                   { method: "GET", path: "/api/competitors", desc: "Competitive authority benchmarking" },
                 ].map((api) => (
                   <div key={api.path} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,0.2)" }}>
-                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded mt-0.5 flex-shrink-0" style={{ background: api.method === "POST" ? "rgba(232,71,42,0.15)" : "rgba(43,140,140,0.15)", color: api.method === "POST" ? vars.accent : vars.teal }}>
+                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded mt-0.5 flex-shrink-0" style={{ background: api.method === "POST" ? "rgba(31,116,143,0.15)" : "rgba(40,150,185,0.15)", color: api.method === "POST" ? vars.accent : vars.teal }}>
                       {api.method}
                     </span>
                     <div>
@@ -2968,7 +2954,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               { stat: "Real-time", label: "Citation monitoring" },
             ].map((item) => (
               <div key={item.label} className="text-center py-6 rounded-2xl border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-                <div className="text-3xl text-white mb-1" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>{item.stat}</div>
+                <div className="text-3xl text-white mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>{item.stat}</div>
                 <p className="text-[12px] text-white/40 font-light">{item.label}</p>
               </div>
             ))}
@@ -2978,7 +2964,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 
       <section className="py-32" style={{ background: vars.navy, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div className="max-w-3xl mx-auto px-8 text-center">
-          <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}>Ready to win AI authority?</h2>
+          <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
           <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
             Get in touch with Simpatico PR to discuss how AIO Fusion can help your business become the source AI cites and recommends.
           </p>
@@ -3000,7 +2986,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
                 <Sparkles size={14} color="#fff" />
               </div>
-              <span className="text-lg" style={{ color: vars.navy, fontFamily: "'DM Serif Display', Georgia, serif" }}>AIO Fusion</span>
+              <span className="text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AIO Fusion</span>
               <span className="text-[13px] font-light" style={{ color: vars.g400 }}>by Simpatico PR</span>
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
