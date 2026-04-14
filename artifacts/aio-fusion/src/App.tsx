@@ -174,7 +174,7 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
 }
 
 const navItems = [
-  { label: "Dashboard", id: "dashboard" },
+  { label: "Dashboard", id: "dashboard", locked: true },
   { label: "AIO Diagnostic", id: "diagnostic" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "Authority Planner", id: "planner" },
@@ -3004,7 +3004,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 function App() {
   const [view, setView] = useState<"landing" | "platform">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [currentPage, setCurrentPage] = useState("diagnostic");
 
   if (view === "landing") {
     return <LandingPage onLogin={() => setView("platform")} />;
@@ -3015,7 +3015,7 @@ function App() {
       <ClientSelectorPage
         onSelectClient={(client) => {
           setActiveClient(client);
-          setCurrentPage("dashboard");
+          setCurrentPage("diagnostic");
         }}
       />
     );
