@@ -331,26 +331,7 @@ function ClientSelectorPage({
         style={{ background: "white", borderColor: vars.g200 }}
       >
         <div className="flex items-center gap-3.5">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}
-          >
-            <Sparkles size={18} color="white" />
-          </div>
-          <div>
-            <span
-              className="text-lg tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-            >
-              AIO Fusion
-            </span>
-            <span
-              className="text-[10px] font-medium tracking-[0.2em] uppercase ml-3"
-              style={{ color: vars.g400 }}
-            >
-              The AI Authority Platform
-            </span>
-          </div>
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12" />
         </div>
         <div className="flex items-center gap-3.5">
           <div
@@ -2983,10 +2964,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         <div className="max-w-6xl mx-auto px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.accent }}>
-                <Sparkles size={14} color="#fff" />
-              </div>
-              <span className="text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AIO Fusion</span>
+              <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
               <span className="text-[13px] font-light" style={{ color: vars.g400 }}>by Simpatico PR</span>
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
