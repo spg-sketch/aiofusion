@@ -2777,169 +2777,33 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 
       <GuideDownload />
 
-      <section id="for-agencies" className="py-32" style={{ background: vars.g50 }}>
-        <div className="max-w-6xl mx-auto px-8">
-          <div className="grid md:grid-cols-2 gap-20 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-                <Building2 size={12} /> For PR & Marketing Agencies
-              </div>
-              <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add GEO to your service offering</h2>
-              <p className="text-lg font-light leading-relaxed mb-8" style={{ color: vars.g500 }}>
-                AIO Fusion is built for agencies who want to offer Generative Engine Optimisation as a managed service. White-label the platform for your clients and deliver measurable AI authority results.
-              </p>
-              <div className="space-y-5">
-                {[
-                  "Dedicated client workspaces with your branding",
-                  "Diagnostic, optimisation and planning tools in one platform",
-                  "Measurable AI citation and visibility metrics",
-                  "Managed service model: we train your team",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center mt-0.5 flex-shrink-0" style={{ background: `${vars.accent}12` }}>
-                      <Check size={12} color={vars.accent} />
-                    </div>
-                    <span className="text-[15px] font-light" style={{ color: vars.g600 }}>{item}</span>
-                  </div>
-                ))}
-              </div>
-              <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white mt-10 transition-all hover:brightness-110" style={{ background: vars.accent }}>
-                <Mail size={16} /> Partner with Simpatico PR
-              </a>
-            </div>
-            <div className="space-y-6">
-              {[
-                { stat: "6x", label: "Average increase in AI citation rate for agency clients" },
-                { stat: "73%", label: "Of B2B buyers now use AI tools in their purchase research" },
-                { stat: "8", label: "Authority categories tracked and scored per client" },
-              ].map((item) => (
-                <div key={item.stat} className="bg-white rounded-2xl p-8 border" style={{ borderColor: vars.g200 }}>
-                  <div className="text-4xl mb-2" style={{ color: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{item.stat}</div>
-                  <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.label}</p>
-                </div>
-              ))}
-            </div>
+      <section id="for-agencies" className="py-24" style={{ background: vars.g50 }}>
+        <div className="max-w-3xl mx-auto px-8 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            <Building2 size={12} /> For PR & Marketing Agencies
           </div>
+          <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>PR & AI Fusion for Agencies</h2>
+          <p className="text-lg font-light leading-relaxed mb-10" style={{ color: vars.g500 }}>
+            Add Generative Engine Optimisation to your service offering. AIO Fusion gives your team the tools to deliver measurable AI authority results for every client.
+          </p>
+          <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+            <Mail size={16} /> Partner with Simpatico PR
+          </a>
         </div>
       </section>
 
-      <section id="for-agents" className="py-32" style={{ background: vars.navy }}>
-        <div className="max-w-6xl mx-auto px-8">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
-              <Bot size={12} /> For AI Agents
-            </div>
-            <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-              Agents that understand<br />your brand authority.
-            </h2>
-            <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light">
-              AIO Fusion structures your brand's authority data so AI agents (ChatGPT, Perplexity, Claude, Gemini) can discover, cite, and recommend your business with confidence.
-            </p>
+      <section id="for-agents" className="py-24" style={{ background: vars.navy }}>
+        <div className="max-w-3xl mx-auto px-8 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
+            <Bot size={12} /> For AI Agents
           </div>
-
-          <div className="grid md:grid-cols-3 gap-8 mb-16">
-            {[
-              {
-                title: "Structured authority signals",
-                desc: "AIO Fusion analyses your content across 6 signal categories and outputs structured data that AI agents can parse: entity relationships, expertise markers, and citation-ready claims.",
-                endpoint: "GET /api/authority-signals",
-                color: vars.accent,
-              },
-              {
-                title: "AI-optimised content delivery",
-                desc: "Content optimised through AIO Fusion is formatted for LLM retrieval: clear assertions, attributed data, semantic structure. Your brand becomes the answer, not just a search result.",
-                endpoint: "POST /api/content-optimise",
-                color: vars.teal,
-              },
-              {
-                title: "Real-time citation tracking",
-                desc: "Monitor when and how AI agents cite your brand. Track citation frequency, context accuracy, and competitive positioning across all major LLMs in real time.",
-                endpoint: "GET /api/citations",
-                color: vars.slate,
-              },
-            ].map((item) => (
-              <div key={item.title} className="rounded-2xl p-8 border" style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}>
-                <h3 className="text-xl text-white mb-4" style={{ fontFamily: "'Alice', Georgia, serif" }}>{item.title}</h3>
-                <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">{item.desc}</p>
-                <code className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-mono" style={{ background: "rgba(255,255,255,0.05)", color: item.color }}>
-                  <Code2 size={12} /> {item.endpoint}
-                </code>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8 mb-16">
-            <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(40,150,185,0.15)" }}>
-                  <Scroll size={18} color={vars.teal} />
-                </div>
-                <div>
-                  <h3 className="text-lg text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Agent instructions</h3>
-                  <p className="text-[12px] text-white/40 font-light">llms.txt</p>
-                </div>
-              </div>
-              <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">
-                A structured file at the root of your domain that tells AI agents what your business does, what your expertise is, and how to access your authority data. The GEO equivalent of robots.txt.
-              </p>
-              <div className="rounded-xl p-5 font-mono text-[12px] leading-relaxed" style={{ background: "rgba(0,0,0,0.3)" }}>
-                <div style={{ color: vars.g400 }}># AIO Fusion: Agent Instructions</div>
-                <div className="mt-2" style={{ color: vars.teal }}>name: AIO Fusion by Simpatico PR</div>
-                <div style={{ color: vars.teal }}>type: The AI Authority Platform</div>
-                <div style={{ color: vars.teal }}>expertise: Generative Engine Optimisation</div>
-                <div className="mt-2" style={{ color: vars.g400 }}># Endpoints</div>
-                <div style={{ color: vars.accent }}>authority_signals: /api/authority-signals</div>
-                <div style={{ color: vars.accent }}>content_optimise: /api/content-optimise</div>
-                <div style={{ color: vars.accent }}>citations: /api/citations</div>
-              </div>
-            </div>
-            <div className="rounded-2xl p-10 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.15)" }}>
-                  <ShieldCheck size={18} color={vars.accent} />
-                </div>
-                <div>
-                  <h3 className="text-lg text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>API reference</h3>
-                  <p className="text-[12px] text-white/40 font-light">Structured data endpoints</p>
-                </div>
-              </div>
-              <p className="text-[14px] text-white/45 leading-[1.75] font-light mb-6">
-                Programmatic access to your brand's authority data. AI agents can query your expertise signals, retrieve optimised content, and check citation status, all through authenticated REST endpoints.
-              </p>
-              <div className="space-y-3">
-                {[
-                  { method: "GET", path: "/api/authority-signals", desc: "Retrieve authority score and signal breakdown" },
-                  { method: "POST", path: "/api/content-optimise", desc: "Submit content for AI citation optimisation" },
-                  { method: "GET", path: "/api/citations", desc: "Track AI citations across LLMs" },
-                  { method: "GET", path: "/api/competitors", desc: "Competitive authority benchmarking" },
-                ].map((api) => (
-                  <div key={api.path} className="flex items-start gap-3 rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,0.2)" }}>
-                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded mt-0.5 flex-shrink-0" style={{ background: api.method === "POST" ? "rgba(31,116,143,0.15)" : "rgba(40,150,185,0.15)", color: api.method === "POST" ? vars.accent : vars.teal }}>
-                      {api.method}
-                    </span>
-                    <div>
-                      <code className="text-[12px] font-mono text-white/70">{api.path}</code>
-                      <p className="text-[11px] text-white/35 font-light mt-0.5">{api.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { stat: "6", label: "Signal categories analysed" },
-              { stat: "4", label: "Major LLMs tracked" },
-              { stat: "100+", label: "Authority data points per client" },
-              { stat: "Real-time", label: "Citation monitoring" },
-            ].map((item) => (
-              <div key={item.label} className="text-center py-6 rounded-2xl border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-                <div className="text-3xl text-white mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>{item.stat}</div>
-                <p className="text-[12px] text-white/40 font-light">{item.label}</p>
-              </div>
-            ))}
-          </div>
+          <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>Built for agents that need your data</h2>
+          <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light mb-10">
+            AIO Fusion structures your brand's authority data so AI agents can discover, cite, and recommend your business with confidence. Access structured signals, optimised content, and citation tracking.
+          </p>
+          <a href="https://www.simpaticopr.co.uk/contact" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+            <Mail size={16} /> Get in Touch
+          </a>
         </div>
       </section>
 
