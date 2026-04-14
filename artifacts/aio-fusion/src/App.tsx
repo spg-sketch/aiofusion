@@ -856,40 +856,60 @@ function DiagnosticPage({
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#1f748f" />
-            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-              AIO Diagnostic Results
-            </h1>
+      <div className="rounded-2xl border overflow-hidden mb-6" style={{ borderColor: vars.g200 }}>
+        <div className="px-5 sm:px-8 py-5 sm:py-6" style={{ background: "linear-gradient(135deg, #165265 0%, #1f748f 60%, #2896b9 100%)" }}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
+              <div className="hidden sm:block w-px h-10" style={{ background: "rgba(255,255,255,0.25)" }} />
+              <div className="hidden sm:block">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-white/60 mb-0.5">Authority & Visibility Report</p>
+                <p className="text-white text-sm font-medium" style={{ fontFamily: "'Alice', Georgia, serif" }}>GEO Diagnostic Analysis</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-center justify-center rounded-xl border border-white/20 bg-white/10 px-4 py-3 min-w-[80px] sm:min-w-[100px]" style={{ backdropFilter: "blur(8px)" }}>
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-white/30 flex items-center justify-center mb-1">
+                  <Building2 size={18} className="text-white/40" />
+                </div>
+                <span className="text-[9px] uppercase tracking-wider text-white/50">Client Logo</span>
+              </div>
+            </div>
           </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            {result.summary}
-          </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white self-start" style={{ background: "#1f748f" }}>
-          <Download size={16} /> Download Report
-        </button>
+        <div className="px-5 sm:px-8 py-4" style={{ background: "white" }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>
+                {result.summary}
+              </p>
+            </div>
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
+              <Download size={14} /> Export PDF
+            </button>
+          </div>
+          {result.sources && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t" style={{ borderColor: vars.g100 }}>
+              {result.sources.claude && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
+                  Claude: {result.sources.claude.score}/100
+                </span>
+              )}
+              {result.sources.openai && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
+                  OpenAI: {result.sources.openai.score}/100
+                </span>
+              )}
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+                {result.provider === "merged" ? "Dual-engine merged" : `Single engine: ${result.provider}`}
+              </span>
+              <span className="ml-auto text-[10px]" style={{ color: vars.g400 }}>
+                {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
-
-      {result.sources && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {result.sources.claude && (
-            <span className="px-3 py-1.5 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-              Claude Score: {result.sources.claude.score}/100
-            </span>
-          )}
-          {result.sources.openai && (
-            <span className="px-3 py-1.5 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-              OpenAI Score: {result.sources.openai.score}/100
-            </span>
-          )}
-          <span className="px-3 py-1.5 rounded-full text-[11px] font-semibold" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-            {result.provider === "merged" ? "Dual-engine merged" : `Single engine: ${result.provider}`}
-          </span>
-        </div>
-      )}
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
