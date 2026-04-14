@@ -1,4 +1,5 @@
 import IntakePage from "./IntakeForm";
+import ReportPage from "./ReportPage";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -183,7 +184,7 @@ const navItems = [
   { label: "Authority Planner", id: "planner" },
   { label: "Archive", id: "archive", locked: true },
   { label: "Release Gateway", id: "gateway", locked: true },
-  { label: "Measure & Report", id: "measure", locked: true },
+  { label: "Measure & Report", id: "measure" },
 ];
 
 const vars = {
@@ -2777,6 +2778,7 @@ function App() {
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
         {currentPage === "planner" && <PlannerPage />}
+        {currentPage === "measure" && <ReportPage activeClient={activeClient} />}
       </main>
     </div>
   );
