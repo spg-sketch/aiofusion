@@ -59,6 +59,7 @@ import {
   Menu,
   X,
   LogIn,
+  Link,
 } from "lucide-react";
 
 type Client = {
@@ -174,7 +175,7 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
 }
 
 const navItems = [
-  { label: "Dashboard", id: "dashboard", locked: true },
+  { label: "Dashboard", id: "dashboard" },
   { label: "AIO Diagnostic", id: "diagnostic" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "Authority Planner", id: "planner" },
@@ -473,6 +474,27 @@ function ClientSelectorPage({
   );
 }
 
+function AuthorityDonut({ score, size = 160 }: { score: number; size?: number }) {
+  const r = (size - 16) / 2;
+  const circ = 2 * Math.PI * r;
+  const pct = score / 100;
+  const scoreColor = score >= 70 ? vars.green : score >= 40 ? vars.amber : vars.red;
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="absolute">
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={vars.g200} strokeWidth={10} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={scoreColor} strokeWidth={10}
+          strokeDasharray={`${pct * circ} ${circ}`} strokeLinecap="round"
+          transform={`rotate(-90 ${size/2} ${size/2})`} className="transition-all duration-700" />
+      </svg>
+      <div className="text-center z-10">
+        <span className="text-4xl font-bold" style={{ color: vars.navy }}>{score}</span>
+        <span className="text-sm font-light" style={{ color: vars.g400 }}>/100</span>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage({
   onNavigate,
   activeClient,
@@ -480,292 +502,164 @@ function DashboardPage({
   onNavigate: (p: string) => void;
   activeClient: Client;
 }) {
-  const activeModules = [
-    {
-      id: "diagnostic",
-      icon: Search,
-      title: "AIO Diagnostic",
-      description:
-        "Analyse how well your content is structured for AI visibility. Get a scored report with specific actions.",
-      color: "#1f748f",
-      gradient: "linear-gradient(135deg, #1f748f, #165265)",
-      stats: {
-        label: "6 Signal Categories",
-        sub: "Authority Index Score /100",
-      },
-    },
-    {
-      id: "optimiser",
-      icon: FileEdit,
-      title: "Content Optimiser",
-      description:
-        "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance.",
-      color: "#2896b9",
-      gradient: "linear-gradient(135deg, #2896b9, #237474)",
-      stats: {
-        label: "Before/After Scoring",
-        sub: "Semantic Phrase Extraction",
-      },
-    },
-    {
-      id: "planner",
-      icon: BarChart3,
-      title: "Authority Planner",
-      description:
-        "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity.",
-      color: "#1f748f",
-      gradient: "linear-gradient(135deg, #1f748f, #165265)",
-      stats: {
-        label: "8 Activity Categories",
-        sub: "Priority Recommendations",
-      },
-    },
+  const authorityScore = activeClient.avgScore || 24;
+  const earnedMedia = { score: 19, max: 80 };
+  const ownedMedia = { score: 5, max: 20 };
+
+  const priorityTasks = [
+    { text: "Implement Organization Schema Markup", tags: ["technical", "Now"] },
+    { text: "Deploy FAQ Schema on Key Pages", tags: ["technical", "Now"] },
+    { text: "Create Expert Author Profiles", tags: ["content", "This week"] },
+    { text: "Publish Industry Report with Original Data", tags: ["content", "This month"] },
   ];
-  const lockedModules = [
-    {
-      id: "archive",
-      icon: Archive,
-      title: "Content Archive",
-      description:
-        "House all PR content with version history, approval workflow and metadata tagging: message, spokesperson and purpose on every piece.",
-    },
-    {
-      id: "gateway",
-      icon: Send,
-      title: "Release Gateway",
-      description:
-        "Route approved content to wire services, client websites and agent-ready publishing channels. Includes PR Agent outreach option.",
-    },
-    {
-      id: "measure",
-      icon: LineChart,
-      title: "Measure & Report",
-      description:
-        "Track AI citation performance across ChatGPT, Perplexity, Claude and Gemini with automated client reporting.",
-    },
+
+  const llmPlatforms = [
+    { name: "ChatGPT", mentions: 24, rank: 3, trend: 8, cited: true },
+    { name: "Perplexity", mentions: 31, rank: 2, trend: 12, cited: true },
+    { name: "Google AI", mentions: 14, rank: 5, trend: 3, cited: false },
+  ];
+
+  const quickLinks = [
+    { icon: Search, label: "Query Library", sub: "View details", action: "diagnostic" },
+    { icon: Link, label: "Citation Tracking", sub: "View details", action: "measure" },
+    { icon: ShieldCheck, label: "AI Auditor", sub: "View details", action: "diagnostic" },
+    { icon: BarChart3, label: "ROI Dashboard", sub: "View details", action: "measure" },
   ];
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto">
+    <div className="px-8 py-8 max-w-5xl mx-auto">
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider"
-            style={{
-              background: "rgba(31,116,143,0.06)",
-              color: "#1f748f",
-            }}
-          >
-            <Sparkles size={12} /> The AI Authority Platform
-          </div>
-        </div>
-        <h1
-          className="text-2xl tracking-tight"
-          style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-        >
-          {activeClient.name}: Overview
+        <h1 className="text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+          {activeClient.name} &mdash; Authority Dashboard
         </h1>
-        <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>
-          Optimise your PR content for AI visibility and citation across
-          ChatGPT, Perplexity, Claude and Gemini.
+        <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
+          Your AI authority performance at a glance
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-5 mb-10">
-        <div
-          className="rounded-xl p-5 border"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(31,116,143,0.06)" }}
-            >
-              <FileText size={20} color="#1f748f" />
-            </div>
-            <div>
-              <p
-                className="text-2xl font-bold"
-                style={{ color: vars.navy }}
-              >
-                24
-              </p>
-              <p className="text-xs" style={{ color: vars.g500 }}>
-                Content Analysed
-              </p>
-            </div>
-          </div>
-          <div
-            className="flex items-center gap-1 text-xs font-medium"
-            style={{ color: vars.green }}
-          >
-            <TrendingUp size={14} /> +8 this month
-          </div>
+
+      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-center mb-6" style={{ color: vars.navy }}>
+          AIO Authority Score
+        </h3>
+        <div className="flex justify-center mb-4">
+          <AuthorityDonut score={authorityScore} />
         </div>
-        <div
-          className="rounded-xl p-5 border"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(40,150,185,0.08)" }}
-            >
-              <Target size={20} color="#2896b9" />
+        <p className="text-center text-sm font-light" style={{ color: vars.g500 }}>Overall Readiness</p>
+
+        <div className="mt-8 space-y-5 max-w-lg mx-auto">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm" style={{ color: vars.navy }}>Earned Media</span>
+              <span className="text-sm font-medium" style={{ color: vars.navy }}>{earnedMedia.score}/{earnedMedia.max}</span>
             </div>
-            <div>
-              <p
-                className="text-2xl font-bold"
-                style={{ color: vars.navy }}
-              >
-                73
-              </p>
-              <p className="text-xs" style={{ color: vars.g500 }}>
-                Avg Authority Score
-              </p>
+            <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
+              <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${(earnedMedia.score / earnedMedia.max) * 100}%`, background: vars.navy }} />
             </div>
           </div>
-          <div
-            className="flex items-center gap-1 text-xs font-medium"
-            style={{ color: vars.green }}
-          >
-            <TrendingUp size={14} /> +12 from baseline
-          </div>
-        </div>
-        <div
-          className="rounded-xl p-5 border"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(74,111,165,0.08)" }}
-            >
-              <BarChart3 size={20} color="#1f748f" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm" style={{ color: vars.navy }}>Owned Media</span>
+              <span className="text-sm font-medium" style={{ color: vars.navy }}>{ownedMedia.score}/{ownedMedia.max}</span>
             </div>
-            <div>
-              <p
-                className="text-2xl font-bold"
-                style={{ color: vars.navy }}
-              >
-                3
-              </p>
-              <p className="text-xs" style={{ color: vars.g500 }}>
-                Active Plans
-              </p>
+            <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
+              <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${(ownedMedia.score / ownedMedia.max) * 100}%`, background: vars.navy }} />
             </div>
-          </div>
-          <div
-            className="flex items-center gap-1 text-xs font-medium"
-            style={{ color: vars.amber }}
-          >
-            1 needs review
           </div>
         </div>
       </div>
-      <h2
-        className="text-sm font-semibold uppercase tracking-wider mb-4"
-        style={{ color: vars.g400 }}
-      >
-        Core Modules
-      </h2>
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        {activeModules.map((mod) => (
-          <div
-            key={mod.id}
-            onClick={() => onNavigate(mod.id)}
-            className="rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:-translate-y-0.5 group"
-            style={{ background: "white", borderColor: vars.g200 }}
-          >
-            <div className="h-1.5" style={{ background: mod.gradient }} />
-            <div className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ background: `${mod.color}10` }}
-                >
-                  <mod.icon size={20} color={mod.color} />
-                </div>
-                <ArrowRight
-                  size={16}
-                  className="transition-transform group-hover:translate-x-1"
-                  style={{ color: vars.g300 }}
-                />
-              </div>
-              <h3
-                className="text-base font-semibold mb-1.5"
-                style={{ color: vars.navy }}
-              >
-                {mod.title}
-              </h3>
-              <p
-                className="text-sm leading-relaxed mb-4"
-                style={{ color: vars.g500 }}
-              >
-                {mod.description}
-              </p>
-              <div
-                className="pt-3 border-t"
-                style={{ borderColor: vars.g100 }}
-              >
-                <p
-                  className="text-xs font-medium"
-                  style={{ color: mod.color }}
-                >
-                  {mod.stats.label}
-                </p>
-                <p
-                  className="text-[11px] mt-0.5"
-                  style={{ color: vars.g400 }}
-                >
-                  {mod.stats.sub}
-                </p>
-              </div>
+
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Tasks Done", value: "0%", trend: null },
+          { label: "Content Pillars", value: "3", trend: "up" },
+          { label: "Entity Coverage", value: "0%", trend: "up" },
+          { label: "Competitor Rank", value: "4", trend: null },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-2xl border p-5" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>{stat.label}</span>
+              {stat.trend === "up" ? (
+                <TrendingUp size={14} color={vars.green} />
+              ) : stat.trend === null ? (
+                <span className="text-sm" style={{ color: vars.g400 }}>&mdash;</span>
+              ) : null}
             </div>
+            <span className="text-3xl font-bold" style={{ color: vars.navy }}>{stat.value}</span>
           </div>
         ))}
       </div>
-      <h2
-        className="text-sm font-semibold uppercase tracking-wider mb-4"
-        style={{ color: vars.g400 }}
-      >
-        Coming in V2
-      </h2>
-      <div className="grid grid-cols-3 gap-4">
-        {lockedModules.map((mod) => (
-          <div
-            key={mod.id}
-            className="rounded-xl border overflow-hidden opacity-50"
-            style={{ background: "white", borderColor: vars.g200 }}
-          >
-            <div className="h-1.5" style={{ background: vars.g200 }} />
-            <div className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ background: vars.g100 }}
-                >
-                  <mod.icon size={20} style={{ color: vars.g400 }} />
+
+      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Priority Tasks</h3>
+          <button onClick={() => onNavigate("planner")} className="flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: vars.g500 }}>
+            View All <ArrowRight size={14} />
+          </button>
+        </div>
+        <div className="space-y-4">
+          {priorityTasks.map((task) => (
+            <div key={task.text} className="flex items-start gap-3">
+              <div className="w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0" style={{ borderColor: vars.g300 }} />
+              <div>
+                <p className="text-sm" style={{ color: vars.navy }}>{task.text}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {task.tags.map((tag) => (
+                    <span key={tag} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium" style={{
+                      background: tag === "technical" ? "rgba(31,116,143,0.08)" : tag === "content" ? "rgba(40,150,185,0.08)" : vars.g100,
+                      color: tag === "technical" ? vars.accent : tag === "content" ? vars.teal : vars.g600,
+                    }}>{tag}</span>
+                  ))}
                 </div>
-                <span
-                  className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full"
-                  style={{ background: vars.g100, color: vars.g400 }}
-                >
-                  <Lock size={10} /> Coming Soon
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={18} color={vars.accent} />
+            <h3 className="text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
+          </div>
+          <span className="px-3 py-1 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>Live monitoring</span>
+        </div>
+        <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
+          A quick snapshot of how visible your brand is right now across the major AI platforms. More mentions and citations mean more people are discovering you through AI.
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          {llmPlatforms.map((llm) => (
+            <div key={llm.name} className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-base font-semibold" style={{ color: vars.navy }}>{llm.name}</span>
+                <span className="flex items-center gap-1 text-sm font-medium" style={{ color: vars.green }}>
+                  <TrendingUp size={14} /> +{llm.trend}
                 </span>
               </div>
-              <h3
-                className="text-base font-semibold mb-1.5"
-                style={{ color: vars.g500 }}
-              >
-                {mod.title}
-              </h3>
-              <p
-                className="text-sm leading-relaxed"
-                style={{ color: vars.g400 }}
-              >
-                {mod.description}
+              <p className="text-sm font-light mb-3" style={{ color: vars.g500 }}>
+                {llm.mentions} mentions this week&nbsp;&nbsp;#{llm.rank} avg
               </p>
+              <span className="inline-flex px-3 py-1 rounded-full text-[11px] font-semibold" style={{
+                background: llm.cited ? "rgba(31,116,143,0.08)" : vars.g100,
+                color: llm.cited ? vars.accent : vars.g600,
+              }}>
+                {llm.cited ? "Cited as source" : "Mentioned only"}
+              </span>
             </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        {quickLinks.map((link) => (
+          <div key={link.label} onClick={() => onNavigate(link.action)}
+            className="rounded-2xl border p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+            style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(31,116,143,0.06)" }}>
+              <link.icon size={20} color={vars.accent} />
+            </div>
+            <p className="text-sm font-semibold" style={{ color: vars.navy }}>{link.label}</p>
+            <p className="text-xs font-light mt-0.5" style={{ color: vars.g500 }}>{link.sub}</p>
           </div>
         ))}
       </div>
@@ -2844,7 +2738,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 function App() {
   const [view, setView] = useState<"landing" | "platform">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
-  const [currentPage, setCurrentPage] = useState("diagnostic");
+  const [currentPage, setCurrentPage] = useState("dashboard");
 
   if (view === "landing") {
     return <LandingPage onLogin={() => setView("platform")} />;
@@ -2855,7 +2749,7 @@ function App() {
       <ClientSelectorPage
         onSelectClient={(client) => {
           setActiveClient(client);
-          setCurrentPage("diagnostic");
+          setCurrentPage("dashboard");
         }}
       />
     );
