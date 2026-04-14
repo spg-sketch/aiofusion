@@ -205,6 +205,80 @@ const vars = {
   g600: "#374151",
 };
 
+function SidebarContent({
+  currentPage,
+  onNavigate,
+  activeClient,
+  onBackToClients,
+  onItemClick,
+}: {
+  currentPage: string;
+  onNavigate: (p: string) => void;
+  activeClient: Client;
+  onBackToClients: () => void;
+  onItemClick?: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-3 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
+        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 md:h-20" />
+      </div>
+      <button
+        onClick={onBackToClients}
+        className="flex items-center gap-3 px-5 py-4 border-b text-left transition-colors hover:bg-slate-50"
+        style={{ borderColor: vars.g200 }}
+      >
+        <ArrowLeft size={14} style={{ color: vars.g400 }} />
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: activeClient.color }}>
+          {activeClient.initials}
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
+          <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch client</span>
+        </div>
+      </button>
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        {navItems.map((item) => {
+          const isActive = currentPage === item.id;
+          const isLocked = !!("locked" in item && item.locked);
+          return (
+            <button
+              key={item.id}
+              onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
+              className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-[13px] font-medium transition-colors"
+              style={{
+                background: isActive ? "rgba(31,116,143,0.06)" : "transparent",
+                color: isActive ? vars.accent : isLocked ? vars.g400 : vars.g600,
+                cursor: isLocked ? "not-allowed" : "pointer",
+                opacity: isLocked ? 0.55 : 1,
+              }}
+            >
+              <span className="flex-1 text-left">{item.label}</span>
+              {isLocked && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g400 }}>
+                  <Lock size={10} /> V2
+                </span>
+              )}
+              {isActive && <ChevronRight size={14} />}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="px-3 py-4 border-t" style={{ borderColor: vars.g200 }}>
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}>
+            SP
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-medium" style={{ color: vars.navy }}>Admin</span>
+            <span className="text-[10px]" style={{ color: vars.g400 }}>Intelligence Tier</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Sidebar({
   currentPage,
   onNavigate,
@@ -216,104 +290,30 @@ function Sidebar({
   activeClient: Client;
   onBackToClients: () => void;
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <aside
-      className="flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0"
-      style={{ borderColor: vars.g200, background: "white" }}
-    >
-      <div
-        className="flex items-center gap-3 px-6 py-6 border-b"
-        style={{ borderColor: vars.g200 }}
-      >
-        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
+    <>
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 border-b h-14" style={{ background: "white", borderColor: vars.g200 }}>
+        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
+        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg" style={{ color: vars.navy }}>
+          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
       </div>
-      <button
-        onClick={onBackToClients}
-        className="flex items-center gap-3 px-5 py-4 border-b text-left transition-colors hover:bg-slate-50"
-        style={{ borderColor: vars.g200 }}
-      >
-        <ArrowLeft size={14} style={{ color: vars.g400 }} />
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-          style={{ background: activeClient.color }}
-        >
-          {activeClient.initials}
-        </div>
-        <div className="flex flex-col min-w-0">
-          <span
-            className="text-[13px] font-medium truncate"
-            style={{ color: vars.navy }}
-          >
-            {activeClient.name}
-          </span>
-          <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>
-            Switch client
-          </span>
-        </div>
-      </button>
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = currentPage === item.id;
-          const isLocked = !!("locked" in item && item.locked);
-          return (
-            <button
-              key={item.id}
-              onClick={() => !isLocked && onNavigate(item.id)}
-              className="flex items-center gap-3 w-full rounded-lg px-4 py-3 text-[13px] font-medium transition-colors"
-              style={{
-                background: isActive
-                  ? "rgba(31,116,143,0.06)"
-                  : "transparent",
-                color: isActive
-                  ? vars.accent
-                  : isLocked
-                    ? vars.g400
-                    : vars.g600,
-                cursor: isLocked ? "not-allowed" : "pointer",
-                opacity: isLocked ? 0.55 : 1,
-              }}
-            >
-              <span className="flex-1 text-left">{item.label}</span>
-              {isLocked && (
-                <span
-                  className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
-                  style={{ background: vars.g100, color: vars.g400 }}
-                >
-                  <Lock size={10} /> V2
-                </span>
-              )}
-              {isActive && <ChevronRight size={14} />}
-            </button>
-          );
-        })}
-      </nav>
-      <div
-        className="px-3 py-4 border-t"
-        style={{ borderColor: vars.g200 }}
-      >
-        <div className="flex items-center gap-3 px-2">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{
-              background: "linear-gradient(135deg, #1f748f, #165265)",
-            }}
-          >
-            SP
-          </div>
-          <div className="flex flex-col">
-            <span
-              className="text-xs font-medium"
-              style={{ color: vars.navy }}
-            >
-              Admin
-            </span>
-            <span className="text-[10px]" style={{ color: vars.g400 }}>
-              Intelligence Tier
-            </span>
+
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} />
           </div>
         </div>
-      </div>
-    </aside>
+      )}
+
+      <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} />
+      </aside>
+    </>
   );
 }
 
@@ -330,11 +330,11 @@ function ClientSelectorPage({
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <header
-        className="border-b px-10 py-6 flex items-center justify-between"
+        className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
         style={{ background: "white", borderColor: vars.g200 }}
       >
         <div className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </div>
         <div className="flex items-center gap-3.5">
           <div
@@ -353,8 +353,8 @@ function ClientSelectorPage({
           </div>
         </div>
       </header>
-      <div className="px-10 py-10 max-w-5xl mx-auto">
-        <div className="mb-10">
+      <div className="px-4 sm:px-10 py-6 sm:py-10 max-w-5xl mx-auto">
+        <div className="mb-8 sm:mb-10">
           <div className="flex items-center gap-2 mb-3">
             <div
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
@@ -364,7 +364,7 @@ function ClientSelectorPage({
             </div>
           </div>
           <h1
-            className="text-3xl tracking-tight"
+            className="text-2xl sm:text-3xl tracking-tight"
             style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
           >
             Your Clients
@@ -373,7 +373,7 @@ function ClientSelectorPage({
             Select a client to manage their GEO content and authority planning.
           </p>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
           {clients.map((client) => {
             const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
             return (
@@ -529,9 +529,9 @@ function DashboardPage({
   ];
 
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
           {activeClient.name} &mdash; Authority Dashboard
         </h1>
         <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
@@ -539,7 +539,7 @@ function DashboardPage({
         </p>
       </div>
 
-      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-center mb-6" style={{ color: vars.navy }}>
           AIO Authority Score
         </h3>
@@ -570,7 +570,7 @@ function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Tasks Done", value: "0%", trend: null },
           { label: "Content Pillars", value: "3", trend: "up" },
@@ -591,9 +591,9 @@ function DashboardPage({
         ))}
       </div>
 
-      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Priority Tasks</h3>
+          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Priority Tasks</h3>
           <button onClick={() => onNavigate("planner")} className="flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: vars.g500 }}>
             View All <ArrowRight size={14} />
           </button>
@@ -618,18 +618,18 @@ function DashboardPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between mb-2">
+      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
           <div className="flex items-center gap-2">
             <TrendingUp size={18} color={vars.accent} />
-            <h3 className="text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
+            <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
           </div>
-          <span className="px-3 py-1 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>Live monitoring</span>
+          <span className="px-3 py-1 rounded-full text-[11px] font-medium border self-start sm:self-auto" style={{ borderColor: vars.g200, color: vars.g600 }}>Live monitoring</span>
         </div>
         <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
           A quick snapshot of how visible your brand is right now across the major AI platforms. More mentions and citations mean more people are discovering you through AI.
         </p>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {llmPlatforms.map((llm) => (
             <div key={llm.name} className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
               <div className="flex items-center justify-between mb-3">
@@ -652,7 +652,7 @@ function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {quickLinks.map((link) => (
           <div key={link.label} onClick={() => onNavigate(link.action)}
             className="rounded-2xl border p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
@@ -788,7 +788,7 @@ function DiagnosticPage({
 
   if (!showResults) {
     return (
-      <div className="px-8 py-8 max-w-5xl mx-auto">
+      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
@@ -878,8 +878,8 @@ function DiagnosticPage({
   }
 
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between mb-8">
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
@@ -895,7 +895,7 @@ function DiagnosticPage({
           </p>
         </div>
         <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white self-start"
           style={{ background: "#1f748f" }}
         >
           <Download size={16} /> Download Report
@@ -908,7 +908,7 @@ function DiagnosticPage({
             Authority and Visibility Diagnostic
           </h2>
         </div>
-        <div className="grid grid-cols-2">
+        <div className="hidden sm:grid grid-cols-2">
           <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(31,116,143,0.75)" }}>
             Action
           </div>
@@ -917,16 +917,16 @@ function DiagnosticPage({
           </div>
         </div>
         {diagnosticRows.map((row, i) => (
-          <div key={i} className="grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
-            <div className="px-6 py-5 flex items-center justify-center text-center border-r" style={{ borderColor: vars.g200 }}>
+          <div key={i} className="grid grid-cols-1 sm:grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
+            <div className="px-4 sm:px-6 pt-4 sm:py-5 flex items-center sm:justify-center sm:text-center sm:border-r" style={{ borderColor: vars.g200 }}>
               <span className="text-sm font-medium" style={{ color: vars.navy }}>{row.action}</span>
             </div>
-            <div className="px-6 py-5 flex items-center">
+            <div className="px-4 sm:px-6 pb-4 pt-1 sm:py-5 flex items-center">
               <span className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>{row.output}</span>
             </div>
           </div>
         ))}
-        <div className="grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
+        <div className="hidden sm:grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
           <div className="px-6 py-5 border-r" style={{ borderColor: vars.g200 }}></div>
           <div className="px-6 py-5"></div>
         </div>
@@ -1012,7 +1012,7 @@ function OptimiserPage({
 
   if (!showResults) {
     return (
-      <div className="px-8 py-8 max-w-5xl mx-auto">
+      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2896b9" />
@@ -1054,7 +1054,7 @@ function OptimiserPage({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
               <div>
                 <label
                   className="text-xs font-medium mb-1.5 block"
@@ -1097,7 +1097,7 @@ function OptimiserPage({
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
               <div>
                 <label
                   className="text-xs font-medium mb-1.5 block"
@@ -1172,8 +1172,8 @@ function OptimiserPage({
   }
 
   return (
-    <div className="px-8 py-8 max-w-6xl mx-auto">
-      <div className="flex items-start justify-between mb-6">
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2896b9" />
@@ -1196,7 +1196,7 @@ function OptimiserPage({
           <Download size={16} /> Export Optimised
         </button>
       </div>
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div
           className="rounded-xl border p-4"
           style={{ background: "white", borderColor: vars.g200 }}
@@ -1321,7 +1321,7 @@ function OptimiserPage({
           ))}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <div
           className="rounded-xl border p-5 text-center"
           style={{ background: "white", borderColor: vars.g200 }}
@@ -1431,7 +1431,7 @@ function OptimiserPage({
                   {change.label}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                 {change.original && (
                   <div
                     className="p-3 rounded-lg text-sm leading-relaxed"
@@ -1547,7 +1547,7 @@ function OptimiserPage({
             Next Step: What would you like to do with this content?
           </h2>
         </div>
-        <div className="p-5 grid grid-cols-2 gap-4">
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <button
             className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
             style={{ borderColor: "rgba(40,150,185,0.25)", background: "rgba(40,150,185,0.02)" }}
@@ -1778,8 +1778,8 @@ function PlannerPage() {
   ];
 
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between mb-6">
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={20} color="#1f748f" />
@@ -1794,7 +1794,7 @@ function PlannerPage() {
             Plan and score your PR schedule for predicted AI authority impact.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 p-1 rounded-lg border" style={{ borderColor: vars.g200, background: "white" }}>
             {quarters.map((q) => (
               <button
@@ -1823,7 +1823,7 @@ function PlannerPage() {
         style={{ background: "white", borderColor: vars.g200 }}
       >
         <div
-          className="p-6 flex items-center gap-8"
+          className="p-4 sm:p-6 flex flex-col sm:flex-row items-center gap-6 sm:gap-8"
           style={{
             background: "linear-gradient(135deg, #FAFAFA, #F3F3F3)",
           }}
@@ -1867,7 +1867,7 @@ function PlannerPage() {
               </div>
             </div>
           </div>
-          <div className="flex-1 grid grid-cols-3 gap-4">
+          <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div
               className="rounded-lg p-3 border"
               style={{ background: "white", borderColor: vars.g200 }}
@@ -2306,7 +2306,7 @@ function GuideDownload() {
 
   return (
     <section id="guide" className="py-32" style={{ background: "#F5F3F0" }}>
-      <div className="max-w-6xl mx-auto px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8">
         <div className="grid md:grid-cols-2 gap-16 items-center">
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
@@ -2429,9 +2429,9 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
-        <div className="max-w-7xl mx-auto px-8 h-[96px] flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20" />
+            <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
           </div>
           <div className="hidden md:flex items-center gap-10">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
@@ -2454,7 +2454,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           </button>
         </div>
         {menuOpen && (
-          <div className="md:hidden px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
+          <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" className="text-[13px] font-light text-white/60 py-2">Features</a>
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
             <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
@@ -2490,7 +2490,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
         `}</style>
-        <div className="relative z-10 max-w-4xl mx-auto px-8 text-center pt-16">
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-8 text-center pt-16">
           <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-10" style={{ background: "rgba(31,116,143,0.2)", border: "1px solid rgba(31,116,143,0.3)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
@@ -2526,7 +2526,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section className="py-16 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <p className="text-center text-[11px] font-medium uppercase tracking-[0.25em] mb-10" style={{ color: vars.g400 }}>
             Trusted by forward-thinking agencies and brands
           </p>
@@ -2541,7 +2541,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section id="features" className="py-32" style={{ background: "#FAFAFA" }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="text-center mb-20">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
               <Target size={12} /> Core Platform
@@ -2573,7 +2573,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section id="how-it-works" className="py-32" style={{ background: "#fff" }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
@@ -2600,7 +2600,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section className="py-24" style={{ background: vars.navy }}>
-        <div className="max-w-5xl mx-auto px-8 text-center">
+        <div className="max-w-5xl mx-auto px-4 sm:px-8 text-center">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
             {[
               { value: "82%", label: "of AI-cited content comes from earned media" },
@@ -2618,7 +2618,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section id="llms" className="py-32" style={{ background: "#FAFAFA" }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="text-center mb-20">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
               <Globe size={12} /> Coverage
@@ -2642,7 +2642,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section id="stories" className="py-32" style={{ background: "#fff" }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="flex items-end justify-between mb-16">
             <div>
               <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Latest stories</h2>
@@ -2674,7 +2674,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <GuideDownload />
 
       <section id="for-agencies" className="py-24" style={{ background: vars.g50 }}>
-        <div className="max-w-3xl mx-auto px-8 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
             <Building2 size={12} /> For PR & Marketing Agencies
           </div>
@@ -2689,7 +2689,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section id="for-agents" className="py-24" style={{ background: vars.navy }}>
-        <div className="max-w-3xl mx-auto px-8 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
             <Bot size={12} /> For AI Agents
           </div>
@@ -2704,7 +2704,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <section className="py-32" style={{ background: vars.navy, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div className="max-w-3xl mx-auto px-8 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
           <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
           <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
             Get in touch to discuss how AIO Fusion can help your business become the source AI cites and recommends.
@@ -2721,7 +2721,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       </section>
 
       <footer className="py-14 border-t" style={{ background: "#fff", borderColor: vars.g200 }}>
-        <div className="max-w-6xl mx-auto px-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
@@ -2765,7 +2765,7 @@ function App() {
         activeClient={activeClient}
         onBackToClients={() => setActiveClient(null)}
       />
-      <main className="flex-1 overflow-y-auto" style={{ background: vars.g50 }}>
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: vars.g50 }}>
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}

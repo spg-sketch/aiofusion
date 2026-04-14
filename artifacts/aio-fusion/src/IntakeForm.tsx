@@ -255,15 +255,15 @@ export default function IntakePage() {
 
   if (submitted) {
     return (
-      <div className="px-8 py-8 max-w-4xl mx-auto">
-        <div className="rounded-2xl border p-16 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-4xl mx-auto">
+        <div className="rounded-2xl border p-6 sm:p-16 text-center" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "rgba(61,155,107,0.1)" }}>
             <CheckCircle2 size={40} color={vars.green} />
           </div>
-          <h2 className="text-2xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+          <h2 className="text-xl sm:text-2xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
             Intake complete
           </h2>
-          <p className="text-[15px] font-light mb-8" style={{ color: vars.g500 }}>
+          <p className="text-[14px] sm:text-[15px] font-light mb-8" style={{ color: vars.g500 }}>
             All 8 sections have been submitted. The platform will use these inputs to generate your content and technical optimisation guides, inform the AIO Diagnostic scoring, and shape Content Optimiser recommendations.
           </p>
           <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mb-8">
@@ -291,18 +291,18 @@ export default function IntakePage() {
   const section = sections[activeSection];
 
   return (
-    <div className="px-8 py-8 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
           GEO & AEO Content Optimisation Intake
         </h1>
-        <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
+        <p className="text-[13px] sm:text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
           Complete each section to enable AI-optimised copy, schema markup, semantic phrase guides, and content architecture.
         </p>
       </div>
 
-      <div className="flex gap-8">
-        <div className="w-72 flex-shrink-0">
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        <div className="w-full lg:w-72 lg:flex-shrink-0">
           <div className="rounded-2xl border p-5 mb-4" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>Progress</span>
