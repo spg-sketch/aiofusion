@@ -692,111 +692,82 @@ const ratingConfig = {
   },
 };
 
+type DiagnosticResult = {
+  overallScore: number;
+  categories: Array<{
+    name: string;
+    score: number;
+    max: number;
+    status: string;
+    findings: string[];
+    recommendations: string[];
+  }>;
+  strengths: string[];
+  warnings: string[];
+  criticalGaps: string[];
+  priorityActions: Array<{
+    priority: string;
+    action: string;
+    timeframe: string;
+    impact: string;
+    category: string;
+  }>;
+  summary: string;
+  provider?: string;
+  sources?: {
+    claude?: { score: number; summary: string };
+    openai?: { score: number; summary: string };
+  };
+};
+
 function DiagnosticPage({
   onNavigate,
 }: {
   onNavigate: (p: string) => void;
 }) {
-  const [showResults, setShowResults] = useState(false);
-  const signals = [
-    {
-      id: 1,
-      title: "Schema Markup",
-      icon: Code2,
-      score: 8,
-      rating: "green" as Rating,
-      finding:
-        "Organization and Article schema correctly implemented across key pages.",
-      action:
-        "Add FAQPage schema to your Q&A content to improve structured snippet eligibility.",
-    },
-    {
-      id: 2,
-      title: "FAQ Page Structure",
-      icon: HelpCircle,
-      score: 4,
-      rating: "amber" as Rating,
-      finding:
-        "FAQ section exists but lacks structured heading hierarchy and answer-first formatting.",
-      action:
-        "Restructure FAQ with H2 question headings and lead each answer with a direct, quotable statement.",
-    },
-    {
-      id: 3,
-      title: "Answer-First Copy",
-      icon: MessageSquareQuote,
-      score: 3,
-      rating: "red" as Rating,
-      finding:
-        "Most pages open with company background rather than direct answers to user questions.",
-      action:
-        "Rewrite opening paragraphs to lead with a definitive answer before providing context or credentials.",
-    },
-    {
-      id: 4,
-      title: "AI Crawler Access",
-      icon: Bot,
-      score: 9,
-      rating: "green" as Rating,
-      finding:
-        "robots.txt allows all major AI crawlers. No blocking directives for GPTBot or Anthropic-AI.",
-      action:
-        "No changes needed. Monitor for new AI crawler user-agents quarterly.",
-    },
-    {
-      id: 5,
-      title: "Source Truth Consistency",
-      icon: ShieldCheck,
-      score: 6,
-      rating: "amber" as Rating,
-      finding:
-        "Key statistics are inconsistent between About page and recent case studies.",
-      action:
-        "Audit and align all numerical claims, founding dates, and capability statements across the site.",
-    },
-    {
-      id: 6,
-      title: "Conversational Content",
-      icon: MessagesSquare,
-      score: 5,
-      rating: "amber" as Rating,
-      finding:
-        "Content is written in formal marketing tone. Lacks natural question-answer patterns.",
-      action:
-        "Add conversational Q&A sections that mirror how users ask questions of AI assistants.",
-    },
-  ];
-  const overallScore = 58;
+  const [urlInput, setUrlInput] = useState("");
+  const [contentInput, setContentInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<DiagnosticResult | null>(null);
 
-  const diagnosticRows = [
-    {
-      action: "Authority Audit in Earned Media",
-      output: "Coverage quality score, citation-readiness of press mentions, journalist attribution patterns, and media outlet authority signals.",
-    },
-    {
-      action: "Authority Audit in Owned Media",
-      output: "Website content structure score, schema markup status, FAQ optimisation, answer-first copy assessment, and AI crawler accessibility.",
-    },
-    {
-      action: "Key competitor comparison",
-      output: "Side-by-side authority benchmarking across competitors, showing citation frequency, signal category scores, and share of AI voice.",
-    },
-    {
-      action: "Priority Actions",
-      output: "Ranked list of high-impact recommendations with estimated effort and projected score improvement per action.",
-    },
-  ];
+  const handleRunDiagnostic = async () => {
+    if (!contentInput.trim() && !urlInput.trim()) {
+      setError("Please enter a URL or paste content to analyse.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const resp = await fetch(`${apiBase}/api/diagnostic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: contentInput.trim() || undefined,
+          url: urlInput.trim() || undefined,
+        }),
+      });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error (${resp.status})`);
+      }
+      const data = await resp.json();
+      setResult(data);
+    } catch (err: any) {
+      setError(err.message || "Analysis failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (!showResults) {
+  if (!result) {
     return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
-            <h1
-              className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-            >
+            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               AIO Diagnostic
             </h1>
           </div>
@@ -804,148 +775,269 @@ function DiagnosticPage({
             Authority and Visibility Diagnostic for AI engines.
           </p>
         </div>
-        <div
-          className="rounded-xl border p-8"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
+        <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="max-w-lg mx-auto">
             <div className="flex items-center gap-2 mb-6">
               <Globe size={18} style={{ color: vars.g400 }} />
-              <span
-                className="text-sm font-medium"
-                style={{ color: vars.g500 }}
-              >
+              <span className="text-sm font-medium" style={{ color: vars.g500 }}>
                 Enter a URL or paste content to analyse
               </span>
             </div>
             <div className="mb-4">
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg border"
-                style={{
-                  borderColor: vars.g200,
-                  background: vars.g50,
-                }}
-              >
+              <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
                 <Globe size={16} style={{ color: vars.g400 }} />
-                <span className="text-sm" style={{ color: vars.g400 }}>
-                  https://example.com/services
-                </span>
+                <input
+                  type="text"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://example.com/services"
+                  className="flex-1 text-sm bg-transparent outline-none"
+                  style={{ color: vars.navy }}
+                />
               </div>
-              <p
-                className="text-[11px] mt-1.5 flex items-center gap-1"
-                style={{ color: vars.g400 }}
-              >
-                <Info size={11} /> Beta: paste content below for best
-                results
+              <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
+                <Info size={11} /> For best results, paste your page content below
               </p>
             </div>
             <div className="mb-6">
-              <div
-                className="p-4 rounded-lg border min-h-[120px] flex items-start gap-3"
-                style={{
-                  borderColor: vars.g200,
-                  background: vars.g50,
-                }}
-              >
-                <ClipboardPaste
-                  size={16}
-                  className="mt-0.5"
-                  style={{ color: vars.g400 }}
-                />
-                <span className="text-sm" style={{ color: vars.g400 }}>
-                  Paste your page content here...
-                </span>
-              </div>
+              <textarea
+                value={contentInput}
+                onChange={(e) => setContentInput(e.target.value)}
+                placeholder="Paste your page content here..."
+                rows={6}
+                className="w-full p-4 rounded-lg border text-sm resize-y outline-none focus:ring-1"
+                style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy, minHeight: 120 }}
+              />
             </div>
+            {error && (
+              <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "#FBEEEC", color: "#B03D33" }}>
+                {error}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setShowResults(true)}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
+                onClick={handleRunDiagnostic}
+                disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
                 style={{ background: "#1f748f" }}
               >
-                <Search size={16} /> Run Diagnostic
-              </button>
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors"
-                style={{ borderColor: vars.g200, color: vars.g600 }}
-              >
-                <Upload size={16} /> Upload Document
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Analysing with Claude & OpenAI...
+                  </>
+                ) : (
+                  <>
+                    <Search size={16} /> Run Diagnostic
+                  </>
+                )}
               </button>
             </div>
+            {loading && (
+              <div className="mt-6 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: vars.accent }} />
+                  <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine analysis</span>
+                </div>
+                <p className="text-xs font-light" style={{ color: vars.g500 }}>
+                  Your content is being analysed by both Claude and OpenAI simultaneously. Results from both engines will be merged to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
+  const statusColor = (s: string) => s === "pass" ? vars.green : s === "warn" ? vars.amber : vars.red;
+  const statusLabel = (s: string) => s === "pass" ? "Strong" : s === "warn" ? "Needs Work" : "Critical";
+  const statusIcon = (s: string) => s === "pass" ? CheckCircle2 : s === "warn" ? AlertTriangle : XCircle;
+
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
-            <h1
-              className="text-xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-            >
-              AIO Diagnostic
+            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              AIO Diagnostic Results
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Authority and Visibility Diagnostic for AI engines.
+            {result.summary}
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white self-start"
-          style={{ background: "#1f748f" }}
-        >
+        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white self-start" style={{ background: "#1f748f" }}>
           <Download size={16} /> Download Report
         </button>
       </div>
 
-      <div className="rounded-xl border overflow-hidden mb-8" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="px-6 py-4 text-center" style={{ background: vars.accent }}>
-          <h2 className="text-lg font-semibold text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            Authority and Visibility Diagnostic
-          </h2>
+      {result.sources && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          {result.sources.claude && (
+            <span className="px-3 py-1.5 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              Claude Score: {result.sources.claude.score}/100
+            </span>
+          )}
+          {result.sources.openai && (
+            <span className="px-3 py-1.5 rounded-full text-[11px] font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              OpenAI Score: {result.sources.openai.score}/100
+            </span>
+          )}
+          <span className="px-3 py-1.5 rounded-full text-[11px] font-semibold" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            {result.provider === "merged" ? "Dual-engine merged" : `Single engine: ${result.provider}`}
+          </span>
         </div>
-        <div className="hidden sm:grid grid-cols-2">
-          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(31,116,143,0.75)" }}>
-            Action
-          </div>
-          <div className="px-6 py-3 text-center font-semibold text-sm text-white" style={{ background: "rgba(31,116,143,0.75)" }}>
-            Output
-          </div>
-        </div>
-        {diagnosticRows.map((row, i) => (
-          <div key={i} className="grid grid-cols-1 sm:grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
-            <div className="px-4 sm:px-6 pt-4 sm:py-5 flex items-center sm:justify-center sm:text-center sm:border-r" style={{ borderColor: vars.g200 }}>
-              <span className="text-sm font-medium" style={{ color: vars.navy }}>{row.action}</span>
+      )}
+
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+          <div className="flex flex-col items-center flex-shrink-0">
+            <div className="relative" style={{ width: 130, height: 130 }}>
+              <svg width={130} height={130}>
+                <circle cx={65} cy={65} r={54} fill="none" stroke={vars.g200} strokeWidth={9} />
+                <circle cx={65} cy={65} r={54} fill="none"
+                  stroke={result.overallScore >= 70 ? vars.green : result.overallScore >= 40 ? vars.amber : vars.red}
+                  strokeWidth={9} strokeDasharray={`${(result.overallScore / 100) * 339} 339`}
+                  strokeLinecap="round" transform="rotate(-90 65 65)" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-bold" style={{ color: vars.navy }}>{result.overallScore}</span>
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: vars.g400 }}>/100</span>
+              </div>
             </div>
-            <div className="px-4 sm:px-6 pb-4 pt-1 sm:py-5 flex items-center">
-              <span className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>{row.output}</span>
+            <span className="text-xs font-semibold mt-1" style={{ color: vars.navy }}>Authority Score</span>
+          </div>
+          <div className="flex-1 w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {(result.categories || []).map((cat) => {
+                const Icon = statusIcon(cat.status);
+                return (
+                  <div key={cat.name} className="p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon size={14} color={statusColor(cat.status)} />
+                      <span className="text-[11px] font-semibold" style={{ color: statusColor(cat.status) }}>{statusLabel(cat.status)}</span>
+                    </div>
+                    <p className="text-xs font-medium truncate" style={{ color: vars.navy }}>{cat.name}</p>
+                    <p className="text-lg font-bold" style={{ color: vars.navy }}>{cat.score}<span className="text-xs font-normal" style={{ color: vars.g400 }}>/{cat.max}</span></p>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ))}
-        <div className="hidden sm:grid grid-cols-2 border-t" style={{ borderColor: vars.g200 }}>
-          <div className="px-6 py-5 border-r" style={{ borderColor: vars.g200 }}></div>
-          <div className="px-6 py-5"></div>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => onNavigate("optimiser")}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white"
-          style={{ background: "#1f748f" }}
-        >
-          Open Optimization Tools <ArrowRight size={14} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="rounded-xl p-4 border" style={{ borderColor: "#C2E5D2", background: "#F0FAF4" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Check size={14} color={vars.green} />
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.green }}>Strengths</span>
+          </div>
+          <ul className="space-y-1.5">
+            {(result.strengths || []).map((s, i) => (
+              <li key={i} className="text-xs leading-relaxed" style={{ color: vars.g600 }}>{s}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-xl p-4 border" style={{ borderColor: "#F5DCA0", background: "#FFFCF0" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={14} color={vars.amber} />
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.amber }}>Warnings</span>
+          </div>
+          <ul className="space-y-1.5">
+            {(result.warnings || []).map((w, i) => (
+              <li key={i} className="text-xs leading-relaxed" style={{ color: vars.g600 }}>{w}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-xl p-4 border" style={{ borderColor: "#E8B5AE", background: "#FDF5F4" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <XCircle size={14} color={vars.red} />
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.red }}>Critical Gaps</span>
+          </div>
+          <ul className="space-y-1.5">
+            {(result.criticalGaps || []).map((g, i) => (
+              <li key={i} className="text-xs leading-relaxed" style={{ color: vars.g600 }}>{g}</li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Category Detail</h3>
+        <div className="space-y-4">
+          {(result.categories || []).map((cat) => (
+            <div key={cat.name} className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold" style={{ color: vars.navy }}>{cat.name}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: statusColor(cat.status) + "18", color: statusColor(cat.status) }}>
+                    {cat.score}/{cat.max}
+                  </span>
+                </div>
+              </div>
+              {cat.findings.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: vars.g400 }}>Findings</p>
+                  <ul className="space-y-1">
+                    {cat.findings.map((f, i) => (
+                      <li key={i} className="text-xs leading-relaxed flex items-start gap-2" style={{ color: vars.g600 }}>
+                        <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: vars.g400 }} />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {cat.recommendations.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: vars.accent }}>Recommendations</p>
+                  <ul className="space-y-1">
+                    {cat.recommendations.map((r, i) => (
+                      <li key={i} className="text-xs leading-relaxed flex items-start gap-2" style={{ color: vars.accent }}>
+                        <ArrowRight size={10} className="mt-1 flex-shrink-0" />
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {(result.priorityActions || []).length > 0 && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
+          <div className="space-y-2">
+            {(result.priorityActions || []).map((action, i) => {
+              const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : vars.accent;
+              return (
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className="w-5 h-5 rounded-full border-2 flex-shrink-0" style={{ borderColor: prioColor }} />
+                    <span className="text-sm" style={{ color: vars.navy }}>{action.action}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 ml-7 sm:ml-0">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: prioColor + "18", color: prioColor }}>{action.priority}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>{action.timeframe}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>{action.category}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+          Open Optimisation Tools <ArrowRight size={14} />
         </button>
-        <button
-          onClick={() => setShowResults(false)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border"
-          style={{ borderColor: vars.g200, color: vars.g600 }}
-        >
+        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
           Run New Diagnostic
         </button>
       </div>
