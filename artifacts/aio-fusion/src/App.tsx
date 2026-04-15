@@ -76,6 +76,7 @@ type Client = {
   activePlans: number;
   lastActive: string;
   recentActivity: string;
+  logo?: string;
 };
 
 const clients: Client[] = [
@@ -230,9 +231,15 @@ function SidebarContent({
         style={{ borderColor: vars.g200 }}
       >
         <ArrowLeft size={14} style={{ color: vars.g400 }} />
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: activeClient.color }}>
-          {activeClient.initials}
-        </div>
+        {activeClient.logo ? (
+          <div className="w-8 h-8 rounded-lg overflow-hidden border flex items-center justify-center flex-shrink-0" style={{ borderColor: vars.g200, background: "white" }}>
+            <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
+          </div>
+        ) : (
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: activeClient.color }}>
+            {activeClient.initials}
+          </div>
+        )}
         <div className="flex flex-col min-w-0">
           <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
           <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch client</span>
@@ -320,8 +327,12 @@ function Sidebar({
 
 function ClientSelectorPage({
   onSelectClient,
+  clientLogos,
+  onLogoUpdate,
 }: {
   onSelectClient: (client: Client) => void;
+  clientLogos: Record<string, string>;
+  onLogoUpdate: (clientId: string, logoDataUrl: string) => void;
 }) {
   const totalContent = clients.reduce((s, c) => s + c.contentCount, 0);
   const avgScore = Math.round(
@@ -377,6 +388,25 @@ function ClientSelectorPage({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
           {clients.map((client) => {
             const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
+            const logoUrl = clientLogos[client.id];
+            const handleLogoUpload = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "image/png,image/jpeg,image/svg+xml,image/webp";
+              input.onchange = (ev) => {
+                const file = (ev.target as HTMLInputElement).files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  if (typeof reader.result === "string") {
+                    onLogoUpdate(client.id, reader.result);
+                  }
+                };
+                reader.readAsDataURL(file);
+              };
+              input.click();
+            };
             return (
               <div
                 key={client.id}
@@ -388,11 +418,27 @@ function ClientSelectorPage({
                 <div className="p-7">
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
-                        style={{ background: client.color }}
-                      >
-                        {client.initials}
+                      <div className="relative group/logo flex-shrink-0">
+                        {logoUrl ? (
+                          <div className="w-12 h-12 rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
+                            <img src={logoUrl} alt={`${client.name} logo`} className="w-full h-full object-contain p-1" />
+                          </div>
+                        ) : (
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-[13px] font-bold text-white"
+                            style={{ background: client.color }}
+                          >
+                            {client.initials}
+                          </div>
+                        )}
+                        <button
+                          onClick={handleLogoUpload}
+                          className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity"
+                          style={{ background: vars.accent }}
+                          title="Upload logo"
+                        >
+                          <Upload size={9} className="text-white" />
+                        </button>
                       </div>
                       <div>
                         <h3 className="text-[15px] font-semibold" style={{ color: vars.navy }}>
@@ -722,8 +768,10 @@ type DiagnosticResult = {
 
 function DiagnosticPage({
   onNavigate,
+  activeClient,
 }: {
   onNavigate: (p: string) => void;
+  activeClient: Client;
 }) {
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
@@ -868,12 +916,18 @@ function DiagnosticPage({
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex flex-col items-center justify-center rounded-xl border border-white/20 bg-white/10 px-4 py-3 min-w-[80px] sm:min-w-[100px]" style={{ backdropFilter: "blur(8px)" }}>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-white/30 flex items-center justify-center mb-1">
-                  <Building2 size={18} className="text-white/40" />
+              {activeClient.logo ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/20 bg-white/90 px-4 py-3 min-w-[80px] sm:min-w-[100px]">
+                  <img src={activeClient.logo} alt={`${activeClient.name} logo`} className="h-10 sm:h-14 max-w-[100px] object-contain" />
                 </div>
-                <span className="text-[9px] uppercase tracking-wider text-white/50">Client Logo</span>
-              </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-white/20 bg-white/10 px-4 py-3 min-w-[80px] sm:min-w-[100px]" style={{ backdropFilter: "blur(8px)" }}>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg border-2 border-dashed border-white/30 flex items-center justify-center mb-1">
+                    <Building2 size={18} className="text-white/40" />
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider text-white/50">Client Logo</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2854,6 +2908,11 @@ function App() {
   const [view, setView] = useState<"landing" | "platform">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
+
+  const handleLogoUpdate = (clientId: string, logoDataUrl: string) => {
+    setClientLogos((prev) => ({ ...prev, [clientId]: logoDataUrl }));
+  };
 
   if (view === "landing") {
     return <LandingPage onLogin={() => setView("platform")} />;
@@ -2863,9 +2922,11 @@ function App() {
     return (
       <ClientSelectorPage
         onSelectClient={(client) => {
-          setActiveClient(client);
+          setActiveClient({ ...client, logo: clientLogos[client.id] });
           setCurrentPage("dashboard");
         }}
+        clientLogos={clientLogos}
+        onLogoUpdate={handleLogoUpdate}
       />
     );
   }
@@ -2884,7 +2945,7 @@ function App() {
         )}
         {currentPage === "intake" && <IntakePage />}
         {currentPage === "diagnostic" && (
-          <DiagnosticPage onNavigate={setCurrentPage} />
+          <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
