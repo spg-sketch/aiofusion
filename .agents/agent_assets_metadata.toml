@@ -29,3 +29,9 @@ id = "f6JwjGiEskUjCpL7HrBS3"
 uri = "file://AIO_Fusion_Logo_Brief.md"
 type = "text"
 title = "AIO Fusion Logo Design Brief"
+
+[[outputs]]
+id = "qawjlreOycm5uPDnUUiup"
+uri = "file://AIO_Fusion_User_Workflow.txt"
+type = "text"
+title = "AIO Fusion — User Workflow"
