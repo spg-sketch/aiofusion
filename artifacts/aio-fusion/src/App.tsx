@@ -58,7 +58,6 @@ import {
   Activity,
   Play,
   ChevronUp,
-  ExternalLink,
   Menu,
   X,
   LogIn,
@@ -2553,11 +2552,6 @@ const agencyBrands = [
   "the7stars", "Fjord", "Mindshare", "OMD UK",
 ];
 
-const blogPosts = [
-  { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", date: "10 March 2026", tag: "Guide", image: "/images/story-ai-authority.png" },
-  { title: "Why Earned Media is the Key to AI Citation", date: "28 February 2026", tag: "Insight", image: "/images/story-earned-media.png" },
-  { title: "How GEO is Reshaping B2B Discovery", date: "14 February 2026", tag: "Analysis", image: "/images/story-geo-reshaping.png" },
-];
 
 function GuideDownload() {
   const [submitted, setSubmitted] = useState(false);
@@ -2702,17 +2696,15 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           <div className="hidden md:flex items-center gap-10">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
             <a href="#how-it-works" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">How It Works</a>
-            <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">LLM Coverage</a>
-            <a href="#stories" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Stories</a>
-            <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
-            <a href="#for-agents" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agents</a>
+            <a href="#llms" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">AI Coverage</a>
             <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
+            <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
             <button
               onClick={onLogin}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
               style={{ background: vars.accent }}
             >
-              <LogIn size={14} /> Admin Login
+              <LogIn size={14} /> Platform Login
             </button>
           </div>
           <button className="md:hidden text-white" onClick={() => setMenuOpen(!menuOpen)}>
@@ -2721,15 +2713,13 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
         {menuOpen && (
           <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
-            <a href="#features" className="text-[13px] font-light text-white/60 py-2">Features</a>
-            <a href="#how-it-works" className="text-[13px] font-light text-white/60 py-2">How It Works</a>
-            <a href="#llms" className="text-[13px] font-light text-white/60 py-2">LLM Coverage</a>
-            <a href="#stories" className="text-[13px] font-light text-white/60 py-2">Stories</a>
-            <a href="#for-agencies" className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
-            <a href="#for-agents" className="text-[13px] font-light text-white/60 py-2">For Agents</a>
-            <a href="#guide" className="text-[13px] font-light text-white/60 py-2">Guide</a>
-            <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
-              <LogIn size={14} /> Admin Login
+            <a href="#features" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Features</a>
+            <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">How It Works</a>
+            <a href="#llms" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">AI Coverage</a>
+            <a href="#guide" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Guide</a>
+            <a href="#for-agencies" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
+            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
+              <LogIn size={14} /> Platform Login
             </button>
           </div>
         )}
@@ -2761,12 +2751,11 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
           <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            Win AI Authority<br />
-            <span style={{ color: vars.accent }}>for Your Brand</span>
+            Become the source<br />
+            <span style={{ color: vars.accent }}>AI cites</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-14 leading-relaxed font-light">
-            AIO Fusion helps agencies and B2B businesses become the source AI cites.
-            Diagnose, optimise, and plan your content for visibility across ChatGPT, Perplexity, Claude and Gemini.
+            AIO Fusion is the GEO platform for PR and communications teams. Diagnose how AI sees your brand, optimise content for citation, and build an authority plan that gets you recommended by ChatGPT, Perplexity, Claude and Gemini.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <button
@@ -2774,14 +2763,14 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]"
               style={{ background: vars.accent }}
             >
-              <LogIn size={18} /> Platform Login
+              <LogIn size={18} /> See the Platform
             </button>
             <a
               href="#features"
               className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
             >
-              Learn More <ArrowRight size={16} />
+              Explore Features <ArrowRight size={16} />
             </a>
           </div>
           <div className="mt-20 flex items-center justify-center gap-2.5 text-white/30 text-[13px] font-light tracking-wide">
@@ -2794,7 +2783,7 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <section className="py-16 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <p className="text-center text-[11px] font-medium uppercase tracking-[0.25em] mb-10" style={{ color: vars.g400 }}>
-            Trusted by forward-thinking agencies and brands
+            Built for PR agencies and B2B communications teams
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-14 gap-y-5">
             {agencyBrands.map((brand) => (
@@ -2806,132 +2795,122 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
         </div>
       </section>
 
-      <section id="features" className="py-32" style={{ background: "#FAFAFA" }}>
+      <section id="features" className="py-24 sm:py-32" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-20">
+          <div className="text-center mb-16 sm:mb-20">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-              <Target size={12} /> Core Platform
+              <Target size={12} /> Platform Features
             </div>
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Three tools, one AI authority strategy</h2>
+            <h2 className="text-3xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              AIO Fusion provides a complete GEO workflow, from diagnosing how AI sees your brand, to optimising content and planning authority-building activity.
+              From diagnosis through to delivery. AIO Fusion covers the full GEO workflow so your clients get cited, not ignored.
             </p>
           </div>
-          <div className="grid md:grid-cols-3 gap-10">
+          <div className="grid md:grid-cols-3 gap-8 sm:gap-10 mb-10">
             {[
-              { title: "AIO Diagnostic", desc: "Analyse how well your content is structured for AI visibility. Get a scored report across 6 signal categories with specific actions.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: FileText },
-              { title: "Content Optimiser", desc: "Transform PR content for maximum AI citation and retrieval. Side-by-side tracked changes with semantic guidance and approval workflow.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: FileEdit },
-              { title: "Authority Planner", desc: "Score your forward PR plan for predicted AI authority impact. Identify gaps and prioritise activity across 8 categories.", color: vars.slate, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: BarChart3 },
+              { title: "AI Diagnostic", desc: "Paste any URL or content and get a scored authority report powered by Claude and OpenAI. See exactly where you're strong and what's holding you back across 6 signal categories.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: Search, tag: "Live AI" },
+              { title: "Content Optimiser", desc: "Transform press releases and PR content into AI-citable material. Side-by-side tracked changes show every edit with the reasoning behind it, so clients understand the value.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: FileEdit, tag: "Core tool" },
+              { title: "Press Release Editor", desc: "Write, edit and export press releases built for AI visibility from the start. Full rich text editor with templates, status tracking and one-click Word export for client approval.", color: "#6366F1", gradient: "linear-gradient(135deg, #6366F1, #4F46E5)", icon: PenLine, tag: "New" },
             ].map((tool) => (
               <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
                 <div className="h-1.5" style={{ background: tool.gradient }} />
-                <div className="p-10">
-                  <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6" style={{ background: `${tool.color}0A` }}>
-                    <tool.icon size={26} color={tool.color} />
+                <div className="p-8 sm:p-10">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ background: `${tool.color}0A` }}>
+                      <tool.icon size={26} color={tool.color} />
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: `${tool.color}0A`, color: tool.color }}>{tool.tag}</span>
                   </div>
-                  <h3 className="text-2xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{tool.title}</h3>
-                  <p className="text-[15px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
+                  <h3 className="text-xl sm:text-2xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{tool.title}</h3>
+                  <p className="text-[14px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              { icon: ClipboardPaste, title: "Client Intake", desc: "Structured onboarding across 6 sections — brand identity, spokespeople, AI presence, goals. Everything the platform needs to work." },
+              { icon: BarChart3, title: "Authority Planner", desc: "Score your forward content plan across 8 PR categories. See which activities drive the most AI authority and where the gaps are." },
+              { icon: LineChart, title: "Measure & Report", desc: "Action plan with interactive checklists, calendar and timeline views. Track progress across priorities and export for client reporting." },
+            ].map((tool) => (
+              <div key={tool.title} className="bg-white rounded-xl border p-6 sm:p-8" style={{ borderColor: vars.g200 }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(31,116,143,0.06)" }}>
+                    <tool.icon size={18} color={vars.accent} />
+                  </div>
+                  <h3 className="text-[15px] font-semibold" style={{ color: vars.navy }}>{tool.title}</h3>
+                </div>
+                <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="how-it-works" className="py-32" style={{ background: "#fff" }}>
+      <section id="how-it-works" className="py-24 sm:py-32" style={{ background: "#fff" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-20">
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
+          <div className="text-center mb-16 sm:mb-20">
+            <h2 className="text-3xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How it works</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              A managed service model. The platform is operated on behalf of clients, delivering GEO as part of a retained engagement.
+              AIO Fusion is a managed service. We operate the platform on your behalf as part of a retained engagement — you focus on PR, we handle the GEO.
             </p>
           </div>
-          <div className="grid md:grid-cols-4 gap-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-10">
             {[
-              { step: "01", title: "Onboard", desc: "Client data, messaging and content are loaded into a dedicated workspace." },
-              { step: "02", title: "Diagnose", desc: "Run the AIO Diagnostic to benchmark how AI currently perceives the brand." },
-              { step: "03", title: "Optimise", desc: "Use the Content Optimiser to rewrite PR content for AI citation and visibility." },
-              { step: "04", title: "Plan & Measure", desc: "Build a forward plan scored for authority impact and track results over time." },
+              { step: "01", title: "Onboard", desc: "We load your client's brand data, messaging, spokespeople and existing content into a dedicated workspace." },
+              { step: "02", title: "Diagnose", desc: "The AI Diagnostic benchmarks how AI currently sees your brand — scored across 6 categories with specific actions to improve." },
+              { step: "03", title: "Optimise", desc: "We rewrite PR content for AI citation using the Content Optimiser, with tracked changes and reasoning your clients can approve." },
+              { step: "04", title: "Plan & Report", desc: "The Authority Planner scores your forward calendar. The Action Plan tracks progress and feeds into client reporting." },
             ].map((item) => (
               <div key={item.step} className="text-center">
-                <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 text-xl font-light border-2" style={{ borderColor: vars.navy, color: vars.navy }}>
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center mx-auto mb-5 sm:mb-6 text-lg sm:text-xl font-light border-2" style={{ borderColor: vars.navy, color: vars.navy }}>
                   {item.step}
                 </div>
-                <h3 className="text-xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{item.title}</h3>
-                <p className="text-[14px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{item.desc}</p>
+                <h3 className="text-lg sm:text-xl mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{item.title}</h3>
+                <p className="text-[13px] sm:text-[14px] leading-[1.75] font-light" style={{ color: vars.g500 }}>{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-24" style={{ background: vars.navy }}>
+      <section className="py-20 sm:py-24" style={{ background: vars.navy }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-8 text-center">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-10">
             {[
               { value: "82%", label: "of AI-cited content comes from earned media" },
               { value: "95%", label: "of AI citations use non-paid sources" },
               { value: "40%", label: "of search queries now handled by AI" },
-              { value: "30%+", label: "visibility boost via GEO methods" },
+              { value: "2x", label: "faster content turnaround with AI-assisted drafting" },
             ].map((stat) => (
               <div key={stat.value}>
-                <div className="text-4xl md:text-5xl mb-3" style={{ color: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{stat.value}</div>
-                <p className="text-[13px] text-white/50 leading-relaxed font-light">{stat.label}</p>
+                <div className="text-3xl sm:text-4xl md:text-5xl mb-3" style={{ color: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{stat.value}</div>
+                <p className="text-[12px] sm:text-[13px] text-white/50 leading-relaxed font-light">{stat.label}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="llms" className="py-32" style={{ background: "#FAFAFA" }}>
+      <section id="llms" className="py-24 sm:py-32" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-20">
+          <div className="text-center mb-16 sm:mb-20">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-              <Globe size={12} /> Coverage
+              <Globe size={12} /> AI Coverage
             </div>
-            <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Optimise for every major LLM</h2>
+            <h2 className="text-3xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Built for the engines that matter</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              AIO Fusion analyses and scores your content against the retrieval and citation patterns of the four dominant answer engines.
+              The diagnostic analyses your content against the retrieval and citation patterns of the four dominant AI platforms. The optimiser structures your content to perform across all of them.
             </p>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
             {llmLogos.map((llm) => (
-              <div key={llm.name} className="bg-white rounded-2xl border p-10 flex flex-col items-center gap-5 transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="w-18 h-18 rounded-2xl flex items-center justify-center" style={{ width: 72, height: 72, background: `${llm.color}0A`, color: llm.color }}>
+              <div key={llm.name} className="bg-white rounded-2xl border p-8 sm:p-10 flex flex-col items-center gap-4 sm:gap-5 transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
+                <div className="rounded-2xl flex items-center justify-center" style={{ width: 64, height: 64, background: `${llm.color}0A`, color: llm.color }}>
                   {llm.icon}
                 </div>
-                <span className="text-xl" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{llm.name}</span>
+                <span className="text-lg sm:text-xl" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{llm.name}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="stories" className="py-32" style={{ background: "#fff" }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="flex items-end justify-between mb-16">
-            <div>
-              <h2 className="text-4xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Latest stories</h2>
-              <p className="text-lg font-light" style={{ color: vars.g500 }}>Insights on AI authority, GEO strategy, and B2B PR.</p>
-            </div>
-            <a href="#" target="_blank" rel="noopener noreferrer" className="hidden md:flex items-center gap-2 text-[13px] font-medium hover:underline" style={{ color: vars.accent }}>
-              View all <ExternalLink size={13} />
-            </a>
-          </div>
-          <div className="grid md:grid-cols-3 gap-10">
-            {blogPosts.map((post) => (
-              <a key={post.title} href="#" target="_blank" rel="noopener noreferrer" className="bg-white rounded-2xl border overflow-hidden group transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="h-52 overflow-hidden">
-                  <img src={post.image} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                </div>
-                <div className="p-8">
-                  <div className="flex items-center gap-3 mb-4">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>{post.tag}</span>
-                    <span className="text-[13px] font-light" style={{ color: vars.g400 }}>{post.date}</span>
-                  </div>
-                  <h3 className="text-lg leading-snug group-hover:underline" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{post.title}</h3>
-                </div>
-              </a>
             ))}
           </div>
         </div>
@@ -2939,48 +2918,55 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
 
       <GuideDownload />
 
-      <section id="for-agencies" className="py-24" style={{ background: vars.g50 }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-            <Building2 size={12} /> For PR & Marketing Agencies
+      <section id="for-agencies" className="py-24 sm:py-32" style={{ background: "#fff" }}>
+        <div className="max-w-4xl mx-auto px-4 sm:px-8">
+          <div className="grid md:grid-cols-2 gap-12 sm:gap-16 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+                <Building2 size={12} /> For PR & Comms Agencies
+              </div>
+              <h2 className="text-3xl md:text-4xl mb-6 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add GEO to your service offering</h2>
+              <p className="text-[15px] font-light leading-[1.8] mb-8" style={{ color: vars.g500 }}>
+                AIO Fusion is designed for agencies who want to offer Generative Engine Optimisation without building the tooling from scratch. We run the platform as a managed service — your team gets the insights, your clients get the results.
+              </p>
+              <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+                <Mail size={16} /> Get in Touch
+              </a>
+            </div>
+            <div className="space-y-4">
+              {[
+                { title: "Multi-client management", desc: "Separate workspaces per client with their own intake data, content pipeline, and reporting." },
+                { title: "Dual-engine AI analysis", desc: "Every diagnostic runs through both Claude and OpenAI for more robust, balanced scoring." },
+                { title: "Client-ready outputs", desc: "Export press releases to Word, save diagnostic reports as PDF, and deliver action plans your clients actually use." },
+                { title: "Full audit trail", desc: "Tracked changes with annotations explain every optimisation, so clients see the reasoning — not just the edits." },
+              ].map((item) => (
+                <div key={item.title} className="flex items-start gap-3 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(31,116,143,0.1)" }}>
+                    <Check size={13} color={vars.accent} />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-semibold mb-0.5" style={{ color: vars.navy }}>{item.title}</p>
+                    <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <h2 className="text-4xl md:text-5xl mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>PR & AI Fusion for Agencies</h2>
-          <p className="text-lg font-light leading-relaxed mb-10" style={{ color: vars.g500 }}>
-            Add Generative Engine Optimisation to your service offering. AIO Fusion gives your team the tools to deliver measurable AI authority results for every client.
-          </p>
-          <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
-            <Mail size={16} /> Get in Touch
-          </a>
         </div>
       </section>
 
-      <section id="for-agents" className="py-24" style={{ background: vars.navy }}>
+      <section className="py-24 sm:py-32" style={{ background: vars.navy }}>
         <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-6" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
-            <Bot size={12} /> For AI Agents
-          </div>
-          <h2 className="text-4xl md:text-5xl text-white mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>Built for agents that need your data</h2>
-          <p className="text-lg text-white/50 max-w-2xl mx-auto leading-relaxed font-light mb-10">
-            AIO Fusion structures your brand's authority data so AI agents can discover, cite, and recommend your business with confidence. Access structured signals, optimised content, and citation tracking.
-          </p>
-          <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
-            <Mail size={16} /> Get in Touch
-          </a>
-        </div>
-      </section>
-
-      <section className="py-32" style={{ background: vars.navy, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
-          <h2 className="text-4xl md:text-5xl text-white mb-7" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
-          <p className="text-lg text-white/50 mb-14 leading-relaxed font-light">
-            Get in touch to discuss how AIO Fusion can help your business become the source AI cites and recommends.
+          <h2 className="text-3xl md:text-5xl text-white mb-7" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
+          <p className="text-lg text-white/50 mb-12 leading-relaxed font-light">
+            Get in touch to see how AIO Fusion can help your agency deliver GEO results for every client.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
               <Mail size={18} /> Contact Us
             </a>
             <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}>
-              <LogIn size={16} /> Admin Login
+              <LogIn size={16} /> See the Platform
             </button>
           </div>
         </div>
@@ -2993,7 +2979,9 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
               <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20" />
             </div>
             <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
-              <a href="#" className="hover:underline">Contact</a>
+              <a href="#features" className="hover:underline">Features</a>
+              <a href="#guide" className="hover:underline">Guide</a>
+              <a href="#for-agencies" className="hover:underline">Contact</a>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
