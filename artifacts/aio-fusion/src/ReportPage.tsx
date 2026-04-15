@@ -86,7 +86,9 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
 }
 
 export default function ReportPage({ activeClient }: { activeClient: Client }) {
-  const [activeTab, setActiveTab] = useState<"overview" | "detail" | "actions">("overview");
+  const [activeTab, setActiveTab] = useState<"actions" | "overview" | "detail">("actions");
+  const [completedActions, setCompletedActions] = useState<Set<number>>(new Set());
+  const [actionFilter, setActionFilter] = useState<"all" | "Critical" | "High" | "Medium" | "Low">("all");
   const reportDate = "14 April 2026";
   const authorityScore = activeClient.avgScore || 24;
 
@@ -147,9 +149,9 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
   const totalOwnedMax = categoryScores.filter(c => ["Schema & Structured Data", "Content Architecture", "Technical Accessibility"].includes(c.label)).reduce((s, c) => s + c.max, 0);
 
   const tabs = [
+    { id: "actions" as const, label: "Action Plan" },
     { id: "overview" as const, label: "Executive Summary" },
     { id: "detail" as const, label: "Detailed Audit" },
-    { id: "actions" as const, label: "Action Plan" },
   ];
 
   return (
@@ -473,59 +475,116 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
         </div>
       )}
 
-      {activeTab === "actions" && (
+      {activeTab === "actions" && (() => {
+        const filteredActions = actionFilter === "all" ? priorityActions : priorityActions.filter(a => a.priority === actionFilter);
+        const completedCount = completedActions.size;
+        const totalActions = priorityActions.length;
+        const progressPct = Math.round((completedCount / totalActions) * 100);
+
+        return (
         <div className="space-y-6">
-          <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Zap size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Priority Action Plan</h3>
-            </div>
-            <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
-              Ranked actions to improve your AI authority score. Focus on critical items first for maximum impact.
-            </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-              <div className="rounded-xl p-4 text-center border" style={{ borderColor: vars.g200 }}>
-                <p className="text-2xl font-bold" style={{ color: vars.red }}>{priorityActions.filter(a => a.priority === "Critical").length}</p>
-                <p className="text-[11px] font-medium" style={{ color: vars.g500 }}>Critical</p>
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap size={18} color={vars.accent} />
+                  <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Action Plan</h3>
+                </div>
+                <p className="text-sm font-light" style={{ color: vars.g500 }}>
+                  {completedCount} of {totalActions} actions completed
+                </p>
               </div>
-              <div className="rounded-xl p-4 text-center border" style={{ borderColor: vars.g200 }}>
-                <p className="text-2xl font-bold" style={{ color: vars.amber }}>{priorityActions.filter(a => a.priority === "High").length}</p>
-                <p className="text-[11px] font-medium" style={{ color: vars.g500 }}>High</p>
-              </div>
-              <div className="rounded-xl p-4 text-center border" style={{ borderColor: vars.g200 }}>
-                <p className="text-2xl font-bold" style={{ color: vars.accent }}>{priorityActions.filter(a => a.priority === "Medium").length}</p>
-                <p className="text-[11px] font-medium" style={{ color: vars.g500 }}>Medium</p>
-              </div>
-              <div className="rounded-xl p-4 text-center border" style={{ borderColor: vars.g200 }}>
-                <p className="text-2xl font-bold" style={{ color: vars.g400 }}>{priorityActions.filter(a => a.priority === "Low").length}</p>
-                <p className="text-[11px] font-medium" style={{ color: vars.g500 }}>Low</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 sm:w-40">
+                  <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
+                    <div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: progressPct === 100 ? vars.green : vars.accent }} />
+                  </div>
+                </div>
+                <span className="text-sm font-bold" style={{ color: progressPct === 100 ? vars.green : vars.accent }}>{progressPct}%</span>
               </div>
             </div>
 
-            <div className="space-y-3">
-              {priorityActions.map((action, i) => {
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5">
+              {(["all", "Critical", "High", "Medium", "Low"] as const).map((f) => {
+                const count = f === "all" ? priorityActions.length : priorityActions.filter(a => a.priority === f).length;
+                const fColor = f === "Critical" ? vars.red : f === "High" ? vars.amber : f === "Medium" ? vars.accent : f === "Low" ? vars.g400 : vars.navy;
+                const isActive = actionFilter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setActionFilter(f)}
+                    className="rounded-xl px-3 py-3 text-center border transition-colors"
+                    style={{
+                      borderColor: isActive ? fColor : vars.g200,
+                      background: isActive ? `${fColor}0A` : "transparent",
+                    }}
+                  >
+                    <p className="text-lg font-bold" style={{ color: fColor }}>{count}</p>
+                    <p className="text-[10px] font-medium" style={{ color: isActive ? fColor : vars.g500 }}>{f === "all" ? "All" : f}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="px-4 sm:px-6 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100, background: vars.g50 }}>
+              <span className="text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: vars.g400 }}>
+                {filteredActions.length} {actionFilter === "all" ? "actions" : `${actionFilter} actions`}
+              </span>
+              {completedCount > 0 && (
+                <span className="text-[10px] font-medium" style={{ color: vars.green }}>
+                  {completedCount} done
+                </span>
+              )}
+            </div>
+            <div className="divide-y" style={{ borderColor: vars.g100 }}>
+              {filteredActions.map((action, i) => {
+                const origIdx = priorityActions.indexOf(action);
+                const isDone = completedActions.has(origIdx);
                 const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : action.priority === "Medium" ? vars.accent : vars.g400;
                 return (
-                  <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border" style={{ borderColor: vars.g200 }}>
+                  <div
+                    key={origIdx}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-6 py-4 transition-colors"
+                    style={{ background: isDone ? "rgba(61,155,107,0.03)" : "transparent", opacity: isDone ? 0.7 : 1 }}
+                  >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="w-6 h-6 rounded-full border-2 flex-shrink-0" style={{ borderColor: prioColor }} />
-                      <span className="text-sm font-medium" style={{ color: vars.navy }}>{action.action}</span>
+                      <button
+                        onClick={() => {
+                          setCompletedActions((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(origIdx)) next.delete(origIdx);
+                            else next.add(origIdx);
+                            return next;
+                          });
+                        }}
+                        className="w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                        style={{
+                          borderColor: isDone ? vars.green : prioColor,
+                          background: isDone ? vars.green : "transparent",
+                        }}
+                      >
+                        {isDone && <Check size={14} color="white" />}
+                      </button>
+                      <span className="text-sm font-medium" style={{ color: vars.navy, textDecoration: isDone ? "line-through" : "none" }}>
+                        {action.action}
+                      </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0 ml-9 sm:ml-0">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold" style={{
+                    <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0 ml-9 sm:ml-0">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{
                         background: action.priority === "Critical" ? "#FBEEEC" : action.priority === "High" ? "#FFF8EC" : "rgba(31,116,143,0.06)",
                         color: prioColor,
                       }}>
                         {action.priority}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
                         {action.timeframe}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
                         {action.category}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium" style={{
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{
                         background: action.impact === "High" ? "#EFF7F2" : vars.g100,
                         color: action.impact === "High" ? vars.green : vars.g500,
                       }}>
@@ -579,7 +638,8 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
