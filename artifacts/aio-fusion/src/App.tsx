@@ -2,6 +2,7 @@ import IntakePage from "./IntakeForm";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
+import LlmCheckPage from "./LlmCheckPage";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -182,6 +183,7 @@ const navItems = [
   { label: "Dashboard", id: "dashboard" },
   { label: "Client Intake", id: "intake" },
   { label: "AIO Diagnostic", id: "diagnostic" },
+  { label: "LLM Visibility", id: "llm-check" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "SEO Assessment", id: "seo-audit" },
   { label: "Authority Planner", id: "planner" },
@@ -2972,6 +2974,7 @@ function App() {
         {currentPage === "diagnostic" && (
           <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
+        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} />}
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
