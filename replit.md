@@ -21,7 +21,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   ├── aio-fusion/         # AIO Fusion — The AI Authority Platform — landing page + interactive demo (React + Vite, Simpatico PR branded)
+│   ├── aio-fusion/         # AIO Fusion — The AI Authority Platform — landing page + interactive demo (React + Vite, Simpatico PR branded). Includes Press Release editor (PressReleasePage.tsx) with WYSIWYG, Word export (docx + file-saver), and document library.
 │   └── api-server/         # Express API server
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config

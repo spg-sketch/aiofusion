@@ -1,5 +1,6 @@
 import IntakePage from "./IntakeForm";
 import ReportPage from "./ReportPage";
+import PressReleasePage from "./PressReleasePage";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -1124,6 +1125,7 @@ function OptimiserPage({
 }: {
   onNavigate: (p: string) => void;
 }) {
+  const [optimiserTab, setOptimiserTab] = useState<"optimise" | "press">("optimise");
   const [showResults, setShowResults] = useState(false);
   const semanticPhrases = [
     { phrase: "independent agency advisory", relevance: 0.94 },
@@ -1177,6 +1179,35 @@ function OptimiserPage({
     },
   ];
 
+  if (optimiserTab === "press") {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-4 sm:px-8 pt-6 sm:pt-8">
+          <div className="flex items-center gap-2 mb-2">
+            <FileEdit size={20} color="#2896b9" />
+            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              Content Optimiser
+            </h1>
+          </div>
+          <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
+            Transform PR content for maximum AI citation and retrieval across large language models.
+          </p>
+          <div className="flex gap-1 p-1 rounded-xl border mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <button onClick={() => setOptimiserTab("optimise")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: "transparent", color: vars.g500 }}>
+              Optimise Content
+            </button>
+            <button onClick={() => setOptimiserTab("press")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: vars.accent, color: "white" }}>
+              Press Releases
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <PressReleasePage />
+        </div>
+      </div>
+    );
+  }
+
   if (!showResults) {
     return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
@@ -1194,6 +1225,14 @@ function OptimiserPage({
             Transform PR content for maximum AI citation and retrieval
             across large language models.
           </p>
+          <div className="flex gap-1 p-1 rounded-xl border mt-4" style={{ background: "white", borderColor: vars.g200 }}>
+            <button onClick={() => setOptimiserTab("optimise")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: vars.accent, color: "white" }}>
+              Optimise Content
+            </button>
+            <button onClick={() => setOptimiserTab("press")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: "transparent", color: vars.g500 }}>
+              Press Releases
+            </button>
+          </div>
         </div>
         <div
           className="rounded-xl border p-8"
@@ -1355,6 +1394,14 @@ function OptimiserPage({
             Transform PR content for maximum AI citation and retrieval
             across large language models.
           </p>
+          <div className="flex gap-1 p-1 rounded-xl border mt-4" style={{ background: "white", borderColor: vars.g200 }}>
+            <button onClick={() => setOptimiserTab("optimise")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: vars.accent, color: "white" }}>
+              Optimise Content
+            </button>
+            <button onClick={() => setOptimiserTab("press")} className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors" style={{ background: "transparent", color: vars.g500 }}>
+              Press Releases
+            </button>
+          </div>
         </div>
         <button
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white"
