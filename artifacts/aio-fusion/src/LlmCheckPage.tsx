@@ -372,6 +372,54 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
               </div>
             </div>
 
+            <div className="border rounded-xl p-5" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-[14px] font-bold mb-3 flex items-center gap-2" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+                How to interpret these results
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
+                    <span className="text-[10px] font-bold" style={{ color: vars.accent }}>1</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
+                    <strong style={{ color: vars.g600 }}>This is the real test.</strong> We're asking AI models the same questions a prospect, journalist or researcher would ask. If your brand doesn't appear, that's the gap GEO work needs to close.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
+                    <span className="text-[10px] font-bold" style={{ color: vars.accent }}>2</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
+                    <strong style={{ color: vars.g600 }}>Scores are directional, not precise.</strong> AI model responses aren't deterministic — the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
+                    <span className="text-[10px] font-bold" style={{ color: vars.accent }}>3</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
+                    <strong style={{ color: vars.g600 }}>Competitors reveal what's working.</strong> The companies AI does mention are winning the visibility race in your sector — analyse what they're doing differently with content structure, schema markup and authority signals.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
+                    <span className="text-[10px] font-bold" style={{ color: vars.accent }}>4</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
+                    <strong style={{ color: vars.g600 }}>Use this as a baseline.</strong> Run it now, do your GEO work (diagnostic, content optimisation, schema, authority planning), then run it again. A score moving from 20% to 50% is a measurable result you can report to the client.
+                  </p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
+                    <span className="text-[10px] font-bold" style={{ color: vars.accent }}>5</span>
+                  </div>
+                  <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
+                    <strong style={{ color: vars.g600 }}>Add keywords for better targeting.</strong> The optional keywords field lets you test more specific queries relevant to what the client wants to be known for, making the check more representative of their actual market.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="text-center py-4">
               <p className="text-[11px]" style={{ color: vars.g400 }}>
                 Checked {new Date(result.checkedAt).toLocaleString()} · Results reflect AI model knowledge at time of query and may vary between sessions
