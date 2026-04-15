@@ -151,7 +151,8 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
   ];
 
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const dayNames = ["M", "T", "W", "T", "F", "S", "S"];
+  const dayNamesFull = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(calendarYear, calendarMonth, 1);
@@ -710,68 +711,76 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
                 <ChevronRight size={16} color={vars.g500} />
               </button>
             </div>
-            <div className="grid grid-cols-7">
-              {dayNames.map((d) => (
-                <div key={d} className="px-1 py-2 text-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g400 }}>{d}</span>
-                </div>
-              ))}
-              {calendarDays.map((day, idx) => {
-                const dayActions = day.isCurrentMonth ? getActionsForDate(day.year, day.month, day.date) : [];
-                const isToday = day.date === 15 && day.month === 3 && day.year === 2026 && day.isCurrentMonth;
-                return (
-                  <div
-                    key={idx}
-                    className="border-t min-h-[80px] p-1"
-                    style={{
-                      borderColor: vars.g100,
-                      background: isToday ? "rgba(31,116,143,0.04)" : "transparent",
-                      opacity: day.isCurrentMonth ? 1 : 0.35,
-                    }}
-                  >
-                    <span
-                      className="text-[11px] font-medium block mb-0.5 px-1"
+            <div className="overflow-x-auto">
+              <div className="grid grid-cols-7 min-w-[320px]">
+                {dayNamesFull.map((d, i) => (
+                  <div key={i} className="px-0.5 sm:px-1 py-2 text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline" style={{ color: vars.g400 }}>{d}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider sm:hidden" style={{ color: vars.g400 }}>{dayNames[i]}</span>
+                  </div>
+                ))}
+                {calendarDays.map((day, idx) => {
+                  const dayActions = day.isCurrentMonth ? getActionsForDate(day.year, day.month, day.date) : [];
+                  const isToday = day.date === 15 && day.month === 3 && day.year === 2026 && day.isCurrentMonth;
+                  const hasActions = dayActions.length > 0;
+                  return (
+                    <div
+                      key={idx}
+                      className="border-t min-h-[56px] sm:min-h-[80px] p-0.5 sm:p-1"
                       style={{
-                        color: isToday ? vars.accent : vars.g500,
-                        fontWeight: isToday ? 700 : 500,
+                        borderColor: vars.g100,
+                        background: isToday ? "rgba(31,116,143,0.04)" : "transparent",
+                        opacity: day.isCurrentMonth ? 1 : 0.35,
                       }}
                     >
-                      {day.date}
-                    </span>
-                    <div className="space-y-0.5">
-                      {dayActions.slice(0, 3).map((a) => {
-                        const prioColor = a.priority === "Critical" ? vars.red : a.priority === "High" ? vars.amber : a.priority === "Medium" ? vars.accent : vars.g400;
-                        const isDone = completedActions.has(a.origIdx);
-                        return (
-                          <button
-                            key={a.origIdx}
-                            onClick={() => {
-                              setCompletedActions((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(a.origIdx)) next.delete(a.origIdx);
-                                else next.add(a.origIdx);
-                                return next;
-                              });
-                            }}
-                            className="w-full text-left px-1.5 py-0.5 rounded text-[9px] font-medium truncate block transition-colors"
-                            style={{
-                              background: isDone ? "#EFF7F2" : `${prioColor}12`,
-                              color: isDone ? vars.green : prioColor,
-                              textDecoration: isDone ? "line-through" : "none",
-                            }}
-                            title={a.action}
-                          >
-                            {a.action}
-                          </button>
-                        );
-                      })}
-                      {dayActions.length > 3 && (
-                        <span className="text-[9px] px-1" style={{ color: vars.g400 }}>+{dayActions.length - 3} more</span>
-                      )}
+                      <span
+                        className="text-[10px] sm:text-[11px] font-medium block mb-0.5 px-0.5"
+                        style={{
+                          color: isToday ? vars.accent : vars.g500,
+                          fontWeight: isToday ? 700 : 500,
+                        }}
+                      >
+                        {day.date}
+                      </span>
+                      <div className="space-y-0.5">
+                        {dayActions.slice(0, 2).map((a) => {
+                          const prioColor = a.priority === "Critical" ? vars.red : a.priority === "High" ? vars.amber : a.priority === "Medium" ? vars.accent : vars.g400;
+                          const isDone = completedActions.has(a.origIdx);
+                          return (
+                            <button
+                              key={a.origIdx}
+                              onClick={() => {
+                                setCompletedActions((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(a.origIdx)) next.delete(a.origIdx);
+                                  else next.add(a.origIdx);
+                                  return next;
+                                });
+                              }}
+                              className="w-full text-left px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-medium truncate block transition-colors"
+                              style={{
+                                background: isDone ? "#EFF7F2" : `${prioColor}12`,
+                                color: isDone ? vars.green : prioColor,
+                                textDecoration: isDone ? "line-through" : "none",
+                              }}
+                              title={a.action}
+                            >
+                              <span className="hidden sm:inline">{a.action}</span>
+                              <span className="sm:hidden">{a.action.split(" ").slice(0, 2).join(" ")}</span>
+                            </button>
+                          );
+                        })}
+                        {dayActions.length > 2 && (
+                          <span className="text-[8px] px-0.5" style={{ color: vars.g400 }}>+{dayActions.length - 2}</span>
+                        )}
+                        {hasActions && dayActions.length <= 2 && (
+                          <span className="hidden" />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
           )}
@@ -785,84 +794,89 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
               </div>
               <p className="text-[11px] font-light" style={{ color: vars.g400 }}>April &ndash; June 2026</p>
             </div>
-            <div className="px-4 sm:px-6 py-4">
-              <div className="flex border-b mb-4" style={{ borderColor: vars.g100 }}>
-                {timelineMonths.map((m) => (
-                  <div
-                    key={m.label}
-                    className="text-[10px] font-bold uppercase tracking-wider py-2"
-                    style={{ color: vars.g400, width: `${m.widthPct}%`, marginLeft: m.startPct === 0 ? 0 : undefined }}
-                  >
-                    {m.label}
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-2">
-                {filteredActions.map((action) => {
-                  const origIdx = priorityActions.indexOf(action);
-                  const isDone = completedActions.has(origIdx);
-                  const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : action.priority === "Medium" ? vars.accent : vars.g400;
-                  const startOffset = Math.max(0, Math.ceil((new Date(action.startDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-                  const endOffset = Math.ceil((new Date(action.endDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-                  const leftPct = (startOffset / timelineTotalDays) * 100;
-                  const widthPct = Math.max(2, ((endOffset - startOffset + 1) / timelineTotalDays) * 100);
-                  return (
-                    <div key={origIdx} className="flex items-center gap-3">
-                      <div className="w-[35%] sm:w-[30%] flex items-center gap-2 min-w-0 flex-shrink-0">
-                        <button
-                          onClick={() => {
-                            setCompletedActions((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(origIdx)) next.delete(origIdx);
-                              else next.add(origIdx);
-                              return next;
-                            });
-                          }}
-                          className="w-4 h-4 rounded border-[1.5px] flex items-center justify-center flex-shrink-0 transition-colors"
-                          style={{
-                            borderColor: isDone ? vars.green : prioColor,
-                            background: isDone ? vars.green : "transparent",
-                          }}
-                        >
-                          {isDone && <Check size={10} color="white" />}
-                        </button>
-                        <span
-                          className="text-[11px] font-medium truncate"
-                          style={{ color: isDone ? vars.g400 : vars.navy, textDecoration: isDone ? "line-through" : "none" }}
-                          title={action.action}
-                        >
-                          {action.action}
-                        </span>
-                      </div>
-                      <div className="flex-1 relative h-7 rounded" style={{ background: vars.g50 }}>
-                        <div
-                          className="absolute top-1 h-5 rounded-md transition-all duration-300 flex items-center px-1.5"
-                          style={{
-                            left: `${leftPct}%`,
-                            width: `${widthPct}%`,
-                            background: isDone ? vars.green : prioColor,
-                            opacity: isDone ? 0.5 : 0.85,
-                          }}
-                        >
-                          <span className="text-[8px] font-semibold text-white truncate">
-                            {action.durationDays}d
+            <div className="px-4 sm:px-6 py-4 overflow-x-auto">
+              <div className="min-w-[500px]">
+                <div className="flex border-b mb-4" style={{ borderColor: vars.g100 }}>
+                  {timelineMonths.map((m) => (
+                    <div
+                      key={m.label}
+                      className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider py-2"
+                      style={{ color: vars.g400, width: `${m.widthPct}%`, marginLeft: m.startPct === 0 ? 0 : undefined }}
+                    >
+                      {m.label}
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-2 sm:space-y-2">
+                  {filteredActions.map((action) => {
+                    const origIdx = priorityActions.indexOf(action);
+                    const isDone = completedActions.has(origIdx);
+                    const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : action.priority === "Medium" ? vars.accent : vars.g400;
+                    const startOffset = Math.max(0, Math.ceil((new Date(action.startDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+                    const endOffset = Math.ceil((new Date(action.endDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
+                    const leftPct = (startOffset / timelineTotalDays) * 100;
+                    const widthPct = Math.max(2, ((endOffset - startOffset + 1) / timelineTotalDays) * 100);
+                    return (
+                      <div key={origIdx}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <button
+                            onClick={() => {
+                              setCompletedActions((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(origIdx)) next.delete(origIdx);
+                                else next.add(origIdx);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded border-[1.5px] flex items-center justify-center flex-shrink-0 transition-colors"
+                            style={{
+                              borderColor: isDone ? vars.green : prioColor,
+                              background: isDone ? vars.green : "transparent",
+                            }}
+                          >
+                            {isDone && <Check size={10} color="white" />}
+                          </button>
+                          <span
+                            className="text-[10px] sm:text-[11px] font-medium truncate"
+                            style={{ color: isDone ? vars.g400 : vars.navy, textDecoration: isDone ? "line-through" : "none" }}
+                            title={action.action}
+                          >
+                            {action.action}
+                          </span>
+                          <span className="text-[9px] ml-auto flex-shrink-0 font-medium" style={{ color: vars.g400 }}>
+                            {new Date(action.startDate).getDate()} {monthNames[new Date(action.startDate).getMonth()].slice(0, 3)} &ndash; {new Date(action.endDate).getDate()} {monthNames[new Date(action.endDate).getMonth()].slice(0, 3)}
                           </span>
                         </div>
+                        <div className="relative h-6 rounded ml-6" style={{ background: vars.g50 }}>
+                          <div
+                            className="absolute top-0.5 h-5 rounded-md transition-all duration-300 flex items-center px-1.5"
+                            style={{
+                              left: `${leftPct}%`,
+                              width: `${widthPct}%`,
+                              background: isDone ? vars.green : prioColor,
+                              opacity: isDone ? 0.5 : 0.85,
+                            }}
+                          >
+                            <span className="text-[8px] font-semibold text-white truncate">
+                              {action.durationDays}d
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-              <div className="flex items-center gap-4 mt-5 pt-4 border-t" style={{ borderColor: vars.g100 }}>
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-5 pt-4 border-t" style={{ borderColor: vars.g100 }}>
                 {[
                   { label: "Critical", color: vars.red },
                   { label: "High", color: vars.amber },
                   { label: "Medium", color: vars.accent },
                   { label: "Low", color: vars.g400 },
-                  { label: "Completed", color: vars.green },
+                  { label: "Done", color: vars.green },
                 ].map((l) => (
                   <div key={l.label} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded" style={{ background: l.color, opacity: l.label === "Completed" ? 0.5 : 0.85 }} />
+                    <div className="w-3 h-3 rounded" style={{ background: l.color, opacity: l.label === "Done" ? 0.5 : 0.85 }} />
                     <span className="text-[10px] font-medium" style={{ color: vars.g500 }}>{l.label}</span>
                   </div>
                 ))}
