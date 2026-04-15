@@ -246,7 +246,14 @@ export default function IntakePage() {
 
   const markComplete = (idx: number) => {
     setCompleted((prev) => new Set(prev).add(idx));
-    if (idx < sections.length - 1) setActiveSection(idx + 1);
+  };
+
+  const sectionHasData = (idx: number) => {
+    return sections[idx].fields.some((f) => {
+      if (f.type === "heading") return false;
+      const val = formData[f.id];
+      return Array.isArray(val) ? val.length > 0 : val && val.trim().length > 0;
+    });
   };
 
   const totalFields = sections.reduce((s, sec) => s + sec.fields.filter((f) => f.type !== "heading").length, 0);
@@ -317,6 +324,7 @@ export default function IntakePage() {
             {sections.map((sec, idx) => {
               const isActive = idx === activeSection;
               const isDone = completed.has(idx);
+              const hasData = sectionHasData(idx);
               return (
                 <button
                   key={sec.id}
@@ -336,11 +344,14 @@ export default function IntakePage() {
                   >
                     {isDone ? <Check size={14} /> : sec.number}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-[12px] font-medium truncate" style={{ color: isActive ? vars.navy : vars.g500 }}>
                       {sec.title}
                     </p>
                   </div>
+                  {!isDone && hasData && (
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: vars.amber }} title="In progress" />
+                  )}
                 </button>
               );
             })}
@@ -448,23 +459,40 @@ export default function IntakePage() {
               </div>
             </div>
 
-            <div className="px-8 py-5 border-t flex items-center justify-between" style={{ borderColor: vars.g100 }}>
+            <div className="px-4 sm:px-8 py-5 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3" style={{ borderColor: vars.g100 }}>
               <button
                 onClick={() => activeSection > 0 && setActiveSection(activeSection - 1)}
                 disabled={activeSection === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30"
-                style={{ color: vars.g500 }}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-30"
+                style={{ borderColor: vars.g200, color: vars.g500 }}
               >
                 <ArrowLeft size={14} /> Previous
               </button>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 justify-end">
                 <button
-                  onClick={() => markComplete(activeSection)}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                  style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}
+                  onClick={() => {
+                    if (completed.has(activeSection)) {
+                      setCompleted((prev) => {
+                        const next = new Set(prev);
+                        next.delete(activeSection);
+                        return next;
+                      });
+                    } else {
+                      markComplete(activeSection);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    background: completed.has(activeSection) ? "rgba(61,155,107,0.08)" : "rgba(31,116,143,0.06)",
+                    color: completed.has(activeSection) ? vars.green : vars.accent,
+                  }}
                 >
-                  <Check size={14} /> Mark Complete
+                  {completed.has(activeSection) ? (
+                    <><CheckCircle2 size={14} /> Completed</>
+                  ) : (
+                    <><Check size={14} /> Mark Complete</>
+                  )}
                 </button>
 
                 {activeSection < sections.length - 1 ? (
@@ -473,7 +501,7 @@ export default function IntakePage() {
                     className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
                     style={{ background: vars.accent }}
                   >
-                    Next Section <ArrowRight size={14} />
+                    Next <ArrowRight size={14} />
                   </button>
                 ) : (
                   <button
