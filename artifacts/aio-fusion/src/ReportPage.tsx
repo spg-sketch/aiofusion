@@ -89,7 +89,7 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
   );
 }
 
-export default function ReportPage({ activeClient }: { activeClient: Client }) {
+export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
   const [activeTab, setActiveTab] = useState<"actions" | "overview" | "detail">("actions");
   const [completedActions, setCompletedActions] = useState<Set<number>>(new Set());
   const [actionFilter, setActionFilter] = useState<"all" | "Critical" | "High" | "Medium" | "Low">("all");
@@ -920,7 +920,7 @@ export default function ReportPage({ activeClient }: { activeClient: Client }) {
                   Use the Content Optimiser and Authority Planner to begin executing these recommendations within the platform.
                 </p>
               </div>
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0" style={{ background: vars.accent }}>
+              <button onClick={() => onNavigate?.("optimiser")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0" style={{ background: vars.accent }}>
                 Start Implementing <ArrowRight size={16} />
               </button>
             </div>

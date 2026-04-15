@@ -2938,7 +2938,7 @@ function App() {
         )}
         {currentPage === "seo-audit" && <SeoAuditPage />}
         {currentPage === "planner" && <PlannerPage />}
-        {currentPage === "measure" && <ReportPage activeClient={activeClient} />}
+        {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={setCurrentPage} />}
       </main>
     </div>
   );
