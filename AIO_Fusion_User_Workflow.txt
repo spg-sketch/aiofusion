@@ -1,0 +1,35 @@
+AIO Fusion — User Workflow
+==========================
+
+Step 1 — Landing Page
+Visitor arrives at the marketing site. They read about GEO, see the features, and click "See the Platform" to log in.
+
+Step 2 — Client Selection
+They pick which client workspace to enter (e.g. Bluhalo, Merkle). Each client has their own separate data and content pipeline.
+
+Step 3 — Dashboard
+The client dashboard shows three things at a glance: their current Authority Score, how far through the Client Intake they are, and a summary of their Authority Planner. Quick navigation cards take them to whichever tool they need.
+
+Step 4 — Client Intake
+First time through, they complete the intake — brand identity, spokespeople, AI presence, goals, etc. across 6 sections. This gives the platform the context it needs to work properly.
+
+Step 5 — AI Diagnostic
+They paste in a URL or content and run the diagnostic. Claude and OpenAI analyse it across 6 signal categories and return a scored authority report with specific actions to improve. This is the "where are we now?" benchmark.
+
+Step 6 — Content Optimiser
+They take existing PR content (press releases, articles) and run it through the optimiser. It rewrites the content for AI citation with side-by-side tracked changes and reasoning — so clients can see exactly what changed and why before approving.
+
+Step 7 — Press Release Editor
+They write new press releases that are built for AI visibility from the start. Rich text editor with templates, status tracking, and Word export for client sign-off.
+
+Step 8 — Authority Planner
+They map out their forward PR plan and the planner scores it across 8 categories for predicted AI authority impact. Shows where the gaps are and which activities to prioritise.
+
+Step 9 — Measure & Report
+The action plan tracks progress with checklists and calendar views. They can export this for client reporting.
+
+The Cycle Repeats
+-----------------
+After publishing optimised content and new press releases, the user comes back and runs the diagnostic again to see if the score has improved. They optimise the next batch of content, plan the next quarter's activity, and measure progress over time.
+
+The loop is: Diagnose → Optimise → Publish → Measure → Diagnose again.
