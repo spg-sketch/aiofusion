@@ -574,10 +574,28 @@ function DashboardPage({
     planned: 2,
   };
 
+  const llmVisibility = {
+    score: 20,
+    lastChecked: "14 Apr 2026",
+    models: [
+      { name: "ChatGPT", mentioned: true },
+      { name: "Claude", mentioned: false },
+    ],
+    topCompetitors: ["Clarity PR", "Hotwire", "The PR Office"],
+  };
+
+  const seoHealth = {
+    score: 62,
+    lastChecked: "12 Apr 2026",
+    issues: { critical: 2, warnings: 5, passed: 18 },
+  };
+
   const quickActions = [
+    { icon: Eye, label: "LLM Visibility", sub: "Check AI brand mentions", action: "llm-check" },
     { icon: Search, label: "Run Diagnostic", sub: "Analyse content with AI", action: "diagnostic" },
+    { icon: Globe, label: "SEO Assessment", sub: "Technical site audit", action: "seo-audit" },
     { icon: FileEdit, label: "Optimise Content", sub: "Transform for AI citation", action: "optimiser" },
-    { icon: BarChart3, label: "View Action Plan", sub: "Track authority tasks", action: "measure" },
+    { icon: BarChart3, label: "View Report", sub: "Measure & track progress", action: "measure" },
     { icon: ClipboardPaste, label: "Complete Intake", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
   ];
 
@@ -682,9 +700,9 @@ function DashboardPage({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Content Items", value: String(activeClient.contentCount), icon: FileText },
-          { label: "Press Releases", value: "3", icon: Send },
-          { label: "Planned Actions", value: "5", icon: Target },
+          { label: "Authority Score", value: String(authorityScore), icon: Sparkles },
+          { label: "LLM Visibility", value: `${llmVisibility.score}%`, icon: Eye },
+          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe },
           { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0 },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
@@ -731,31 +749,108 @@ function DashboardPage({
         </div>
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6 relative overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="absolute top-3 right-3">
-          <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-            Coming Soon
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={18} color={vars.g300} />
-          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
-        </div>
-        <p className="text-sm font-light mb-4" style={{ color: vars.g400 }}>
-          Track how often your brand is mentioned and cited across ChatGPT, Perplexity, Google AI and Claude. Live monitoring activates after your first diagnostic.
-        </p>
-        <div className="grid grid-cols-3 gap-3 opacity-40 pointer-events-none select-none">
-          {["ChatGPT", "Perplexity", "Google AI"].map((name) => (
-            <div key={name} className="rounded-xl border p-4 text-center" style={{ borderColor: vars.g200 }}>
-              <span className="text-sm font-semibold" style={{ color: vars.g400 }}>{name}</span>
-              <p className="text-2xl font-bold mt-1" style={{ color: vars.g300 }}>&mdash;</p>
-              <p className="text-[10px] mt-1" style={{ color: vars.g400 }}>No data yet</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Eye size={18} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>LLM Visibility</h3>
             </div>
-          ))}
+            <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {llmVisibility.lastChecked}</span>
+          </div>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative w-16 h-16">
+              <svg width={64} height={64} viewBox="0 0 64 64">
+                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={32} cy={32} r={26} fill="none"
+                  stroke={llmVisibility.score >= 60 ? vars.green : llmVisibility.score >= 30 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(llmVisibility.score / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{llmVisibility.score}%</span>
+            </div>
+            <div className="flex-1">
+              <div className="space-y-1.5">
+                {llmVisibility.models.map((m) => (
+                  <div key={m.name} className="flex items-center gap-2">
+                    {m.mentioned ? <CheckCircle2 size={13} color={vars.green} /> : <XCircle size={13} color={vars.red} />}
+                    <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
+                    <span className="text-[10px]" style={{ color: m.mentioned ? vars.green : vars.g400 }}>
+                      {m.mentioned ? "Mentioned" : "Not mentioned"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
+            <div className="flex flex-wrap gap-1.5">
+              {llmVisibility.topCompetitors.map((c) => (
+                <span key={c} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Run New Check <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Globe size={18} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health</h3>
+            </div>
+            <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {seoHealth.lastChecked}</span>
+          </div>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative w-16 h-16">
+              <svg width={64} height={64} viewBox="0 0 64 64">
+                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={32} cy={32} r={26} fill="none"
+                  stroke={seoHealth.score >= 80 ? vars.green : seoHealth.score >= 50 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(seoHealth.score / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{seoHealth.score}</span>
+            </div>
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <XCircle size={13} color={vars.red} />
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Critical Issues</span>
+                </div>
+                <span className="text-[12px] font-bold" style={{ color: vars.red }}>{seoHealth.issues.critical}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={13} color={vars.amber} />
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Warnings</span>
+                </div>
+                <span className="text-[12px] font-bold" style={{ color: vars.amber }}>{seoHealth.issues.warnings}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={13} color={vars.green} />
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Passed</span>
+                </div>
+                <span className="text-[12px] font-bold" style={{ color: vars.green }}>{seoHealth.issues.passed}</span>
+              </div>
+            </div>
+          </div>
+          <div className="w-full h-2 rounded-full flex overflow-hidden mb-3" style={{ background: vars.g200 }}>
+            <div className="h-full" style={{ width: `${(seoHealth.issues.critical / 25) * 100}%`, background: vars.red }} />
+            <div className="h-full" style={{ width: `${(seoHealth.issues.warnings / 25) * 100}%`, background: vars.amber }} />
+            <div className="h-full" style={{ width: `${(seoHealth.issues.passed / 25) * 100}%`, background: vars.green }} />
+          </div>
+          <button onClick={() => onNavigate("seo-audit")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Run SEO Audit <ArrowRight size={12} />
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {quickActions.map((link) => (
           <div key={link.label} onClick={() => onNavigate(link.action)}
             className="rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
