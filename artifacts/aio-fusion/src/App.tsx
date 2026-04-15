@@ -1,6 +1,7 @@
 import IntakePage from "./IntakeForm";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
+import SeoAuditPage from "./SeoAuditPage";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -182,6 +183,7 @@ const navItems = [
   { label: "Client Intake", id: "intake" },
   { label: "AIO Diagnostic", id: "diagnostic" },
   { label: "Content Optimiser", id: "optimiser" },
+  { label: "SEO Assessment", id: "seo-audit" },
   { label: "Authority Planner", id: "planner" },
   { label: "Archive", id: "archive", locked: true },
   { label: "Release Gateway", id: "gateway", locked: true },
@@ -2894,6 +2896,7 @@ function App() {
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
+        {currentPage === "seo-audit" && <SeoAuditPage />}
         {currentPage === "planner" && <PlannerPage />}
         {currentPage === "measure" && <ReportPage activeClient={activeClient} />}
       </main>
