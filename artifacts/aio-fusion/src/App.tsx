@@ -2568,6 +2568,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           <div className="hidden md:flex items-center gap-10">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
             <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
+            <a href="#for-b2b" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For B2B</a>
             <button onClick={onNavigateAgents} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agents</button>
             <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
             <button
@@ -2586,6 +2587,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Features</a>
             <a href="#for-agencies" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
+            <a href="#for-b2b" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">For B2B</a>
             <button onClick={() => { setMenuOpen(false); onNavigateAgents(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agents</button>
             <a href="#guide" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Guide</a>
             <button onClick={() => { setMenuOpen(false); onLogin(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
@@ -2745,6 +2747,43 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
                   <div>
                     <p className="text-[13px] font-semibold mb-0.5" style={{ color: vars.navy }}>{item.title}</p>
                     <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="for-b2b" className="py-20 sm:py-24" style={{ background: vars.navy }}>
+        <div className="max-w-4xl mx-auto px-4 sm:px-8">
+          <div className="grid md:grid-cols-2 gap-10 sm:gap-14 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
+                <Globe size={12} /> For B2B Companies
+              </div>
+              <h2 className="text-3xl md:text-4xl text-white mb-5 leading-[1.15]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Make AI recommend your business</h2>
+              <p className="text-[15px] font-light leading-[1.8] mb-6 text-white/50">
+                When prospects ask ChatGPT, Perplexity or Claude for solutions in your category, is your company in the answer? AIO Fusion diagnoses your AI visibility and gives your team a clear plan to fix it.
+              </p>
+              <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+                <Mail size={16} /> Book a Demo
+              </a>
+            </div>
+            <div className="space-y-3">
+              {[
+                { title: "Know your AI visibility score", desc: "See exactly how AI models perceive your brand across 6 signal categories — and where competitors rank." },
+                { title: "Fix what AI can't find", desc: "Get specific, prioritised actions: schema markup, content structure, authority signals your site is missing." },
+                { title: "Optimise content for citation", desc: "Turn existing pages, press releases and thought leadership into content AI models actually quote." },
+                { title: "Track progress over time", desc: "Monthly reports show how your AI authority score is improving and which actions are driving results." },
+              ].map((item) => (
+                <div key={item.title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.15)" }}>
+                    <Check size={11} color={vars.teal} />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-white mb-0.5">{item.title}</p>
+                    <p className="text-[12px] font-light leading-relaxed text-white/40">{item.desc}</p>
                   </div>
                 </div>
               ))}
