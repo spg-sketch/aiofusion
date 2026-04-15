@@ -553,27 +553,29 @@ function DashboardPage({
   activeClient: Client;
 }) {
   const authorityScore = activeClient.avgScore || 24;
-  const earnedMedia = { score: 19, max: 80 };
-  const ownedMedia = { score: 5, max: 20 };
 
-  const priorityTasks = [
-    { text: "Implement Organization Schema Markup", tags: ["technical", "Now"] },
-    { text: "Deploy FAQ Schema on Key Pages", tags: ["technical", "Now"] },
-    { text: "Create Expert Author Profiles", tags: ["content", "This week"] },
-    { text: "Publish Industry Report with Original Data", tags: ["content", "This month"] },
+  const contentPipeline = [
+    { title: "Agency Agentic Collective Launch", type: "Press Release", status: "in-review" as const, date: "14 Apr" },
+    { title: "Q1 2026 Agency Benchmarking Report", type: "Research", status: "draft" as const, date: "28 Apr" },
+    { title: "Strategic Partnership with Simpatico PR", type: "Press Release", status: "approved" as const, date: "2 May" },
+    { title: "AI Visibility for PR Agencies", type: "Speaking", status: "planned" as const, date: "15 May" },
   ];
 
-  const llmPlatforms = [
-    { name: "ChatGPT", mentions: 24, rank: 3, trend: 8, cited: true },
-    { name: "Perplexity", mentions: 31, rank: 2, trend: 12, cited: true },
-    { name: "Google AI", mentions: 14, rank: 5, trend: 3, cited: false },
-  ];
+  const intakeProgress = { completed: 2, total: 6 };
+  const intakePct = Math.round((intakeProgress.completed / intakeProgress.total) * 100);
 
-  const quickLinks = [
-    { icon: Search, label: "Query Library", sub: "View details", action: "diagnostic" },
-    { icon: Link, label: "Citation Tracking", sub: "View details", action: "measure" },
-    { icon: ShieldCheck, label: "AI Auditor", sub: "View details", action: "diagnostic" },
-    { icon: BarChart3, label: "ROI Dashboard", sub: "View details", action: "measure" },
+  const plannerItems = {
+    total: 5,
+    optimised: 1,
+    drafts: 2,
+    planned: 2,
+  };
+
+  const quickActions = [
+    { icon: Search, label: "Run Diagnostic", sub: "Analyse content with AI", action: "diagnostic" },
+    { icon: FileEdit, label: "Optimise Content", sub: "Transform for AI citation", action: "optimiser" },
+    { icon: BarChart3, label: "View Action Plan", sub: "Track authority tasks", action: "measure" },
+    { icon: ClipboardPaste, label: "Complete Intake", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
   ];
 
   return (
@@ -587,129 +589,179 @@ function DashboardPage({
         </p>
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-center mb-6" style={{ color: vars.navy }}>
-          AIO Authority Score
-        </h3>
-        <div className="flex justify-center mb-4">
-          <AuthorityDonut score={authorityScore} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
+        <div className="rounded-2xl border p-4 sm:p-6 flex flex-col items-center" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+            Authority Score
+          </h3>
+          <AuthorityDonut score={authorityScore} size={130} />
+          <p className="text-sm font-light mt-2" style={{ color: vars.g500 }}>Overall Readiness</p>
+          <button onClick={() => onNavigate("diagnostic")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Run Diagnostic <ArrowRight size={12} />
+          </button>
         </div>
-        <p className="text-center text-sm font-light" style={{ color: vars.g500 }}>Overall Readiness</p>
 
-        <div className="mt-8 space-y-5 max-w-lg mx-auto">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm" style={{ color: vars.navy }}>Earned Media</span>
-              <span className="text-sm font-medium" style={{ color: vars.navy }}>{earnedMedia.score}/{earnedMedia.max}</span>
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+            Client Intake
+          </h3>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative w-14 h-14">
+              <svg width={56} height={56} viewBox="0 0 56 56">
+                <circle cx={28} cy={28} r={22} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={28} cy={28} r={22} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(intakePct / 100) * 138} 138`} strokeLinecap="round" transform="rotate(-90 28 28)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
             </div>
-            <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
-              <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${(earnedMedia.score / earnedMedia.max) * 100}%`, background: vars.navy }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: vars.navy }}>{intakeProgress.completed} of {intakeProgress.total}</p>
+              <p className="text-xs font-light" style={{ color: vars.g500 }}>sections complete</p>
             </div>
           </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm" style={{ color: vars.navy }}>Owned Media</span>
-              <span className="text-sm font-medium" style={{ color: vars.navy }}>{ownedMedia.score}/{ownedMedia.max}</span>
+          <div className="space-y-1.5">
+            {["Business Fundamentals", "GEO Priority", "Spokespersons", "AI Presence", "Content Audit", "Goals"].map((s, i) => (
+              <div key={s} className="flex items-center gap-2">
+                {i < intakeProgress.completed ? (
+                  <CheckCircle2 size={13} color={vars.green} />
+                ) : (
+                  <Circle size={13} color={vars.g300} />
+                )}
+                <span className="text-[12px]" style={{ color: i < intakeProgress.completed ? vars.navy : vars.g400 }}>{s}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onNavigate("intake")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            {intakePct < 100 ? "Continue Intake" : "View Intake"} <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+            Authority Planner
+          </h3>
+          <div className="flex items-baseline gap-1 mb-3">
+            <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerItems.total}</span>
+            <span className="text-sm font-light" style={{ color: vars.g500 }}>content items</span>
+          </div>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.green }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>Optimised</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.optimised}</span>
             </div>
-            <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
-              <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${(ownedMedia.score / ownedMedia.max) * 100}%`, background: vars.navy }} />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.amber }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>In Draft</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.drafts}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.g300 }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>Planned</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.planned}</span>
             </div>
           </div>
+          <div className="mt-3 w-full h-2 rounded-full flex overflow-hidden" style={{ background: vars.g200 }}>
+            <div className="h-full" style={{ width: `${(plannerItems.optimised / plannerItems.total) * 100}%`, background: vars.green }} />
+            <div className="h-full" style={{ width: `${(plannerItems.drafts / plannerItems.total) * 100}%`, background: vars.amber }} />
+          </div>
+          <button onClick={() => onNavigate("planner")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Open Planner <ArrowRight size={12} />
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Tasks Done", value: "0%", trend: null },
-          { label: "Content Pillars", value: "3", trend: "up" },
-          { label: "Entity Coverage", value: "0%", trend: "up" },
-          { label: "Competitor Rank", value: "4", trend: null },
+          { label: "Content Items", value: String(activeClient.contentCount), icon: FileText },
+          { label: "Press Releases", value: "3", icon: Send },
+          { label: "Planned Actions", value: "5", icon: Target },
+          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0 },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl border p-5" style={{ background: "white", borderColor: vars.g200 }}>
+          <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>{stat.label}</span>
-              {stat.trend === "up" ? (
-                <TrendingUp size={14} color={vars.green} />
-              ) : stat.trend === null ? (
-                <span className="text-sm" style={{ color: vars.g400 }}>&mdash;</span>
-              ) : null}
+              <stat.icon size={14} color={"positive" in stat ? (stat.positive ? vars.green : vars.red) : vars.accent} />
             </div>
-            <span className="text-3xl font-bold" style={{ color: vars.navy }}>{stat.value}</span>
+            <span className="text-2xl sm:text-3xl font-bold" style={{ color: vars.navy }}>{stat.value}</span>
           </div>
         ))}
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Priority Tasks</h3>
-          <button onClick={() => onNavigate("planner")} className="flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: vars.g500 }}>
-            View All <ArrowRight size={14} />
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline</h3>
+          <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-1.5 text-xs font-medium hover:underline" style={{ color: vars.accent }}>
+            All Press Releases <ArrowRight size={12} />
           </button>
         </div>
-        <div className="space-y-4">
-          {priorityTasks.map((task) => (
-            <div key={task.text} className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full border-2 mt-0.5 flex-shrink-0" style={{ borderColor: vars.g300 }} />
-              <div>
-                <p className="text-sm" style={{ color: vars.navy }}>{task.text}</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  {task.tags.map((tag) => (
-                    <span key={tag} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium" style={{
-                      background: tag === "technical" ? "rgba(31,116,143,0.08)" : tag === "content" ? "rgba(40,150,185,0.08)" : vars.g100,
-                      color: tag === "technical" ? vars.accent : tag === "content" ? vars.teal : vars.g600,
-                    }}>{tag}</span>
-                  ))}
+        <div className="space-y-3">
+          {contentPipeline.map((item) => {
+            const statusStyles = {
+              "in-review": { bg: "rgba(31,116,143,0.06)", color: vars.accent, label: "In Review" },
+              "draft": { bg: "rgba(212,146,42,0.08)", color: vars.amber, label: "Draft" },
+              "approved": { bg: "rgba(61,155,107,0.08)", color: vars.green, label: "Approved" },
+              "planned": { bg: vars.g100, color: vars.g500, label: "Planned" },
+            };
+            const st = statusStyles[item.status];
+            return (
+              <div key={item.title} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
+                  <FileText size={14} color={st.color} />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" style={{ color: vars.navy }}>{item.title}</p>
+                  <p className="text-[11px] font-light" style={{ color: vars.g400 }}>{item.type} &middot; {item.date}</p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold flex-shrink-0" style={{ background: st.bg, color: st.color }}>
+                  {st.label}
+                </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-8 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
-          <div className="flex items-center gap-2">
-            <TrendingUp size={18} color={vars.accent} />
-            <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
-          </div>
-          <span className="px-3 py-1 rounded-full text-[11px] font-medium border self-start sm:self-auto" style={{ borderColor: vars.g200, color: vars.g600 }}>Live monitoring</span>
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6 relative overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="absolute top-3 right-3">
+          <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            Coming Soon
+          </span>
         </div>
-        <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
-          A quick snapshot of how visible your brand is right now across the major AI platforms. More mentions and citations mean more people are discovering you through AI.
+        <div className="flex items-center gap-2 mb-2">
+          <TrendingUp size={18} color={vars.g300} />
+          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Brand Pulse &mdash; AI Platform Visibility</h3>
+        </div>
+        <p className="text-sm font-light mb-4" style={{ color: vars.g400 }}>
+          Track how often your brand is mentioned and cited across ChatGPT, Perplexity, Google AI and Claude. Live monitoring activates after your first diagnostic.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {llmPlatforms.map((llm) => (
-            <div key={llm.name} className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-base font-semibold" style={{ color: vars.navy }}>{llm.name}</span>
-                <span className="flex items-center gap-1 text-sm font-medium" style={{ color: vars.green }}>
-                  <TrendingUp size={14} /> +{llm.trend}
-                </span>
-              </div>
-              <p className="text-sm font-light mb-3" style={{ color: vars.g500 }}>
-                {llm.mentions} mentions this week&nbsp;&nbsp;#{llm.rank} avg
-              </p>
-              <span className="inline-flex px-3 py-1 rounded-full text-[11px] font-semibold" style={{
-                background: llm.cited ? "rgba(31,116,143,0.08)" : vars.g100,
-                color: llm.cited ? vars.accent : vars.g600,
-              }}>
-                {llm.cited ? "Cited as source" : "Mentioned only"}
-              </span>
+        <div className="grid grid-cols-3 gap-3 opacity-40 pointer-events-none select-none">
+          {["ChatGPT", "Perplexity", "Google AI"].map((name) => (
+            <div key={name} className="rounded-xl border p-4 text-center" style={{ borderColor: vars.g200 }}>
+              <span className="text-sm font-semibold" style={{ color: vars.g400 }}>{name}</span>
+              <p className="text-2xl font-bold mt-1" style={{ color: vars.g300 }}>&mdash;</p>
+              <p className="text-[10px] mt-1" style={{ color: vars.g400 }}>No data yet</p>
             </div>
           ))}
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {quickLinks.map((link) => (
+        {quickActions.map((link) => (
           <div key={link.label} onClick={() => onNavigate(link.action)}
-            className="rounded-2xl border p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+            className="rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
             style={{ background: "white", borderColor: vars.g200 }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(31,116,143,0.06)" }}>
               <link.icon size={20} color={vars.accent} />
             </div>
             <p className="text-sm font-semibold" style={{ color: vars.navy }}>{link.label}</p>
-            <p className="text-xs font-light mt-0.5" style={{ color: vars.g500 }}>{link.sub}</p>
+            <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{link.sub}</p>
           </div>
         ))}
       </div>
@@ -939,8 +991,8 @@ function DiagnosticPage({
                 {result.summary}
               </p>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
-              <Download size={14} /> Export PDF
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
+              <Download size={14} /> Save as PDF
             </button>
           </div>
           {result.sources && (
