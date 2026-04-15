@@ -2720,8 +2720,8 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
           <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            Get your brand cited<br />
-            <span style={{ color: vars.accent }}>by AI</span>
+            Supporting your brand's<br />
+            <span style={{ color: vars.accent }}>AI visibility</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
             AIO Fusion measures your visibility in ChatGPT, Claude, Perplexity and Gemini — then gives you the tools to improve it. The GEO platform built for PR and comms teams.
