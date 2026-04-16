@@ -218,38 +218,72 @@ function SidebarContent({
   activeClient,
   onBackToClients,
   onItemClick,
+  onLogoUpdate,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
   activeClient: Client;
   onBackToClients: () => void;
   onItemClick?: () => void;
+  onLogoUpdate?: (clientId: string, dataUrl: string) => void;
 }) {
+  const handleLogoUpload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onLogoUpdate) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/svg+xml,image/webp";
+    input.onchange = (ev) => {
+      const file = (ev.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          onLogoUpdate(activeClient.id, reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
   return (
     <>
       <div className="flex items-center gap-3 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 md:h-20" />
       </div>
-      <button
-        onClick={onBackToClients}
-        className="flex items-center gap-3 px-5 py-4 border-b text-left transition-colors hover:bg-slate-50"
-        style={{ borderColor: vars.g200 }}
-      >
-        <ArrowLeft size={14} style={{ color: vars.g400 }} />
-        {activeClient.logo ? (
-          <div className="w-8 h-8 rounded-lg overflow-hidden border flex items-center justify-center flex-shrink-0" style={{ borderColor: vars.g200, background: "white" }}>
-            <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
+      <div className="flex items-stretch border-b" style={{ borderColor: vars.g200 }}>
+        <button
+          onClick={onBackToClients}
+          className="flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 flex-1 min-w-0"
+        >
+          <ArrowLeft size={14} style={{ color: vars.g400 }} />
+          <div className="relative group/sblogo flex-shrink-0">
+            {activeClient.logo ? (
+              <div className="w-8 h-8 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
+                <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white" style={{ background: activeClient.color }}>
+                {activeClient.initials}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: activeClient.color }}>
-            {activeClient.initials}
+          <div className="flex flex-col min-w-0">
+            <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
+            <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch client</span>
           </div>
+        </button>
+        {onLogoUpdate && (
+          <button
+            onClick={handleLogoUpload}
+            className="px-3 border-l flex items-center justify-center transition-colors hover:bg-slate-50"
+            style={{ borderColor: vars.g200, color: vars.accent }}
+            title={activeClient.logo ? "Replace client logo" : "Upload client logo"}
+          >
+            <Upload size={14} />
+          </button>
         )}
-        <div className="flex flex-col min-w-0">
-          <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
-          <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch client</span>
-        </div>
-      </button>
+      </div>
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = currentPage === item.id;
@@ -297,11 +331,13 @@ function Sidebar({
   onNavigate,
   activeClient,
   onBackToClients,
+  onLogoUpdate,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
   activeClient: Client;
   onBackToClients: () => void;
+  onLogoUpdate?: (clientId: string, dataUrl: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -318,13 +354,13 @@ function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} />
           </div>
         </div>
       )}
 
       <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} />
       </aside>
     </>
   );
@@ -3108,6 +3144,7 @@ function App() {
 
   const handleLogoUpdate = (clientId: string, logoDataUrl: string) => {
     setClientLogos((prev) => ({ ...prev, [clientId]: logoDataUrl }));
+    setActiveClient((prev) => (prev && prev.id === clientId ? { ...prev, logo: logoDataUrl } : prev));
   };
 
   if (view === "landing") {
@@ -3213,6 +3250,7 @@ function App() {
         onNavigate={setCurrentPage}
         activeClient={activeClient}
         onBackToClients={() => setActiveClient(null)}
+        onLogoUpdate={handleLogoUpdate}
       />
       <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: vars.g50 }}>
         {currentPage === "dashboard" && (
