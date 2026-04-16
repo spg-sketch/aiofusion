@@ -3,6 +3,7 @@ import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
+import InfoTip from "./InfoTip";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -548,33 +549,6 @@ function AuthorityDonut({ score, size = 160 }: { score: number; size?: number })
   );
 }
 
-function InfoTip({ text }: { text: string }) {
-  const [show, setShow] = useState(false);
-  return (
-    <span className="relative inline-flex items-center ml-1.5">
-      <button
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onClick={() => setShow(!show)}
-        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
-        style={{ background: show ? vars.accent : vars.g200 }}
-        aria-label="More info"
-      >
-        <HelpCircle size={10} color={show ? "white" : vars.g500} />
-      </button>
-      {show && (
-        <div
-          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg text-[11px] leading-relaxed font-normal normal-case tracking-normal whitespace-normal shadow-lg z-50"
-          style={{ background: vars.navy, color: "white", width: 220, pointerEvents: "none" }}
-        >
-          {text}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0" style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `5px solid ${vars.navy}` }} />
-        </div>
-      )}
-    </span>
-  );
-}
-
 function DashboardPage({
   onNavigate,
   activeClient,
@@ -999,8 +973,9 @@ function DiagnosticPage({
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
-            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               AIO Diagnostic
+              <InfoTip text="Runs an AI-powered audit of your content (URL or pasted text) against GEO readiness criteria — content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -1368,8 +1343,9 @@ function OptimiserPage({
         <div className="px-4 sm:px-8 pt-6 sm:pt-8">
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2896b9" />
-            <h1 className="text-xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               Content Optimiser
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
@@ -1398,10 +1374,11 @@ function OptimiserPage({
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2896b9" />
             <h1
-              className="text-xl tracking-tight"
+              className="text-xl tracking-tight flex items-center"
               style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -1567,10 +1544,11 @@ function OptimiserPage({
           <div className="flex items-center gap-2 mb-2">
             <FileEdit size={20} color="#2896b9" />
             <h1
-              className="text-xl tracking-tight"
+              className="text-xl tracking-tight flex items-center"
               style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -2181,10 +2159,11 @@ function PlannerPage() {
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={20} color="#1f748f" />
             <h1
-              className="text-xl tracking-tight"
+              className="text-xl tracking-tight flex items-center"
               style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Authority Planner
+              <InfoTip text="Plan and score your forward PR schedule across 8 weighted content categories. Higher-weighted activities (whitepapers, original research) drive more AI authority. Identifies gaps and shows your overall plan score." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>

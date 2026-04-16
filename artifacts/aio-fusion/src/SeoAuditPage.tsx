@@ -1,4 +1,5 @@
 import { useState } from "react";
+import InfoTip from "./InfoTip";
 import {
   Globe,
   Search,
@@ -234,8 +235,9 @@ export default function SeoAuditPage() {
               <Globe size={20} style={{ color: vars.accent }} />
             </div>
             <div>
-              <h1 className="text-[22px] font-bold" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+              <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
                 SEO Assessment
+                <InfoTip text="Crawls a URL and checks meta tags, headings, schema markup, links, images, AI crawler access, and Google PageSpeed scores. Returns prioritised fixes to improve both human SEO and AI discoverability." width={260} />
               </h1>
               <p className="text-[13px]" style={{ color: vars.g500 }}>
                 Technical SEO analysis with AI readiness scoring

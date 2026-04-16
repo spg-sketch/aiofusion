@@ -1,4 +1,5 @@
 import { useState } from "react";
+import InfoTip from "./InfoTip";
 import {
   Eye,
   Search,
@@ -226,8 +227,9 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
               <Eye size={20} style={{ color: vars.accent }} />
             </div>
             <div>
-              <h1 className="text-[22px] font-bold" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+              <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
                 LLM Visibility Check
+                <InfoTip text="Sends real questions about your sector to ChatGPT and Claude, then checks whether your brand is mentioned in their answers. This is the test that matters — it measures actual AI citation behaviour." width={260} />
               </h1>
               <p className="text-[13px]" style={{ color: vars.g500 }}>
                 Check whether AI models mention {activeClient.name} when asked about your sector

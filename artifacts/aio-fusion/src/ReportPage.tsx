@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import InfoTip from "./InfoTip";
 import {
   Download,
   Printer,
@@ -221,8 +222,9 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         <div>
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={20} color={vars.accent} />
-            <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="text-xl sm:text-2xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               GEO Authority Report
+              <InfoTip text="Consolidated client report combining diagnostic scores, LLM visibility, SEO health, content pipeline progress and recommended next actions. Designed to be exported and shared with clients to demonstrate GEO impact." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
