@@ -548,6 +548,33 @@ function AuthorityDonut({ score, size = 160 }: { score: number; size?: number })
   );
 }
 
+function InfoTip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center ml-1.5">
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(!show)}
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
+        style={{ background: show ? vars.accent : vars.g200 }}
+        aria-label="More info"
+      >
+        <HelpCircle size={10} color={show ? "white" : vars.g500} />
+      </button>
+      {show && (
+        <div
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg text-[11px] leading-relaxed font-normal normal-case tracking-normal whitespace-normal shadow-lg z-50"
+          style={{ background: vars.navy, color: "white", width: 220, pointerEvents: "none" }}
+        >
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0" style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `5px solid ${vars.navy}` }} />
+        </div>
+      )}
+    </span>
+  );
+}
+
 function DashboardPage({
   onNavigate,
   activeClient,
@@ -612,8 +639,9 @@ function DashboardPage({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
         <div className="rounded-2xl border p-4 sm:p-6 flex flex-col items-center" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Authority Score
+            <InfoTip text="How ready your content is to be picked up and recommended by AI models. Based on structure, schema markup, and authority signals." />
           </h3>
           <AuthorityDonut score={authorityScore} size={130} />
           <p className="text-sm font-light mt-2" style={{ color: vars.g500 }}>Overall Readiness</p>
@@ -623,8 +651,9 @@ function DashboardPage({
         </div>
 
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Client Intake
+            <InfoTip text="The onboarding questionnaire that captures your business details, target audience, key spokespersons, and GEO goals. Complete all sections for the best diagnostic results." />
           </h3>
           <div className="flex items-center gap-3 mb-3">
             <div className="relative w-14 h-14">
@@ -658,8 +687,9 @@ function DashboardPage({
         </div>
 
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4" style={{ color: vars.g400 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Authority Planner
+            <InfoTip text="Your content plan for building AI authority. Track press releases, research, speaking engagements and other content through draft, review and publication stages." />
           </h3>
           <div className="flex items-baseline gap-1 mb-3">
             <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerItems.total}</span>
@@ -700,14 +730,17 @@ function DashboardPage({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Authority Score", value: String(authorityScore), icon: Sparkles },
-          { label: "LLM Visibility", value: `${llmVisibility.score}%`, icon: Eye },
-          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe },
-          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0 },
+          { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Overall readiness score based on your latest AIO diagnostic results." },
+          { label: "LLM Visibility", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
+          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical SEO score from your last site audit — meta tags, schema, speed, and AI crawler access." },
+          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How your authority score has changed over the last 30 days." },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>{stat.label}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center" style={{ color: vars.g400 }}>
+                {stat.label}
+                <InfoTip text={stat.tip} />
+              </span>
               <stat.icon size={14} color={"positive" in stat ? (stat.positive ? vars.green : vars.red) : vars.accent} />
             </div>
             <span className="text-2xl sm:text-3xl font-bold" style={{ color: vars.navy }}>{stat.value}</span>
@@ -717,7 +750,7 @@ function DashboardPage({
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline</h3>
+          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline <InfoTip text="Your queue of content being prepared for AI optimisation — press releases, research, speaking opportunities and more." /></h3>
           <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-1.5 text-xs font-medium hover:underline" style={{ color: vars.accent }}>
             All Press Releases <ArrowRight size={12} />
           </button>
@@ -754,7 +787,7 @@ function DashboardPage({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Eye size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>LLM Visibility</h3>
+              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>LLM Visibility <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
             </div>
             <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {llmVisibility.lastChecked}</span>
           </div>
@@ -801,7 +834,7 @@ function DashboardPage({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Globe size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health</h3>
+              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health <InfoTip text="Technical health of your website — checks meta tags, headings, schema markup, page speed, and whether AI crawlers can access your content." /></h3>
             </div>
             <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {seoHealth.lastChecked}</span>
           </div>
