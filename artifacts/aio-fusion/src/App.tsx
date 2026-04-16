@@ -2433,10 +2433,151 @@ function PlannerPage() {
         >
           <div className="flex items-center gap-2">
             <Calendar size={14} color="#1f748f" />
-            <h2
-              className="text-sm font-semibold"
-              style={{ color: vars.navy }}
-            >
+            <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>
+              Calendar
+            </h2>
+          </div>
+          <span className="text-xs" style={{ color: vars.g400 }}>
+            {scheduledItems.length} items in {selectedQuarter}
+          </span>
+        </div>
+        <div className="p-4 sm:p-5">
+          {(() => {
+            const quarterMonths: Record<string, { month: number; year: number; label: string }[]> = {
+              "Q1 2026": [
+                { month: 0, year: 2026, label: "January" },
+                { month: 1, year: 2026, label: "February" },
+                { month: 2, year: 2026, label: "March" },
+              ],
+              "Q2 2026": [
+                { month: 3, year: 2026, label: "April" },
+                { month: 4, year: 2026, label: "May" },
+                { month: 5, year: 2026, label: "June" },
+              ],
+              "Q3 2026": [
+                { month: 6, year: 2026, label: "July" },
+                { month: 7, year: 2026, label: "August" },
+                { month: 8, year: 2026, label: "September" },
+              ],
+              "Q4 2026": [
+                { month: 9, year: 2026, label: "October" },
+                { month: 10, year: 2026, label: "November" },
+                { month: 11, year: 2026, label: "December" },
+              ],
+            };
+            const months = quarterMonths[selectedQuarter] || quarterMonths["Q2 2026"];
+            const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+            const statusColors = {
+              optimised: { bg: "#EFF7F2", border: "#3D9B6B", dot: "#3D9B6B" },
+              draft: { bg: "#FDF6ED", border: "#D4922A", dot: "#D4922A" },
+              planned: { bg: "rgba(31,116,143,0.06)", border: "#1f748f", dot: "#1f748f" },
+            };
+            const parseDate = (d: string) => new Date(d);
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {months.map((m) => {
+                  const firstDay = new Date(m.year, m.month, 1);
+                  const daysInMonth = new Date(m.year, m.month + 1, 0).getDate();
+                  let startDay = firstDay.getDay() - 1;
+                  if (startDay < 0) startDay = 6;
+                  const itemsInMonth = scheduledItems.filter((si) => {
+                    const d = parseDate(si.date);
+                    return d.getMonth() === m.month && d.getFullYear() === m.year;
+                  });
+                  const itemsByDay: Record<number, typeof scheduledItems> = {};
+                  itemsInMonth.forEach((si) => {
+                    const day = parseDate(si.date).getDate();
+                    if (!itemsByDay[day]) itemsByDay[day] = [];
+                    itemsByDay[day].push(si);
+                  });
+                  const cells: (number | null)[] = [];
+                  for (let i = 0; i < startDay; i++) cells.push(null);
+                  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+                  return (
+                    <div key={m.label}>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] mb-2 text-center" style={{ color: vars.navy }}>
+                        {m.label}
+                      </p>
+                      <div className="grid grid-cols-7 gap-px">
+                        {dayNames.map((dn) => (
+                          <div key={dn} className="text-center py-1">
+                            <span className="text-[9px] font-medium uppercase" style={{ color: vars.g400 }}>{dn}</span>
+                          </div>
+                        ))}
+                        {cells.map((day, idx) => {
+                          const items = day ? itemsByDay[day] : undefined;
+                          const hasItems = items && items.length > 0;
+                          const today = new Date();
+                          const isToday = day && m.month === today.getMonth() && m.year === today.getFullYear() && day === today.getDate();
+                          return (
+                            <div
+                              key={idx}
+                              className="relative flex flex-col items-center py-1 rounded-md min-h-[32px]"
+                              style={{
+                                background: hasItems ? items[0] ? statusColors[items[0].status]?.bg : "transparent" : "transparent",
+                                border: isToday ? `1.5px solid ${vars.accent}` : "1.5px solid transparent",
+                              }}
+                              title={hasItems ? items.map((it) => `${it.title} (${it.status})`).join("\n") : undefined}
+                            >
+                              {day && (
+                                <span
+                                  className="text-[11px]"
+                                  style={{
+                                    color: hasItems ? vars.navy : vars.g400,
+                                    fontWeight: hasItems || isToday ? 700 : 400,
+                                  }}
+                                >
+                                  {day}
+                                </span>
+                              )}
+                              {hasItems && (
+                                <div className="flex gap-0.5 mt-0.5">
+                                  {items.map((it, ii) => (
+                                    <div
+                                      key={ii}
+                                      className="w-1.5 h-1.5 rounded-full"
+                                      style={{ background: statusColors[it.status]?.dot || vars.g400 }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          <div className="flex items-center justify-center gap-5 mt-4 pt-3 border-t" style={{ borderColor: vars.g100 }}>
+            {[
+              { label: "Optimised", color: "#3D9B6B" },
+              { label: "Draft", color: "#D4922A" },
+              { label: "Planned", color: "#1f748f" },
+            ].map((leg) => (
+              <div key={leg.label} className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ background: leg.color }} />
+                <span className="text-[10px]" style={{ color: vars.g500 }}>{leg.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="rounded-xl border overflow-hidden mb-6"
+        style={{ background: "white", borderColor: vars.g200 }}
+      >
+        <div
+          className="px-5 py-3 border-b flex items-center justify-between"
+          style={{ background: vars.g50, borderColor: vars.g200 }}
+        >
+          <div className="flex items-center gap-2">
+            <Calendar size={14} color="#1f748f" />
+            <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>
               Scheduled Activations
             </h2>
           </div>
