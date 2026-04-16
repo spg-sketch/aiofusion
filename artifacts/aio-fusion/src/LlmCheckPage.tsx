@@ -229,7 +229,7 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
             <div>
               <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
                 LLM Visibility Check
-                <InfoTip text="Sends real questions about your sector to ChatGPT and Claude, then checks whether your brand is mentioned in their answers. This is the test that matters — it measures actual AI citation behaviour." width={260} />
+                <InfoTip text="Sends real questions about your sector to ChatGPT and Claude, then checks whether your brand is mentioned in their answers. This is the test that matters - it measures actual AI citation behaviour." width={260} />
               </h1>
               <p className="text-[13px]" style={{ color: vars.g500 }}>
                 Check whether AI models mention {activeClient.name} when asked about your sector
@@ -317,10 +317,10 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
                   </p>
                   <p className="text-[13px] leading-relaxed" style={{ color: vars.g400 }}>
                     {result.visibilityScore >= 60
-                      ? "Strong AI visibility — this brand is being referenced by AI models in your sector."
+                      ? "Strong AI visibility - this brand is being referenced by AI models in your sector."
                       : result.visibilityScore >= 30
-                      ? "Moderate AI visibility — the brand appears in some contexts but is not consistently cited."
-                      : "Low AI visibility — AI models are not reliably mentioning this brand when asked about the sector."}
+                      ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
+                      : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector."}
                   </p>
                 </div>
               </div>
@@ -392,7 +392,7 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
                     <span className="text-[10px] font-bold" style={{ color: vars.accent }}>2</span>
                   </div>
                   <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
-                    <strong style={{ color: vars.g600 }}>Scores are directional, not precise.</strong> AI model responses aren't deterministic — the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful.
+                    <strong style={{ color: vars.g600 }}>Scores are directional, not precise.</strong> AI model responses aren't deterministic - the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful.
                   </p>
                 </div>
                 <div className="flex items-start gap-3">
@@ -400,7 +400,7 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
                     <span className="text-[10px] font-bold" style={{ color: vars.accent }}>3</span>
                   </div>
                   <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>
-                    <strong style={{ color: vars.g600 }}>Competitors reveal what's working.</strong> The companies AI does mention are winning the visibility race in your sector — analyse what they're doing differently with content structure, schema markup and authority signals.
+                    <strong style={{ color: vars.g600 }}>Competitors reveal what's working.</strong> The companies AI does mention are winning the visibility race in your sector - analyse what they're doing differently with content structure, schema markup and authority signals.
                   </p>
                 </div>
                 <div className="flex items-start gap-3">

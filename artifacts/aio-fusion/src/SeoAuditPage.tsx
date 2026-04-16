@@ -380,7 +380,7 @@ export default function SeoAuditPage() {
                       <div className="space-y-1 max-h-40 overflow-y-auto">
                         {result.links.internal.slice(0, 15).map((l, i) => (
                           <div key={i} className="text-[11px] truncate" style={{ color: vars.g500 }}>
-                            {l.href} {l.text && <span style={{ color: vars.g400 }}>— {l.text}</span>}
+                            {l.href} {l.text && <span style={{ color: vars.g400 }}>- {l.text}</span>}
                           </div>
                         ))}
                       </div>
@@ -392,7 +392,7 @@ export default function SeoAuditPage() {
                       <div className="space-y-1 max-h-40 overflow-y-auto">
                         {result.links.external.slice(0, 15).map((l, i) => (
                           <div key={i} className="text-[11px] truncate" style={{ color: vars.g500 }}>
-                            {l.href} {l.text && <span style={{ color: vars.g400 }}>— {l.text}</span>}
+                            {l.href} {l.text && <span style={{ color: vars.g400 }}>- {l.text}</span>}
                           </div>
                         ))}
                       </div>
@@ -407,7 +407,7 @@ export default function SeoAuditPage() {
 
             <div className="text-center py-4">
               <p className="text-[11px]" style={{ color: vars.g400 }}>
-                Audited {new Date(result.fetchedAt).toLocaleString()} · Scores are indicative — always verify with manual review
+                Audited {new Date(result.fetchedAt).toLocaleString()} · Scores are indicative - always verify with manual review
               </p>
             </div>
           </div>

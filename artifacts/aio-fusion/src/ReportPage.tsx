@@ -120,7 +120,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const technicalAudit = [
     { item: "Organization Schema", status: "fail" as const, detail: "No Organization schema detected on homepage" },
     { item: "FAQ Schema", status: "fail" as const, detail: "FAQ page exists but no structured markup applied" },
-    { item: "Article Schema", status: "warn" as const, detail: "Partial implementation — missing author and datePublished" },
+    { item: "Article Schema", status: "warn" as const, detail: "Partial implementation - missing author and datePublished" },
     { item: "AI Crawler Access", status: "pass" as const, detail: "robots.txt allows GPTBot, PerplexityBot, ClaudeBot" },
     { item: "Sitemap", status: "pass" as const, detail: "XML sitemap present and submitted to GSC" },
     { item: "Page Speed (Core Web Vitals)", status: "warn" as const, detail: "LCP 3.2s (target < 2.5s), CLS 0.08 (pass)" },
@@ -129,7 +129,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   ];
 
   const contentAudit = [
-    { item: "Homepage Descriptor", status: "warn" as const, detail: "Generic tagline — needs entity-rich, answer-first copy" },
+    { item: "Homepage Descriptor", status: "warn" as const, detail: "Generic tagline - needs entity-rich, answer-first copy" },
     { item: "Product/Service Pages", status: "fail" as const, detail: "4 of 6 pages use promotional language instead of factual statements" },
     { item: "FAQ Page", status: "warn" as const, detail: "12 questions present, but missing category authority and misconception FAQs" },
     { item: "Blog / Thought Leadership", status: "pass" as const, detail: "Regular publishing cadence, 3 expert-authored pieces this quarter" },
@@ -143,7 +143,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     { priority: "High", timeframe: "This week", action: "Create expert author profile pages with credentials", impact: "High", category: "Content", startDate: "2026-04-17", endDate: "2026-04-21", durationDays: 5 },
     { priority: "High", timeframe: "This month", action: "Rewrite homepage descriptor with entity-rich copy", impact: "Medium", category: "Content", startDate: "2026-04-22", endDate: "2026-04-28", durationDays: 7 },
     { priority: "High", timeframe: "This month", action: "Add answer-first key takeaway blocks to top 10 pages", impact: "High", category: "Content", startDate: "2026-04-24", endDate: "2026-05-05", durationDays: 12 },
-    { priority: "Medium", timeframe: "This month", action: "Fix Article Schema — add author and datePublished", impact: "Medium", category: "Technical", startDate: "2026-04-29", endDate: "2026-05-01", durationDays: 3 },
+    { priority: "Medium", timeframe: "This month", action: "Fix Article Schema - add author and datePublished", impact: "Medium", category: "Technical", startDate: "2026-04-29", endDate: "2026-05-01", durationDays: 3 },
     { priority: "Medium", timeframe: "This month", action: "Update 3 outdated third-party profiles (NAP)", impact: "Medium", category: "Authority", startDate: "2026-05-04", endDate: "2026-05-08", durationDays: 5 },
     { priority: "Medium", timeframe: "This quarter", action: "Publish industry report with original research data", impact: "High", category: "Content", startDate: "2026-05-18", endDate: "2026-06-05", durationDays: 19 },
     { priority: "Medium", timeframe: "This quarter", action: "Rewrite 4 product pages from promotional to factual", impact: "Medium", category: "Content", startDate: "2026-05-25", endDate: "2026-06-12", durationDays: 19 },
@@ -228,7 +228,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            {activeClient.name} &mdash; Generated {reportDate}
+            {activeClient.name} - Generated {reportDate}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -283,7 +283,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-lg sm:text-xl font-semibold text-white mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-                    {authorityScore >= 70 ? "Strong Authority Position" : authorityScore >= 40 ? "Moderate Authority — Room to Grow" : "Early Stage — Significant Opportunities"}
+                    {authorityScore >= 70 ? "Strong Authority Position" : authorityScore >= 40 ? "Moderate Authority - Room to Grow" : "Early Stage - Significant Opportunities"}
                   </h2>
                   <p className="text-sm text-white/70 leading-relaxed mb-4">
                     {activeClient.name} currently scores {authorityScore}/100 on the AIO Authority Index. This score reflects your brand's readiness to be cited, referenced, and recommended by AI-powered search and answer engines. The breakdown below shows where you're strong and where focused effort will drive the biggest improvements.

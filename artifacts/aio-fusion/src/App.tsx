@@ -640,7 +640,7 @@ function DashboardPage({
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          {activeClient.name} &mdash; Authority Dashboard
+          {activeClient.name} - Authority Dashboard
         </h1>
         <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
           Your AI authority performance at a glance
@@ -742,7 +742,7 @@ function DashboardPage({
         {[
           { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Overall readiness score based on your latest AIO diagnostic results." },
           { label: "LLM Visibility", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
-          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical SEO score from your last site audit — meta tags, schema, speed, and AI crawler access." },
+          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical SEO score from your last site audit - meta tags, schema, speed, and AI crawler access." },
           { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How your authority score has changed over the last 30 days." },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
@@ -760,7 +760,7 @@ function DashboardPage({
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline <InfoTip text="Your queue of content being prepared for AI optimisation — press releases, research, speaking opportunities and more." /></h3>
+          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline <InfoTip text="Your queue of content being prepared for AI optimisation - press releases, research, speaking opportunities and more." /></h3>
           <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-1.5 text-xs font-medium hover:underline" style={{ color: vars.accent }}>
             All Press Releases <ArrowRight size={12} />
           </button>
@@ -844,7 +844,7 @@ function DashboardPage({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Globe size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health <InfoTip text="Technical health of your website — checks meta tags, headings, schema markup, page speed, and whether AI crawlers can access your content." /></h3>
+              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health <InfoTip text="Technical health of your website - checks meta tags, headings, schema markup, page speed, and whether AI crawlers can access your content." /></h3>
             </div>
             <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {seoHealth.lastChecked}</span>
           </div>
@@ -1011,7 +1011,7 @@ function DiagnosticPage({
             <Search size={20} color="#1f748f" />
             <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               AIO Diagnostic
-              <InfoTip text="Runs an AI-powered audit of your content (URL or pasted text) against GEO readiness criteria — content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
+              <InfoTip text="Runs an AI-powered audit of your content (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -1381,7 +1381,7 @@ function OptimiserPage({
             <FileEdit size={20} color="#2896b9" />
             <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               Content Optimiser
-              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
@@ -1414,7 +1414,7 @@ function OptimiserPage({
               style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
-              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -1584,7 +1584,7 @@ function OptimiserPage({
               style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
               Content Optimiser
-              <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+              <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -2913,7 +2913,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
             <span style={{ color: vars.accent }}>AI visibility</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
-            AIO Fusion measures your visibility in ChatGPT, Claude, Perplexity and Gemini — then gives you the tools to improve it. The GEO platform built for PR and comms teams.
+            AIO Fusion measures your visibility in ChatGPT, Claude, Perplexity and Gemini - then gives you the tools to improve it. The GEO platform built for PR and comms teams.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <button
@@ -2951,7 +2951,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           <div className="text-center mb-14">
             <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility</h2>
             <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              From diagnosis through to delivery — the full GEO workflow in one platform.
+              From diagnosis through to delivery - the full GEO workflow in one platform.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 sm:gap-8 mb-8">
@@ -3013,7 +3013,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
               </div>
               <h2 className="text-3xl md:text-4xl mb-5 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add GEO to your service offering</h2>
               <p className="text-[15px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-                We run the platform as a managed service — your team gets the insights, your clients get the results. No tooling to build, no AI expertise required.
+                We run the platform as a managed service - your team gets the insights, your clients get the results. No tooling to build, no AI expertise required.
               </p>
               <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
                 <Mail size={16} /> Get in Touch
@@ -3058,7 +3058,7 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
             </div>
             <div className="space-y-3">
               {[
-                { title: "Know your AI visibility score", desc: "See exactly how AI models perceive your brand across 6 signal categories — and where competitors rank." },
+                { title: "Know your AI visibility score", desc: "See exactly how AI models perceive your brand across 6 signal categories - and where competitors rank." },
                 { title: "Fix what AI can't find", desc: "Get specific, prioritised actions: schema markup, content structure, authority signals your site is missing." },
                 { title: "Optimise content for citation", desc: "Turn existing pages, press releases and thought leadership into content AI models actually quote." },
                 { title: "Track progress over time", desc: "Monthly reports show how your AI authority score is improving and which actions are driving results." },

@@ -55,7 +55,7 @@ type PressReleaseDoc = {
 const PR_TEMPLATE = `<h1>PRESS RELEASE</h1>
 <h2>[Headline: Clear, Factual, Entity-Rich Statement]</h2>
 <p><strong>[Subheading: Supporting context with key differentiator]</strong></p>
-<p><em>[City, Date]</em> — [Opening paragraph: Answer-first structure. Lead with the definitive, quotable statement that AI engines will extract. State WHO is doing WHAT and WHY it matters — in one sentence.]</p>
+<p><em>[City, Date]</em> - [Opening paragraph: Answer-first structure. Lead with the definitive, quotable statement that AI engines will extract. State WHO is doing WHAT and WHY it matters - in one sentence.]</p>
 <p>[Second paragraph: Expand on the announcement. Include specific facts, figures, and context. Name the key entities, products, or initiatives clearly.]</p>
 <h2>Key Facts</h2>
 <ul>
@@ -64,8 +64,8 @@ const PR_TEMPLATE = `<h1>PRESS RELEASE</h1>
 <li>[Fact 3: Timeline, availability, or scope detail]</li>
 </ul>
 <h2>Quote</h2>
-<p>"[Direct quote from spokesperson — include their full name and title. Make the quote substantive, not generic. Include a forward-looking statement or insight.]"</p>
-<p>— <strong>[Full Name]</strong>, [Title], [Organisation]</p>
+<p>"[Direct quote from spokesperson - include their full name and title. Make the quote substantive, not generic. Include a forward-looking statement or insight.]"</p>
+<p>- <strong>[Full Name]</strong>, [Title], [Organisation]</p>
 <h2>Background</h2>
 <p>[Company/organisation boilerplate. Include founding year, mission, key metrics, and areas of expertise. Write in third person, factual tone.]</p>
 <h2>Media Contact</h2>
@@ -78,7 +78,7 @@ const MOCK_DOCS: PressReleaseDoc[] = [
     status: "review",
     updatedAt: "14 Apr 2026",
     createdAt: "10 Apr 2026",
-    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Launches The Agency Agentic Collective — First AI-Powered Professional Network for Independent Agencies</h2><p><strong>New platform replaces passive networking with autonomous AI agents that discover opportunities in real-time</strong></p><p><em>London, 10 April 2026</em> — The Agency Agentic Collective is the first professional network where independent agencies are represented by dedicated AI agents. Launched by Spencer Gallagher and Mark Sainthill of Bluhalo, the platform replaces passive networking with autonomous peer intelligence.</p><p>Each agency's AI agent runs automated discovery cycles every 15 minutes, matching peer agencies by sector and capability, querying anonymised benchmark data, and flagging collaboration opportunities for human review.</p><h2>Key Facts</h2><ul><li>196 live advisory engagements contribute to the benchmarking dataset</li><li>75 performance metrics tracked including gross profit margin, revenue per head, and utilisation rates</li><li>Discovery cycles run every 15 minutes across the entire network</li></ul><h2>Quote</h2><p>"The future of professional networking isn't about who you know — it's about what your AI agent can discover while you focus on delivering for clients. The Collective gives every independent agency the market intelligence that was previously only available to the networks."</p><p>— <strong>Spencer Gallagher</strong>, Co-Founder, Bluhalo</p><h2>Background</h2><p>Bluhalo is an independent agency advisory and intelligence practice founded in 2019. The firm provides benchmarking, peer intelligence, and strategic advisory to independent agencies across the UK and internationally.</p><h2>Media Contact</h2><p>Press Office | press@bluhalo.com | +44 20 7946 0958</p>`,
+    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Launches The Agency Agentic Collective - First AI-Powered Professional Network for Independent Agencies</h2><p><strong>New platform replaces passive networking with autonomous AI agents that discover opportunities in real-time</strong></p><p><em>London, 10 April 2026</em> - The Agency Agentic Collective is the first professional network where independent agencies are represented by dedicated AI agents. Launched by Spencer Gallagher and Mark Sainthill of Bluhalo, the platform replaces passive networking with autonomous peer intelligence.</p><p>Each agency's AI agent runs automated discovery cycles every 15 minutes, matching peer agencies by sector and capability, querying anonymised benchmark data, and flagging collaboration opportunities for human review.</p><h2>Key Facts</h2><ul><li>196 live advisory engagements contribute to the benchmarking dataset</li><li>75 performance metrics tracked including gross profit margin, revenue per head, and utilisation rates</li><li>Discovery cycles run every 15 minutes across the entire network</li></ul><h2>Quote</h2><p>"The future of professional networking isn't about who you know - it's about what your AI agent can discover while you focus on delivering for clients. The Collective gives every independent agency the market intelligence that was previously only available to the networks."</p><p>- <strong>Spencer Gallagher</strong>, Co-Founder, Bluhalo</p><h2>Background</h2><p>Bluhalo is an independent agency advisory and intelligence practice founded in 2019. The firm provides benchmarking, peer intelligence, and strategic advisory to independent agencies across the UK and internationally.</p><h2>Media Contact</h2><p>Press Office | press@bluhalo.com | +44 20 7946 0958</p>`,
     source: "ai-drafted",
   },
   {
@@ -87,7 +87,7 @@ const MOCK_DOCS: PressReleaseDoc[] = [
     status: "draft",
     updatedAt: "8 Apr 2026",
     createdAt: "5 Apr 2026",
-    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Q1 2026 Agency Benchmark Report Reveals 12% Growth in Independent Agency Gross Profit Margins</h2><p><strong>Latest data from 196 engagements shows independents outperforming holding company averages for the third consecutive quarter</strong></p><p><em>London, 8 April 2026</em> — Independent agencies tracked by Bluhalo's benchmarking practice achieved average gross profit margins of 52.3% in Q1 2026, a 12% increase year-on-year and the third consecutive quarter of outperformance versus major holding company averages.</p><p>The data is drawn from Bluhalo's proprietary dataset covering 196 live advisory engagements and 75 performance metrics.</p><h2>Key Facts</h2><ul><li>52.3% average gross profit margin for independent agencies in Q1 2026</li><li>12% year-on-year increase</li><li>Third consecutive quarter outperforming holding company averages</li></ul><h2>Quote</h2><p>"The narrative that scale equals profitability is being rewritten. Our data consistently shows that well-managed independents are achieving margins that the networks can only dream of."</p><p>— <strong>Mark Sainthill</strong>, Co-Founder, Bluhalo</p>`,
+    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Q1 2026 Agency Benchmark Report Reveals 12% Growth in Independent Agency Gross Profit Margins</h2><p><strong>Latest data from 196 engagements shows independents outperforming holding company averages for the third consecutive quarter</strong></p><p><em>London, 8 April 2026</em> - Independent agencies tracked by Bluhalo's benchmarking practice achieved average gross profit margins of 52.3% in Q1 2026, a 12% increase year-on-year and the third consecutive quarter of outperformance versus major holding company averages.</p><p>The data is drawn from Bluhalo's proprietary dataset covering 196 live advisory engagements and 75 performance metrics.</p><h2>Key Facts</h2><ul><li>52.3% average gross profit margin for independent agencies in Q1 2026</li><li>12% year-on-year increase</li><li>Third consecutive quarter outperforming holding company averages</li></ul><h2>Quote</h2><p>"The narrative that scale equals profitability is being rewritten. Our data consistently shows that well-managed independents are achieving margins that the networks can only dream of."</p><p>- <strong>Mark Sainthill</strong>, Co-Founder, Bluhalo</p>`,
     source: "manual",
   },
   {
@@ -96,7 +96,7 @@ const MOCK_DOCS: PressReleaseDoc[] = [
     status: "approved",
     updatedAt: "1 Apr 2026",
     createdAt: "28 Mar 2026",
-    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Partners with Simpatico PR to Deliver AI-Optimised Communications for Independent Agencies</h2><p><em>London, 1 April 2026</em> — Bluhalo and Simpatico PR have entered a strategic partnership to provide independent agencies with communications services optimised for AI search engines and large language models.</p>`,
+    content: `<h1>PRESS RELEASE</h1><h2>Bluhalo Partners with Simpatico PR to Deliver AI-Optimised Communications for Independent Agencies</h2><p><em>London, 1 April 2026</em> - Bluhalo and Simpatico PR have entered a strategic partnership to provide independent agencies with communications services optimised for AI search engines and large language models.</p>`,
     source: "uploaded",
   },
 ];
