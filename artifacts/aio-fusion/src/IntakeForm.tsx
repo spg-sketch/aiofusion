@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -31,6 +31,8 @@ const vars = {
   g600: "#374151",
 };
 
+type Track = "tech" | "content";
+
 type SectionDef = {
   id: string;
   number: number;
@@ -39,7 +41,17 @@ type SectionDef = {
   icon: typeof Building2;
   intro: string;
   fields: FieldDef[];
+  track: Track;
 };
+
+const MEDIA_CATEGORIES = ["Priority", "National", "Specialist A", "Specialist B", "Specialist C", "Specialist D"] as const;
+type MediaCategory = typeof MEDIA_CATEGORIES[number];
+type MediaList = Record<MediaCategory, string[]>;
+const emptyMedia = (): MediaList => MEDIA_CATEGORIES.reduce((a, c) => ({ ...a, [c]: [] }), {} as MediaList);
+
+type Spokesperson = { name: string; title: string; expertise: string };
+
+const INTAKE_KEY = "aio.intake.v1";
 
 type FieldDef = {
   id: string;
@@ -52,6 +64,7 @@ type FieldDef = {
 const sections: SectionDef[] = [
   {
     id: "fundamentals",
+    track: "tech",
     number: 1,
     title: "Business & Brand Fundamentals",
     subtitle: "Core identity: who you are and what you do",
@@ -69,6 +82,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "priority",
+    track: "tech",
     number: 2,
     title: "GEO vs AEO Priority Assessment",
     subtitle: "Determine which optimisation approach should lead",
@@ -103,6 +117,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "audience",
+    track: "tech",
     number: 3,
     title: "Audience & Intent Mapping",
     subtitle: "Who you're talking to and what they need to hear",
@@ -117,6 +132,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "earned-media",
+    track: "content",
     number: 4,
     title: "Earned Media: Message Framework",
     subtitle: "Boilerplate, message hierarchy & semantic phrase guide",
@@ -139,6 +155,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "website",
+    track: "content",
     number: 5,
     title: "Website Content Architecture",
     subtitle: "Answer-first copy, key takeaways & FAQ structure",
@@ -159,6 +176,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "faq",
+    track: "content",
     number: 6,
     title: "FAQ Page: Facts, Policies & Common Questions",
     subtitle: "AEO-ready answers to what your audience actually asks",
@@ -173,6 +191,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "schema",
+    track: "tech",
     number: 7,
     title: "Schema Markup & Technical Signals",
     subtitle: "Organization schema, robots.txt, AI crawlers & structured data",
@@ -204,6 +223,7 @@ const sections: SectionDef[] = [
   },
   {
     id: "source-truth",
+    track: "tech",
     number: 8,
     title: "Source Truth Audit",
     subtitle: "Consistency check across all existing content & citations",
@@ -225,10 +245,29 @@ const sections: SectionDef[] = [
 ];
 
 export default function IntakePage() {
+  const [track, setTrack] = useState<Track>("tech");
+  const visibleSections = sections.filter((s) => s.track === track);
   const [activeSection, setActiveSection] = useState(0);
-  const [formData, setFormData] = useState<Record<string, string | string[]>>({});
+  const [formData, setFormData] = useState<Record<string, string | string[]>>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).formData || {}; } catch {}
+    return {};
+  });
+  const [spokespeople, setSpokespeople] = useState<Spokesperson[]>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).spokespeople || []; } catch {}
+    return [];
+  });
+  const [media, setMedia] = useState<MediaList>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return { ...emptyMedia(), ...(JSON.parse(raw).media || {}) }; } catch {}
+    return emptyMedia();
+  });
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(INTAKE_KEY, JSON.stringify({ formData, spokespeople, media })); } catch {}
+  }, [formData, spokespeople, media]);
+
+  useEffect(() => { setActiveSection(0); }, [track]);
 
   const updateField = (fieldId: string, value: string) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
@@ -249,14 +288,14 @@ export default function IntakePage() {
   };
 
   const sectionHasData = (idx: number) => {
-    return sections[idx].fields.some((f) => {
+    return visibleSections[idx].fields.some((f) => {
       if (f.type === "heading") return false;
       const val = formData[f.id];
       return Array.isArray(val) ? val.length > 0 : val && val.trim().length > 0;
     });
   };
 
-  const totalFields = sections.reduce((s, sec) => s + sec.fields.filter((f) => f.type !== "heading").length, 0);
+  const totalFields = visibleSections.reduce((s, sec) => s + sec.fields.filter((f) => f.type !== "heading").length, 0);
   const filledFields = Object.values(formData).filter((v) => (Array.isArray(v) ? v.length > 0 : v && v.trim().length > 0)).length;
   const progressPct = Math.round((filledFields / totalFields) * 100);
 
@@ -295,17 +334,32 @@ export default function IntakePage() {
     );
   }
 
-  const section = sections[activeSection];
+  const section = visibleSections[activeSection] || visibleSections[0];
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          GEO & AEO Content Optimisation Intake
+          Client Intake
         </h1>
-        <p className="text-[13px] sm:text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
-          Complete each section to enable AI-optimised copy, schema markup, semantic phrase guides, and content architecture.
+        <p className="text-[13px] sm:text-[14px] font-light mt-1 mb-4" style={{ color: vars.g500 }}>
+          Capture the technical foundations and the content/messaging framework that power every other module.
         </p>
+        <div className="inline-flex p-1 rounded-xl border" style={{ background: "white", borderColor: vars.g200 }}>
+          {(["tech", "content"] as Track[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTrack(t)}
+              className="px-4 py-2 rounded-lg text-[13px] font-semibold transition-all"
+              style={{
+                background: track === t ? vars.accent : "transparent",
+                color: track === t ? "white" : vars.g500,
+              }}
+            >
+              {t === "tech" ? "Tech Intake" : "Content Intake"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -321,7 +375,7 @@ export default function IntakePage() {
           </div>
 
           <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-            {sections.map((sec, idx) => {
+            {visibleSections.map((sec, idx) => {
               const isActive = idx === activeSection;
               const isDone = completed.has(idx);
               const hasData = sectionHasData(idx);
@@ -383,6 +437,54 @@ export default function IntakePage() {
 
               <div className="space-y-6">
                 {section.fields.map((field) => {
+                  if (field.id === "4.8") {
+                    return (
+                      <div key={field.id}>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: vars.navy }}>
+                          <span className="text-xs font-bold mr-2" style={{ color: vars.accent }}>4.8</span>
+                          Spokespeople (used by the Optimiser dropdown)
+                        </label>
+                        <p className="text-xs font-light mb-3" style={{ color: vars.g400 }}>Add each media spokesperson with name, title, and area of expertise.</p>
+                        <div className="space-y-2 mb-2">
+                          {spokespeople.map((sp, i) => (
+                            <div key={i} className="grid grid-cols-12 gap-2">
+                              <input value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="Name" className="col-span-3 px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                              <input value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="Title" className="col-span-4 px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                              <input value={sp.expertise} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: e.target.value } : s))} placeholder="Expertise" className="col-span-4 px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                              <button onClick={() => setSpokespeople(spokespeople.filter((_, j) => j !== i))} className="col-span-1 text-[12px] text-red-600">Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                        <button onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: "" }])} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Add spokesperson</button>
+                      </div>
+                    );
+                  }
+                  if (field.id === "4.9") {
+                    return (
+                      <div key={field.id}>
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: vars.navy }}>
+                          <span className="text-xs font-bold mr-2" style={{ color: vars.accent }}>4.9</span>
+                          Target media (categorised — feeds Optimiser & Planner)
+                        </label>
+                        <p className="text-xs font-light mb-3" style={{ color: vars.g400 }}>Paste one URL or outlet name per line under each category.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {MEDIA_CATEGORIES.map((cat) => (
+                            <div key={cat}>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color: vars.g500 }}>{cat}</p>
+                              <textarea
+                                value={media[cat].join("\n")}
+                                onChange={(e) => setMedia({ ...media, [cat]: e.target.value.split("\n").map((x) => x.trim()).filter(Boolean) })}
+                                rows={3}
+                                placeholder="One outlet or URL per line"
+                                className="w-full px-3 py-2 rounded-lg border text-[12px] font-light"
+                                style={{ borderColor: vars.g200, background: vars.g50 }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
                   if (field.type === "heading") {
                     return (
                       <h3 key={field.id} className="text-xs font-bold uppercase tracking-[0.15em] pt-4 pb-1" style={{ color: vars.accent }}>
@@ -495,7 +597,7 @@ export default function IntakePage() {
                   )}
                 </button>
 
-                {activeSection < sections.length - 1 ? (
+                {activeSection < visibleSections.length - 1 ? (
                   <button
                     onClick={() => setActiveSection(activeSection + 1)}
                     className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"

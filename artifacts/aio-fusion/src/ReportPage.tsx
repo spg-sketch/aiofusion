@@ -91,7 +91,7 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
 }
 
 export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"actions" | "overview" | "detail">("actions");
+  const [activeTab, setActiveTab] = useState<"actions" | "overview" | "detail" | "released">("actions");
   const [completedActions, setCompletedActions] = useState<Set<number>>(new Set());
   const [actionFilter, setActionFilter] = useState<"all" | "Critical" | "High" | "Medium" | "Low">("all");
   const [actionView, setActionView] = useState<"list" | "calendar" | "timeline">("list");
@@ -214,6 +214,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     { id: "actions" as const, label: "Action Plan" },
     { id: "overview" as const, label: "Executive Summary" },
     { id: "detail" as const, label: "Detailed Audit" },
+    { id: "released" as const, label: "Released Content" },
   ];
 
   return (
@@ -930,6 +931,113 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         </div>
         );
       })()}
+
+      {activeTab === "released" && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
+            <h2 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Released Content Performance</h2>
+            <p className="text-[13px] font-light mb-6" style={{ color: vars.g500 }}>Outcomes from coverage that has actually shipped — measured against your message framework, audience reach, and authority targets.</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+              {[
+                { label: "Audience reach", value: "2.4M", sub: "monthly impressions" },
+                { label: "Pieces released", value: "47", sub: "last 90 days" },
+                { label: "Visibility / piece", value: "82", sub: "avg AI citation score" },
+                { label: "Ideas → outcomes", value: "68%", sub: "ratio shipped" },
+              ].map((m) => (
+                <div key={m.label} className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>{m.label}</p>
+                  <p className="text-2xl font-bold mt-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{m.value}</p>
+                  <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{m.sub}</p>
+                </div>
+              ))}
+            </div>
+
+            <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Coverage per key message</h3>
+            <div className="space-y-2 mb-6">
+              {[
+                { msg: "AI authority platform built by PR consultants", n: 18, pct: 92 },
+                { msg: "Generative engine optimisation expertise", n: 14, pct: 78 },
+                { msg: "Measurable AI citation outcomes", n: 9, pct: 55 },
+                { msg: "Tech + content fusion", n: 6, pct: 38 },
+              ].map((k) => (
+                <div key={k.msg}>
+                  <div className="flex items-center justify-between text-[12px] mb-1">
+                    <span style={{ color: vars.navy }}>{k.msg}</span>
+                    <span className="font-semibold" style={{ color: vars.accent }}>{k.n} pieces · {k.pct}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full" style={{ background: vars.g200 }}>
+                    <div className="h-full rounded-full" style={{ width: `${k.pct}%`, background: vars.accent }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
+                <div className="space-y-2">
+                  {[
+                    ["Press release", 12], ["Article", 9], ["Case study", 6], ["Whitepaper", 3],
+                    ["Blog post", 8], ["Social post", 5], ["Award submission", 2], ["Speaker submission", 2],
+                  ].map(([t, n]) => (
+                    <div key={t as string} className="flex justify-between text-[12px]">
+                      <span style={{ color: vars.g600 }}>{t}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by media tier</h3>
+                <div className="space-y-2">
+                  {[
+                    ["Priority", 8], ["National", 14], ["Specialist A", 11], ["Specialist B", 7],
+                    ["Specialist C", 4], ["Specialist D", 3],
+                  ].map(([t, n]) => (
+                    <div key={t as string} className="flex justify-between text-[12px]">
+                      <span style={{ color: vars.g600 }}>{t}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Social impact</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ["LinkedIn shares", "1,820"], ["LinkedIn engagement", "4.2%"],
+                    ["Inbound DMs", "37"], ["Profile views (week)", "612"],
+                  ].map(([k, v]) => (
+                    <div key={k as string}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: vars.g400 }}>{k}</p>
+                      <p className="text-[16px] font-bold" style={{ color: vars.navy }}>{v}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
+                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
+                <div className="space-y-2">
+                  {[
+                    ["Spencer Gallagher, Co-Founder", 16],
+                    ["Helen Croydon, Founder", 12],
+                    ["Guest contributors", 5],
+                  ].map(([n, c]) => (
+                    <div key={n as string} className="flex justify-between text-[12px]">
+                      <span style={{ color: vars.g600 }}>{n}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{c} pieces</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
