@@ -105,7 +105,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     { label: "Content Architecture", score: 5, max: 15, description: "Answer-first formatting, semantic phrase density, heading structure" },
     { label: "Source Authority", score: 4, max: 15, description: "NAP consistency, third-party profiles, citation network" },
     { label: "Earned Media Signals", score: 7, max: 20, description: "Press mentions, backlink quality, spokesperson visibility" },
-    { label: "LLM Visibility", score: 3, max: 20, description: "Mentions and citations across ChatGPT, Perplexity, Google AI" },
+    { label: "Earned Visibility", score: 3, max: 20, description: "Mentions and citations across ChatGPT, Perplexity, Google AI" },
     { label: "Technical Accessibility", score: 2, max: 15, description: "AI crawler access, robots.txt, sitemap, page speed" },
   ];
 
@@ -205,8 +205,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return months;
   }, []);
 
-  const totalEarned = categoryScores.filter(c => ["Earned Media Signals", "LLM Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.score, 0);
-  const totalEarnedMax = categoryScores.filter(c => ["Earned Media Signals", "LLM Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.max, 0);
+  const totalEarned = categoryScores.filter(c => ["Earned Media Signals", "Earned Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.score, 0);
+  const totalEarnedMax = categoryScores.filter(c => ["Earned Media Signals", "Earned Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.max, 0);
   const totalOwned = categoryScores.filter(c => ["Schema & Structured Data", "Content Architecture", "Technical Accessibility"].includes(c.label)).reduce((s, c) => s + c.score, 0);
   const totalOwnedMax = categoryScores.filter(c => ["Schema & Structured Data", "Content Architecture", "Technical Accessibility"].includes(c.label)).reduce((s, c) => s + c.max, 0);
 
@@ -320,7 +320,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
               <Eye size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>LLM Visibility Scorecard</h3>
+              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility Scorecard</h3>
             </div>
             <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
               How your brand appears across the major AI platforms when users ask questions in your category.

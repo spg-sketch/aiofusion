@@ -184,7 +184,7 @@ const navItems = [
   { label: "Dashboard", id: "dashboard" },
   { label: "Client Intake", id: "intake" },
   { label: "AIO Diagnostic", id: "diagnostic" },
-  { label: "LLM Visibility", id: "llm-check" },
+  { label: "Earned Visibility", id: "llm-check" },
   { label: "Content Optimiser", id: "optimiser" },
   { label: "SEO Assessment", id: "seo-audit" },
   { label: "Authority Planner", id: "planner" },
@@ -628,7 +628,7 @@ function DashboardPage({
   };
 
   const quickActions = [
-    { icon: Eye, label: "LLM Visibility", sub: "Check AI brand mentions", action: "llm-check" },
+    { icon: Eye, label: "Earned Visibility", sub: "Check AI brand mentions", action: "llm-check" },
     { icon: Search, label: "Run Diagnostic", sub: "Analyse content with AI", action: "diagnostic" },
     { icon: Globe, label: "SEO Assessment", sub: "Technical site audit", action: "seo-audit" },
     { icon: FileEdit, label: "Optimise Content", sub: "Transform for AI citation", action: "optimiser" },
@@ -741,7 +741,7 @@ function DashboardPage({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Overall readiness score based on your latest AIO diagnostic results." },
-          { label: "LLM Visibility", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
+          { label: "Earned Visibility", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
           { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical SEO score from your last site audit - meta tags, schema, speed, and AI crawler access." },
           { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How your authority score has changed over the last 30 days." },
         ].map((stat) => (
@@ -797,7 +797,7 @@ function DashboardPage({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Eye size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>LLM Visibility <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
+              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
             </div>
             <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {llmVisibility.lastChecked}</span>
           </div>
@@ -2841,7 +2841,7 @@ const agencyBrands = [
 ];
 
 
-function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNavigateAgents: () => void }) {
+function LandingPage({ onLogin, onNavigateAgents, onNavigate }: { onLogin: () => void; onNavigateAgents: () => void; onNavigate: (v: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -2851,12 +2851,13 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           <div className="flex items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
           </div>
-          <div className="hidden md:flex items-center gap-10">
+          <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
-            <a href="#for-agencies" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</a>
-            <a href="#for-b2b" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For B2B</a>
-            <button onClick={onNavigateAgents} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agents</button>
-            <a href="#guide" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Guide</a>
+            <button onClick={() => onNavigate("for-inhouse")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For In-house</button>
+            <button onClick={onNavigateAgents} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</button>
+            <button onClick={() => onNavigate("insights")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Insights</button>
+            <button onClick={() => onNavigate("about")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">About</button>
+            <button onClick={() => onNavigate("contact")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Contact</button>
             <button
               onClick={onLogin}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
@@ -2872,10 +2873,11 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
         {menuOpen && (
           <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Features</a>
-            <a href="#for-agencies" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">For Agencies</a>
-            <a href="#for-b2b" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">For B2B</a>
-            <button onClick={() => { setMenuOpen(false); onNavigateAgents(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agents</button>
-            <a href="#guide" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Guide</a>
+            <button onClick={() => { setMenuOpen(false); onNavigate("for-inhouse"); }} className="text-[13px] font-light text-white/60 py-2 text-left">For In-house</button>
+            <button onClick={() => { setMenuOpen(false); onNavigateAgents(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agencies</button>
+            <button onClick={() => { setMenuOpen(false); onNavigate("insights"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Insights</button>
+            <button onClick={() => { setMenuOpen(false); onNavigate("about"); }} className="text-[13px] font-light text-white/60 py-2 text-left">About</button>
+            <button onClick={() => { setMenuOpen(false); onNavigate("contact"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Contact</button>
             <button onClick={() => { setMenuOpen(false); onLogin(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Platform Login
             </button>
@@ -2904,16 +2906,22 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
         `}</style>
-        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-8 text-center pt-16">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-8 text-center pt-16">
+          <img
+            src={`${import.meta.env.BASE_URL}images/logo-white.png`}
+            alt="AIO Fusion"
+            className="mx-auto mb-10 h-32 sm:h-44 md:h-56 drop-shadow-2xl"
+            style={{ filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.45))" }}
+          />
           <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-8" style={{ background: "rgba(31,116,143,0.2)", border: "1px solid rgba(31,116,143,0.3)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
           <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            Supporting your brand's<br />
-            <span style={{ color: vars.accent }}>AI visibility</span>
+            Business visibility<br />
+            for the <span style={{ color: vars.accent }}>AI Age</span>
           </h1>
           <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
-            AIO Fusion measures your visibility in ChatGPT, Claude, Perplexity and Gemini - then gives you the tools to improve it. The GEO platform built for PR and comms teams.
+            With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
             <button
@@ -2934,18 +2942,6 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
         </div>
       </section>
 
-      <section className="py-10 border-b" style={{ background: "#fff", borderColor: vars.g200 }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-            {agencyBrands.map((brand) => (
-              <span key={brand} className="text-[14px] font-medium tracking-tight" style={{ color: vars.g300 }}>
-                {brand}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section id="features" className="py-20 sm:py-24" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="text-center mb-14">
@@ -2956,9 +2952,9 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
           </div>
           <div className="grid md:grid-cols-3 gap-6 sm:gap-8 mb-8">
             {[
-              { title: "AI Diagnostic", desc: "Scored authority report powered by Claude and OpenAI across 6 signal categories. See exactly where you're strong and what needs work.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: Search, tag: "Live AI" },
-              { title: "Content Optimiser", desc: "Transform PR content into AI-citable material with side-by-side tracked changes and reasoning your clients can approve.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: FileEdit, tag: "Core tool" },
-              { title: "Press Release Editor", desc: "Write press releases built for AI visibility. Rich text editor with templates, status tracking and one-click Word export.", color: "#6366F1", gradient: "linear-gradient(135deg, #6366F1, #4F46E5)", icon: PenLine, tag: "New" },
+              { title: "AIO Diagnostic", desc: "Create your website GEO score powered by Claude and ChatGPT across 6 signal categories. See exactly where you're strong and what needs work.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: Search, tag: "Audit" },
+              { title: "Earned Visibility", desc: "Audit your earned media visibility with leading AI agents. Score your company or brand for visibility against common lines of enquiry.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: Eye, tag: "Audit" },
+              { title: "GEO Content Optimisation", desc: "Define and refine your core business messaging and content to maximise consistent AI recognition.", color: "#6366F1", gradient: "linear-gradient(135deg, #6366F1, #4F46E5)", icon: MessageSquareQuote, tag: "Optimise" },
             ].map((tool) => (
               <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
                 <div className="h-1.5" style={{ background: tool.gradient }} />
@@ -2975,11 +2971,13 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 sm:gap-6 mb-10">
             {[
-              { icon: ClipboardPaste, title: "Client Intake", desc: "Structured onboarding: brand identity, spokespeople, AI presence, goals." },
-              { icon: BarChart3, title: "Authority Planner", desc: "Score your forward plan across 8 PR categories for AI authority impact." },
-              { icon: LineChart, title: "Measure & Report", desc: "Action plan with checklists, calendar views and client-ready exports." },
+              { icon: FileEdit, title: "Content Optimiser", desc: "Rewrite and optimise PR and marketing content for AI citation." },
+              { icon: BarChart3, title: "Authority Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact." },
+              { icon: Send, title: "Release Gateway", desc: "Release approved content via media APIs and download for manual management." },
+              { icon: LineChart, title: "Measure & Report", desc: "Measure AI authority growth across optimisation, content and released coverage." },
+              { icon: Archive, title: "Archive", desc: "Store approved and draft content and curate your content marketing over time." },
             ].map((tool) => (
               <div key={tool.title} className="bg-white rounded-xl border p-5 sm:p-6" style={{ borderColor: vars.g200 }}>
                 <div className="flex items-center gap-3 mb-2">
@@ -3004,99 +3002,63 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
         </div>
       </section>
 
-      <section id="for-agencies" className="py-20 sm:py-24" style={{ background: "#fff" }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-8">
-          <div className="grid md:grid-cols-2 gap-10 sm:gap-14 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-                <Building2 size={12} /> For PR & Comms Agencies
-              </div>
-              <h2 className="text-3xl md:text-4xl mb-5 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add GEO to your service offering</h2>
-              <p className="text-[15px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-                We run the platform as a managed service - your team gets the insights, your clients get the results. No tooling to build, no AI expertise required.
-              </p>
-              <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
-                <Mail size={16} /> Get in Touch
-              </a>
-            </div>
-            <div className="space-y-3">
-              {[
-                { title: "Multi-client management", desc: "Separate workspaces per client with their own intake data, content pipeline, and reporting." },
-                { title: "Dual-engine AI analysis", desc: "Every diagnostic runs through both Claude and OpenAI for robust, balanced scoring." },
-                { title: "Client-ready outputs", desc: "Export press releases to Word, save diagnostic reports as PDF, deliver action plans clients actually use." },
-                { title: "Full audit trail", desc: "Tracked changes with annotations explain every optimisation, so clients see the reasoning." },
-              ].map((item) => (
-                <div key={item.title} className="flex items-start gap-3 p-3.5 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(31,116,143,0.1)" }}>
-                    <Check size={11} color={vars.accent} />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold mb-0.5" style={{ color: vars.navy }}>{item.title}</p>
-                    <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      <section id="how-it-works" className="py-20 sm:py-24" style={{ background: "#fff" }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl mb-5 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How it works</h2>
+            <p className="text-[15px] font-light leading-[1.8] max-w-3xl mx-auto" style={{ color: vars.g500 }}>
+              AIO Fusion enhances your PR and marketing and supports your brand's AI visibility at the same time. Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all.
+            </p>
           </div>
+          <div className="space-y-4">
+            {[
+              { n: "1", title: "Diagnose", desc: "AIO Fusion diagnoses the status of your business or brand visibility with LLM agents such as ChatGPT, Claude, Perplexity, Copilot and Gemini. It audits your earned media as well as the AI performance of your website." },
+              { n: "2", title: "Strategise", desc: "Create a GEO (Generative Engine Optimisation) strategy including optimised content and technical AIO steps for your website and all your future PR and marketing output." },
+              { n: "3", title: "Plan", desc: "Optimise your forward marketing and PR plan for AI authority." },
+              { n: "4", title: "Optimise & Release", desc: "Optimise your on-going PR and marketing content using a tailored AI authority editor and release optimised content via media management and monitoring APIs. Agentic media relations and management are coming soon." },
+              { n: "5", title: "Measure", desc: "Measure and report the impact of AIO on your PR and marketing effectiveness. Continually score your AI optimisation performance over time and adjust your tactics." },
+              { n: "6", title: "Coming soon", desc: "AIO Fusion will enable always-on agentic PR management and media relations - offering a cost-effective and powerful B2B PR and marketing solution." },
+            ].map((step) => (
+              <div key={step.n} className="flex items-start gap-5 p-5 sm:p-6 rounded-2xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[18px] font-bold" style={{ background: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{step.n}</div>
+                <div>
+                  <h3 className="text-[16px] font-semibold mb-1" style={{ color: vars.navy }}>{step.title}</h3>
+                  <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{step.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-[13px] font-light mt-8 italic" style={{ color: vars.g400 }}>
+            AIO Fusion is designed to enable human experts to control and oversee authority strategy and content management.
+          </p>
         </div>
       </section>
 
-      <section id="for-b2b" className="py-20 sm:py-24" style={{ background: vars.navy }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-8">
-          <div className="grid md:grid-cols-2 gap-10 sm:gap-14 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: "rgba(40,150,185,0.1)", color: vars.teal }}>
-                <Globe size={12} /> For B2B Companies
-              </div>
-              <h2 className="text-3xl md:text-4xl text-white mb-5 leading-[1.15]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Make AI recommend your business</h2>
-              <p className="text-[15px] font-light leading-[1.8] mb-6 text-white/50">
-                When prospects ask ChatGPT, Perplexity or Claude for solutions in your category, is your company in the answer? AIO Fusion diagnoses your AI visibility and gives your team a clear plan to fix it.
-              </p>
-              <a href="#" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
-                <Mail size={16} /> Book a Demo
-              </a>
-            </div>
-            <div className="space-y-3">
-              {[
-                { title: "Know your AI visibility score", desc: "See exactly how AI models perceive your brand across 6 signal categories - and where competitors rank." },
-                { title: "Fix what AI can't find", desc: "Get specific, prioritised actions: schema markup, content structure, authority signals your site is missing." },
-                { title: "Optimise content for citation", desc: "Turn existing pages, press releases and thought leadership into content AI models actually quote." },
-                { title: "Track progress over time", desc: "Monthly reports show how your AI authority score is improving and which actions are driving results." },
-              ].map((item) => (
-                <div key={item.title} className="flex items-start gap-3 p-3.5 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.15)" }}>
-                    <Check size={11} color={vars.teal} />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-white mb-0.5">{item.title}</p>
-                    <p className="text-[12px] font-light leading-relaxed text-white/40">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="guide" className="py-14 sm:py-16" style={{ background: "#F5F3F0" }}>
+      <section id="insights" className="py-14 sm:py-16" style={{ background: "#F5F3F0" }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
             <div className="flex-1">
               <h2 className="text-2xl md:text-3xl mb-3 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                Free guide: Winning AI Authority in B2B
+                The B2B Marketer's Fast Guide to Winning AI Authority in 2026
               </h2>
               <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g500 }}>
-                Why 82% of AI-cited content comes from earned media, the 6 GEO signal categories, and a practical roadmap for building authority.
+                What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing and get practical help now.
               </p>
             </div>
             <a
-              href={`${import.meta.env.BASE_URL}Simpatico_PR_B2B_AI_Authority_Guide_2026.pdf`}
-              download
+              href="https://simpaticopraiauthorityguide.carrd.co/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex-shrink-0 inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110"
               style={{ background: vars.accent }}
             >
-              <Download size={16} /> Download PDF
+              <BookOpen size={16} /> Read the Guide
             </a>
+          </div>
+          <div className="mt-6 text-center">
+            <button onClick={() => onNavigate("insights")} className="text-[13px] font-semibold inline-flex items-center gap-1" style={{ color: vars.accent }}>
+              See more insights <ArrowRight size={14} />
+            </button>
           </div>
         </div>
       </section>
@@ -3105,10 +3067,10 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
         <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
           <h2 className="text-3xl md:text-4xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
           <p className="text-[15px] mb-10 leading-relaxed font-light" style={{ color: vars.g500 }}>
-            Get in touch to see how AIO Fusion can help your agency deliver GEO results for every client.
+            Get in touch to book a platform demo and find out about pricing.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+            <a href="mailto:info@aiofusion.ai" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
               <Mail size={18} /> Contact Us
             </a>
             <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium transition-all hover:brightness-95" style={{ background: "#fff", color: vars.navy, border: `1px solid ${vars.g200}` }}>
@@ -3124,9 +3086,13 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
             <div className="flex items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16" />
             </div>
-            <div className="flex items-center gap-8 text-[13px] font-light" style={{ color: vars.g400 }}>
+            <div className="flex items-center gap-6 text-[13px] font-light flex-wrap justify-center" style={{ color: vars.g400 }}>
               <a href="#features" className="hover:underline">Features</a>
-              <a href="#for-agencies" className="hover:underline">Contact</a>
+              <button onClick={() => onNavigate("for-inhouse")} className="hover:underline">For In-house</button>
+              <button onClick={onNavigateAgents} className="hover:underline">For Agencies</button>
+              <button onClick={() => onNavigate("insights")} className="hover:underline">Insights</button>
+              <button onClick={() => onNavigate("about")} className="hover:underline">About</button>
+              <button onClick={() => onNavigate("contact")} className="hover:underline">Contact</button>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
@@ -3136,8 +3102,208 @@ function LandingPage({ onLogin, onNavigateAgents }: { onLogin: () => void; onNav
   );
 }
 
+function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, dark }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
+  const bg = dark ? vars.navy : "#FAFAFA";
+  const textCol = dark ? "white" : vars.navy;
+  return (
+    <div className="font-['Inter',sans-serif] min-h-screen" style={{ background: bg, color: textCol }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: dark ? "rgba(22,82,101,0.92)" : "rgba(255,255,255,0.92)", borderBottom: dark ? "none" : `1px solid ${vars.g200}` }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
+          <button onClick={onBack} className="flex items-center gap-3">
+            <img src={`${import.meta.env.BASE_URL}images/${dark ? "logo-white" : "logo-color"}.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
+          </button>
+          <div className="hidden md:flex items-center gap-8">
+            {[
+              { l: "Features", v: "landing#features" },
+              { l: "For In-house", v: "for-inhouse" },
+              { l: "For Agencies", v: "for-agents" },
+              { l: "Insights", v: "insights" },
+              { l: "About", v: "about" },
+              { l: "Contact", v: "contact" },
+            ].map((it) => (
+              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[13px] font-light hover:opacity-100 transition-colors tracking-wide" style={{ color: dark ? "rgba(255,255,255,0.6)" : vars.g500 }}>
+                {it.l}
+              </button>
+            ))}
+            <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+              <LogIn size={14} /> Platform Login
+            </button>
+          </div>
+        </div>
+      </nav>
+      <section className="pt-[120px] sm:pt-[160px] pb-12 sm:pb-16 px-4 sm:px-8" style={{ background: dark ? vars.navy : "#fff" }}>
+        <div className="max-w-4xl mx-auto">
+          {eyebrow && (
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: dark ? "rgba(40,150,185,0.15)" : "rgba(31,116,143,0.06)", color: dark ? vars.teal : vars.accent }}>
+              {eyebrow}
+            </div>
+          )}
+          <h1 className="text-4xl md:text-5xl mb-5 leading-[1.1]" style={{ color: textCol, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
+        </div>
+      </section>
+      <section className="py-12 sm:py-16 px-4 sm:px-8" style={{ background: bg }}>
+        <div className="max-w-4xl mx-auto">{children}</div>
+      </section>
+      <footer className="py-10 border-t" style={{ background: dark ? "rgba(0,0,0,0.2)" : "#fff", borderColor: dark ? "rgba(255,255,255,0.1)" : vars.g200 }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-[12px] font-light" style={{ color: dark ? "rgba(255,255,255,0.4)" : vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
+          <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: dark ? "rgba(255,255,255,0.6)" : vars.g500 }}>info@aiofusion.ai</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+  return (
+    <MarketingPage title="Control and scale your PR and AI Visibility" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} dark {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+        When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion will transform the performance of your PR and marketing and put you in control.
+      </p>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(255,255,255,0.75)" }}>
+        Make your communications work harder, build optimised plans and content fast, and measure your AI authority as it grows over time.
+      </p>
+      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for you</h2>
+      <div className="grid sm:grid-cols-2 gap-3 mb-10">
+        {[
+          { title: "Evolve from SEO to AI visibility", desc: "Move beyond search-optimised content to content AI engines actually surface and cite." },
+          { title: "Create a PR programme at scale", desc: "Plan, optimise and measure all your marketing output without buying full agency service." },
+          { title: "Always-on, cost-effective platform", desc: "Coherent planning and measurable outcomes from PR and marketing investment." },
+          { title: "Measure your AI authority over time", desc: "See how each piece of content moves the needle on AI citation and recommendation." },
+        ].map((it) => (
+          <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.2)" }}>
+                <Check size={11} color={vars.teal} />
+              </div>
+              <div>
+                <p className="text-[14px] font-semibold text-white mb-0.5">{it.title}</p>
+                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>{it.desc}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Add expert PR & media relations</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Add expert PR content and media relations consultancy to your AIO Fusion platform from Simpatico PR. Get in touch to find out more.</p>
+      </div>
+      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+        <Mail size={16} /> Book a Demo
+      </a>
+    </MarketingPage>
+  );
+}
+
+function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+  const articles = [
+    { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide" },
+    { title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", tag: "Article" },
+    { title: "The 6 GEO signal categories every brand should track", excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.", url: "#", tag: "Article" },
+    { title: "From SEO to AIO: a transition playbook for marketing teams", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: "#", tag: "Playbook" },
+  ];
+  return (
+    <MarketingPage title="Insights" eyebrow={<><BookOpen size={12} /> Library</> as any} {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+        Practical thinking on AI visibility, GEO, and the future of PR and marketing.
+      </p>
+      <div className="space-y-4">
+        {articles.map((a) => (
+          <a key={a.title} href={a.url} target="_blank" rel="noopener noreferrer" className="block p-5 sm:p-6 rounded-2xl border bg-white transition-all hover:shadow-md hover:-translate-y-0.5" style={{ borderColor: vars.g200 }}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="inline-block text-[10px] font-semibold uppercase tracking-[0.18em] mb-2 px-2 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>{a.tag}</span>
+                <h3 className="text-[18px] font-semibold mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
+              </div>
+              <ArrowUpRight size={20} color={vars.accent} className="flex-shrink-0" />
+            </div>
+          </a>
+        ))}
+      </div>
+    </MarketingPage>
+  );
+}
+
+function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+  return (
+    <MarketingPage title="Designed by PR consultants. Built with deep tech expertise." eyebrow={<><Users size={12} /> About AIO Fusion</> as any} {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
+        AIO Fusion was created by experts from the PR, business marketing and tech development worlds to help in-house teams answer the communications challenges of the AI age.
+      </p>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
+        It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.
+      </p>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+        Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all. Our platform offers in-house teams a rapid, cost-effective route to achieving business visibility for AI and human audiences.
+      </p>
+
+      <h2 className="text-[24px] mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Built on decades of experience</h2>
+      <p className="text-[15px] font-light leading-[1.8] mb-4" style={{ color: vars.g500 }}>
+        AIO Fusion has been designed by B2B PR agency Simpatico PR, building on decades of experience in PR and journalism.
+      </p>
+      <p className="text-[15px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+        Our ambition is to make the fusion of human expertise and a pioneering AI communications technology available to in-house PR and marketing teams as well as PR agencies and consultants - enabling you to leverage the power of answer engines with a single automated platform.
+      </p>
+
+      <div className="p-6 rounded-2xl mb-10" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.accent }}>Developed by Bluhalo</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g500 }}>
+          The AIO Fusion platform is engineered in partnership with Bluhalo, an independent agency advisory and intelligence practice with deep technology and AI delivery expertise.
+        </p>
+      </div>
+
+      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+        <Mail size={16} /> Get in Touch
+      </a>
+    </MarketingPage>
+  );
+}
+
+function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+  return (
+    <MarketingPage title="Get in touch" eyebrow={<><Mail size={12} /> Contact</> as any} {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
+        Get in touch to book a platform demo and enquire about pricing.
+      </p>
+      <div className="space-y-3">
+        <a href="mailto:info@aiofusion.ai" className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md" style={{ borderColor: vars.g200 }}>
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.08)" }}>
+            <Mail size={20} color={vars.accent} />
+          </div>
+          <div className="flex-1">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Email</p>
+            <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>info@aiofusion.ai</p>
+          </div>
+          <ArrowUpRight size={18} color={vars.accent} />
+        </a>
+        <a href="#" className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md" style={{ borderColor: vars.g200 }}>
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.08)" }}>
+            <Users size={20} color={vars.accent} />
+          </div>
+          <div className="flex-1">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>LinkedIn</p>
+            <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>Follow AIO Fusion <span className="text-[12px] font-light italic" style={{ color: vars.g400 }}>(coming soon)</span></p>
+          </div>
+          <ArrowUpRight size={18} color={vars.accent} />
+        </a>
+        <a href="#" className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md" style={{ borderColor: vars.g200 }}>
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.08)" }}>
+            <BookOpen size={20} color={vars.accent} />
+          </div>
+          <div className="flex-1">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Substack</p>
+            <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>Subscribe to insights <span className="text-[12px] font-light italic" style={{ color: vars.g400 }}>(coming soon)</span></p>
+          </div>
+          <ArrowUpRight size={18} color={vars.accent} />
+        </a>
+      </div>
+    </MarketingPage>
+  );
+}
+
 function App() {
-  const [view, setView] = useState<"landing" | "platform" | "for-agents">("landing");
+  const [view, setView] = useState<"landing" | "platform" | "for-agents" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
@@ -3147,8 +3313,30 @@ function App() {
     setActiveClient((prev) => (prev && prev.id === clientId ? { ...prev, logo: logoDataUrl } : prev));
   };
 
+  const goToView = (v: string) => {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "landing") {
+      setView(v as any);
+      window.scrollTo(0, 0);
+    } else if (v === "landing#features") {
+      setView("landing");
+      setTimeout(() => { document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }, 100);
+    }
+  };
+
   if (view === "landing") {
-    return <LandingPage onLogin={() => setView("platform")} onNavigateAgents={() => setView("for-agents")} />;
+    return <LandingPage onLogin={() => setView("platform")} onNavigateAgents={() => setView("for-agents")} onNavigate={goToView} />;
+  }
+  if (view === "for-inhouse") {
+    return <ForInhousePage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+  }
+  if (view === "insights") {
+    return <InsightsPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+  }
+  if (view === "about") {
+    return <AboutPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+  }
+  if (view === "contact") {
+    return <ContactPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
 
   if (view === "for-agents") {
