@@ -78,6 +78,65 @@ Legend: ✅ done · ⚠️ partial · ⏳ flagged for next phase
 - ✅ Code review pass (final fix applied: toolbar uses `onMouseDown` + `preventDefault` so selection isn't lost when clicking Bold/Italic/Link/Image)
 - ✅ This coverage checklist
 
+## Scoring engine — how it works & how to manage it
+
+Every project on the Authority Planner gets a **Visibility score (out of 50)** + an **Authority score (out of 50)** = **Total out of 100**. The Planner header sums these across all projects to give the projected programme score and breaks it down by content type.
+
+### The three inputs
+
+**1. Content-type weights** (visibility weight / authority weight, each out of 10):
+
+| Content type | Visibility | Authority |
+|---|---|---|
+| Press release | 8 | 7 |
+| Article | 7 | 8 |
+| Case study | 6 | 9 |
+| Whitepaper | 5 | 10 |
+| Blog post | 6 | 5 |
+| Social post | 8 | 3 |
+| Event copy | 5 | 6 |
+| Speaker submission | 4 | 8 |
+| Award submission | 4 | 9 |
+| Directory entry | 3 | 4 |
+
+**2. Channel multiplier** (Visibility only) — `0.5 + (channels × 0.25)`, capped at 1.5×. So 1 channel = 0.75×, 4+ channels = 1.5×. Reaching more outlets boosts visibility but doesn't change authority.
+
+**3. Status multiplier** (both scores) — discounts work-in-progress so the projected total reflects delivery confidence:
+- Approved → 1.0×
+- Review → 0.85×
+- Drafting → 0.7×
+- Planned → 0.5×
+
+### The formulas
+
+- **Visibility** = content-type vis weight × channel multiplier × status multiplier (scaled to /50)
+- **Authority** = content-type auth weight × status multiplier (scaled to /50)
+- **Total** = Visibility + Authority (/100)
+
+Worked example — a Press release in Review status going to 4 channels:
+- Channels: 0.5 + 4×0.25 = 1.5×
+- Status: 0.85×
+- Visibility ≈ 8 × 1.5 × 0.85 → ~26/50
+- Authority ≈ 7 × 0.85 → ~17/50
+- **Total ≈ 43/100**
+
+Move the same project to Approved → ~30 visibility + ~20 authority = ~50/100.
+
+### How to manage / tune the scoring
+
+All scoring config lives in **one place**: `artifacts/aio-fusion/src/App.tsx`, the `CONTENT_TYPE_WEIGHTS` constant and the `scoreProject` function.
+
+- **Re-weight a content type** — change the `vis` and `auth` numbers in `CONTENT_TYPE_WEIGHTS` (e.g. push whitepapers to vis 6 if you want them counted as more visible).
+- **Add a new content type** — add a row to `CONTENT_TYPE_WEIGHTS` and to the `CONTENT_TYPES` array in the Optimiser. It will appear automatically in the Optimiser dropdown and the Planner edit modal.
+- **Change channel reward curve** — edit the `channelMultiplier` line in `scoreProject` (e.g. raise the cap from 1.5× to 2× to reward broad distribution more).
+- **Change the status discount** — edit the `statusMultiplier` line (e.g. make Drafting 0.8× if you want to give in-flight work more credit).
+- **Add new channels** — add to the `CHANNEL_OPTIONS` array; they'll appear as multi-select pills in the modal automatically.
+- **Add new statuses** — extend the `PlannerStatus` type and the `STATUS_COLOURS` map, then add a branch to `statusMultiplier`.
+
+Live preview: every change shows immediately — open any project on the Planner and the **"Projected score"** panel at the bottom of the edit modal recalculates as you change content type / channels / status, and the header card updates the programme total in real time.
+
+Future enhancement worth considering: surface these weights as an **admin settings panel** so non-developers can tune them per client without touching code. Flag this if you'd like it built.
+
 ## Outstanding / for your decision
 - ⏳ **Bluhalo references** — the demo data still uses Bluhalo as the seed client and there are a couple of legacy mentions (`agencyBrands` array, an "About" line, the unused `PressReleasePage.tsx` sample). I held off stripping these because you may want Bluhalo kept as the visible demo. Tell me which of these to remove and I'll do it.
 - ⏳ Owned-channel deep technical tools (schema markup audit, robots.txt, H1–H3 audit, FAQ schema) — explicitly out of Phase 1 in our workflow doc, flagged for V2.
