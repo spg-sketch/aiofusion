@@ -2197,48 +2197,96 @@ function PlannerPage() {
         </div>
       )}
 
-      {view === "spreadsheet" && (
-        <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px] border-collapse">
-              <thead style={{ background: vars.g50 }}>
-                <tr>
-                  {["Week", "Project Title", "Type", "Content message", "Audience", "Channels", "Spokesperson", "Status", "Release date", "Notes", "Score"].map((h) => (
-                    <th key={h} className="px-2.5 py-2.5 text-left font-semibold border-r" style={{ color: vars.g500, borderColor: vars.g200 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {projects.length === 0 ? (
-                  <tr><td colSpan={11} className="px-3 py-8 text-center text-[12px]" style={{ color: vars.g500 }}>No projects yet. Click "New project" to add one.</td></tr>
-                ) : (
-                  [...projects].sort((a, b) => a.week - b.week).map((p) => {
-                    const s = scoreProject(p, cfg);
-                    const cs = STATUS_COLOURS[p.status];
-                    return (
-                      <tr key={p.id} onClick={() => setEditing(p)} className="border-t cursor-pointer hover:bg-gray-50" style={{ borderColor: vars.g100 }}>
-                        <td className="px-2.5 py-2 border-r font-semibold" style={{ borderColor: vars.g100, color: vars.navy }}>W{p.week}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.navy }}>{p.title}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.contentType}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 220 }}>{p.keyMessage || <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 160 }}>{p.audience || <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.channels.length ? p.channels.join(", ") : <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.spokesperson || <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100 }}>
-                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
-                        </td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.releaseDate || <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 200 }}>{p.notes || <span style={{ color: vars.g300 }}>—</span>}</td>
-                        <td className="px-2.5 py-2 font-bold" style={{ color: vars.accent }}>{Math.round(s.visibility + s.authority)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+      {view === "spreadsheet" && (() => {
+        const SLOTS_PER_WEEK = 6;
+        const TEAL = "#5BA8B5";
+        const TEAL_DARK = "#3A8693";
+        const SLOT_BG_A = "#F2F8F9";
+        const SLOT_BG_B = "#E6F0F2";
+        const HEADER_BG = "#9FD0D7";
+        const COLS = ["Week of", "Project Title", "Content message", "Audience", "Release Channel a.", "Release Channel b.", "Release Channel c.", "Release Channel d.", "Spokes", "Status", "Release Date", "Notes", "Score"];
+        return (
+          <div className="flex gap-4 items-start">
+            <div className="flex-1 bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g200 }}>
+                <h3 className="text-[15px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[11px] border-collapse">
+                  <thead>
+                    <tr>
+                      {COLS.map((h) => (
+                        <th key={h} className="px-2 py-2 text-left font-semibold border" style={{ color: vars.navy, borderColor: "#FFFFFF", background: HEADER_BG, whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeks.map((w) => {
+                      const wkProjects = projects.filter((p) => p.week === w);
+                      const rowCount = Math.max(SLOTS_PER_WEEK, wkProjects.length);
+                      const label = weekDateLabel(w);
+                      return Array.from({ length: rowCount }).map((_, i) => {
+                        const p = wkProjects[i];
+                        const s = p ? scoreProject(p, cfg) : null;
+                        const cs = p ? STATUS_COLOURS[p.status] : null;
+                        const ch = p ? p.channels : [];
+                        const slotBg = i % 2 === 0 ? SLOT_BG_A : SLOT_BG_B;
+                        return (
+                          <tr key={`${w}-${i}`}>
+                            {i === 0 && (
+                              <td rowSpan={rowCount} className="text-center font-semibold align-middle border" style={{ background: TEAL, color: "white", borderColor: "white", borderRightColor: TEAL_DARK, minWidth: 70, fontSize: 12 }}>
+                                {label}
+                              </td>
+                            )}
+                            {p ? (
+                              <>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.navy }}>{p.title}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 200 }}>{p.keyMessage || ""}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.audience || ""}</td>
+                                {[0, 1, 2, 3].map((idx) => (
+                                  <td key={idx} onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{ch[idx] || ""}</td>
+                                ))}
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.status}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 180 }}>{p.notes || ""}</td>
+                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.accent }}>{Math.round(s!.visibility + s!.authority)}</td>
+                              </>
+                            ) : (
+                              Array.from({ length: 12 }).map((__, c) => (
+                                <td
+                                  key={c}
+                                  onClick={c === 0 ? () => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); } : undefined}
+                                  className={`px-2 py-1.5 border ${c === 0 ? "cursor-pointer" : ""}`}
+                                  style={{ background: slotBg, borderColor: "white", color: vars.g300, minHeight: 24 }}
+                                  title={c === 0 ? `Add project to ${label}` : undefined}
+                                >
+                                  {c === 0 && i === wkProjects.length ? <span style={{ fontSize: 10, color: vars.g400 }}>+ Add project</span> : ""}
+                                </td>
+                              ))
+                            )}
+                          </tr>
+                        );
+                      });
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bg-white border rounded-xl p-3 w-[140px] flex-shrink-0" style={{ borderColor: vars.g200 }}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 text-center" style={{ color: vars.g500 }}>Status Key</p>
+              <div className="space-y-1.5">
+                {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((st) => {
+                  const cs = STATUS_COLOURS[st];
+                  return (
+                    <div key={st} className="text-center text-[11px] font-semibold py-1.5 rounded" style={{ background: cs.bg, color: cs.fg }}>{st}</div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {view === "cards" && (
       <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
@@ -2862,6 +2910,17 @@ function getISOWeek(d: Date) {
   date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
   return Math.ceil(((+date - +yearStart) / 86400000 + 1) / 7);
+}
+
+function weekDateLabel(weekNumber: number, year: number = new Date().getFullYear()): string {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const target = new Date(week1Monday);
+  target.setUTCDate(week1Monday.getUTCDate() + (weekNumber - 1) * 7);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${target.getUTCDate()}-${months[target.getUTCMonth()]}`;
 }
 
 type ScoringConfig = {
