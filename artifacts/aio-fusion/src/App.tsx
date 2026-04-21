@@ -2598,7 +2598,7 @@ const agencyBrands = [
 ];
 
 
-function LandingPage({ onLogin, onNavigateAgents, onNavigate }: { onLogin: () => void; onNavigateAgents: () => void; onNavigate: (v: string) => void }) {
+function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () => void; onNavigateAgencies: () => void; onNavigate: (v: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -2611,7 +2611,7 @@ function LandingPage({ onLogin, onNavigateAgents, onNavigate }: { onLogin: () =>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
             <button onClick={() => onNavigate("for-inhouse")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For In-house</button>
-            <button onClick={onNavigateAgents} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</button>
+            <button onClick={onNavigateAgencies} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</button>
             <button onClick={() => onNavigate("insights")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Insights</button>
             <button onClick={() => onNavigate("about")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">About</button>
             <button onClick={() => onNavigate("contact")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Contact</button>
@@ -2631,7 +2631,7 @@ function LandingPage({ onLogin, onNavigateAgents, onNavigate }: { onLogin: () =>
           <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Features</a>
             <button onClick={() => { setMenuOpen(false); onNavigate("for-inhouse"); }} className="text-[13px] font-light text-white/60 py-2 text-left">For In-house</button>
-            <button onClick={() => { setMenuOpen(false); onNavigateAgents(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agencies</button>
+            <button onClick={() => { setMenuOpen(false); onNavigateAgencies(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agencies</button>
             <button onClick={() => { setMenuOpen(false); onNavigate("insights"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Insights</button>
             <button onClick={() => { setMenuOpen(false); onNavigate("about"); }} className="text-[13px] font-light text-white/60 py-2 text-left">About</button>
             <button onClick={() => { setMenuOpen(false); onNavigate("contact"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Contact</button>
@@ -2846,10 +2846,11 @@ function LandingPage({ onLogin, onNavigateAgents, onNavigate }: { onLogin: () =>
             <div className="flex items-center gap-6 text-[13px] font-light flex-wrap justify-center" style={{ color: vars.g400 }}>
               <a href="#features" className="hover:underline">Features</a>
               <button onClick={() => onNavigate("for-inhouse")} className="hover:underline">For In-house</button>
-              <button onClick={onNavigateAgents} className="hover:underline">For Agencies</button>
+              <button onClick={onNavigateAgencies} className="hover:underline">For Agencies</button>
               <button onClick={() => onNavigate("insights")} className="hover:underline">Insights</button>
               <button onClick={() => onNavigate("about")} className="hover:underline">About</button>
               <button onClick={() => onNavigate("contact")} className="hover:underline">Contact</button>
+              <button onClick={() => onNavigate("for-agents")} className="hover:underline opacity-70">For AI agents</button>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
@@ -3255,7 +3256,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
             {[
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
-              { l: "For Agencies", v: "for-agents" },
+              { l: "For Agencies", v: "for-agencies" },
               { l: "Insights", v: "insights" },
               { l: "About", v: "about" },
               { l: "Contact", v: "contact" },
@@ -3329,6 +3330,49 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
       </div>
       <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
         <Mail size={16} /> Book a Demo
+      </a>
+    </MarketingPage>
+  );
+}
+
+function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+  return (
+    <MarketingPage title="Integrate AI optimisation into your client service" eyebrow={<><Users size={12} /> For Agencies</> as any} dark {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+        Run every client programme on a single platform built for the AI age. AIO Fusion gives PR and marketing agencies one workspace per client, scored content, predictable planning and the measurement story their clients are starting to ask for.
+      </p>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(255,255,255,0.75)" }}>
+        Add AI visibility to your existing service without rebuilding your tech stack, hiring new specialists or rewriting client retainers.
+      </p>
+      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
+      <div className="grid sm:grid-cols-2 gap-3 mb-10">
+        {[
+          { title: "One workspace per client", desc: "Spin up a fully isolated programme for every client, with their own intake, plan, archive and reporting." },
+          { title: "Multi-client dashboard", desc: "Switch between clients in a click; see programme health and scores across your whole book of business." },
+          { title: "Optional client review access", desc: "Invite your client in as a reviewer or viewer when you want their sign-off, keep them out when you don't." },
+          { title: "Scored, defensible plans", desc: "Every project carries a visibility and authority score so client conversations move from opinion to evidence." },
+          { title: "Productise your AI offering", desc: "Package GEO, AI authority audits and AI-ready content as new retainers without building tooling from scratch." },
+          { title: "Measurement clients will pay for", desc: "Coverage per key message, audience reach, ideas-to-outcomes ratio and AI authority growth, per client." },
+        ].map((it) => (
+          <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.2)" }}>
+                <Check size={11} color={vars.teal} />
+              </div>
+              <div>
+                <p className="text-[14px] font-semibold text-white mb-0.5">{it.title}</p>
+                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>{it.desc}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Partner with Simpatico</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Designed by working PR consultants, AIO Fusion is built to slot into how agencies already operate. Talk to us about partner pricing, white-labelled reporting and onboarding for your team.</p>
+      </div>
+      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+        <Mail size={16} /> Talk to Us
       </a>
     </MarketingPage>
   );
@@ -3442,7 +3486,7 @@ function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigat
 }
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform" | "for-agents" | "for-inhouse" | "insights" | "about" | "contact">("landing");
+  const [view, setView] = useState<"landing" | "platform" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
@@ -3453,7 +3497,7 @@ function App() {
   };
 
   const goToView = (v: string) => {
-    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "landing") {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "landing") {
       setView(v as any);
       window.scrollTo(0, 0);
     } else if (v === "landing#features") {
@@ -3463,10 +3507,13 @@ function App() {
   };
 
   if (view === "landing") {
-    return <LandingPage onLogin={() => setView("platform")} onNavigateAgents={() => setView("for-agents")} onNavigate={goToView} />;
+    return <LandingPage onLogin={() => setView("platform")} onNavigateAgencies={() => setView("for-agencies")} onNavigate={goToView} />;
   }
   if (view === "for-inhouse") {
     return <ForInhousePage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+  }
+  if (view === "for-agencies") {
+    return <ForAgenciesPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
   if (view === "insights") {
     return <InsightsPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
