@@ -122,20 +122,25 @@ Worked example — a Press release in Review status going to 4 channels:
 
 Move the same project to Approved → ~30 visibility + ~20 authority = ~50/100.
 
-### How to manage / tune the scoring
+### How to manage / tune the scoring (no code required)
 
-All scoring config lives in **one place**: `artifacts/aio-fusion/src/App.tsx`, the `CONTENT_TYPE_WEIGHTS` constant and the `scoreProject` function.
+The scoring engine is now fully tunable from the UI via the **"Scoring settings"** button in the Authority Planner header. All changes are persisted per-browser to `localStorage` (`aio.scoring.v1`).
 
-- **Re-weight a content type** — change the `vis` and `auth` numbers in `CONTENT_TYPE_WEIGHTS` (e.g. push whitepapers to vis 6 if you want them counted as more visible).
-- **Add a new content type** — add a row to `CONTENT_TYPE_WEIGHTS` and to the `CONTENT_TYPES` array in the Optimiser. It will appear automatically in the Optimiser dropdown and the Planner edit modal.
-- **Change channel reward curve** — edit the `channelMultiplier` line in `scoreProject` (e.g. raise the cap from 1.5× to 2× to reward broad distribution more).
-- **Change the status discount** — edit the `statusMultiplier` line (e.g. make Drafting 0.8× if you want to give in-flight work more credit).
-- **Add new channels** — add to the `CHANNEL_OPTIONS` array; they'll appear as multi-select pills in the modal automatically.
-- **Add new statuses** — extend the `PlannerStatus` type and the `STATUS_COLOURS` map, then add a branch to `statusMultiplier`.
+Inside the panel:
+- **Content type weights** — table of all content types with editable Visibility (0–10) and Authority (0–10) weights. Add new types or remove existing ones.
+- **Channel multiplier** — edit the Base, Step, and Cap numbers that control how much extra Visibility each channel adds. Add or remove channels in the channel list (these populate the multi-select pills in the project edit modal).
+- **Status multipliers** — set the discount for each status (Planned / Drafting / Review / Approved).
+- **Reset to defaults** restores the original config; **Save settings** applies and recalculates every projected score live.
 
 Live preview: every change shows immediately — open any project on the Planner and the **"Projected score"** panel at the bottom of the edit modal recalculates as you change content type / channels / status, and the header card updates the programme total in real time.
 
-Future enhancement worth considering: surface these weights as an **admin settings panel** so non-developers can tune them per client without touching code. Flag this if you'd like it built.
+#### Safety behaviour when settings change
+To prevent stale data from quietly inflating scores after you remove a channel or content type:
+- On Save, all existing projects are **normalised**: any channel that no longer exists in the config is stripped from the project, and any project whose content type was removed is remapped to the first available type.
+- The scoring engine itself only counts channels still present in the active config when computing the channel multiplier — so a removed channel never contributes to Visibility, even if it survives in legacy data.
+- New projects created via "+ New project" are seeded from the first available content type and channel in the current config (no hardcoded fallbacks).
+
+Developer notes (only relevant if extending core types): adding a new **status** still requires a code change — extend the `PlannerStatus` union and the `STATUS_COLOURS` map in `App.tsx`. Everything else is data-driven from the settings panel.
 
 ## Outstanding / for your decision
 - ⏳ **Bluhalo references** — the demo data still uses Bluhalo as the seed client and there are a couple of legacy mentions (`agencyBrands` array, an "About" line, the unused `PressReleasePage.tsx` sample). I held off stripping these because you may want Bluhalo kept as the visible demo. Tell me which of these to remove and I'll do it.
