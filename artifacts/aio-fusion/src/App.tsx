@@ -1175,7 +1175,7 @@ function DiagnosticPage({
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Analysing with Claude & OpenAI...
+                    Analysing with Claude & ChatGPT...
                   </>
                 ) : (
                   <>
@@ -1191,7 +1191,7 @@ function DiagnosticPage({
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine analysis</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  Your content is being analysed by both Claude and OpenAI simultaneously. Results from both engines will be merged to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
+                  Your content is being analysed by both Claude and ChatGPT simultaneously. Results from both engines will be merged to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
                 </p>
               </div>
             )}
@@ -1254,7 +1254,7 @@ function DiagnosticPage({
               )}
               {result.sources.openai && (
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
-                  OpenAI: {result.sources.openai.score}/100
+                  ChatGPT: {result.sources.openai.score}/100
                 </span>
               )}
               <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
@@ -3637,7 +3637,7 @@ function App() {
 
             <div className="grid sm:grid-cols-2 gap-4 mb-14">
               {[
-                { title: "AI-powered content diagnostics", desc: "Scored authority report across 6 signal categories using Claude and OpenAI." },
+                { title: "AI-powered content diagnostics", desc: "Scored authority report across 6 signal categories using Claude and ChatGPT." },
                 { title: "Content optimisation with tracked changes", desc: "Every edit annotated with reasoning so the business understands what changed and why." },
                 { title: "Structured authority planning", desc: "Forward PR plans scored across 8 categories for predicted AI authority impact." },
                 { title: "Multi-LLM coverage", desc: "Built for ChatGPT, Perplexity, Claude and Gemini." },
