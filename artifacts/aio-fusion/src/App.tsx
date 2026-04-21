@@ -2072,6 +2072,7 @@ function PlannerPage() {
   const [editing, setEditing] = useState<PlannerProject | null>(null);
   const [cfg, setCfg] = useState<ScoringConfig>(loadScoringConfig());
   const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<"cards" | "spreadsheet">("cards");
   const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
   const updateCfg = (next: ScoringConfig) => {
     setCfg(next); saveScoringConfig(next);
@@ -2139,6 +2140,14 @@ function PlannerPage() {
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Plan and score your forward PR and marketing schedule for AI authority impact.</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border bg-white p-0.5" style={{ borderColor: vars.g200 }} role="group" aria-label="Planner view">
+            <button onClick={() => setView("cards")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "cards" ? vars.navy : "transparent", color: view === "cards" ? "white" : vars.g500 }}>
+              Cards
+            </button>
+            <button onClick={() => setView("spreadsheet")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "spreadsheet" ? vars.navy : "transparent", color: view === "spreadsheet" ? "white" : vars.g500 }}>
+              Spreadsheet
+            </button>
+          </div>
           <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Scoring settings">
             <Shield size={14} /> Scoring settings
           </button>
@@ -2188,6 +2197,50 @@ function PlannerPage() {
         </div>
       )}
 
+      {view === "spreadsheet" && (
+        <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11px] border-collapse">
+              <thead style={{ background: vars.g50 }}>
+                <tr>
+                  {["Week", "Project Title", "Type", "Content message", "Audience", "Channels", "Spokesperson", "Status", "Release date", "Notes", "Score"].map((h) => (
+                    <th key={h} className="px-2.5 py-2.5 text-left font-semibold border-r" style={{ color: vars.g500, borderColor: vars.g200 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {projects.length === 0 ? (
+                  <tr><td colSpan={11} className="px-3 py-8 text-center text-[12px]" style={{ color: vars.g500 }}>No projects yet. Click "New project" to add one.</td></tr>
+                ) : (
+                  [...projects].sort((a, b) => a.week - b.week).map((p) => {
+                    const s = scoreProject(p, cfg);
+                    const cs = STATUS_COLOURS[p.status];
+                    return (
+                      <tr key={p.id} onClick={() => setEditing(p)} className="border-t cursor-pointer hover:bg-gray-50" style={{ borderColor: vars.g100 }}>
+                        <td className="px-2.5 py-2 border-r font-semibold" style={{ borderColor: vars.g100, color: vars.navy }}>W{p.week}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.navy }}>{p.title}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.contentType}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 220 }}>{p.keyMessage || <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 160 }}>{p.audience || <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.channels.length ? p.channels.join(", ") : <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.spokesperson || <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100 }}>
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
+                        </td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500 }}>{p.releaseDate || <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 border-r" style={{ borderColor: vars.g100, color: vars.g500, maxWidth: 200 }}>{p.notes || <span style={{ color: vars.g300 }}>—</span>}</td>
+                        <td className="px-2.5 py-2 font-bold" style={{ color: vars.accent }}>{Math.round(s.visibility + s.authority)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {view === "cards" && (
       <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
@@ -2239,6 +2292,7 @@ function PlannerPage() {
           </table>
         </div>
       </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setEditing(null)}>
