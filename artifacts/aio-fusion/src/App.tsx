@@ -2070,18 +2070,32 @@ function OptimiserPage({
 function PlannerPage() {
   const [projects, setProjects] = useState<PlannerProject[]>(loadPlannerProjects());
   const [editing, setEditing] = useState<PlannerProject | null>(null);
-
+  const [cfg, setCfg] = useState<ScoringConfig>(loadScoringConfig());
+  const [showSettings, setShowSettings] = useState(false);
   const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
+  const updateCfg = (next: ScoringConfig) => {
+    setCfg(next); saveScoringConfig(next);
+    const types = Object.keys(next.typeWeights);
+    const fallbackType = types[0] || "Press release";
+    const normalised = projects.map((p) => ({
+      ...p,
+      channels: p.channels.filter((c) => next.channels.includes(c)),
+      contentType: next.typeWeights[p.contentType] ? p.contentType : fallbackType,
+    }));
+    update(normalised);
+  };
   const addProject = () => {
     const w = getISOWeek(new Date());
+    const defaultType = Object.keys(cfg.typeWeights)[0] || "Press release";
+    const defaultChannel = cfg.channels[0];
     const np: PlannerProject = {
       id: `proj-${Date.now()}`,
       title: "New project",
-      contentType: "Press release",
+      contentType: defaultType,
       spokesperson: "",
       keyMessage: "",
       audience: "",
-      channels: ["Priority"],
+      channels: defaultChannel ? [defaultChannel] : [],
       week: w,
       status: "Planned",
       releaseDate: "",
@@ -2105,7 +2119,7 @@ function PlannerPage() {
 
   const totals = projects.reduce(
     (acc, p) => {
-      const s = scoreProject(p);
+      const s = scoreProject(p, cfg);
       acc.visibility += s.visibility;
       acc.authority += s.authority;
       acc.byType[p.contentType] = (acc.byType[p.contentType] || 0) + s.visibility + s.authority;
@@ -2124,9 +2138,14 @@ function PlannerPage() {
           <h1 className="text-3xl sm:text-4xl mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Authority Planner</h1>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Plan and score your forward PR and marketing schedule for AI authority impact.</p>
         </div>
-        <button onClick={addProject} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
-          <Plus size={14} /> New project
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Scoring settings">
+            <Shield size={14} /> Scoring settings
+          </button>
+          <button onClick={addProject} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+            <Plus size={14} /> New project
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
@@ -2181,7 +2200,7 @@ function PlannerPage() {
             <tbody>
               {weeks.map((w) => {
                 const wkProjects = projects.filter((p) => p.week === w);
-                const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p); return s + sc.visibility + sc.authority; }, 0);
+                const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p, cfg); return s + sc.visibility + sc.authority; }, 0);
                 return (
                   <tr key={w} className="border-t" style={{ borderColor: vars.g100 }}>
                     <td className="px-3 py-3 align-top sticky left-0 z-10 bg-white" style={{ minWidth: 90 }}>
@@ -2194,7 +2213,7 @@ function PlannerPage() {
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {wkProjects.map((p) => {
-                            const s = scoreProject(p);
+                            const s = scoreProject(p, cfg);
                             const cs = STATUS_COLOURS[p.status];
                             return (
                               <button key={p.id} onClick={() => setEditing(p)} className="text-left rounded-lg border p-3 hover:shadow-sm transition-all min-w-[220px] max-w-[280px] bg-white" style={{ borderColor: vars.g200 }}>
@@ -2237,7 +2256,7 @@ function PlannerPage() {
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Content type</label>
                   <select value={editing.contentType} onChange={(e) => setEditing({ ...editing, contentType: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-                    {Object.keys(CONTENT_TYPE_WEIGHTS).map((t) => <option key={t} value={t}>{t}</option>)}
+                    {Object.keys(cfg.typeWeights).map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
@@ -2264,7 +2283,7 @@ function PlannerPage() {
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Release channels (multi-select)</label>
                 <div className="flex flex-wrap gap-1.5">
-                  {CHANNEL_OPTIONS.map((c) => {
+                  {cfg.channels.map((c) => {
                     const on = editing.channels.includes(c);
                     return (
                       <button
@@ -2299,15 +2318,15 @@ function PlannerPage() {
                 <div className="flex items-center gap-4">
                   <div>
                     <span className="text-[11px]" style={{ color: vars.g500 }}>Visibility</span>
-                    <p className="text-[18px] font-bold" style={{ color: vars.accent }}>{Math.round(scoreProject(editing).visibility)}/50</p>
+                    <p className="text-[18px] font-bold" style={{ color: vars.accent }}>{Math.round(scoreProject(editing, cfg).visibility)}/50</p>
                   </div>
                   <div>
                     <span className="text-[11px]" style={{ color: vars.g500 }}>Authority</span>
-                    <p className="text-[18px] font-bold" style={{ color: vars.teal }}>{Math.round(scoreProject(editing).authority)}/50</p>
+                    <p className="text-[18px] font-bold" style={{ color: vars.teal }}>{Math.round(scoreProject(editing, cfg).authority)}/50</p>
                   </div>
                   <div className="ml-auto">
                     <span className="text-[11px]" style={{ color: vars.g500 }}>Total</span>
-                    <p className="text-[24px] font-bold" style={{ color: vars.navy }}>{Math.round(scoreProject(editing).visibility + scoreProject(editing).authority)}</p>
+                    <p className="text-[24px] font-bold" style={{ color: vars.navy }}>{Math.round(scoreProject(editing, cfg).visibility + scoreProject(editing, cfg).authority)}</p>
                   </div>
                 </div>
               </div>
@@ -2322,6 +2341,136 @@ function PlannerPage() {
           </div>
         </div>
       )}
+
+      {showSettings && (
+        <ScoringSettingsModal cfg={cfg} onSave={(c) => { updateCfg(c); setShowSettings(false); }} onClose={() => setShowSettings(false)} />
+      )}
+    </div>
+  );
+}
+
+function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; onSave: (c: ScoringConfig) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<ScoringConfig>(JSON.parse(JSON.stringify(cfg)));
+  const [newType, setNewType] = useState("");
+  const [newChannel, setNewChannel] = useState("");
+  const updateWeight = (t: string, k: "vis" | "auth", v: number) => {
+    setDraft({ ...draft, typeWeights: { ...draft.typeWeights, [t]: { ...draft.typeWeights[t], [k]: v } } });
+  };
+  const removeType = (t: string) => {
+    const tw = { ...draft.typeWeights }; delete tw[t]; setDraft({ ...draft, typeWeights: tw });
+  };
+  const addType = () => {
+    const name = newType.trim(); if (!name || draft.typeWeights[name]) return;
+    setDraft({ ...draft, typeWeights: { ...draft.typeWeights, [name]: { vis: 5, auth: 5 } } });
+    setNewType("");
+  };
+  const removeChannel = (c: string) => setDraft({ ...draft, channels: draft.channels.filter((x) => x !== c) });
+  const addChannel = () => {
+    const name = newChannel.trim(); if (!name || draft.channels.includes(name)) return;
+    setDraft({ ...draft, channels: [...draft.channels, name] }); setNewChannel("");
+  };
+  const updateStatus = (s: PlannerStatus, v: number) => setDraft({ ...draft, statusMultipliers: { ...draft.statusMultipliers, [s]: v } });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+          <div>
+            <h2 className="text-[16px] font-semibold" style={{ color: vars.navy }}>Scoring settings</h2>
+            <p className="text-[11px]" style={{ color: vars.g500 }}>Tune how Visibility and Authority scores are calculated. Saved per browser.</p>
+          </div>
+          <button onClick={onClose} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+        </div>
+        <div className="p-6 space-y-6">
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[13px] font-semibold" style={{ color: vars.navy }}>Content type weights</h3>
+              <span className="text-[11px]" style={{ color: vars.g500 }}>Each weight 0–10</span>
+            </div>
+            <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
+              <table className="w-full text-[12px]">
+                <thead style={{ background: vars.g50 }}>
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold" style={{ color: vars.g500 }}>Type</th>
+                    <th className="px-3 py-2 text-left font-semibold w-24" style={{ color: vars.g500 }}>Visibility</th>
+                    <th className="px-3 py-2 text-left font-semibold w-24" style={{ color: vars.g500 }}>Authority</th>
+                    <th className="px-3 py-2 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(draft.typeWeights).map(([t, w]) => (
+                    <tr key={t} className="border-t" style={{ borderColor: vars.g100 }}>
+                      <td className="px-3 py-2" style={{ color: vars.navy }}>{t}</td>
+                      <td className="px-3 py-2"><input type="number" min={0} max={10} step={0.5} value={w.vis} onChange={(e) => updateWeight(t, "vis", parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
+                      <td className="px-3 py-2"><input type="number" min={0} max={10} step={0.5} value={w.auth} onChange={(e) => updateWeight(t, "auth", parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 rounded border text-[12px]" style={{ borderColor: vars.g200 }} /></td>
+                      <td className="px-3 py-2 text-right"><button onClick={() => removeType(t)} className="text-[11px]" style={{ color: vars.red }} title="Remove">×</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex gap-2 mt-2">
+              <input type="text" value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="Add new content type…" className="flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+              <button onClick={addType} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add type</button>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[13px] font-semibold mb-2" style={{ color: vars.navy }}>Channel multiplier (Visibility only)</h3>
+            <p className="text-[11px] mb-3" style={{ color: vars.g500 }}>Visibility multiplier = base + (channels × step), capped at max.</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Base</label>
+                <input type="number" step={0.05} value={draft.channelBase} onChange={(e) => setDraft({ ...draft, channelBase: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Step (per channel)</label>
+                <input type="number" step={0.05} value={draft.channelStep} onChange={(e) => setDraft({ ...draft, channelStep: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>Max (cap)</label>
+                <input type="number" step={0.05} value={draft.channelCap} onChange={(e) => setDraft({ ...draft, channelCap: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Channels</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {draft.channels.map((c) => (
+                  <span key={c} className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    {c}
+                    <button onClick={() => removeChannel(c)} style={{ color: vars.red }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input type="text" value={newChannel} onChange={(e) => setNewChannel(e.target.value)} placeholder="Add new channel…" className="flex-1 px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                <button onClick={addChannel} className="px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>Add channel</button>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[13px] font-semibold mb-2" style={{ color: vars.navy }}>Status multipliers</h3>
+            <p className="text-[11px] mb-3" style={{ color: vars.g500 }}>Discounts both Visibility and Authority by delivery confidence.</p>
+            <div className="grid grid-cols-4 gap-3">
+              {(Object.keys(draft.statusMultipliers) as PlannerStatus[]).map((s) => (
+                <div key={s}>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider mb-1 block" style={{ color: vars.g500 }}>{s}</label>
+                  <input type="number" min={0} max={1} step={0.05} value={draft.statusMultipliers[s]} onChange={(e) => updateStatus(s, parseFloat(e.target.value) || 0)} className="w-full px-3 py-2 rounded-lg border text-[12px]" style={{ borderColor: vars.g200 }} />
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+        <div className="px-6 py-4 border-t flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+          <button onClick={() => setDraft(JSON.parse(JSON.stringify(DEFAULT_SCORING)))} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500, background: vars.g50 }}>Reset to defaults</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+            <button onClick={() => onSave(draft)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Save settings</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2661,25 +2810,53 @@ function getISOWeek(d: Date) {
   return Math.ceil(((+date - +yearStart) / 86400000 + 1) / 7);
 }
 
-const CONTENT_TYPE_WEIGHTS: Record<string, { vis: number; auth: number }> = {
-  "Press release":      { vis: 8,  auth: 7 },
-  "Article":            { vis: 7,  auth: 8 },
-  "Case study":         { vis: 6,  auth: 9 },
-  "Whitepaper":         { vis: 5,  auth: 10 },
-  "Blog post":          { vis: 6,  auth: 5 },
-  "Social post":        { vis: 8,  auth: 3 },
-  "Event copy":         { vis: 5,  auth: 6 },
-  "Speaker submission": { vis: 4,  auth: 8 },
-  "Award submission":   { vis: 4,  auth: 9 },
-  "Directory entry":    { vis: 3,  auth: 4 },
+type ScoringConfig = {
+  typeWeights: Record<string, { vis: number; auth: number }>;
+  channels: string[];
+  channelBase: number;
+  channelStep: number;
+  channelCap: number;
+  statusMultipliers: Record<PlannerStatus, number>;
 };
 
-const CHANNEL_OPTIONS = ["Priority", "National", "Specialist A", "Specialist B", "Specialist C", "Specialist D", "Owned", "LinkedIn"];
+const DEFAULT_SCORING: ScoringConfig = {
+  typeWeights: {
+    "Press release":      { vis: 8,  auth: 7 },
+    "Article":            { vis: 7,  auth: 8 },
+    "Case study":         { vis: 6,  auth: 9 },
+    "Whitepaper":         { vis: 5,  auth: 10 },
+    "Blog post":          { vis: 6,  auth: 5 },
+    "Social post":        { vis: 8,  auth: 3 },
+    "Event copy":         { vis: 5,  auth: 6 },
+    "Speaker submission": { vis: 4,  auth: 8 },
+    "Award submission":   { vis: 4,  auth: 9 },
+    "Directory entry":    { vis: 3,  auth: 4 },
+  },
+  channels: ["Priority", "National", "Specialist A", "Specialist B", "Specialist C", "Specialist D", "Owned", "LinkedIn"],
+  channelBase: 0.5,
+  channelStep: 0.25,
+  channelCap: 1.5,
+  statusMultipliers: { Approved: 1, Review: 0.85, Drafting: 0.7, Planned: 0.5 },
+};
 
-function scoreProject(p: PlannerProject) {
-  const weights = CONTENT_TYPE_WEIGHTS[p.contentType] || { vis: 5, auth: 5 };
-  const channelMultiplier = Math.min(1.5, 0.5 + p.channels.length * 0.25);
-  const statusMultiplier = p.status === "Approved" ? 1 : p.status === "Review" ? 0.85 : p.status === "Drafting" ? 0.7 : 0.5;
+const SCORING_KEY = "aio.scoring.v1";
+function loadScoringConfig(): ScoringConfig {
+  try {
+    const raw = localStorage.getItem(SCORING_KEY);
+    if (!raw) return DEFAULT_SCORING;
+    const parsed = JSON.parse(raw) as Partial<ScoringConfig>;
+    return { ...DEFAULT_SCORING, ...parsed, statusMultipliers: { ...DEFAULT_SCORING.statusMultipliers, ...(parsed.statusMultipliers || {}) }, typeWeights: parsed.typeWeights || DEFAULT_SCORING.typeWeights, channels: parsed.channels || DEFAULT_SCORING.channels };
+  } catch { return DEFAULT_SCORING; }
+}
+function saveScoringConfig(cfg: ScoringConfig) {
+  try { localStorage.setItem(SCORING_KEY, JSON.stringify(cfg)); } catch { /* noop */ }
+}
+
+function scoreProject(p: PlannerProject, cfg: ScoringConfig = loadScoringConfig()) {
+  const weights = cfg.typeWeights[p.contentType] || { vis: 5, auth: 5 };
+  const activeChannelCount = p.channels.filter((c) => cfg.channels.includes(c)).length;
+  const channelMultiplier = Math.min(cfg.channelCap, cfg.channelBase + activeChannelCount * cfg.channelStep);
+  const statusMultiplier = cfg.statusMultipliers[p.status] ?? 0.5;
   const visibility = Math.round(weights.vis * 5 * channelMultiplier * statusMultiplier * 0.125 * 10) / 10;
   const authority  = Math.round(weights.auth * 5 * statusMultiplier * 0.1 * 10) / 10;
   return { visibility: Math.min(50, visibility * 5), authority: Math.min(50, authority * 5) };
