@@ -64,7 +64,8 @@ import {
   Menu,
   X,
   LogIn,
-  Link,
+  Link as LinkIcon,
+  Image as ImageIcon,
 } from "lucide-react";
 
 type Client = {
@@ -1579,22 +1580,21 @@ function OptimiserPage({
               >
                 Paste Your Content
               </label>
-              <div
-                className="p-4 rounded-lg border min-h-[140px] flex items-start gap-3"
-                style={{
-                  borderColor: vars.g200,
-                  background: vars.g50,
-                }}
-              >
-                <ClipboardPaste
-                  size={16}
-                  className="mt-0.5"
-                  style={{ color: vars.g400 }}
+              <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
+                <div className="flex items-center gap-1 px-2 py-1.5 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }} className="px-2 py-1 rounded text-xs font-bold hover:bg-white" style={{ color: vars.navy }} title="Bold">B</button>
+                  <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic'); }} className="px-2 py-1 rounded text-xs italic hover:bg-white" style={{ color: vars.navy }} title="Italic">I</button>
+                  <span className="w-px h-4 mx-1" style={{ background: vars.g200 }} />
+                  <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Link URL'); if (url) document.execCommand('createLink', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Link"><LinkIcon size={12} /> Link</button>
+                  <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Image URL'); if (url) document.execCommand('insertImage', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Image"><ImageIcon size={12} /> Image</button>
+                </div>
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="p-4 min-h-[160px] text-sm outline-none"
+                  style={{ color: vars.navy }}
+                  data-placeholder="Paste your press release, article, case study or whitepaper here..."
                 />
-                <span className="text-sm" style={{ color: vars.g400 }}>
-                  Paste your press release, article, case study or
-                  whitepaper here...
-                </span>
               </div>
             </div>
             <button

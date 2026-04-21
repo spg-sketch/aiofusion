@@ -35,3 +35,9 @@ id = "qawjlreOycm5uPDnUUiup"
 uri = "file://AIO_Fusion_User_Workflow.txt"
 type = "text"
 title = "AIO Fusion — User Workflow"
+
+[[outputs]]
+id = "vSQTxMdY-DnWm9Gb5_KDF"
+uri = "file://COVERAGE_CHECKLIST.md"
+type = "text"
+title = "AIO Fusion — Build Coverage Checklist"
