@@ -1036,6 +1036,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
           </div>
+
+          <div className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5" style={{ background: vars.navy, color: "white" }}>
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>Close the loop</p>
+              <h3 className="text-[18px] sm:text-[20px] font-semibold mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>Re-run Earned Visibility</h3>
+              <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
+                You have measured the cycle. Now re-check whether AI models are mentioning the brand more often than they were last time. Each pass should move the needle on AI citations.
+              </p>
+            </div>
+            {onNavigate && (
+              <button onClick={() => onNavigate("llm-check")} className="px-5 py-3 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-all hover:brightness-110 self-start sm:self-auto" style={{ background: "#2896b9", color: "white" }}>
+                Re-run Earned Visibility <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

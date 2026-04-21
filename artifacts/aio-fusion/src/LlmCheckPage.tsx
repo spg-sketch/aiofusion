@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
+import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import {
   Eye,
   Search,
@@ -13,6 +14,10 @@ import {
   Zap,
   Users,
   ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Repeat,
+  FileEdit,
 } from "lucide-react";
 
 const vars = {
@@ -176,11 +181,17 @@ function highlightName(text: string, name: string): React.ReactNode {
   );
 }
 
-export default function LlmCheckPage({ activeClient }: { activeClient: Client }) {
+export default function LlmCheckPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (p: string) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
   const [customKeywords, setCustomKeywords] = useState("");
+  const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
+  const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
+
+  useEffect(() => {
+    setCycleData(loadCycle(activeClient.id));
+  }, [activeClient.id]);
 
   async function runCheck() {
     setLoading(true);
@@ -211,6 +222,8 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
 
       const data = await resp.json();
       setResult(data);
+      const updated = recordCycle(activeClient.id, data.visibilityScore);
+      setCycleData(updated);
     } catch (err: any) {
       setError(err.message || "Failed to run visibility check");
     } finally {
@@ -309,9 +322,28 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
               <div className="flex flex-col sm:flex-row items-center gap-6">
                 <ScoreRing score={result.visibilityScore} size={110} />
                 <div className="flex-1 text-center sm:text-left">
-                  <h2 className="text-[20px] font-bold mb-1" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
-                    AI Visibility Score
-                  </h2>
+                  <div className="flex items-center justify-center sm:justify-start gap-3 mb-1 flex-wrap">
+                    <h2 className="text-[20px] font-bold" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+                      AI Visibility Score
+                    </h2>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>
+                      <Repeat size={10} className="inline mr-1" /> Cycle {cycleData.cycle}
+                    </span>
+                    {previousScore !== null && (() => {
+                      const delta = result.visibilityScore - previousScore;
+                      const positive = delta > 0;
+                      const same = delta === 0;
+                      const Icon = positive ? TrendingUp : same ? ArrowRight : TrendingDown;
+                      const color = positive ? vars.green : same ? vars.g500 : vars.red;
+                      const bg = positive ? "#ECFDF5" : same ? vars.g100 : "#FEE2E2";
+                      return (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: bg, color }}>
+                          <Icon size={10} className="inline mr-1" />
+                          {positive ? "+" : ""}{delta} vs last cycle ({previousScore}%)
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <p className="text-[14px] mb-3" style={{ color: vars.g500 }}>
                     {result.companyName} was mentioned in <strong style={{ color: vars.navy }}>{result.totalMentions}</strong> of <strong style={{ color: vars.navy }}>{result.totalProbes}</strong> queries across both models
                   </p>
@@ -420,6 +452,49 @@ export default function LlmCheckPage({ activeClient }: { activeClient: Client })
                   </p>
                 </div>
               </div>
+            </div>
+
+            {cycleData.history.length > 1 && (
+              <div className="border rounded-xl p-5" style={{ background: "white", borderColor: vars.g200 }}>
+                <h3 className="text-[15px] font-bold mb-3 flex items-center gap-2" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+                  <Repeat size={16} style={{ color: vars.accent }} /> Visibility over cycles
+                </h3>
+                <div className="flex items-end gap-2 h-24">
+                  {cycleData.history.map((h, i) => {
+                    const pct = Math.max(4, h.score);
+                    const isLast = i === cycleData.history.length - 1;
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-[10px] font-semibold" style={{ color: vars.g500 }}>{h.score}%</span>
+                        <div className="w-full rounded-t" style={{ height: `${pct}%`, background: isLast ? vars.accent : vars.lightBg }} />
+                        <span className="text-[9px]" style={{ color: vars.g400 }}>C{i + 1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4" style={{ background: vars.navy, color: "white" }}>
+              <div className="flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] mb-1" style={{ color: "rgba(255,255,255,0.6)" }}>
+                  <Repeat size={11} className="inline mr-1" /> Continue the loop
+                </p>
+                <p className="text-[15px] font-semibold mb-1">Use this score to drive the next cycle</p>
+                <p className="text-[12px] font-light" style={{ color: "rgba(255,255,255,0.7)" }}>
+                  Optimise the next piece of content, push it through Plan and Release, then re-run this check. Each cycle should move the score.
+                </p>
+              </div>
+              {onNavigate && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button onClick={() => onNavigate("optimiser")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: vars.teal, color: "white" }}>
+                    <FileEdit size={14} /> Optimise content
+                  </button>
+                  <button onClick={() => onNavigate("planner")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+                    Open Planner <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="text-center py-4">

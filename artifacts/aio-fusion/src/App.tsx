@@ -66,7 +66,28 @@ import {
   LogIn,
   Link as LinkIcon,
   Image as ImageIcon,
+  Repeat,
+  TrendingDown,
 } from "lucide-react";
+
+export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
+export const cycleKey = (clientId: string) => `aio.cycle.${clientId}`;
+export function loadCycle(clientId: string): CycleHistory {
+  try {
+    const raw = localStorage.getItem(cycleKey(clientId));
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { cycle: 0, history: [] };
+}
+export function recordCycle(clientId: string, score: number): CycleHistory {
+  const cur = loadCycle(clientId);
+  const next: CycleHistory = {
+    cycle: cur.cycle + 1,
+    history: [...cur.history, { date: new Date().toISOString(), score }].slice(-12),
+  };
+  localStorage.setItem(cycleKey(clientId), JSON.stringify(next));
+  return next;
+}
 
 type Client = {
   id: string;
@@ -672,6 +693,17 @@ function DashboardPage({
     { icon: ClipboardPaste, label: "Complete Intake", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
   ];
 
+  const cycle = loadCycle(activeClient.id);
+  const loopSteps: { label: string; sub: string; icon: any; action: string }[] = [
+    { label: "Intake", sub: "Capture", icon: ClipboardPaste, action: "intake" },
+    { label: "Diagnose", sub: "Audit", icon: Search, action: "diagnostic" },
+    { label: "Visibility", sub: "Check AI", icon: Eye, action: "llm-check" },
+    { label: "Optimise", sub: "Content", icon: FileEdit, action: "optimiser" },
+    { label: "Plan", sub: "Schedule", icon: Calendar, action: "planner" },
+    { label: "Release", sub: "Publish", icon: Send, action: "gateway" },
+    { label: "Measure", sub: "Outcomes", icon: BarChart3, action: "measure" },
+  ];
+
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="mb-6 sm:mb-8">
@@ -681,6 +713,46 @@ function DashboardPage({
         <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
           Your AI authority performance at a glance
         </p>
+      </div>
+
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg }}>
+              <Repeat size={16} style={{ color: vars.accent }} />
+            </div>
+            <div>
+              <h3 className="text-[13px] font-bold" style={{ color: vars.navy }}>The AIO Loop</h3>
+              <p className="text-[11px] font-light" style={{ color: vars.g500 }}>Each pass should move the needle on AI citations</p>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>
+            <Repeat size={11} className="inline mr-1" /> Cycle {cycle.cycle || 1}
+          </span>
+        </div>
+        <div className="flex items-stretch gap-1 sm:gap-2 overflow-x-auto">
+          {loopSteps.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <div key={s.label} className="flex items-center flex-shrink-0">
+                <button onClick={() => onNavigate(s.action)} className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all hover:bg-gray-50 min-w-[64px]">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
+                    <Icon size={16} />
+                  </div>
+                  <span className="text-[11px] font-semibold text-center" style={{ color: vars.navy }}>{s.label}</span>
+                  <span className="text-[10px] font-light text-center" style={{ color: vars.g400 }}>{s.sub}</span>
+                </button>
+                {i < loopSteps.length - 1 && (
+                  <ChevronRight size={14} className="flex-shrink-0" style={{ color: vars.g300 }} />
+                )}
+              </div>
+            );
+          })}
+          <div className="flex items-center flex-shrink-0 pl-1">
+            <Repeat size={16} style={{ color: vars.accent }} />
+            <span className="text-[10px] font-semibold ml-1 hidden sm:inline" style={{ color: vars.accent }}>Repeat</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
@@ -3634,7 +3706,7 @@ function App() {
         {currentPage === "diagnostic" && (
           <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
-        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} />}
+        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} />}
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
