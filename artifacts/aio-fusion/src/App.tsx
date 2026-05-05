@@ -68,6 +68,7 @@ import {
   Image as ImageIcon,
   Repeat,
   TrendingDown,
+  FolderOpen,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -318,7 +319,7 @@ function SidebarContent({
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
-            <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch client</span>
+            <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch project</span>
           </div>
         </button>
         {onLogoUpdate && (
@@ -427,10 +428,12 @@ function ClientSelectorPage({
   onSelectClient,
   clientLogos,
   onLogoUpdate,
+  onBackToPlatformHome,
 }: {
   onSelectClient: (client: Client) => void;
   clientLogos: Record<string, string>;
   onLogoUpdate: (clientId: string, logoDataUrl: string) => void;
+  onBackToPlatformHome: () => void;
 }) {
   const totalContent = clients.reduce((s, c) => s + c.contentCount, 0);
   const avgScore = Math.round(
@@ -443,10 +446,13 @@ function ClientSelectorPage({
         className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
         style={{ background: "white", borderColor: vars.g200 }}
       >
-        <div className="flex items-center gap-3.5">
+        <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
-        </div>
-        <div className="flex items-center gap-3.5">
+        </button>
+        <div className="flex items-center gap-4">
+          <button onClick={onBackToPlatformHome} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
+            <ArrowLeft size={14} /> Platform home
+          </button>
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
             style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}
@@ -470,17 +476,17 @@ function ClientSelectorPage({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
               style={{ background: "rgba(31,116,143,0.06)", color: "#1f748f" }}
             >
-              <Building2 size={12} /> Client Hub
+              <Building2 size={12} /> Project Hub
             </div>
           </div>
           <h1
             className="text-2xl sm:text-3xl tracking-tight"
             style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
           >
-            Your Clients
+            Your Projects
           </h1>
           <p className="text-[15px] font-light mt-2" style={{ color: vars.g500 }}>
-            Select a client to manage their GEO content and authority planning.
+            Select a Project to manage AI optimisation, on-going PR and marketing output.
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
@@ -509,8 +515,10 @@ function ClientSelectorPage({
               <div
                 key={client.id}
                 onClick={() => onSelectClient(client)}
-                className="rounded-2xl border overflow-hidden cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 group"
-                style={{ background: "white", borderColor: vars.g200 }}
+                className="rounded-2xl border-2 overflow-hidden cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-offset-2 group"
+                style={{ background: "white", borderColor: vars.g200, ["--tw-ring-color" as any]: client.color }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = client.color; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; }}
               >
                 <div className="h-1" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}66)` }} />
                 <div className="p-7">
@@ -722,7 +730,7 @@ function DashboardPage({
               <Repeat size={16} style={{ color: vars.accent }} />
             </div>
             <div>
-              <h3 className="text-[13px] font-bold" style={{ color: vars.navy }}>The AIO Loop</h3>
+              <h3 className="text-[13px] font-bold" style={{ color: vars.navy }}>The AIO Marketing Loop</h3>
               <p className="text-[11px] font-light" style={{ color: vars.g500 }}>Each pass should move the needle on AI citations</p>
             </div>
           </div>
@@ -3529,8 +3537,280 @@ function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigat
   );
 }
 
+function PlatformHomePage({
+  onContinueToProjects,
+  onArchivedProjects,
+  onGuidance,
+  onBackToLanding,
+}: {
+  onContinueToProjects: () => void;
+  onArchivedProjects: () => void;
+  onGuidance: () => void;
+  onBackToLanding: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const loopSteps: { label: string; sub: string; icon: any }[] = [
+    { label: "Intake", sub: "Capture", icon: ClipboardPaste },
+    { label: "Diagnose", sub: "Audit", icon: Search },
+    { label: "Visibility", sub: "Check AI", icon: Eye },
+    { label: "Optimise", sub: "Content", icon: FileEdit },
+    { label: "Plan", sub: "Schedule", icon: Calendar },
+    { label: "Release", sub: "Publish", icon: Send },
+    { label: "Measure", sub: "Outcomes", icon: BarChart3 },
+  ];
+  const buttons = [
+    { icon: Plus, title: "Create Project", desc: "Start a new client or in-house programme.", onClick: onContinueToProjects },
+    { icon: FolderOpen, title: "Current Projects", desc: "Open the Project Hub to manage live programmes.", onClick: onContinueToProjects },
+    { icon: Archive, title: "Archived Projects", desc: "Browse past projects stored in the archive.", onClick: onArchivedProjects },
+    { icon: BookOpen, title: "Guidance", desc: "How-to articles and short videos for AIO Fusion.", onClick: onGuidance },
+  ];
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+      <header className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
+        <button onClick={onBackToLanding} className="flex items-center gap-3.5">
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+        </button>
+        <button onClick={onBackToLanding} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
+          <ArrowLeft size={14} /> Back to website
+        </button>
+      </header>
+      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-6xl mx-auto">
+        <div className="mb-8 sm:mb-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            <Sparkles size={12} /> Platform Home
+          </div>
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            Welcome to AIO Fusion
+          </h1>
+          <p className="text-[15px] font-light mt-2 max-w-2xl" style={{ color: vars.g500 }}>
+            Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-7 mb-8 sm:mb-10">
+          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
+                <LogIn size={16} />
+              </div>
+              <div>
+                <h2 className="text-[15px] font-bold" style={{ color: vars.navy }}>Sign in to the platform</h2>
+                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+              </div>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); onContinueToProjects(); }} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Email</label>
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: vars.accent }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Password</label>
+                <div className="relative">
+                  <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: vars.accent }}
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110"
+                style={{ background: vars.accent }}
+              >
+                <LogIn size={14} /> Continue
+              </button>
+              <p className="text-[11px] font-light text-center" style={{ color: vars.g400 }}>
+                Demo build &middot; any details continue to your projects.
+              </p>
+            </form>
+          </div>
+
+          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
+                <Repeat size={16} />
+              </div>
+              <div>
+                <h2 className="text-[15px] font-bold" style={{ color: vars.navy }}>The AIO Marketing Loop</h2>
+                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>Each pass moves the needle on AI citations.</p>
+              </div>
+            </div>
+            <div className="flex items-stretch gap-1 sm:gap-2 overflow-x-auto pb-1">
+              {loopSteps.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <div key={s.label} className="flex items-center flex-shrink-0">
+                    <div className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg min-w-[64px]">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
+                        <Icon size={16} />
+                      </div>
+                      <span className="text-[11px] font-semibold text-center" style={{ color: vars.navy }}>{s.label}</span>
+                      <span className="text-[10px] font-light text-center" style={{ color: vars.g400 }}>{s.sub}</span>
+                    </div>
+                    {i < loopSteps.length - 1 && (
+                      <ChevronRight size={14} className="flex-shrink-0" style={{ color: vars.g300 }} />
+                    )}
+                  </div>
+                );
+              })}
+              <div className="flex items-center flex-shrink-0 pl-1">
+                <Repeat size={16} style={{ color: vars.accent }} />
+                <span className="text-[10px] font-semibold ml-1 hidden sm:inline" style={{ color: vars.accent }}>Repeat</span>
+              </div>
+            </div>
+            <p className="text-[12px] font-light mt-4 leading-relaxed" style={{ color: vars.g500 }}>
+              The AIO Marketing Loop runs through every project: capture intake, diagnose visibility, optimise content, plan releases, measure impact, then repeat.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
+          {buttons.map((b) => {
+            const Icon = b.icon;
+            return (
+              <button
+                key={b.title}
+                onClick={b.onClick}
+                className="text-left rounded-2xl border-2 p-5 transition-all hover:shadow-lg hover:-translate-y-1"
+                style={{ background: "white", borderColor: vars.g200 }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = vars.accent; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; }}
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style={{ background: vars.lightBg, color: vars.accent }}>
+                  <Icon size={18} />
+                </div>
+                <h3 className="text-[14px] font-bold mb-1" style={{ color: vars.navy }}>{b.title}</h3>
+                <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{b.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
+          <h2 className="text-[15px] font-bold mb-1" style={{ color: vars.navy }}>How AIO Fusion works</h2>
+          <p className="text-[12px] font-light mb-5" style={{ color: vars.g500 }}>Three movements, one continuous loop.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { num: "01", title: "Audit", desc: "Diagnose AI visibility and pinpoint the messages, content and citations that drive AI authority." },
+              { num: "02", title: "Optimise", desc: "Improve content and website signals so AI models can find, trust and recommend the business." },
+              { num: "03", title: "Release & Measure", desc: "Plan and publish PR and marketing activity, then track AI authority growth over time." },
+            ].map((s) => (
+              <div key={s.num} className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                <div className="text-[11px] font-bold tracking-[0.18em]" style={{ color: vars.accent }}>{s.num}</div>
+                <h3 className="text-[14px] font-bold mt-1 mb-1" style={{ color: vars.navy }}>{s.title}</h3>
+                <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GuidancePage({ onBack }: { onBack: () => void }) {
+  const articles = [
+    { title: "Getting started with AIO Fusion", desc: "A walk-through of the platform, from intake to measurement.", type: "Article" },
+    { title: "Running an AIO Diagnostic", desc: "How to interpret the diagnostic score and pick the first fixes.", type: "Article" },
+    { title: "Building a comms plan that scores", desc: "Turning the Comms Planner into AI authority impact.", type: "Article" },
+    { title: "Optimising content for AI citation", desc: "Tracked-changes editing for press releases, articles and case studies.", type: "Video" },
+    { title: "Measuring AI authority growth", desc: "Reading the cycle history and the released-coverage metrics.", type: "Video" },
+    { title: "Working with multiple projects", desc: "Project Hub, archived projects and switching between them.", type: "Article" },
+  ];
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+      <header className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center gap-3.5">
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+        </div>
+        <button onClick={onBack} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
+          <ArrowLeft size={14} /> Back to platform home
+        </button>
+      </header>
+      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-5xl mx-auto">
+        <div className="mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            <BookOpen size={12} /> Guidance
+          </div>
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            How-to articles and videos
+          </h1>
+          <p className="text-[15px] font-light mt-2 max-w-2xl" style={{ color: vars.g500 }}>
+            Short guides to get the most out of AIO Fusion. Articles and videos will be added as the platform grows.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+          {articles.map((a) => (
+            <div key={a.title} className="rounded-2xl border p-5 transition-all hover:shadow-md" style={{ background: "white", borderColor: vars.g200 }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-0.5 rounded" style={{ background: vars.lightBg, color: vars.accent }}>{a.type}</span>
+                <span className="text-[11px] font-light italic" style={{ color: vars.g400 }}>Coming soon</span>
+              </div>
+              <h3 className="text-[15px] font-bold mb-1" style={{ color: vars.navy }}>{a.title}</h3>
+              <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g500 }}>{a.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+      <header className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center gap-3.5">
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+        </div>
+        <button onClick={onBack} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
+          <ArrowLeft size={14} /> Back to platform home
+        </button>
+      </header>
+      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-5xl mx-auto">
+        <div className="mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
+            <Archive size={12} /> Archived Projects
+          </div>
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            Past projects
+          </h1>
+          <p className="text-[15px] font-light mt-2 max-w-2xl" style={{ color: vars.g500 }}>
+            Projects that have been completed or paused are stored here for reference. Open a project to revisit its intake, content, plan and reports.
+          </p>
+        </div>
+        <div className="rounded-2xl border p-12 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
+            <Archive size={20} />
+          </div>
+          <h3 className="text-[15px] font-bold mb-1" style={{ color: vars.navy }}>No archived projects yet</h3>
+          <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>
+            Once you complete or pause a project from the Project Hub it will appear here, with full intake, content and report history preserved.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const [view, setView] = useState<"landing" | "platform" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
@@ -3550,23 +3830,41 @@ function App() {
     }
   };
 
+  const enterPlatform = () => setView("platform-home");
+
   if (view === "landing") {
-    return <LandingPage onLogin={() => setView("platform")} onNavigateAgencies={() => setView("for-agencies")} onNavigate={goToView} />;
+    return <LandingPage onLogin={enterPlatform} onNavigateAgencies={() => setView("for-agencies")} onNavigate={goToView} />;
   }
   if (view === "for-inhouse") {
-    return <ForInhousePage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ForInhousePage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
   if (view === "for-agencies") {
-    return <ForAgenciesPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ForAgenciesPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
   if (view === "insights") {
-    return <InsightsPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <InsightsPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
   if (view === "about") {
-    return <AboutPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <AboutPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
   }
   if (view === "contact") {
-    return <ContactPage onLogin={() => setView("platform")} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ContactPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+  }
+  if (view === "platform-home") {
+    return (
+      <PlatformHomePage
+        onContinueToProjects={() => setView("platform")}
+        onArchivedProjects={() => setView("archived-projects")}
+        onGuidance={() => setView("guidance")}
+        onBackToLanding={() => setView("landing")}
+      />
+    );
+  }
+  if (view === "guidance") {
+    return <GuidancePage onBack={() => setView("platform-home")} />;
+  }
+  if (view === "archived-projects") {
+    return <ArchivedProjectsPage onBack={() => setView("platform-home")} />;
   }
 
   if (view === "for-agents") {
@@ -3582,7 +3880,7 @@ function App() {
                 <ArrowLeft size={14} className="inline mr-1" /> Back
               </button>
               <button
-                onClick={() => setView("platform")}
+                onClick={enterPlatform}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
                 style={{ background: vars.accent }}
               >
@@ -3628,7 +3926,7 @@ function App() {
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button
-                onClick={() => setView("platform")}
+                onClick={enterPlatform}
                 className="flex items-center justify-center gap-2.5 px-8 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110"
                 style={{ background: vars.accent }}
               >
@@ -3657,6 +3955,7 @@ function App() {
         }}
         clientLogos={clientLogos}
         onLogoUpdate={handleLogoUpdate}
+        onBackToPlatformHome={() => setView("platform-home")}
       />
     );
   }
