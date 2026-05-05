@@ -3841,13 +3841,18 @@ function LandingPageB({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
    LANDING PAGE C  -  Vibrant / Image-led
    Per Patrick d2 feedback (C12-14): more colour, more imagery,
    less navy-dominant, less text-heavy bottom half. Cream paper base,
-   colour-blocked feature panels (coral / teal / gold), image-rich
-   How It Works grid, warm coral final CTA.
+   colour-blocked feature panels (teal / raspberry / gold), image-rich
+   How It Works grid, raspberry→gold gradient final CTA.
    ============================================================ */
 function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin: () => void; onNavigate: (v: string) => void; variant: "a" | "b" | "c"; onPickVariant: (v: "a" | "b" | "c") => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const paper = "#FBF6EC";
   const ink = "#102B36";
+  // Variant C accent: raspberry/berry-pink (replaces coral to differentiate from bouncebackability.co's orange).
+  const accent = "#C8497A";
+  const accentDark = "#A33860";
+  const accentTint = "#F4B4CD";
+  const accentSoft = "#FBE3ED";
   return (
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <VariantPicker current={variant} onPick={onPickVariant} />
@@ -3902,12 +3907,12 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         <div className="relative max-w-7xl mx-auto px-4 sm:px-8">
           <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             <div className="lg:col-span-7">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: vars.coralSoft, border: `1px solid ${vars.coral}40` }}>
-                <Sparkles size={12} color={vars.coral} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.coral }}>Generative Engine Optimisation</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+                <Sparkles size={12} color={accent} />
+                <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
               </div>
               <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] leading-[1.02] mb-6" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                Business visibility<br />for the <span style={{ color: vars.coral }}>AI Age</span>
+                Business visibility<br />for the <span style={{ color: accent }}>AI Age</span>
               </h1>
               <p className="text-xl md:text-2xl max-w-xl leading-snug font-light mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
                 The AI Authority Platform for PR and marketing professionals.
@@ -3916,7 +3921,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
                 With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={onLogin} className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 shadow-lg" style={{ background: vars.coral, color: "white", boxShadow: "0 12px 28px rgba(224,120,86,0.32)" }}>
+                <button onClick={onLogin} className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 shadow-lg" style={{ background: accent, color: "white", boxShadow: "0 12px 28px rgba(200,73,122,0.32)" }}>
                   <LogIn size={15} /> See the Platform
                 </button>
                 <a href="#features" className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5" style={{ color: ink, border: `1.5px solid ${ink}30` }}>
@@ -3928,7 +3933,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <div className="relative w-full max-w-[360px]">
                 <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full" style={{ background: vars.gold, opacity: 0.25 }} />
                 <div className="absolute -bottom-6 -left-6 w-40 h-40 rounded-full" style={{ background: vars.teal, opacity: 0.2 }} />
-                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ background: `linear-gradient(135deg, ${vars.coral} 0%, #d96546 100%)`, boxShadow: "0 30px 60px -20px rgba(224,120,86,0.45)" }}>
+                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accentDark} 100%)`, boxShadow: "0 30px 60px -20px rgba(200,73,122,0.45)" }}>
                   <div className="absolute inset-0 flex items-center justify-center p-10">
                     <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-full max-w-[220px]" />
                   </div>
@@ -3943,11 +3948,11 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         </div>
       </section>
 
-      {/* FEATURE PANELS - three full-colour blocks (coral, teal, gold) */}
+      {/* FEATURE PANELS - three full-colour blocks (teal, raspberry, gold) */}
       <section className="pb-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 mb-10">
           <div className="max-w-3xl">
-            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>The Platform</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>The Platform</span>
             <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
             <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery — the full GEO, PR and marketing content workflow in one platform.</p>
           </div>
@@ -3956,7 +3961,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
           <div className="grid md:grid-cols-3 gap-5">
             {[
               { title: "AI Visibility Diagnostic", copy: "Audit the performance of your earned media and website in the eyes of LLMs like Claude and ChatGPT. See exactly where you're strong and what needs work.", icon: Search, bg: vars.teal, tint: "#9DD6E8" },
-              { title: "Optimise PR and Marketing", copy: "Maximise the impact your PR and marketing has on humans and AI, with easy-to-use content optimisation tools that will give you consistent authority from press releases to award entries.", icon: FileEdit, bg: vars.coral, tint: "#FBC4B0" },
+              { title: "Optimise PR and Marketing", copy: "Maximise the impact your PR and marketing has on humans and AI, with easy-to-use content optimisation tools that will give you consistent authority from press releases to award entries.", icon: FileEdit, bg: accent, tint: accentTint },
               { title: "Automate your Communications", copy: "AIO Fusion enables in-house marketers and communications professionals to rapidly research, plan, scale and predict the impact of content and marketing activity.", icon: Bot, bg: vars.gold, tint: "#EFD49B" },
             ].map((box) => (
               <div key={box.title} className="relative p-7 sm:p-8 rounded-2xl overflow-hidden" style={{ background: box.bg, color: "white" }}>
@@ -3974,7 +3979,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
           <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
               { icon: Calendar, title: "Comms Planner", copy: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.teal },
-              { icon: Lightbulb, title: "Media & Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: vars.coral },
+              { icon: Lightbulb, title: "Media & Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: accent },
               { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
             ].map((b) => (
               <div key={b.title} className="p-5 rounded-2xl bg-white" style={{ border: `1px solid ${b.accent}30`, boxShadow: `0 4px 14px -6px ${b.accent}25` }}>
@@ -4002,7 +4007,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { n: "01", img: step1Img, title: "Diagnose your AI visibility", body: "AIO Fusion diagnoses your business or brand visibility with LLM agents such as ChatGPT, Claude, Perplexity, CoPilot and Gemini.", accent: vars.teal },
-              { n: "02", img: step2Img, title: "Build a GEO strategy", body: "Create a GEO strategy combining optimised content and technical AIO steps for your website and all your future PR and marketing output.", accent: vars.coral },
+              { n: "02", img: step2Img, title: "Build a GEO strategy", body: "Create a GEO strategy combining optimised content and technical AIO steps for your website and all your future PR and marketing output.", accent: accent },
               { n: "03", img: step3Img, title: "Plan and predict impact", body: "Optimise and predict the impact of your forward marketing and PR plan for AI authority and search.", accent: vars.gold },
               { n: "04", img: step4Img, title: "Optimise content output", body: "Optimise your on-going PR and marketing content output using a tailored AI authority editor.", accent: vars.green },
               { n: "05", img: step5Img, title: "Measure, report and predict", body: "Measure, report and predict marketing performance and AI visibility, tracking business messages, spokespeople and earned media.", accent: vars.accent },
@@ -4013,7 +4018,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
                   <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
                   <div className="absolute top-3 left-3 w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold" style={{ background: "white", color: s.accent }}>{s.n}</div>
                   {s.soon && (
-                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "white", color: vars.coral }}>Coming soon</span>
+                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "white", color: accent }}>Coming soon</span>
                   )}
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
@@ -4030,24 +4035,24 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
       <section id="features" className="py-20" style={{ background: vars.creamDeep }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
-            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>Key features</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>Key features</span>
             <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing.</h2>
             <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g600 }}>Designed to AI Optimise PR and marketing at scale.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your strategy and audit AI authority across earned and owned media.", accent: vars.teal },
-              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.coral },
+              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: accent },
               { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit press releases, articles, events and awards content.", accent: vars.gold },
               { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing.", accent: vars.green },
               { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts.", accent: vars.accent },
-              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: vars.coral },
+              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: accent },
               { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.teal },
               { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
               { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
               { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
               { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations.", accent: vars.amber, soon: true },
-              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: vars.coral, soon: true },
+              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
             ].map((tool) => (
               <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${tool.accent}25` }}>
                 <div className="flex items-center gap-2.5 mb-2">
@@ -4081,14 +4086,14 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.gold }}>Insights</span>
               <h2 className="text-4xl md:text-5xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Practical thinking on AI visibility.</h2>
             </div>
-            <button onClick={() => onNavigate("insights")} className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70" style={{ color: vars.coral }}>
+            <button onClick={() => onNavigate("insights")} className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70" style={{ color: accent }}>
               All articles <ArrowRight size={14} />
             </button>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
-              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation.", url: "#", external: false, accent: vars.coral },
+              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation.", url: "#", external: false, accent: accent },
               { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme.", url: "#", external: false, accent: vars.gold },
             ].map((a) => (
               <a key={a.title} href={a.url} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
@@ -4107,11 +4112,11 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
       </section>
 
       {/* MADE BY COMMS - warm colour-blocked panel */}
-      <section className="py-20" style={{ background: vars.coralSoft }}>
+      <section className="py-20" style={{ background: accentSoft }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="grid md:grid-cols-12 gap-10 items-center">
             <div className="md:col-span-5">
-              <div className="aspect-square rounded-2xl overflow-hidden relative" style={{ background: `linear-gradient(135deg, ${vars.coral} 0%, #c75a3d 100%)`, boxShadow: "0 30px 60px -20px rgba(224,120,86,0.4)" }}>
+              <div className="aspect-square rounded-2xl overflow-hidden relative" style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accentDark} 100%)`, boxShadow: "0 30px 60px -20px rgba(200,73,122,0.4)" }}>
                 <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full" style={{ background: vars.gold, opacity: 0.4 }} />
                 <div className="absolute -bottom-10 -left-10 w-52 h-52 rounded-full" style={{ background: vars.teal, opacity: 0.3 }} />
                 <div className="absolute inset-0 flex items-center justify-center p-12">
@@ -4120,7 +4125,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               </div>
             </div>
             <div className="md:col-span-7">
-              <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>Made by Comms Experts</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>Made by Comms Experts</span>
               <p className="text-2xl md:text-3xl mt-3 mb-5 leading-[1.3]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
                 "An AIO platform built by comms professionals. We believe it will transform PR and marketing for good."
               </p>
@@ -4133,8 +4138,8 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         </div>
       </section>
 
-      {/* FINAL CTA - warm coral block (not navy) */}
-      <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(120deg, ${vars.coral} 0%, #d96546 60%, ${vars.gold} 130%)`, color: "white" }}>
+      {/* FINAL CTA - raspberry → gold gradient (not navy) */}
+      <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(120deg, ${accent} 0%, ${accentDark} 60%, ${vars.gold} 130%)`, color: "white" }}>
         <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full opacity-20" style={{ background: vars.cream }} />
         <div className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full opacity-15" style={{ background: vars.teal }} />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-8">
@@ -4145,7 +4150,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <p className="text-[15px] leading-relaxed font-light text-white/85 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
-              <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: vars.coral }}>
+              <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: accent }}>
                 <span className="flex items-center gap-2"><Calendar size={16} /> Book a Demo</span> <ArrowRight size={14} />
               </a>
               <a href="mailto:info@aiofusion.ai" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
