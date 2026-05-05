@@ -3174,7 +3174,7 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate, variant, onPickV
         )}
       </nav>
 
-      <section className="relative flex items-center justify-center overflow-hidden py-24 sm:py-28 md:py-36" style={{ background: vars.navy, minHeight: "min(92vh, 920px)" }}>
+      <section className="relative flex items-center justify-center overflow-hidden pt-[80px] pb-6 sm:pt-[104px] sm:pb-8" style={{ background: vars.navy, minHeight: "100dvh" }}>
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,1) 0%, rgba(22,82,101,0.92) 45%, rgba(22,82,101,1) 100%)" }} />
           <div className="absolute w-[600px] h-[600px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "8%", right: "-12%", animation: "float1 22s ease-in-out infinite" }} />
@@ -3186,40 +3186,40 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate, variant, onPickV
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
           @keyframes pulse-glow { 0%, 100% { filter: drop-shadow(0 8px 32px rgba(224,120,86,0.25)); } 50% { filter: drop-shadow(0 12px 48px rgba(224,120,86,0.45)); } }
         `}</style>
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-8 text-center pt-16">
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-8 text-center">
           <img
             src={`${import.meta.env.BASE_URL}images/logo-white.png`}
             alt="AIO Fusion"
-            className="mx-auto mb-10 h-40 sm:h-52 md:h-64"
+            className="mx-auto mb-3 sm:mb-4 h-20 sm:h-24 md:h-28"
             style={{ animation: "pulse-glow 4s ease-in-out infinite" }}
           />
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/85 mb-8" style={{ background: "rgba(224,120,86,0.18)", border: "1px solid rgba(224,120,86,0.4)" }}>
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/85 mb-4" style={{ background: "rgba(224,120,86,0.18)", border: "1px solid rgba(224,120,86,0.4)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-4xl sm:text-5xl md:text-[3.75rem] lg:text-[4.25rem] text-white leading-[1.05] mb-3" style={{ fontFamily: "'Alice', Georgia, serif" }}>
             Business visibility<br />
             for the <span style={{ color: vars.coral }}>AI Age</span>
           </h1>
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto mb-4 leading-snug" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+          <p className="text-base sm:text-lg md:text-[1.25rem] text-white/90 max-w-3xl mx-auto mb-2 leading-snug" style={{ fontFamily: "'Alice', Georgia, serif" }}>
             The AI Authority Platform for PR and marketing professionals
           </p>
-          <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
+          <p className="text-sm sm:text-[15px] text-white/80 max-w-2xl mx-auto mb-5 leading-relaxed font-light">
             With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={onLogin}
-              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-lg"
+              className="flex items-center gap-2.5 px-8 py-3 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-lg"
               style={{ background: vars.coral, boxShadow: "0 12px 32px rgba(224,120,86,0.35)" }}
             >
-              <LogIn size={18} /> See the Platform
+              <LogIn size={16} /> See the Platform
             </button>
             <a
               href="#features"
-              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/95 transition-all hover:bg-white/15"
+              className="flex items-center gap-2.5 px-8 py-3 rounded-lg text-[14px] font-medium text-white/95 transition-all hover:bg-white/15"
               style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)" }}
             >
-              Explore Features <ArrowRight size={16} />
+              Explore Features <ArrowRight size={14} />
             </a>
           </div>
         </div>
