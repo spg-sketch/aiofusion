@@ -5495,7 +5495,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
           </div>
         </div>
       </nav>
-      <section className="pt-[120px] sm:pt-[160px] pb-12 sm:pb-16 px-4 sm:px-8" style={{ background: dark ? vars.navy : "#fff" }}>
+      <section className="pt-[120px] sm:pt-[160px] pb-8 sm:pb-12 px-4 sm:px-8" style={{ background: dark ? vars.navy : "#fff" }}>
         <div className="max-w-4xl mx-auto">
           {eyebrow && (
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: dark ? "rgba(40,150,185,0.15)" : "rgba(31,116,143,0.06)", color: dark ? vars.teal : vars.accent }}>
@@ -5505,7 +5505,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
           <h1 className="text-4xl md:text-5xl mb-5 leading-[1.1]" style={{ color: textCol, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
         </div>
       </section>
-      <section className="py-12 sm:py-16 px-4 sm:px-8" style={{ background: bg }}>
+      <section className="pt-8 sm:pt-12 pb-12 sm:pb-16 px-4 sm:px-8" style={{ background: bg }}>
         <div className="max-w-4xl mx-auto">{children}</div>
       </section>
       <footer className="py-10 border-t" style={{ background: dark ? "rgba(0,0,0,0.2)" : "#fff", borderColor: dark ? "rgba(255,255,255,0.1)" : vars.g200 }}>
