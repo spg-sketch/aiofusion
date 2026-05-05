@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import {
   Download,
@@ -11,19 +11,17 @@ import {
   X,
   Shield,
   FileText,
-  Target,
-  Users,
   BarChart3,
   CheckCircle2,
   Clock,
   ArrowRight,
   Eye,
-  Zap,
-  Star,
-  List,
+  Search,
+  Plus,
+  Trash2,
+  Sparkles,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
+  Globe,
 } from "lucide-react";
 
 const vars = {
@@ -33,6 +31,9 @@ const vars = {
   green: "#3D9B6B",
   amber: "#D4922A",
   red: "#C94A3E",
+  coral: "#E07856",
+  gold: "#C9A04E",
+  cream: "#F8F2E8",
   g50: "#FAFAFA",
   g100: "#F3F3F3",
   g200: "#E5E5E5",
@@ -56,6 +57,59 @@ type Client = {
   recentActivity: string;
 };
 
+const CONTENT_TYPES = [
+  "Press Release",
+  "Article (Trade Publication)",
+  "Case Study",
+  "Whitepaper",
+  "Blog Post",
+  "Social Post",
+  "Event Copy",
+  "Speaker Submission",
+  "Award Submission",
+  "Directory Entry",
+];
+
+const REGIONS = ["UK", "North America", "EMEA", "Global"];
+
+type TrackerRow = {
+  id: string;
+  date: string;
+  title: string;
+  type: string;
+  publication: string;
+  category: string;
+  spokesperson: string;
+  link: string;
+  reach: number;
+  score: number;
+};
+
+const TRACKER_KEY = "aio.earnedTracker.v1";
+const seedTracker: TrackerRow[] = [
+  { id: "t1", date: "2026-03-12", title: "AI authority is the new SEO", type: "Article (Trade Publication)", publication: "PRWeek", category: "Marketing & PR", spokesperson: "Spencer Gallagher", link: "https://prweek.com/...", reach: 480000, score: 9 },
+  { id: "t2", date: "2026-03-21", title: "Simpatico launches GEO benchmark", type: "Press Release", publication: "PRovoke", category: "Marketing & PR", spokesperson: "Helen Croydon", link: "https://provokemedia.com/...", reach: 220000, score: 7 },
+  { id: "t3", date: "2026-04-02", title: "How agencies measure AI visibility", type: "Article (Trade Publication)", publication: "Campaign", category: "Marketing & PR", spokesperson: "Spencer Gallagher", link: "https://campaignlive.co.uk/...", reach: 615000, score: 9 },
+  { id: "t4", date: "2026-04-09", title: "Case study: AIO Fusion at Lighthouse", type: "Case Study", publication: "B2B Marketing", category: "Marketing & PR", spokesperson: "Helen Croydon", link: "https://b2bmarketing.net/...", reach: 95000, score: 6 },
+  { id: "t5", date: "2026-04-15", title: "Whitepaper: GEO measurement framework", type: "Whitepaper", publication: "PR Moment", category: "Marketing & PR", spokesperson: "Spencer Gallagher", link: "https://prmoment.com/...", reach: 130000, score: 7 },
+];
+
+function loadTracker(): TrackerRow[] {
+  try {
+    const raw = localStorage.getItem(TRACKER_KEY);
+    if (!raw) {
+      localStorage.setItem(TRACKER_KEY, JSON.stringify(seedTracker));
+      return seedTracker;
+    }
+    return JSON.parse(raw) as TrackerRow[];
+  } catch {
+    return seedTracker;
+  }
+}
+
+function saveTracker(rows: TrackerRow[]) {
+  try { localStorage.setItem(TRACKER_KEY, JSON.stringify(rows)); } catch { /* ignore */ }
+}
 
 function ScoreBar({ label, score, max, description }: { label: string; score: number; max: number; description: string }) {
   const pct = Math.round((score / max) * 100);
@@ -90,24 +144,76 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
   );
 }
 
+function StatTile({ label, value, sub, color, icon: Icon }: { label: string; value: string; sub?: string; color?: string; icon?: any }) {
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>{label}</p>
+        {Icon && <Icon size={14} color={color || vars.accent} />}
+      </div>
+      <p className="text-2xl font-bold mt-1" style={{ color: color || vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{value}</p>
+      {sub && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{sub}</p>}
+    </div>
+  );
+}
+
+function CalloutBrief({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border p-3 sm:p-4 mb-4" style={{ background: vars.cream, borderColor: "#E6D7BC" }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <Sparkles size={14} color={vars.gold} />
+        <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.gold }}>{title}</span>
+      </div>
+      <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g600 }}>{children}</p>
+    </div>
+  );
+}
+
 export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"actions" | "overview" | "detail" | "released">("actions");
-  const [completedActions, setCompletedActions] = useState<Set<number>>(new Set());
-  const [actionFilter, setActionFilter] = useState<"all" | "Critical" | "High" | "Medium" | "Low">("all");
-  const [actionView, setActionView] = useState<"list" | "calendar" | "timeline">("list");
-  const [calendarMonth, setCalendarMonth] = useState(3);
-  const [calendarYear, setCalendarYear] = useState(2026);
+  const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo">("summary");
   const reportDate = "14 April 2026";
+  const projectStartDate = "2026-01-08";
   const authorityScore = activeClient.avgScore || 24;
+  const earnedScore = 20;
+  const websiteScore = 38;
+
+  const [rangeFrom, setRangeFrom] = useState(projectStartDate);
+  const [rangeTo, setRangeTo] = useState("2026-04-30");
+
+  const [tracker, setTracker] = useState<TrackerRow[]>(() => loadTracker());
+  useEffect(() => saveTracker(tracker), [tracker]);
+
+  const inRange = useMemo(() => tracker.filter(r => r.date >= rangeFrom && r.date <= rangeTo), [tracker, rangeFrom, rangeTo]);
+  const earnedRowsForCoverage = useMemo(() =>
+    inRange.filter(r => ["Press Release", "Article (Trade Publication)", "Case Study", "Whitepaper"].includes(r.type)),
+    [inRange]);
+
+  const audienceReach = inRange.reduce((s, r) => s + r.reach, 0);
+  const authorityPerPiece = inRange.length ? Math.round((inRange.reduce((s, r) => s + r.score, 0) / inRange.length) * 10) / 10 : 0;
+  const earnedAuthorityScore = Math.min(100, Math.round(inRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)));
+  const prCoverageCount = earnedRowsForCoverage.length;
 
   const categoryScores = [
-    { label: "Schema & Structured Data", score: 3, max: 15, description: "Organization, FAQ, and Article schema coverage" },
-    { label: "Content Architecture", score: 5, max: 15, description: "Answer-first formatting, semantic phrase density, heading structure" },
-    { label: "Source Authority", score: 4, max: 15, description: "NAP consistency, third-party profiles, citation network" },
+    { label: "Schema & Structured Data", score: 3, max: 15, description: "Organization, FAQ, Article schema coverage" },
+    { label: "Content Architecture", score: 5, max: 15, description: "Answer-first formatting, semantic phrase density" },
+    { label: "Source Authority", score: 4, max: 15, description: "NAP consistency, third-party profiles, citations" },
     { label: "Earned Media Signals", score: 7, max: 20, description: "Press mentions, backlink quality, spokesperson visibility" },
-    { label: "Earned Visibility", score: 3, max: 20, description: "Mentions and citations across ChatGPT, Perplexity, Google AI" },
+    { label: "Earned Visibility", score: 3, max: 20, description: "Mentions across ChatGPT, Perplexity, Claude, Gemini" },
     { label: "Technical Accessibility", score: 2, max: 15, description: "AI crawler access, robots.txt, sitemap, page speed" },
   ];
+
+  const websiteGeoScores = {
+    tech: [
+      { label: "Schema coverage", score: 6, max: 10, desc: "Organisation, FAQ and Article schema across key templates." },
+      { label: "Crawlability", score: 8, max: 10, desc: "AI agents (GPTBot, ClaudeBot, PerplexityBot) reach all priority pages." },
+      { label: "Page speed", score: 5, max: 10, desc: "LCP 3.2s on the homepage; target under 2.5s." },
+    ],
+    content: [
+      { label: "Entity clarity", score: 5, max: 10, desc: "Brand, founders and services need explicit, consistent definitions." },
+      { label: "Q&A snippet density", score: 4, max: 10, desc: "Add answer-first key takeaways to top 10 templates." },
+      { label: "Internal authority graph", score: 6, max: 10, desc: "Spokesperson and topic hubs partially in place." },
+    ],
+  };
 
   const llmScorecard = [
     { platform: "ChatGPT", mentions: 24, cited: true, rank: 3, sentiment: "Positive", trend: 8 },
@@ -137,99 +243,152 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     { item: "Key Takeaway Boxes", status: "fail" as const, detail: "No answer-first summary blocks on content pages" },
   ];
 
-  const priorityActions = [
-    { priority: "Critical", timeframe: "This week", action: "Implement Organization Schema on homepage", impact: "High", category: "Technical", startDate: "2026-04-15", endDate: "2026-04-17", durationDays: 3 },
-    { priority: "Critical", timeframe: "This week", action: "Deploy FAQ Schema markup on FAQ page", impact: "High", category: "Technical", startDate: "2026-04-16", endDate: "2026-04-18", durationDays: 3 },
-    { priority: "High", timeframe: "This week", action: "Create expert author profile pages with credentials", impact: "High", category: "Content", startDate: "2026-04-17", endDate: "2026-04-21", durationDays: 5 },
-    { priority: "High", timeframe: "This month", action: "Rewrite homepage descriptor with entity-rich copy", impact: "Medium", category: "Content", startDate: "2026-04-22", endDate: "2026-04-28", durationDays: 7 },
-    { priority: "High", timeframe: "This month", action: "Add answer-first key takeaway blocks to top 10 pages", impact: "High", category: "Content", startDate: "2026-04-24", endDate: "2026-05-05", durationDays: 12 },
-    { priority: "Medium", timeframe: "This month", action: "Fix Article Schema - add author and datePublished", impact: "Medium", category: "Technical", startDate: "2026-04-29", endDate: "2026-05-01", durationDays: 3 },
-    { priority: "Medium", timeframe: "This month", action: "Update 3 outdated third-party profiles (NAP)", impact: "Medium", category: "Authority", startDate: "2026-05-04", endDate: "2026-05-08", durationDays: 5 },
-    { priority: "Medium", timeframe: "This quarter", action: "Publish industry report with original research data", impact: "High", category: "Content", startDate: "2026-05-18", endDate: "2026-06-05", durationDays: 19 },
-    { priority: "Medium", timeframe: "This quarter", action: "Rewrite 4 product pages from promotional to factual", impact: "Medium", category: "Content", startDate: "2026-05-25", endDate: "2026-06-12", durationDays: 19 },
-    { priority: "Low", timeframe: "This quarter", action: "Add misconception and category authority FAQs", impact: "Low", category: "Content", startDate: "2026-06-08", endDate: "2026-06-19", durationDays: 12 },
-    { priority: "Low", timeframe: "This quarter", action: "Improve LCP to under 2.5 seconds", impact: "Low", category: "Technical", startDate: "2026-06-15", endDate: "2026-06-26", durationDays: 12 },
+  const monthlyTrend = [
+    { m: "Nov", total: 18, earned: 12, web: 32 },
+    { m: "Dec", total: 22, earned: 14, web: 33 },
+    { m: "Jan", total: 24, earned: 16, web: 34 },
+    { m: "Feb", total: 27, earned: 17, web: 35 },
+    { m: "Mar", total: 30, earned: 18, web: 36 },
+    { m: "Apr", total: authorityScore, earned: earnedScore, web: websiteScore },
   ];
+  const trendMax = Math.max(...monthlyTrend.flatMap(p => [p.total, p.earned, p.web])) + 4;
 
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const dayNames = ["M", "T", "W", "T", "F", "S", "S"];
-  const dayNamesFull = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const messageCoverage = useMemo(() => {
+    const buckets = [
+      { msg: "AI authority platform built by PR consultants", contains: ["authority", "platform"] },
+      { msg: "Generative engine optimisation expertise", contains: ["geo", "generative", "engine"] },
+      { msg: "Measurable AI citation outcomes", contains: ["citation", "measure", "benchmark"] },
+      { msg: "Tech + content fusion", contains: ["tech", "fusion", "content"] },
+    ];
+    return buckets.map(b => {
+      const matches = earnedRowsForCoverage.filter(r => b.contains.some(k => r.title.toLowerCase().includes(k)));
+      return { msg: b.msg, n: matches.length, articles: matches.filter(r => r.type === "Article (Trade Publication)").length, prs: matches.filter(r => r.type === "Press Release").length };
+    });
+  }, [earnedRowsForCoverage]);
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(calendarYear, calendarMonth, 1);
-    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
-    const startDow = (firstDay.getDay() + 6) % 7;
-    const days: { date: number; month: number; year: number; isCurrentMonth: boolean }[] = [];
-    const prevMonthLast = new Date(calendarYear, calendarMonth, 0).getDate();
-    for (let i = startDow - 1; i >= 0; i--) {
-      days.push({ date: prevMonthLast - i, month: calendarMonth - 1, year: calendarYear, isCurrentMonth: false });
-    }
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      days.push({ date: d, month: calendarMonth, year: calendarYear, isCurrentMonth: true });
-    }
-    const remaining = 42 - days.length;
-    for (let d = 1; d <= remaining; d++) {
-      days.push({ date: d, month: calendarMonth + 1, year: calendarYear, isCurrentMonth: false });
-    }
-    return days;
-  }, [calendarMonth, calendarYear]);
+  const volByType = useMemo(() => {
+    const tally = new Map<string, number>();
+    inRange.forEach(r => tally.set(r.type, (tally.get(r.type) || 0) + 1));
+    return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
+  }, [inRange]);
 
-  const getActionsForDate = (year: number, month: number, date: number) => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
-    const source = actionFilter === "all" ? priorityActions : priorityActions.filter(a => a.priority === actionFilter);
-    return source.filter((a) => dateStr >= a.startDate && dateStr <= a.endDate).map((a) => ({
-      ...a,
-      origIdx: priorityActions.indexOf(a),
-    }));
-  };
+  const volByCategory = useMemo(() => {
+    const tally = new Map<string, number>();
+    inRange.forEach(r => tally.set(r.category || "—", (tally.get(r.category || "—") || 0) + 1));
+    return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
+  }, [inRange]);
 
-  const timelineStartDate = new Date("2026-04-15");
-  const timelineEndDate = new Date("2026-06-30");
-  const timelineTotalDays = Math.ceil((timelineEndDate.getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-  const timelineMonths = useMemo(() => {
-    const months: { label: string; startPct: number; widthPct: number }[] = [];
-    let cursor = new Date(timelineStartDate);
-    while (cursor < timelineEndDate) {
-      const monthStart = new Date(cursor);
-      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-      const effectiveEnd = monthEnd > timelineEndDate ? timelineEndDate : monthEnd;
-      const startOffset = Math.ceil((monthStart.getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-      const endOffset = Math.ceil((effectiveEnd.getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-      months.push({
-        label: `${monthNames[cursor.getMonth()]} ${cursor.getFullYear()}`,
-        startPct: (startOffset / timelineTotalDays) * 100,
-        widthPct: ((endOffset - startOffset + 1) / timelineTotalDays) * 100,
-      });
-      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-    }
-    return months;
-  }, []);
+  const volBySpokesperson = useMemo(() => {
+    const tally = new Map<string, number>();
+    inRange.forEach(r => tally.set(r.spokesperson || "—", (tally.get(r.spokesperson || "—") || 0) + 1));
+    return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
+  }, [inRange]);
 
-  const totalEarned = categoryScores.filter(c => ["Earned Media Signals", "Earned Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.score, 0);
-  const totalEarnedMax = categoryScores.filter(c => ["Earned Media Signals", "Earned Visibility", "Source Authority"].includes(c.label)).reduce((s, c) => s + c.max, 0);
-  const totalOwned = categoryScores.filter(c => ["Schema & Structured Data", "Content Architecture", "Technical Accessibility"].includes(c.label)).reduce((s, c) => s + c.score, 0);
-  const totalOwnedMax = categoryScores.filter(c => ["Schema & Structured Data", "Content Architecture", "Technical Accessibility"].includes(c.label)).reduce((s, c) => s + c.max, 0);
+  const prRows = useMemo(() => inRange.filter(r => r.type === "Press Release"), [inRange]);
+  const prAvgScore = prRows.length ? Math.round((prRows.reduce((s, r) => s + r.score, 0) / prRows.length) * 10) / 10 : 0;
 
   const tabs = [
-    { id: "actions" as const, label: "Action Plan" },
-    { id: "overview" as const, label: "Executive Summary" },
-    { id: "detail" as const, label: "Detailed Audit" },
-    { id: "released" as const, label: "Released Content" },
+    { id: "summary" as const, label: "Executive Summary" },
+    { id: "prmkt" as const, label: "PR & Marketing" },
+    { id: "tracker" as const, label: "Earned Media Tracker" },
+    { id: "geo" as const, label: "Website GEO & Technical" },
   ];
 
+  // ---- Earned Media Tracker form state ----
+  const [aiSearch, setAiSearch] = useState({ from: rangeFrom, to: rangeTo, region: "UK", project: activeClient.name });
+  const [aiResults, setAiResults] = useState<Array<{ title: string; type: string; publication: string; reach: number; scores: Record<string, number>; link: string }>>([]);
+  const [aiSearched, setAiSearched] = useState(false);
+
+  const [detailedSearch, setDetailedSearch] = useState({ spokesperson: "All", title: "All" });
+  const [detailedResults, setDetailedResults] = useState<typeof aiResults>([]);
+  const [detailedSearched, setDetailedSearched] = useState(false);
+
+  const [manualForm, setManualForm] = useState<Omit<TrackerRow, "id">>({
+    date: "2026-04-15",
+    title: "",
+    type: CONTENT_TYPES[0],
+    publication: "",
+    category: "",
+    spokesperson: "",
+    link: "",
+    reach: 0,
+    score: 7,
+  });
+
+  function runAiSearch() {
+    setAiSearched(true);
+    setAiResults([
+      { title: "Why every PR shop now needs a GEO playbook", type: "Article", publication: "PRWeek", reach: 480000, scores: { Claude: 8, Gemini: 7, ChatGPT: 9, Perplexity: 8, CoPilot: 6 }, link: "https://prweek.com/..." },
+      { title: "Simpatico extends GEO measurement to award entries", type: "Press Release", publication: "PRovoke", reach: 220000, scores: { Claude: 6, Gemini: 6, ChatGPT: 7, Perplexity: 7, CoPilot: 5 }, link: "https://provokemedia.com/..." },
+      { title: "Inside the AI authority benchmark", type: "Case Study", publication: "B2B Marketing", reach: 95000, scores: { Claude: 5, Gemini: 5, ChatGPT: 6, Perplexity: 7, CoPilot: 4 }, link: "https://b2bmarketing.net/..." },
+    ]);
+  }
+
+  function runDetailedSearch() {
+    setDetailedSearched(true);
+    const matches = inRange.filter(r => {
+      const okPerson = detailedSearch.spokesperson === "All" || r.spokesperson === detailedSearch.spokesperson;
+      const okTitle = detailedSearch.title === "All" || r.title === detailedSearch.title;
+      return okPerson && okTitle;
+    });
+    if (matches.length === 0) {
+      setDetailedResults([]);
+      return;
+    }
+    setDetailedResults(matches.map(r => ({
+      title: r.title,
+      type: r.type,
+      publication: r.publication,
+      reach: r.reach,
+      scores: { Claude: r.score, Gemini: Math.max(0, r.score - 1), ChatGPT: Math.min(10, r.score + 1), Perplexity: r.score, CoPilot: Math.max(0, r.score - 2) },
+      link: r.link,
+    })));
+  }
+
+  function addAiResultToTracker(r: typeof aiResults[number]) {
+    const avgScore = Math.round(Object.values(r.scores).reduce((a, b) => a + b, 0) / Object.values(r.scores).length);
+    const newRow: TrackerRow = {
+      id: `t${Date.now()}`,
+      date: new Date().toISOString().slice(0, 10),
+      title: r.title,
+      type: r.type === "Article" ? "Article (Trade Publication)" : r.type,
+      publication: r.publication,
+      category: "Marketing & PR",
+      spokesperson: aiSearch.project,
+      link: r.link,
+      reach: r.reach,
+      score: avgScore,
+    };
+    setTracker(prev => [newRow, ...prev]);
+  }
+
+  function addManualRow() {
+    if (!manualForm.title.trim()) {
+      alert("Please add a Content Title before saving.");
+      return;
+    }
+    const row: TrackerRow = { ...manualForm, id: `t${Date.now()}` };
+    setTracker(prev => [row, ...prev]);
+    setManualForm(f => ({ ...f, title: "", publication: "", link: "", reach: 0 }));
+  }
+
+  function removeRow(id: string) {
+    setTracker(prev => prev.filter(r => r.id !== id));
+  }
+
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={20} color={vars.accent} />
             <h1 className="text-xl sm:text-2xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-              GEO Authority Report
-              <InfoTip text="Consolidated client report combining diagnostic scores, LLM visibility, SEO health, content pipeline progress and recommended next actions. Designed to be exported and shared with clients to demonstrate GEO impact." width={260} />
+              Authority &amp; Activity Report
+              <InfoTip text="Combines diagnostic scores, earned media authority, planned activity, the Earned Media Tracker and the website GEO audit. Designed to be exported and shared with the client." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            {activeClient.name} - Generated {reportDate}
+            {activeClient.name} &middot; Generated {reportDate}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -245,12 +404,12 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         </div>
       </div>
 
-      <div className="flex gap-1 p-1 rounded-xl border mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-xl border mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            className="px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
             style={{
               background: activeTab === tab.id ? vars.accent : "transparent",
               color: activeTab === tab.id ? "white" : vars.g500,
@@ -261,10 +420,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         ))}
       </div>
 
-      {activeTab === "overview" && (
+      {/* ============== EXECUTIVE SUMMARY ============== */}
+      {activeTab === "summary" && (
         <div className="space-y-6">
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="rounded-xl p-4 sm:p-6 mb-6" style={{ background: "linear-gradient(135deg, #165265, #1f748f)" }}>
+            <div className="rounded-xl p-4 sm:p-6 mb-5" style={{ background: "linear-gradient(135deg, #165265, #1f748f)" }}>
               <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
                 <div className="flex flex-col items-center">
                   <div className="relative" style={{ width: 140, height: 140 }}>
@@ -280,29 +440,30 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                       <span className="text-[10px] text-white/60 uppercase tracking-wider">/100</span>
                     </div>
                   </div>
-                  <span className="text-xs text-white/70 mt-2 font-medium">AIO Authority Score</span>
+                  <span className="text-xs text-white/70 mt-2 font-medium">Total Authority Score</span>
+                  <span className="text-[10px] text-white/60 mt-0.5">Since {projectStartDate}</span>
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-lg sm:text-xl font-semibold text-white mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-                    {authorityScore >= 70 ? "Strong Authority Position" : authorityScore >= 40 ? "Moderate Authority - Room to Grow" : "Early Stage - Significant Opportunities"}
+                    {authorityScore >= 70 ? "Strong authority position" : authorityScore >= 40 ? "Moderate authority — room to grow" : "Early stage — significant opportunities"}
                   </h2>
-                  <p className="text-sm text-white/70 leading-relaxed mb-4">
-                    {activeClient.name} currently scores {authorityScore}/100 on the AIO Authority Index. This score reflects your brand's readiness to be cited, referenced, and recommended by AI-powered search and answer engines. The breakdown below shows where you're strong and where focused effort will drive the biggest improvements.
+                  <p className="text-sm text-white/75 leading-relaxed mb-4">
+                    {activeClient.name} currently scores {authorityScore}/100. This combines earned media authority and your website&rsquo;s technical &amp; content readiness for AI citation.
                   </p>
-                  <div className="flex flex-wrap gap-4">
-                    <div className="px-4 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-xs text-white/50 block">Earned Media</span>
-                      <span className="text-lg font-bold text-white">{totalEarned}/{totalEarnedMax}</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
+                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">Earned</span>
+                      <span className="text-lg font-bold text-white">{earnedScore}/100</span>
                     </div>
-                    <div className="px-4 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-xs text-white/50 block">Owned Media</span>
-                      <span className="text-lg font-bold text-white">{totalOwned}/{totalOwnedMax}</span>
+                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
+                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">Website</span>
+                      <span className="text-lg font-bold text-white">{websiteScore}/100</span>
                     </div>
-                    <div className="px-4 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-xs text-white/50 block">Trend</span>
+                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
+                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">30-day trend</span>
                       <span className="text-lg font-bold text-white flex items-center gap-1">
                         {activeClient.scoreTrend >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                        {activeClient.scoreTrend >= 0 ? "+" : ""}{activeClient.scoreTrend}%
+                        {activeClient.scoreTrend >= 0 ? "+" : ""}{activeClient.scoreTrend}
                       </span>
                     </div>
                   </div>
@@ -310,64 +471,500 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
 
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-5" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-5 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — From</label>
+                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — To</label>
+                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo("2026-04-30"); }} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                Reset to project start
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+              <StatTile label="Total Authority Trend" value={`+${activeClient.scoreTrend || 12}`} sub="vs last period" color={vars.green} icon={TrendingUp} />
+              <StatTile label="Earned Media Trend" value="+6" sub="from LLM checks" color={vars.green} icon={Eye} />
+              <StatTile label="Website Trend" value="+4" sub="from latest crawl" color={vars.green} icon={Globe} />
+              <StatTile label="Predicted Earned Authority" value={`+${28}`} sub="next 6 months from Comms Planner" color={vars.accent} icon={Sparkles} />
+              <StatTile label="PR Coverage" value={String(prCoverageCount)} sub="PR / Article / Case Study / Whitepaper" color={vars.accent} icon={FileText} />
+            </div>
+
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend (last 6 months)</h3>
+            <div className="rounded-xl border p-4 mb-6" style={{ borderColor: vars.g200 }}>
+              <div className="flex items-end gap-2 h-40">
+                {monthlyTrend.map(p => (
+                  <div key={p.m} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div className="w-full flex items-end gap-0.5 h-full">
+                      <div className="flex-1 rounded-t" style={{ height: `${(p.total / trendMax) * 100}%`, background: vars.navy }} title={`Total ${p.total}`} />
+                      <div className="flex-1 rounded-t" style={{ height: `${(p.earned / trendMax) * 100}%`, background: vars.coral }} title={`Earned ${p.earned}`} />
+                      <div className="flex-1 rounded-t" style={{ height: `${(p.web / trendMax) * 100}%`, background: vars.teal }} title={`Website ${p.web}`} />
+                    </div>
+                    <span className="text-[10px]" style={{ color: vars.g500 }}>{p.m}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-3 mt-3 text-[11px]" style={{ color: vars.g500 }}>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.navy }} /> Total</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.coral }} /> Earned</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.teal }} /> Website</span>
+              </div>
+            </div>
+
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-              {categoryScores.map((cat) => (
-                <ScoreBar key={cat.label} {...cat} />
+              {[...websiteGeoScores.tech, ...websiteGeoScores.content].map(c => (
+                <ScoreBar key={c.label} label={c.label} score={c.score} max={c.max} description={c.desc} />
               ))}
             </div>
           </div>
 
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+              {categoryScores.map(cat => <ScoreBar key={cat.label} {...cat} />)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============== PR & MARKETING ============== */}
+      {activeTab === "prmkt" && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <h2 className="text-lg font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>PR &amp; Marketing performance</h2>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Pulled from your Earned Media Tracker for the date range below.</p>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — From</label>
+                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — To</label>
+                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatTile label="Earned Media Authority Score" value={String(earnedAuthorityScore)} sub="weighted from tracker" color={vars.navy} icon={Sparkles} />
+            <StatTile label="Earned Media Authority Trend" value="+6" sub="vs prior period" color={vars.green} icon={TrendingUp} />
+            <StatTile label="Audience Reach" value={`${(audienceReach / 1_000_000).toFixed(2)}M`} sub="period total" color={vars.navy} icon={Eye} />
+            <StatTile label="Authority / piece" value={String(authorityPerPiece)} sub="avg score across rows" color={vars.accent} icon={BarChart3} />
+          </div>
+
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Coverage per key message</h3>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker.</p>
+            <div className="space-y-3">
+              {messageCoverage.map(k => (
+                <div key={k.msg}>
+                  <div className="flex items-center justify-between text-[12px] mb-1">
+                    <span style={{ color: vars.navy }}>{k.msg}</span>
+                    <span className="font-semibold" style={{ color: vars.accent }}>{k.n} pieces</span>
+                  </div>
+                  <div className="h-1.5 rounded-full" style={{ background: vars.g200 }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, k.n * 25)}%`, background: vars.accent }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Thought Leadership per key message</h3>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Articles only.</p>
+              <div className="space-y-2">
+                {messageCoverage.map(k => (
+                  <div key={k.msg} className="flex justify-between text-[12px]">
+                    <span style={{ color: vars.g600 }}>{k.msg}</span>
+                    <span className="font-semibold" style={{ color: vars.navy }}>{k.articles}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Releases per Key message</h3>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Press Release rows only.</p>
+              <div className="space-y-2">
+                {messageCoverage.map(k => (
+                  <div key={k.msg} className="flex justify-between text-[12px]">
+                    <span style={{ color: vars.g600 }}>{k.msg}</span>
+                    <span className="font-semibold" style={{ color: vars.navy }}>{k.prs}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Release Performance</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              <StatTile label="Press Releases in period" value={String(prRows.length)} color={vars.navy} icon={FileText} />
+              <StatTile label="Average score / PR" value={String(prAvgScore)} sub="out of 10" color={vars.accent} icon={BarChart3} />
+              <StatTile label="Top scorer" value={prRows.length ? String(Math.max(...prRows.map(r => r.score))) : "—"} sub="single PR best" color={vars.green} icon={TrendingUp} />
+            </div>
+            <div className="space-y-2">
+              {prRows.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No press releases in the selected period.</p>}
+              {prRows.map(r => (
+                <div key={r.id} className="flex items-center justify-between text-[12px] p-2 rounded-lg" style={{ background: vars.g50 }}>
+                  <span className="truncate flex-1" style={{ color: vars.navy }}>{r.title}</span>
+                  <span className="px-2 py-0.5 rounded-full font-semibold ml-2" style={{ background: r.score >= 8 ? "#EFF7F2" : "#FFF8EC", color: r.score >= 8 ? vars.green : vars.amber }}>{r.score}/10</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
+              <div className="space-y-2">
+                {volByType.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
+                {volByType.map(([t, n]) => (
+                  <div key={t} className="flex justify-between text-[12px]">
+                    <span style={{ color: vars.g600 }}>{t}</span>
+                    <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by media category</h3>
+              <div className="space-y-2">
+                {volByCategory.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
+                {volByCategory.map(([t, n]) => (
+                  <div key={t} className="flex justify-between text-[12px]">
+                    <span style={{ color: vars.g600 }}>{t}</span>
+                    <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
+              <div className="space-y-2">
+                {volBySpokesperson.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
+                {volBySpokesperson.map(([t, n]) => (
+                  <div key={t} className="flex justify-between text-[12px]">
+                    <span style={{ color: vars.g600 }}>{t}</span>
+                    <span className="font-semibold" style={{ color: vars.navy }}>{n} pieces</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Social impact</h3>
+              <select className="text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: vars.g200 }}>
+                <option>Company LinkedIn</option>
+                <option>Spencer Gallagher</option>
+                <option>Helen Croydon</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatTile label="LinkedIn shares" value="1,820" color={vars.navy} icon={Share2} />
+              <StatTile label="LinkedIn engagement" value="4.2%" color={vars.navy} icon={TrendingUp} />
+              <StatTile label="Inbound DMs" value="37" color={vars.navy} icon={FileText} />
+              <StatTile label="Profile views (week)" value="612" color={vars.navy} icon={Eye} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5" style={{ background: vars.navy, color: "white" }}>
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>Close the loop</p>
+              <h3 className="text-[18px] sm:text-[20px] font-semibold mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>Re-run Earned Visibility</h3>
+              <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
+                Refresh the LLM check; the Earned Media Authority Score and trends above will recalculate for the same date range.
+              </p>
+            </div>
+            {onNavigate && (
+              <button onClick={() => onNavigate("llm-check")} className="px-5 py-3 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-all hover:brightness-110 self-start sm:self-auto" style={{ background: "#2896b9", color: "white" }}>
+                Re-run Earned Visibility <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============== EARNED MEDIA TRACKER ============== */}
+      {activeTab === "tracker" && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <p className="text-sm font-light" style={{ color: vars.g500 }}>
+              Search and record your project coverage and content activity to fuel your authority and visibility scores.
+            </p>
+          </div>
+
+          {/* AI Coverage Search */}
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Search size={16} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AI Coverage Search</h3>
+            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
+              Search the web for earned coverage about your project across Press Releases, Articles, Case Studies, Whitepapers, Blogs, Social, Conferences, Awards and Directories. Each item is scored across Claude, Gemini, ChatGPT, Perplexity and CoPilot.
+            </p>
+            <CalloutBrief title="LLM brief">
+              Search the web (last [date range]) for coverage of [project] in [region]. Return: link, publication, reach, and a score out of 10 from each of Claude, Gemini, ChatGPT, Perplexity and CoPilot. Bucket results by Press Release / Article / Case Study / Whitepaper / Blog / Social / Conference / Award / Directory.
+            </CalloutBrief>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>From</label>
+                <input type="date" value={aiSearch.from} onChange={e => setAiSearch({ ...aiSearch, from: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>To</label>
+                <input type="date" value={aiSearch.to} onChange={e => setAiSearch({ ...aiSearch, to: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Region</label>
+                <select value={aiSearch.region} onChange={e => setAiSearch({ ...aiSearch, region: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  {REGIONS.map(r => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Project search</label>
+                <input value={aiSearch.project} onChange={e => setAiSearch({ ...aiSearch, project: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={runAiSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+                <Search size={14} /> Run AI Coverage Search
+              </button>
+              {aiSearched && (
+                <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                  <Download size={14} /> Download Report
+                </button>
+              )}
+            </div>
+
+            {aiSearched && (
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[700px] text-sm">
+                  <thead>
+                    <tr style={{ background: vars.g50 }}>
+                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Title</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Type</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Publication</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Reach</th>
+                      <th className="text-center px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Avg score</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aiResults.map((r, i) => {
+                      const avg = Math.round(Object.values(r.scores).reduce((a, b) => a + b, 0) / Object.values(r.scores).length);
+                      return (
+                        <tr key={i} className="border-t" style={{ borderColor: vars.g200 }}>
+                          <td className="px-3 py-3" style={{ color: vars.navy }}>{r.title}</td>
+                          <td className="px-3 py-3" style={{ color: vars.g600 }}>{r.type}</td>
+                          <td className="px-3 py-3" style={{ color: vars.g600 }}>{r.publication}</td>
+                          <td className="px-3 py-3 text-right" style={{ color: vars.g600 }}>{r.reach.toLocaleString()}</td>
+                          <td className="px-3 py-3 text-center"><span className="px-2 py-0.5 rounded-full font-semibold text-[11px]" style={{ background: avg >= 7 ? "#EFF7F2" : "#FFF8EC", color: avg >= 7 ? vars.green : vars.amber }}>{avg}/10</span></td>
+                          <td className="px-3 py-3 text-right">
+                            <button onClick={() => addAiResultToTracker(r)} className="text-xs font-semibold flex items-center gap-1 ml-auto" style={{ color: vars.accent }}>
+                              <Plus size={12} /> Add to Tracker
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Detailed Search */}
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Search size={16} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Detailed Search</h3>
+            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Drill into a single spokesperson and approved Content Title.</p>
+            <CalloutBrief title="LLM brief">
+              Augment the AI Coverage Search above with: spokesperson [name] AND content title [exact match]. Return only direct mentions; weight authority score upward where the title appears verbatim in the body.
+            </CalloutBrief>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
+                <select value={detailedSearch.spokesperson} onChange={e => setDetailedSearch({ ...detailedSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option>All</option>
+                  {Array.from(new Set(tracker.map(t => t.spokesperson))).map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title</label>
+                <select value={detailedSearch.title} onChange={e => setDetailedSearch({ ...detailedSearch, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option>All</option>
+                  {inRange.map(r => <option key={r.id}>{r.title}</option>)}
+                </select>
+              </div>
+            </div>
+            <button onClick={runDetailedSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+              <Search size={14} /> Detailed Search
+            </button>
+            {detailedSearched && detailedResults.length === 0 && (
+              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No matches in the selected date range. Adjust the spokesperson or content title and try again.</p>
+            )}
+            {detailedSearched && detailedResults.length > 0 && (
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr style={{ background: vars.g50 }}>
+                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Title</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Publication</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Reach</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailedResults.map((r, i) => (
+                      <tr key={i} className="border-t" style={{ borderColor: vars.g200 }}>
+                        <td className="px-3 py-3" style={{ color: vars.navy }}>{r.title}</td>
+                        <td className="px-3 py-3" style={{ color: vars.g600 }}>{r.publication}</td>
+                        <td className="px-3 py-3 text-right" style={{ color: vars.g600 }}>{r.reach.toLocaleString()}</td>
+                        <td className="px-3 py-3 text-right">
+                          <button onClick={() => addAiResultToTracker(r)} className="text-xs font-semibold flex items-center gap-1 ml-auto" style={{ color: vars.accent }}>
+                            <Plus size={12} /> Add to Tracker
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Manual Entry */}
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Plus size={16} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Manual Entry</h3>
+            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Add a row directly to the Earned Media Tracker spreadsheet.</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Publication date</label>
+                <input type="date" value={manualForm.date} onChange={e => setManualForm({ ...manualForm, date: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title</label>
+                <input value={manualForm.title} onChange={e => setManualForm({ ...manualForm, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="Content Title" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Type</label>
+                <select value={manualForm.type} onChange={e => setManualForm({ ...manualForm, type: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  {CONTENT_TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Publication</label>
+                <input value={manualForm.publication} onChange={e => setManualForm({ ...manualForm, publication: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="e.g. PRWeek" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Media Category</label>
+                <input value={manualForm.category} onChange={e => setManualForm({ ...manualForm, category: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="From 4.9 (e.g. Marketing & PR)" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
+                <input value={manualForm.spokesperson} onChange={e => setManualForm({ ...manualForm, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="Name or NA" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Link</label>
+                <input value={manualForm.link} onChange={e => setManualForm({ ...manualForm, link: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="https://" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Reach</label>
+                <input type="number" value={manualForm.reach} onChange={e => setManualForm({ ...manualForm, reach: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Authority Score (0-10)</label>
+                <input type="number" min={0} max={10} value={manualForm.score} onChange={e => setManualForm({ ...manualForm, score: Number(e.target.value) })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+            </div>
+            <button onClick={addManualRow} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+              <Plus size={14} /> Add to Earned Media Tracker
+            </button>
+          </div>
+
+          {/* Tracker Spreadsheet */}
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Tracker spreadsheet</h3>
+              <span className="text-[11px]" style={{ color: vars.g400 }}>{tracker.length} rows</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead>
+                  <tr style={{ background: vars.g50 }}>
+                    {["Date", "Title", "Type", "Publication", "Category", "Spokesperson", "Reach", "Score", ""].map(h => (
+                      <th key={h} className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tracker.map(r => (
+                    <tr key={r.id} className="border-t" style={{ borderColor: vars.g200 }}>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.date}</td>
+                      <td className="px-3 py-2" style={{ color: vars.navy }}>
+                        {r.link ? <a href={r.link} target="_blank" rel="noreferrer" className="underline">{r.title}</a> : r.title}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.type}</td>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.publication}</td>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.category}</td>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.spokesperson}</td>
+                      <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.reach.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-center"><span className="px-2 py-0.5 rounded-full font-semibold text-[11px]" style={{ background: r.score >= 7 ? "#EFF7F2" : "#FFF8EC", color: r.score >= 7 ? vars.green : vars.amber }}>{r.score}/10</span></td>
+                      <td className="px-3 py-2"><button onClick={() => removeRow(r.id)} aria-label={`Remove ${r.title}`} title="Remove row" className="text-[11px]" style={{ color: vars.red }}><Trash2 size={12} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============== WEBSITE GEO & TECHNICAL ============== */}
+      {activeTab === "geo" && (
+        <div className="space-y-6">
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
               <Eye size={18} color={vars.accent} />
               <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility Scorecard</h3>
             </div>
-            <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>
-              How your brand appears across the major AI platforms when users ask questions in your category.
-            </p>
-
+            <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>How your brand appears across the major AI platforms when users ask questions in your category.</p>
             <div className="overflow-x-auto -mx-4 sm:mx-0">
               <table className="w-full min-w-[500px]">
                 <thead>
                   <tr style={{ background: vars.g50 }}>
-                    <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Platform</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Mentions</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Cited</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Rank</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Sentiment</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>Trend</th>
+                    {["Platform", "Mentions", "Cited", "Rank", "Sentiment", "Trend"].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {llmScorecard.map((llm) => (
+                  {llmScorecard.map(llm => (
                     <tr key={llm.platform} className="border-t" style={{ borderColor: vars.g200 }}>
+                      <td className="px-4 py-3.5"><span className="text-sm font-medium" style={{ color: vars.navy }}>{llm.platform}</span></td>
+                      <td className="px-4 py-3.5"><span className="text-sm font-semibold" style={{ color: vars.navy }}>{llm.mentions}</span></td>
+                      <td className="px-4 py-3.5">{llm.cited ? <CheckCircle2 size={16} color={vars.green} /> : <X size={16} color={vars.g300} />}</td>
+                      <td className="px-4 py-3.5"><span className="text-sm" style={{ color: vars.g600 }}>#{llm.rank}</span></td>
                       <td className="px-4 py-3.5">
-                        <span className="text-sm font-medium" style={{ color: vars.navy }}>{llm.platform}</span>
+                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: llm.sentiment === "Positive" ? "#EFF7F2" : vars.g100, color: llm.sentiment === "Positive" ? vars.green : vars.g500 }}>{llm.sentiment}</span>
                       </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm font-semibold" style={{ color: vars.navy }}>{llm.mentions}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        {llm.cited ? (
-                          <CheckCircle2 size={16} color={vars.green} className="mx-auto" />
-                        ) : (
-                          <X size={16} color={vars.g300} className="mx-auto" />
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm" style={{ color: vars.g600 }}>#{llm.rank}</span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{
-                          background: llm.sentiment === "Positive" ? "#EFF7F2" : vars.g100,
-                          color: llm.sentiment === "Positive" ? vars.green : vars.g500,
-                        }}>
-                          {llm.sentiment}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="text-sm font-medium flex items-center justify-center gap-1" style={{ color: llm.trend >= 0 ? vars.green : vars.red }}>
+                      <td className="px-4 py-3.5">
+                        <span className="text-sm font-medium flex items-center gap-1" style={{ color: llm.trend >= 0 ? vars.green : vars.red }}>
                           {llm.trend >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                           {llm.trend >= 0 ? "+" : ""}{llm.trend}%
                         </span>
@@ -381,90 +978,20 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-2">
-              <Target size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Key Findings</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-              <div className="rounded-xl p-4 border" style={{ borderColor: "#C2E5D2", background: "#F0FAF4" }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Check size={16} color={vars.green} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: vars.green }}>Strengths</span>
-                </div>
-                <ul className="space-y-2">
-                  <li className="text-sm" style={{ color: vars.g600 }}>AI crawlers have full access (robots.txt configured)</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>Active thought leadership publishing programme</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>Already cited by ChatGPT and Perplexity</li>
-                </ul>
-              </div>
-              <div className="rounded-xl p-4 border" style={{ borderColor: "#F5DCA0", background: "#FFFCF0" }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle size={16} color={vars.amber} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: vars.amber }}>Needs Attention</span>
-                </div>
-                <ul className="space-y-2">
-                  <li className="text-sm" style={{ color: vars.g600 }}>Content uses promotional rather than factual language</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>NAP inconsistencies across 3 profiles</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>FAQ page lacks schema markup</li>
-                </ul>
-              </div>
-              <div className="rounded-xl p-4 border" style={{ borderColor: "#E8B5AE", background: "#FDF5F4" }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <X size={16} color={vars.red} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: vars.red }}>Critical Gaps</span>
-                </div>
-                <ul className="space-y-2">
-                  <li className="text-sm" style={{ color: vars.g600 }}>No Organization Schema on any page</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>No expert author profile pages</li>
-                  <li className="text-sm" style={{ color: vars.g600 }}>No answer-first content formatting</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "detail" && (
-        <div className="space-y-6">
-          <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2 mb-2">
               <Shield size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Technical & Schema Audit</h3>
+              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Technical &amp; Schema Audit</h3>
             </div>
-            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>
-              Assessment of structured data, crawler access, and technical signals that help AI engines understand and trust your content.
-            </p>
+            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>Assessment of structured data, crawler access and technical signals that help AI engines understand and trust your content.</p>
             <div className="space-y-3">
-              {technicalAudit.map((item) => (
+              {technicalAudit.map(item => (
                 <div key={item.item} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
-                  </div>
+                  <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
                   <div className="flex items-center gap-3 sm:ml-auto">
                     <StatusBadge status={item.status} />
                     <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="flex items-center gap-4 mt-5 p-4 rounded-xl" style={{ background: "rgba(31,116,143,0.04)" }}>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.green }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {technicalAudit.filter(t => t.status === "pass").length} Pass
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.amber }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {technicalAudit.filter(t => t.status === "warn").length} Needs Work
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.red }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {technicalAudit.filter(t => t.status === "fail").length} Missing
-                </span>
-              </div>
             </div>
           </div>
 
@@ -473,15 +1000,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <FileText size={18} color={vars.teal} />
               <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Architecture Audit</h3>
             </div>
-            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>
-              How well your website content is structured for AI comprehension, citation, and answer extraction.
-            </p>
+            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>How well your website content is structured for AI comprehension, citation and answer extraction.</p>
             <div className="space-y-3">
-              {contentAudit.map((item) => (
+              {contentAudit.map(item => (
                 <div key={item.item} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
-                  </div>
+                  <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
                   <div className="flex items-center gap-3 sm:ml-auto">
                     <StatusBadge status={item.status} />
                     <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
@@ -489,565 +1012,17 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-4 mt-5 p-4 rounded-xl" style={{ background: "rgba(40,150,185,0.04)" }}>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.green }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {contentAudit.filter(t => t.status === "pass").length} Pass
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.amber }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {contentAudit.filter(t => t.status === "warn").length} Needs Work
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ background: vars.red }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>
-                  {contentAudit.filter(t => t.status === "fail").length} Missing
-                </span>
-              </div>
-            </div>
           </div>
 
-          <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Users size={18} color={vars.accent} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Brand Profile Summary</h3>
-            </div>
-            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>Key information from the client intake that shapes this report.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl" style={{ background: vars.g50 }}>
-                <span className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: vars.g400 }}>Industry / Sector</span>
-                <span className="text-sm font-medium" style={{ color: vars.navy }}>{activeClient.sector}</span>
-              </div>
-              <div className="p-4 rounded-xl" style={{ background: vars.g50 }}>
-                <span className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: vars.g400 }}>Priority Type</span>
-                <span className="text-sm font-medium" style={{ color: vars.navy }}>GEO (Generative Engine Optimisation)</span>
-              </div>
-              <div className="p-4 rounded-xl" style={{ background: vars.g50 }}>
-                <span className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: vars.g400 }}>Primary Audience</span>
-                <span className="text-sm font-medium" style={{ color: vars.navy }}>B2B decision makers, procurement leads</span>
-              </div>
-              <div className="p-4 rounded-xl" style={{ background: vars.g50 }}>
-                <span className="text-[10px] font-bold uppercase tracking-wider block mb-1" style={{ color: vars.g400 }}>Content Pieces Managed</span>
-                <span className="text-sm font-medium" style={{ color: vars.navy }}>{activeClient.contentCount} active items</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "actions" && (() => {
-        const filteredActions = actionFilter === "all" ? priorityActions : priorityActions.filter(a => a.priority === actionFilter);
-        const completedCount = completedActions.size;
-        const totalActions = priorityActions.length;
-        const progressPct = Math.round((completedCount / totalActions) * 100);
-
-        return (
-        <div className="space-y-6">
-          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap size={18} color={vars.accent} />
-                  <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Action Plan</h3>
-                </div>
-                <p className="text-sm font-light" style={{ color: vars.g500 }}>
-                  {completedCount} of {totalActions} actions completed
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 sm:w-40">
-                  <div className="w-full h-2.5 rounded-full" style={{ background: vars.g200 }}>
-                    <div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: progressPct === 100 ? vars.green : vars.accent }} />
-                  </div>
-                </div>
-                <span className="text-sm font-bold" style={{ color: progressPct === 100 ? vars.green : vars.accent }}>{progressPct}%</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-              <div className="grid grid-cols-5 gap-2 flex-1">
-                {(["all", "Critical", "High", "Medium", "Low"] as const).map((f) => {
-                  const count = f === "all" ? priorityActions.length : priorityActions.filter(a => a.priority === f).length;
-                  const fColor = f === "Critical" ? vars.red : f === "High" ? vars.amber : f === "Medium" ? vars.accent : f === "Low" ? vars.g400 : vars.navy;
-                  const isActive = actionFilter === f;
-                  return (
-                    <button
-                      key={f}
-                      onClick={() => setActionFilter(f)}
-                      className="rounded-xl px-2 py-2.5 text-center border transition-colors"
-                      style={{
-                        borderColor: isActive ? fColor : vars.g200,
-                        background: isActive ? `${fColor}0A` : "transparent",
-                      }}
-                    >
-                      <p className="text-lg font-bold" style={{ color: fColor }}>{count}</p>
-                      <p className="text-[10px] font-medium" style={{ color: isActive ? fColor : vars.g500 }}>{f === "all" ? "All" : f}</p>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex gap-1 p-1 rounded-lg border" style={{ borderColor: vars.g200 }}>
-                {([
-                  { id: "list" as const, icon: List, label: "List" },
-                  { id: "calendar" as const, icon: Calendar, label: "Calendar" },
-                  { id: "timeline" as const, icon: BarChart3, label: "Timeline" },
-                ] as const).map((v) => {
-                  const Icon = v.icon;
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => setActionView(v.id)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                      style={{
-                        background: actionView === v.id ? vars.accent : "transparent",
-                        color: actionView === v.id ? "white" : vars.g500,
-                      }}
-                    >
-                      <Icon size={14} /> {v.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {actionView === "list" && (
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="px-4 sm:px-6 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100, background: vars.g50 }}>
-              <span className="text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: vars.g400 }}>
-                {filteredActions.length} {actionFilter === "all" ? "actions" : `${actionFilter} actions`}
-              </span>
-              {completedCount > 0 && (
-                <span className="text-[10px] font-medium" style={{ color: vars.green }}>
-                  {completedCount} done
-                </span>
-              )}
-            </div>
-            <div className="divide-y" style={{ borderColor: vars.g100 }}>
-              {filteredActions.map((action) => {
-                const origIdx = priorityActions.indexOf(action);
-                const isDone = completedActions.has(origIdx);
-                const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : action.priority === "Medium" ? vars.accent : vars.g400;
-                return (
-                  <div
-                    key={origIdx}
-                    className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-6 py-4 transition-colors"
-                    style={{ background: isDone ? "rgba(61,155,107,0.03)" : "transparent", opacity: isDone ? 0.7 : 1 }}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <button
-                        onClick={() => {
-                          setCompletedActions((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(origIdx)) next.delete(origIdx);
-                            else next.add(origIdx);
-                            return next;
-                          });
-                        }}
-                        className="w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors"
-                        style={{
-                          borderColor: isDone ? vars.green : prioColor,
-                          background: isDone ? vars.green : "transparent",
-                        }}
-                      >
-                        {isDone && <Check size={14} color="white" />}
-                      </button>
-                      <span className="text-sm font-medium" style={{ color: vars.navy, textDecoration: isDone ? "line-through" : "none" }}>
-                        {action.action}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0 ml-9 sm:ml-0">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{
-                        background: action.priority === "Critical" ? "#FBEEEC" : action.priority === "High" ? "#FFF8EC" : "rgba(31,116,143,0.06)",
-                        color: prioColor,
-                      }}>
-                        {action.priority}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
-                        {action.timeframe}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>
-                        {action.category}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{
-                        background: action.impact === "High" ? "#EFF7F2" : vars.g100,
-                        color: action.impact === "High" ? vars.green : vars.g500,
-                      }}>
-                        {action.impact} impact
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          )}
-
-          {actionView === "calendar" && (
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g100 }}>
-              <button
-                onClick={() => {
-                  if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(calendarYear - 1); }
-                  else setCalendarMonth(calendarMonth - 1);
-                }}
-                className="w-8 h-8 rounded-lg border flex items-center justify-center transition-colors hover:bg-gray-50"
-                style={{ borderColor: vars.g200 }}
-              >
-                <ChevronLeft size={16} color={vars.g500} />
-              </button>
-              <h4 className="text-sm font-semibold" style={{ color: vars.navy }}>
-                {monthNames[calendarMonth]} {calendarYear}
-              </h4>
-              <button
-                onClick={() => {
-                  if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(calendarYear + 1); }
-                  else setCalendarMonth(calendarMonth + 1);
-                }}
-                className="w-8 h-8 rounded-lg border flex items-center justify-center transition-colors hover:bg-gray-50"
-                style={{ borderColor: vars.g200 }}
-              >
-                <ChevronRight size={16} color={vars.g500} />
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="grid grid-cols-7 min-w-[320px]">
-                {dayNamesFull.map((d, i) => (
-                  <div key={i} className="px-0.5 sm:px-1 py-2 text-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline" style={{ color: vars.g400 }}>{d}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider sm:hidden" style={{ color: vars.g400 }}>{dayNames[i]}</span>
-                  </div>
-                ))}
-                {calendarDays.map((day, idx) => {
-                  const dayActions = day.isCurrentMonth ? getActionsForDate(day.year, day.month, day.date) : [];
-                  const isToday = day.date === 15 && day.month === 3 && day.year === 2026 && day.isCurrentMonth;
-                  const hasActions = dayActions.length > 0;
-                  return (
-                    <div
-                      key={idx}
-                      className="border-t min-h-[56px] sm:min-h-[80px] p-0.5 sm:p-1"
-                      style={{
-                        borderColor: vars.g100,
-                        background: isToday ? "rgba(31,116,143,0.04)" : "transparent",
-                        opacity: day.isCurrentMonth ? 1 : 0.35,
-                      }}
-                    >
-                      <span
-                        className="text-[10px] sm:text-[11px] font-medium block mb-0.5 px-0.5"
-                        style={{
-                          color: isToday ? vars.accent : vars.g500,
-                          fontWeight: isToday ? 700 : 500,
-                        }}
-                      >
-                        {day.date}
-                      </span>
-                      <div className="space-y-0.5">
-                        {dayActions.slice(0, 2).map((a) => {
-                          const prioColor = a.priority === "Critical" ? vars.red : a.priority === "High" ? vars.amber : a.priority === "Medium" ? vars.accent : vars.g400;
-                          const isDone = completedActions.has(a.origIdx);
-                          return (
-                            <button
-                              key={a.origIdx}
-                              onClick={() => {
-                                setCompletedActions((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(a.origIdx)) next.delete(a.origIdx);
-                                  else next.add(a.origIdx);
-                                  return next;
-                                });
-                              }}
-                              className="w-full text-left px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-medium truncate block transition-colors"
-                              style={{
-                                background: isDone ? "#EFF7F2" : `${prioColor}12`,
-                                color: isDone ? vars.green : prioColor,
-                                textDecoration: isDone ? "line-through" : "none",
-                              }}
-                              title={a.action}
-                            >
-                              <span className="hidden sm:inline">{a.action}</span>
-                              <span className="sm:hidden">{a.action.split(" ").slice(0, 2).join(" ")}</span>
-                            </button>
-                          );
-                        })}
-                        {dayActions.length > 2 && (
-                          <span className="text-[8px] px-0.5" style={{ color: vars.g400 }}>+{dayActions.length - 2}</span>
-                        )}
-                        {hasActions && dayActions.length <= 2 && (
-                          <span className="hidden" />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          )}
-
-          {actionView === "timeline" && (
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="px-4 sm:px-6 py-4 border-b" style={{ borderColor: vars.g100 }}>
-              <div className="flex items-center gap-2 mb-1">
-                <BarChart3 size={16} color={vars.accent} />
-                <h4 className="text-sm font-semibold" style={{ color: vars.navy }}>Implementation Timeline</h4>
-              </div>
-              <p className="text-[11px] font-light" style={{ color: vars.g400 }}>April &ndash; June 2026</p>
-            </div>
-            <div className="px-4 sm:px-6 py-4 overflow-x-auto">
-              <div className="min-w-[500px]">
-                <div className="flex border-b mb-4" style={{ borderColor: vars.g100 }}>
-                  {timelineMonths.map((m) => (
-                    <div
-                      key={m.label}
-                      className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider py-2"
-                      style={{ color: vars.g400, width: `${m.widthPct}%`, marginLeft: m.startPct === 0 ? 0 : undefined }}
-                    >
-                      {m.label}
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2 sm:space-y-2">
-                  {filteredActions.map((action) => {
-                    const origIdx = priorityActions.indexOf(action);
-                    const isDone = completedActions.has(origIdx);
-                    const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : action.priority === "Medium" ? vars.accent : vars.g400;
-                    const startOffset = Math.max(0, Math.ceil((new Date(action.startDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24)));
-                    const endOffset = Math.ceil((new Date(action.endDate).getTime() - timelineStartDate.getTime()) / (1000 * 60 * 60 * 24));
-                    const leftPct = (startOffset / timelineTotalDays) * 100;
-                    const widthPct = Math.max(2, ((endOffset - startOffset + 1) / timelineTotalDays) * 100);
-                    return (
-                      <div key={origIdx}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <button
-                            onClick={() => {
-                              setCompletedActions((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(origIdx)) next.delete(origIdx);
-                                else next.add(origIdx);
-                                return next;
-                              });
-                            }}
-                            className="w-4 h-4 rounded border-[1.5px] flex items-center justify-center flex-shrink-0 transition-colors"
-                            style={{
-                              borderColor: isDone ? vars.green : prioColor,
-                              background: isDone ? vars.green : "transparent",
-                            }}
-                          >
-                            {isDone && <Check size={10} color="white" />}
-                          </button>
-                          <span
-                            className="text-[10px] sm:text-[11px] font-medium truncate"
-                            style={{ color: isDone ? vars.g400 : vars.navy, textDecoration: isDone ? "line-through" : "none" }}
-                            title={action.action}
-                          >
-                            {action.action}
-                          </span>
-                          <span className="text-[9px] ml-auto flex-shrink-0 font-medium" style={{ color: vars.g400 }}>
-                            {new Date(action.startDate).getDate()} {monthNames[new Date(action.startDate).getMonth()].slice(0, 3)} &ndash; {new Date(action.endDate).getDate()} {monthNames[new Date(action.endDate).getMonth()].slice(0, 3)}
-                          </span>
-                        </div>
-                        <div className="relative h-6 rounded ml-6" style={{ background: vars.g50 }}>
-                          <div
-                            className="absolute top-0.5 h-5 rounded-md transition-all duration-300 flex items-center px-1.5"
-                            style={{
-                              left: `${leftPct}%`,
-                              width: `${widthPct}%`,
-                              background: isDone ? vars.green : prioColor,
-                              opacity: isDone ? 0.5 : 0.85,
-                            }}
-                          >
-                            <span className="text-[8px] font-semibold text-white truncate">
-                              {action.durationDays}d
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-5 pt-4 border-t" style={{ borderColor: vars.g100 }}>
-                {[
-                  { label: "Critical", color: vars.red },
-                  { label: "High", color: vars.amber },
-                  { label: "Medium", color: vars.accent },
-                  { label: "Low", color: vars.g400 },
-                  { label: "Done", color: vars.green },
-                ].map((l) => (
-                  <div key={l.label} className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded" style={{ background: l.color, opacity: l.label === "Done" ? 0.5 : 0.85 }} />
-                    <span className="text-[10px] font-medium" style={{ color: vars.g500 }}>{l.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          )}
-
-          <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2 mb-2">
-              <Star size={18} color={vars.amber} />
-              <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Projected Impact</h3>
-            </div>
-            <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>
-              Estimated score improvement if all actions in each timeframe are completed.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="rounded-xl p-5 text-center" style={{ background: "linear-gradient(135deg, rgba(31,116,143,0.04), rgba(40,150,185,0.04))" }}>
-                <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: vars.g400 }}>After This Week</p>
-                <p className="text-3xl font-bold mb-1" style={{ color: vars.navy }}>{Math.min(authorityScore + 15, 100)}</p>
-                <p className="text-xs font-medium" style={{ color: vars.green }}>+15 points (Schema + FAQ fix)</p>
-              </div>
-              <div className="rounded-xl p-5 text-center" style={{ background: "linear-gradient(135deg, rgba(31,116,143,0.06), rgba(40,150,185,0.06))" }}>
-                <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: vars.g400 }}>After This Month</p>
-                <p className="text-3xl font-bold mb-1" style={{ color: vars.navy }}>{Math.min(authorityScore + 32, 100)}</p>
-                <p className="text-xs font-medium" style={{ color: vars.green }}>+32 points (Content + Authority)</p>
-              </div>
-              <div className="rounded-xl p-5 text-center" style={{ background: "linear-gradient(135deg, rgba(31,116,143,0.08), rgba(40,150,185,0.08))" }}>
-                <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: vars.g400 }}>After This Quarter</p>
-                <p className="text-3xl font-bold mb-1" style={{ color: vars.navy }}>{Math.min(authorityScore + 48, 100)}</p>
-                <p className="text-xs font-medium" style={{ color: vars.green }}>+48 points (Full implementation)</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "rgba(31,116,143,0.03)", borderColor: vars.g200 }}>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
-              <div className="flex-1">
-                <h4 className="text-sm font-semibold mb-1" style={{ color: vars.navy }}>Ready to implement?</h4>
-                <p className="text-[13px] font-light" style={{ color: vars.g500 }}>
-                  Use the Content Optimiser and Authority Planner to begin executing these recommendations within the platform.
-                </p>
-              </div>
-              <button onClick={() => onNavigate?.("optimiser")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0" style={{ background: vars.accent }}>
-                Start Implementing <ArrowRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-        );
-      })()}
-
-      {activeTab === "released" && (
-        <div className="space-y-6">
-          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <h2 className="text-lg sm:text-xl font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Released Content Performance</h2>
-            <p className="text-[13px] font-light mb-6" style={{ color: vars.g500 }}>Outcomes from coverage that has actually shipped — measured against your message framework, audience reach, and authority targets.</p>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              {[
-                { label: "Audience reach", value: "2.4M", sub: "monthly impressions" },
-                { label: "Pieces released", value: "47", sub: "last 90 days" },
-                { label: "Visibility / piece", value: "82", sub: "avg AI citation score" },
-                { label: "Ideas → outcomes", value: "68%", sub: "ratio shipped" },
-              ].map((m) => (
-                <div key={m.label} className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>{m.label}</p>
-                  <p className="text-2xl font-bold mt-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{m.value}</p>
-                  <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{m.sub}</p>
-                </div>
-              ))}
-            </div>
-
-            <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Coverage per key message</h3>
-            <div className="space-y-2 mb-6">
-              {[
-                { msg: "AI authority platform built by PR consultants", n: 18, pct: 92 },
-                { msg: "Generative engine optimisation expertise", n: 14, pct: 78 },
-                { msg: "Measurable AI citation outcomes", n: 9, pct: 55 },
-                { msg: "Tech + content fusion", n: 6, pct: 38 },
-              ].map((k) => (
-                <div key={k.msg}>
-                  <div className="flex items-center justify-between text-[12px] mb-1">
-                    <span style={{ color: vars.navy }}>{k.msg}</span>
-                    <span className="font-semibold" style={{ color: vars.accent }}>{k.n} pieces · {k.pct}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full" style={{ background: vars.g200 }}>
-                    <div className="h-full rounded-full" style={{ width: `${k.pct}%`, background: vars.accent }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
-                <div className="space-y-2">
-                  {[
-                    ["Press release", 12], ["Article", 9], ["Case study", 6], ["Whitepaper", 3],
-                    ["Blog post", 8], ["Social post", 5], ["Award submission", 2], ["Speaker submission", 2],
-                  ].map(([t, n]) => (
-                    <div key={t as string} className="flex justify-between text-[12px]">
-                      <span style={{ color: vars.g600 }}>{t}</span>
-                      <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by media tier</h3>
-                <div className="space-y-2">
-                  {[
-                    ["Priority", 8], ["National", 14], ["Specialist A", 11], ["Specialist B", 7],
-                    ["Specialist C", 4], ["Specialist D", 3],
-                  ].map(([t, n]) => (
-                    <div key={t as string} className="flex justify-between text-[12px]">
-                      <span style={{ color: vars.g600 }}>{t}</span>
-                      <span className="font-semibold" style={{ color: vars.navy }}>{n}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Social impact</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    ["LinkedIn shares", "1,820"], ["LinkedIn engagement", "4.2%"],
-                    ["Inbound DMs", "37"], ["Profile views (week)", "612"],
-                  ].map(([k, v]) => (
-                    <div key={k as string}>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: vars.g400 }}>{k}</p>
-                      <p className="text-[16px] font-bold" style={{ color: vars.navy }}>{v}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border p-5" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-sm font-semibold mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
-                <div className="space-y-2">
-                  {[
-                    ["Spencer Gallagher, Co-Founder", 16],
-                    ["Helen Croydon, Founder", 12],
-                    ["Guest contributors", 5],
-                  ].map(([n, c]) => (
-                    <div key={n as string} className="flex justify-between text-[12px]">
-                      <span style={{ color: vars.g600 }}>{n}</span>
-                      <span className="font-semibold" style={{ color: vars.navy }}>{c} pieces</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5" style={{ background: vars.navy, color: "white" }}>
+          <div className="rounded-2xl border p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4" style={{ background: vars.cream, borderColor: "#E6D7BC" }}>
+            <Calendar size={22} color={vars.gold} />
             <div className="flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>Close the loop</p>
-              <h3 className="text-[18px] sm:text-[20px] font-semibold mb-1" style={{ fontFamily: "'Alice', Georgia, serif" }}>Re-run Earned Visibility</h3>
-              <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.75)" }}>
-                You have measured the cycle. Now re-check whether AI models are mentioning the brand more often than they were last time. Each pass should move the needle on AI citations.
-              </p>
+              <p className="text-sm font-semibold" style={{ color: vars.navy }}>Itemised action report</p>
+              <p className="text-[12px] font-light" style={{ color: vars.g600 }}>The Website Technical GEO module consumes Project Data sections 1-3 and 7-8, then produces a downloadable, itemised action list to drive these scores up.</p>
             </div>
             {onNavigate && (
-              <button onClick={() => onNavigate("llm-check")} className="px-5 py-3 rounded-lg text-[13px] font-semibold flex items-center gap-2 transition-all hover:brightness-110 self-start sm:self-auto" style={{ background: "#2896b9", color: "white" }}>
-                Re-run Earned Visibility <ArrowRight size={14} />
+              <button onClick={() => onNavigate("seo-audit")} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0" style={{ background: vars.accent }}>
+                Open Website Technical GEO <ArrowRight size={14} />
               </button>
             )}
           </div>

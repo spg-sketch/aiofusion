@@ -1,4 +1,5 @@
-import IntakePage from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories } from "./IntakeForm";
+import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
@@ -14,7 +15,7 @@ import step6Img from "./assets/step-6-agentic.png";
 import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   ChevronRight,
   Lock,
@@ -209,6 +210,97 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
       >
         {score}
       </span>
+    </div>
+  );
+}
+
+// Shared content types (used by Optimiser, Creator and Planner).
+const CONTENT_TYPES = [
+  "Press release", "Article", "Case study", "Whitepaper", "Blog post",
+  "Social post", "Event copy", "Speaker submission", "Award submission", "Directory entry",
+];
+
+function countWords(s: string): number {
+  return s.trim() ? s.trim().split(/\s+/).length : 0;
+}
+
+function Labelled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
+        {label}
+        {hint && <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· {hint}</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>{label}</span>
+      <span className="text-[13px]" style={{ color: vars.navy }}>{value}</span>
+    </div>
+  );
+}
+
+function ScorePill({ label, score, color }: { label: string; score: number; color: string }) {
+  return (
+    <div className="text-center px-2 py-1 rounded-md" style={{ background: `${color}15` }}>
+      <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color }}>{label}</div>
+      <div className="text-[14px] font-bold leading-tight" style={{ color }}>{score.toFixed(1)}</div>
+    </div>
+  );
+}
+
+function CategoryPickerModal({
+  all, selected, projectSet = [], onClose, onSave,
+}: {
+  all: string[]; selected: string[]; projectSet?: string[];
+  onClose: () => void; onSave: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState<string[]>(selected);
+  const [search, setSearch] = useState("");
+  const filtered = all.filter((c) => !search || c.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+          <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Trade media categories (alpha)</h2>
+          <button onClick={onClose} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+        </div>
+        <div className="px-6 py-3 border-b flex items-center gap-2 flex-wrap" style={{ borderColor: vars.g100 }}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter categories..." className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+          {projectSet.length > 0 && (
+            <button onClick={() => setDraft(Array.from(new Set([...draft, ...projectSet])))} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+              + Use Project Set-Up ({projectSet.length})
+            </button>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {filtered.map((cat) => {
+              const on = draft.includes(cat);
+              return (
+                <button key={cat} onClick={() => setDraft(on ? draft.filter((c) => c !== cat) : [...draft, cat])} className="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors" style={{ background: on ? "rgba(31,116,143,0.08)" : "transparent" }}>
+                  <div className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: on ? vars.accent : vars.g300, background: on ? vars.accent : "transparent" }}>
+                    {on && <Check size={11} color="white" />}
+                  </div>
+                  <span className="text-[12px]" style={{ color: vars.navy }}>{cat}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="px-6 py-3 border-t flex justify-between gap-2" style={{ borderColor: vars.g200 }}>
+          <button onClick={() => setDraft([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+            <button onClick={() => onSave(draft)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done ({draft.length})</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -673,22 +765,25 @@ function ClientSelectorPage({
   );
 }
 
-function AuthorityDonut({ score, size = 160 }: { score: number; size?: number }) {
+function AuthorityDonut({ score, size = 160, light = false }: { score: number; size?: number; light?: boolean }) {
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
   const pct = score / 100;
-  const scoreColor = score >= 70 ? vars.green : score >= 40 ? vars.amber : vars.red;
+  const scoreColor = light ? "#FFFFFF" : (score >= 70 ? vars.green : score >= 40 ? vars.amber : vars.red);
+  const trackColor = light ? "rgba(255,255,255,0.18)" : vars.g200;
+  const numColor = light ? "#FFFFFF" : vars.navy;
+  const subColor = light ? "rgba(255,255,255,0.7)" : vars.g400;
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="absolute">
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={vars.g200} strokeWidth={10} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={10} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={scoreColor} strokeWidth={10}
           strokeDasharray={`${pct * circ} ${circ}`} strokeLinecap="round"
           transform={`rotate(-90 ${size/2} ${size/2})`} className="transition-all duration-700" />
       </svg>
       <div className="text-center z-10">
-        <span className="text-4xl font-bold" style={{ color: vars.navy }}>{score}</span>
-        <span className="text-sm font-light" style={{ color: vars.g400 }}>/100</span>
+        <span className="text-4xl font-bold" style={{ color: numColor }}>{score}</span>
+        <span className="text-sm font-light" style={{ color: subColor }}>/100</span>
       </div>
     </div>
   );
@@ -720,8 +815,14 @@ function DashboardPage({
     planned: 2,
   };
 
+  const earnedScore = 20;
+  const websiteScore = 38;
+  const earnedTrend = 6;
+  const websiteTrend = 4;
+  const totalTrend = activeClient.scoreTrend;
+
   const llmVisibility = {
-    score: 20,
+    score: earnedScore,
     lastChecked: "14 Apr 2026",
     models: [
       { name: "ChatGPT", mentioned: true },
@@ -730,19 +831,19 @@ function DashboardPage({
     topCompetitors: ["Clarity PR", "Hotwire", "The PR Office"],
   };
 
-  const seoHealth = {
-    score: 62,
-    lastChecked: "12 Apr 2026",
-    issues: { critical: 2, warnings: 5, passed: 18 },
+  const predictedAuthority = {
+    next6m: Math.min(100, authorityScore + 28),
+    pieces: 12,
+    delta: 28,
   };
 
   const quickActions = [
+    { icon: ClipboardPaste, label: "Project Set-Up", sub: "Capture business profile and messaging", action: "intake" },
     { icon: Eye, label: "Earned Media Audit", sub: "Score AI brand mentions", action: "llm-check" },
-    { icon: Search, label: "Website Visibility Audit", sub: "Score the site for AI", action: "diagnostic" },
-    { icon: Globe, label: "Website Technical GEO", sub: "Schema and crawlability", action: "seo-audit" },
-    { icon: FileEdit, label: "Content Optimiser", sub: "Optimise and edit drafts", action: "optimiser" },
+    { icon: Search, label: "Website Visibility Audit", sub: "Score your site for AI citation", action: "diagnostic" },
+    { icon: Calendar, label: "Comms Planner", sub: "Plan and score the PR / marketing schedule", action: "planner" },
+    { icon: FileEdit, label: "Content Optimiser & Editor", sub: "Optimise and edit drafts", action: "optimiser" },
     { icon: BarChart3, label: "Measure & Report", sub: "Track AI authority and PR impact", action: "measure" },
-    { icon: ClipboardPaste, label: "Project Set-Up", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
   ];
 
   const cycle = loadCycle(activeClient.id);
@@ -821,15 +922,161 @@ function DashboardPage({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
-        <div className="rounded-2xl border p-4 sm:p-6 flex flex-col items-center" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+        <div className="rounded-2xl border p-4 sm:p-6 flex flex-col items-center" style={{ background: "linear-gradient(160deg, #165265 0%, #1f748f 100%)", borderColor: vars.navy, color: "white" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.75)" }}>
             Authority Score
-            <InfoTip text="How ready your content is to be picked up and recommended by AI models. Based on structure, schema markup, and authority signals." />
+            <InfoTip text="Total authority score combining earned and website authority and visibility. LLM brief: 'Score Project [name] [URL] for authority and visibility in its market [Project Data S1] including earned and owned media – provide a score out of 100.'" />
           </h3>
-          <AuthorityDonut score={authorityScore} size={130} />
-          <p className="text-sm font-light mt-2" style={{ color: vars.g500 }}>Overall Readiness</p>
-          <button onClick={() => onNavigate("diagnostic")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Run Diagnostic <ArrowRight size={12} />
+          <AuthorityDonut score={authorityScore} size={130} light />
+          <p className="text-sm font-light mt-2" style={{ color: "rgba(255,255,255,0.85)" }}>Earned + Website combined</p>
+          <button onClick={() => onNavigate("measure")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: "white" }}>
+            Open Authority Report <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+            Earned Media Audit
+            <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
+          </h3>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative w-16 h-16">
+              <svg width={64} height={64} viewBox="0 0 64 64">
+                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={32} cy={32} r={26} fill="none"
+                  stroke={earnedScore >= 60 ? vars.green : earnedScore >= 30 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(earnedScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{earnedScore}%</span>
+            </div>
+            <div className="flex-1 space-y-1.5">
+              {llmVisibility.models.map((m) => (
+                <div key={m.name} className="flex items-center gap-2">
+                  {m.mentioned ? <CheckCircle2 size={13} color={vars.green} /> : <XCircle size={13} color={vars.red} />}
+                  <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
+            <div className="flex flex-wrap gap-1.5">
+              {llmVisibility.topCompetitors.map((c) => (
+                <span key={c} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Run Earned Media Audit <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+            Website Visibility Audit
+            <InfoTip text="Score for how well your website is structured for AI citation — schema, crawlability, entity clarity, internal authority graph." />
+          </h3>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative w-16 h-16">
+              <svg width={64} height={64} viewBox="0 0 64 64">
+                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={32} cy={32} r={26} fill="none"
+                  stroke={websiteScore >= 70 ? vars.green : websiteScore >= 40 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(websiteScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{websiteScore}</span>
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={13} color={vars.green} />
+                <span className="text-[12px]" style={{ color: vars.navy }}>Schema coverage</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={13} color={vars.amber} />
+                <span className="text-[12px]" style={{ color: vars.navy }}>Entity clarity</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <XCircle size={13} color={vars.red} />
+                <span className="text-[12px]" style={{ color: vars.navy }}>Q&amp;A snippets</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>3 tech + 3 content scores feed the Website GEO Summary in your Authority Report.</p>
+          <button onClick={() => onNavigate("diagnostic")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Run Website Audit <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+            Comms Planner
+            <InfoTip text="Your forward plan of PR and marketing activity. Each item is scored for predicted AI authority impact and tracked through draft, review and approved." />
+          </h3>
+          <div className="flex items-baseline gap-1 mb-3">
+            <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerItems.total}</span>
+            <span className="text-sm font-light" style={{ color: vars.g500 }}>content items</span>
+          </div>
+          <div className="space-y-2.5 mb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.green }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>Optimised</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.optimised}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.amber }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>In Draft</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.drafts}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.g300 }} />
+                <span className="text-xs" style={{ color: vars.g500 }}>Planned</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.planned}</span>
+            </div>
+          </div>
+          <div className="w-full h-2 rounded-full flex overflow-hidden mb-3" style={{ background: vars.g200 }}>
+            <div className="h-full" style={{ width: `${(plannerItems.optimised / plannerItems.total) * 100}%`, background: vars.green }} />
+            <div className="h-full" style={{ width: `${(plannerItems.drafts / plannerItems.total) * 100}%`, background: vars.amber }} />
+          </div>
+          <button onClick={() => onNavigate("planner")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            Open Comms Planner <ArrowRight size={12} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+            Predicted Earned Authority
+            <InfoTip text="Scoring likely earned media authority generated by planned activity in the Comms Planner over the next six months." />
+          </h3>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-bold" style={{ color: vars.accent }}>{predictedAuthority.next6m}</span>
+            <span className="text-xs font-medium" style={{ color: vars.green }}>+{predictedAuthority.delta} forecast</span>
+          </div>
+          <p className="text-[12px] font-light mb-3" style={{ color: vars.g500 }}>From {predictedAuthority.pieces} planned pieces over the next 6 months.</p>
+          <div className="space-y-1.5">
+            {[
+              { label: "Articles", n: 5, weight: "high" },
+              { label: "Press releases", n: 3, weight: "med" },
+              { label: "Case studies", n: 2, weight: "med" },
+              { label: "Awards / events", n: 2, weight: "low" },
+            ].map((b) => (
+              <div key={b.label} className="flex items-center justify-between">
+                <span className="text-[12px]" style={{ color: vars.g500 }}>{b.label}</span>
+                <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{b.n}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onNavigate("measure")} className="mt-3 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            See projection in report <ArrowRight size={12} />
           </button>
         </div>
 
@@ -868,55 +1115,13 @@ function DashboardPage({
             {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
           </button>
         </div>
-
-        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Comms Planner
-            <InfoTip text="Your forward plan of PR and marketing activity. Each item is scored for predicted AI authority impact and tracked through draft, review and approved stages." />
-          </h3>
-          <div className="flex items-baseline gap-1 mb-3">
-            <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerItems.total}</span>
-            <span className="text-sm font-light" style={{ color: vars.g500 }}>content items</span>
-          </div>
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.green }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>Optimised</span>
-              </div>
-              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.optimised}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.amber }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>In Draft</span>
-              </div>
-              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.drafts}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.g300 }} />
-                <span className="text-xs" style={{ color: vars.g500 }}>Planned</span>
-              </div>
-              <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerItems.planned}</span>
-            </div>
-          </div>
-          <div className="mt-3 w-full h-2 rounded-full flex overflow-hidden" style={{ background: vars.g200 }}>
-            <div className="h-full" style={{ width: `${(plannerItems.optimised / plannerItems.total) * 100}%`, background: vars.green }} />
-            <div className="h-full" style={{ width: `${(plannerItems.drafts / plannerItems.total) * 100}%`, background: vars.amber }} />
-          </div>
-          <button onClick={() => onNavigate("planner")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Open Comms Planner <ArrowRight size={12} />
-          </button>
-        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         {[
-          { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Combined earned media and website authority score for the project." },
-          { label: "Earned Media Audit", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
-          { label: "Website Technical GEO", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical site score from your last audit - schema, crawlability, AI agent access." },
-          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How the combined authority score has changed over the last 30 days." },
+          { label: "Score Trend", prefix: "Total +12 ", value: totalTrend > 0 ? `+${totalTrend}` : String(totalTrend), icon: TrendingUp, positive: totalTrend > 0, tip: "Combined authority score change over the last 30 days. Prefixed Total +12 to reflect cumulative gain since project start." },
+          { label: "Earned Trend", value: earnedTrend > 0 ? `+${earnedTrend}` : String(earnedTrend), icon: Eye, positive: earnedTrend > 0, tip: "Movement of the earned visibility score from the latest LLM checks." },
+          { label: "Website Trend", value: websiteTrend > 0 ? `+${websiteTrend}` : String(websiteTrend), icon: Globe, positive: websiteTrend > 0, tip: "Movement of the website visibility score from the latest crawl." },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-2">
@@ -924,19 +1129,19 @@ function DashboardPage({
                 {stat.label}
                 <InfoTip text={stat.tip} />
               </span>
-              <stat.icon size={14} color={"positive" in stat ? (stat.positive ? vars.green : vars.red) : vars.accent} />
+              <stat.icon size={14} color={stat.positive ? vars.green : vars.red} />
             </div>
-            <span className="text-2xl sm:text-3xl font-bold" style={{ color: vars.navy }}>{stat.value}</span>
+            <span className="text-2xl sm:text-3xl font-bold" style={{ color: stat.positive ? vars.green : vars.red }}>
+              {"prefix" in stat && stat.prefix ? <span className="text-sm font-medium mr-1" style={{ color: vars.g500 }}>{stat.prefix}</span> : null}
+              {stat.value}
+            </span>
           </div>
         ))}
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Pipeline <InfoTip text="Your queue of content being prepared for AI optimisation - press releases, research, speaking opportunities and more." /></h3>
-          <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-1.5 text-xs font-medium hover:underline" style={{ color: vars.accent }}>
-            All Press Releases <ArrowRight size={12} />
-          </button>
+          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Activity Pipeline <InfoTip text="Your queue of content being prepared, reviewed and approved across PR, articles, case studies, awards and speaking. Click an item to open it in the Archive." /></h3>
         </div>
         <div className="space-y-3">
           {contentPipeline.map((item) => {
@@ -948,7 +1153,7 @@ function DashboardPage({
             };
             const st = statusStyles[item.status];
             return (
-              <div key={item.title} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
+              <button key={item.title} onClick={() => onNavigate("archive")} className="w-full flex items-center gap-3 p-3 rounded-xl border text-left hover:bg-gray-50 transition-colors" style={{ borderColor: vars.g200 }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
                   <FileText size={14} color={st.color} />
                 </div>
@@ -959,110 +1164,10 @@ function DashboardPage({
                 <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold flex-shrink-0" style={{ background: st.bg, color: st.color }}>
                   {st.label}
                 </span>
-              </div>
+                <ArrowRight size={14} color={vars.g400} />
+              </button>
             );
           })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
-        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Eye size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Audit <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
-            </div>
-            <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {llmVisibility.lastChecked}</span>
-          </div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="relative w-16 h-16">
-              <svg width={64} height={64} viewBox="0 0 64 64">
-                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
-                <circle cx={32} cy={32} r={26} fill="none"
-                  stroke={llmVisibility.score >= 60 ? vars.green : llmVisibility.score >= 30 ? vars.amber : vars.red}
-                  strokeWidth={5} strokeDasharray={`${(llmVisibility.score / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{llmVisibility.score}%</span>
-            </div>
-            <div className="flex-1">
-              <div className="space-y-1.5">
-                {llmVisibility.models.map((m) => (
-                  <div key={m.name} className="flex items-center gap-2">
-                    {m.mentioned ? <CheckCircle2 size={13} color={vars.green} /> : <XCircle size={13} color={vars.red} />}
-                    <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
-                    <span className="text-[10px]" style={{ color: m.mentioned ? vars.green : vars.g400 }}>
-                      {m.mentioned ? "Mentioned" : "Not mentioned"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="mb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
-            <div className="flex flex-wrap gap-1.5">
-              {llmVisibility.topCompetitors.map((c) => (
-                <span key={c} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
-                  {c}
-                </span>
-              ))}
-            </div>
-          </div>
-          <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Run New Check <ArrowRight size={12} />
-          </button>
-        </div>
-
-        <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Globe size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>SEO Health <InfoTip text="Technical health of your website - checks meta tags, headings, schema markup, page speed, and whether AI crawlers can access your content." /></h3>
-            </div>
-            <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {seoHealth.lastChecked}</span>
-          </div>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="relative w-16 h-16">
-              <svg width={64} height={64} viewBox="0 0 64 64">
-                <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
-                <circle cx={32} cy={32} r={26} fill="none"
-                  stroke={seoHealth.score >= 80 ? vars.green : seoHealth.score >= 50 ? vars.amber : vars.red}
-                  strokeWidth={5} strokeDasharray={`${(seoHealth.score / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{seoHealth.score}</span>
-            </div>
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <XCircle size={13} color={vars.red} />
-                  <span className="text-[12px]" style={{ color: vars.navy }}>Critical Issues</span>
-                </div>
-                <span className="text-[12px] font-bold" style={{ color: vars.red }}>{seoHealth.issues.critical}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle size={13} color={vars.amber} />
-                  <span className="text-[12px]" style={{ color: vars.navy }}>Warnings</span>
-                </div>
-                <span className="text-[12px] font-bold" style={{ color: vars.amber }}>{seoHealth.issues.warnings}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={13} color={vars.green} />
-                  <span className="text-[12px]" style={{ color: vars.navy }}>Passed</span>
-                </div>
-                <span className="text-[12px] font-bold" style={{ color: vars.green }}>{seoHealth.issues.passed}</span>
-              </div>
-            </div>
-          </div>
-          <div className="w-full h-2 rounded-full flex overflow-hidden mb-3" style={{ background: vars.g200 }}>
-            <div className="h-full" style={{ width: `${(seoHealth.issues.critical / 25) * 100}%`, background: vars.red }} />
-            <div className="h-full" style={{ width: `${(seoHealth.issues.warnings / 25) * 100}%`, background: vars.amber }} />
-            <div className="h-full" style={{ width: `${(seoHealth.issues.passed / 25) * 100}%`, background: vars.green }} />
-          </div>
-          <button onClick={() => onNavigate("seo-audit")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Run SEO Audit <ArrowRight size={12} />
-          </button>
         </div>
       </div>
 
@@ -1492,47 +1597,133 @@ function OptimiserPage({
 }: {
   onNavigate: (p: string) => void;
 }) {
+  const intake = loadIntakeData();
+  const keyMessages = getKeyMessages();
+  const spokesList = getSpokespeople();
+  const projectCategories = getProjectMediaCategories();
+
   const [showResults, setShowResults] = useState(false);
   const [projectTitle, setProjectTitle] = useState("");
   const [contentType, setContentType] = useState("Press release");
-  const CONTENT_TYPES = [
-    "Press release", "Article", "Case study", "Whitepaper", "Blog post",
-    "Social post", "Event copy", "Speaker submission", "Award submission", "Directory entry",
-  ];
+  const [spokesperson, setSpokesperson] = useState<string>(spokesList[0]?.name || "NA");
+  const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
+  const [mediaCats, setMediaCats] = useState<string[]>([]);
+  const [contentStatus, setContentStatus] = useState<"Draft" | "Review" | "Final">("Draft");
+  const [pubDate, setPubDate] = useState("");
+  const [llmTarget, setLlmTarget] = useState("General (All LLMs)");
+  const [bodyText, setBodyText] = useState("");
+  const [showRetrieve, setShowRetrieve] = useState(false);
+  const [showCatPicker, setShowCatPicker] = useState(false);
+  const [retrieveQuery, setRetrieveQuery] = useState("");
+
+  const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
+  const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
+  const filteredArchive = archiveAll.filter((a) => !retrieveQuery || (a.title + " " + (a.body || "")).toLowerCase().includes(retrieveQuery.toLowerCase()));
+
+  // Preload from planner / archive
+  useEffect(() => {
+    let archiveId = "";
+    try { archiveId = localStorage.getItem("aio.optimiser.preload") || ""; } catch { /* noop */ }
+    if (!archiveId) return;
+    try { localStorage.removeItem("aio.optimiser.preload"); } catch { /* noop */ }
+    const planner = loadPlannerProjects().find((p) => p.id === archiveId);
+    if (planner) {
+      setProjectTitle(planner.title);
+      setContentType(planner.contentType);
+      if (planner.spokesperson) setSpokesperson(planner.spokesperson);
+      if (planner.releaseDate) setPubDate(planner.releaseDate);
+      return;
+    }
+    const arc = loadArchive().find((a) => a.id === archiveId);
+    if (arc) {
+      setProjectTitle(arc.title);
+      setContentType(arc.contentType);
+      if (arc.spokesperson) setSpokesperson(arc.spokesperson);
+      if (arc.body) setBodyText(arc.body);
+    }
+  }, []);
+
+  const handleRetrieve = (a: ArchiveItem) => {
+    setProjectTitle(a.title);
+    setContentType(a.contentType);
+    if (a.spokesperson) setSpokesperson(a.spokesperson);
+    if (a.body) setBodyText(a.body);
+    setShowRetrieve(false);
+  };
+
   const archiveItem = (status: "Draft" | "Final") => {
     const items = loadArchive();
     const item: ArchiveItem = {
       id: `arch-${Date.now()}`,
       title: projectTitle || "Untitled project",
       contentType,
-      spokesperson: "Spencer Gallagher",
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status,
-      tags: [contentType.toLowerCase().replace(/\s+/g, "-")],
-      body: "Optimised content body. (Demo - real editor content captured here.)",
+      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), ...mediaCats.slice(0, 3).map((c) => c.toLowerCase().replace(/\s+/g, "-"))],
+      body: bodyText || "Optimised content body. (Demo)",
       createdAt: new Date().toISOString(),
     };
     saveArchive([item, ...items]);
     alert(`Saved "${item.title}" to Archive as ${status}.`);
   };
   const pushToPlanner = () => {
+    if (!projectTitle.trim()) {
+      alert("Add a Content Title before placing it on the Comms Planner.");
+      return;
+    }
     const projects = loadPlannerProjects();
+    const dateWeek = pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date());
     const proj: PlannerProject = {
       id: `proj-${Date.now()}`,
-      title: projectTitle || "Untitled project",
+      title: projectTitle,
       contentType,
-      spokesperson: "Spencer Gallagher",
-      keyMessage: "AI authority for professional services",
-      audience: "Industry / press",
-      channels: ["Priority"],
-      week: getISOWeek(new Date()),
-      status: "Drafting",
-      releaseDate: "",
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+      keyMessage: selectedMessages[0] || "",
+      audience: mediaCats[0] || "",
+      channels: mediaCats.slice(0, 4),
+      week: dateWeek,
+      status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
+      releaseDate: pubDate,
       notes: "Sent from Content Optimiser.",
     };
     savePlannerProjects([proj, ...projects]);
-    alert(`"${proj.title}" added to Authority Planner.`);
+    alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
     onNavigate("planner");
   };
+  const shareDraft = () => {
+    const subject = encodeURIComponent(`Draft for review: ${projectTitle || "Untitled"}`);
+    const body = encodeURIComponent(`Draft of "${projectTitle}" (${contentType}) for review.\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\n— sent via AIO Fusion`);
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  };
+  const downloadDraft = () => {
+    const blob = new Blob([
+      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "—"}\n\n---\n\n${bodyText || "(no body content)"}`,
+    ], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(projectTitle || "draft").replace(/[^a-z0-9]/gi, "_")}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const sendToMediaResearch = () => {
+    const id = `temp-${Date.now()}`;
+    const items = loadArchive();
+    saveArchive([{
+      id,
+      title: projectTitle || "Untitled draft",
+      contentType,
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+      status: "Draft",
+      tags: [contentType.toLowerCase().replace(/\s+/g, "-")],
+      body: bodyText,
+      createdAt: new Date().toISOString(),
+    }, ...items]);
+    try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
+    onNavigate("media-research");
+  };
+  const canResearch = RESEARCH_TYPES.includes(contentType);
+  const intakeReady = !!intake;
   const semanticPhrases = [
     { phrase: "independent agency advisory", relevance: 0.94 },
     { phrase: "benchmarking dataset", relevance: 0.91 },
@@ -1588,135 +1779,143 @@ function OptimiserPage({
   if (!showResults) {
     return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#2896b9" />
-            <h1
-              className="text-xl tracking-tight flex items-center"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-            >
-              Content Optimiser
-              <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
-            </h1>
+        <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <FileEdit size={20} color={vars.teal} />
+              <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                Content Optimiser & Editor
+                <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+              </h1>
+            </div>
+            <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+              Transform PR and marketing content for maximum AI citation and retrieval. Pull approved Project Data into every optimisation.
+            </p>
           </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Transform PR content for maximum AI citation and retrieval
-            across large language models.
-          </p>
+          <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <Archive size={14} /> Retrieve content draft
+          </button>
         </div>
-        <div
-          className="rounded-xl border p-8"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="max-w-lg mx-auto">
-            <div className="mb-5">
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: vars.g500 }}>Project Title</label>
-              <input
-                type="text"
-                value={projectTitle}
-                onChange={(e) => setProjectTitle(e.target.value)}
-                placeholder="e.g. Q2 product launch announcement"
-                className="w-full px-3 py-2.5 rounded-lg border text-sm"
-                style={{ borderColor: vars.g200, color: vars.navy }}
-              />
-            </div>
-            <div className="mb-5">
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: vars.g500 }}>Content Type</label>
-              <select
-                value={contentType}
-                onChange={(e) => setContentType(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border text-sm bg-white"
-                style={{ borderColor: vars.g200, color: vars.navy }}
-              >
-                {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label
-                  className="text-xs font-medium mb-1.5 block"
-                  style={{ color: vars.g500 }}
-                >
-                  Spokesperson
-                </label>
-                <div
-                  className="flex items-center gap-2 p-3 rounded-lg border"
-                  style={{ borderColor: vars.g200 }}
-                >
-                  <User size={14} style={{ color: vars.g400 }} />
-                  <span
-                    className="text-sm"
-                    style={{ color: vars.g400 }}
-                  >
-                    Name and title...
-                  </span>
-                </div>
+
+        {!intakeReady && (
+          <div className="mb-4 p-3 rounded-xl flex items-start gap-2" style={{ background: vars.creamDeep, border: `1px solid ${vars.gold}33` }}>
+            <AlertTriangle size={14} color={vars.gold} className="mt-0.5 flex-shrink-0" />
+            <p className="text-[12px] font-light" style={{ color: vars.navy }}>
+              Project Data hasn't been accepted yet. Spokespeople, Key Messages and Media Categories will be empty until you complete <button onClick={() => onNavigate("intake")} className="underline font-semibold" style={{ color: vars.accent }}>Project Set-Up</button>.
+            </p>
+          </div>
+        )}
+
+        <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="space-y-5">
+            {/* Row 1 — Title + type */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <Labelled label="Content Title" hint="Used as the planner card label and archive entry">
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
+                      className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
+                    <InfoTip text="Becomes the visible heading on the Comms Planner row, on the Archive card and on the Earned Media Tracker entry. Keep it descriptive (≈8 words)." />
+                  </div>
+                </Labelled>
               </div>
-              <div>
-                <label
-                  className="text-xs font-medium mb-1.5 block"
-                  style={{ color: vars.g500 }}
-                >
-                  LLM Target
-                </label>
-                <div
-                  className="flex items-center gap-2 p-3 rounded-lg border"
-                  style={{ borderColor: vars.g200 }}
-                >
-                  <span className="text-sm" style={{ color: vars.navy }}>
-                    General (All LLMs)
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    style={{ color: vars.g400 }}
-                    className="ml-auto"
-                  />
+              <Labelled label="Content Type" hint="Drives the scoring weight">
+                <div className="flex items-center gap-2">
+                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <InfoTip text="Each type carries a default Authority and Visibility score (see Score settings inside the Comms Planner)." />
                 </div>
-              </div>
+              </Labelled>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label
-                  className="text-xs font-medium mb-1.5 block"
-                  style={{ color: vars.g500 }}
-                >
-                  Key Message
-                </label>
-                <div
-                  className="flex items-center gap-2 p-3 rounded-lg border"
-                  style={{ borderColor: vars.g200 }}
-                >
-                  <Tag size={14} style={{ color: vars.g400 }} />
-                  <span className="text-sm" style={{ color: vars.g400 }}>
-                    Core message to optimise around...
-                  </span>
+
+            {/* Row 2 — Spokesperson + LLM target */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Labelled label="Spokesperson">
+                <div className="flex items-center gap-2">
+                  <select value={spokesperson} onChange={(e) => setSpokesperson(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    {spokesList.length > 0
+                      ? spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` — ${s.title}` : ""}</option>)
+                      : <option value="">No spokespeople in Project Data</option>
+                    }
+                    <option value="NA">NA — no spokesperson</option>
+                  </select>
+                  <InfoTip text="Pulled from Section 4.8 of the Project Set-Up. NA is allowed for company-issued content." />
                 </div>
-              </div>
-              <div>
-                <label
-                  className="text-xs font-medium mb-1.5 block"
-                  style={{ color: vars.g500 }}
-                >
-                  Purpose
-                </label>
-                <div
-                  className="flex items-center gap-2 p-3 rounded-lg border"
-                  style={{ borderColor: vars.g200 }}
-                >
-                  <Target size={14} style={{ color: vars.g400 }} />
-                  <span className="text-sm" style={{ color: vars.g400 }}>
-                    e.g. Product launch, Thought leadership...
-                  </span>
+              </Labelled>
+              <Labelled label="LLM Target">
+                <div className="flex items-center gap-2">
+                  <select value={llmTarget} onChange={(e) => setLlmTarget(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    {["General (All LLMs)", "ChatGPT", "Claude", "Perplexity", "Gemini", "Copilot"].map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <InfoTip text="Tunes the optimisation prompt to the citation patterns of a single answer engine. Leave on General unless you have a specific target." />
                 </div>
-              </div>
+              </Labelled>
             </div>
-            <div className="mb-6">
-              <label
-                className="text-xs font-medium mb-1.5 block"
-                style={{ color: vars.g500 }}
-              >
-                Paste Your Content
-              </label>
+
+            {/* Row 3 — Key messages multi (4.2/4.3) */}
+            <Labelled label="Select Key Messages" hint="Multi-select from Project Data sections 4.2 + 4.3">
+              <div className="rounded-lg border p-2.5 min-h-[80px]" style={{ borderColor: vars.g200 }}>
+                {keyMessages.length === 0 ? (
+                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {keyMessages.map((m) => {
+                      const label = m.short || m.long;
+                      const on = selectedMessages.includes(label);
+                      return (
+                        <button key={`${m.tag}-${label}`} onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== label) : [...selectedMessages, label])}
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-full border text-left max-w-full"
+                          style={{ borderColor: on ? vars.accent : vars.g200, background: on ? "rgba(31,116,143,0.1)" : "white", color: on ? vars.accent : vars.g500 }}
+                          title={m.long}>
+                          <span className="opacity-70 mr-1">[{m.tag}]</span>{label.length > 70 ? `${label.slice(0, 70)}…` : label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </Labelled>
+
+            {/* Row 4 — Media categories (replaces Purpose) */}
+            <Labelled label="Select Media Categories" hint="Multi-select from Section 4.9">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowCatPicker(true)} className="flex-1 text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between" style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}>
+                  <span>{mediaCats.length === 0 ? "Choose categories…" : `${mediaCats.length} categor${mediaCats.length === 1 ? "y" : "ies"} selected`}</span>
+                  <ChevronDown size={14} color={vars.g400} />
+                </button>
+                <InfoTip text="Pulled from the 110 Trade media categories alpha list. Drives Media Research and the Earned Media Tracker filters." />
+              </div>
+              {mediaCats.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {mediaCats.slice(0, 8).map((c) => (
+                    <span key={c} className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: "rgba(201,160,78,0.12)", color: "#7A5E25" }}>{c}</span>
+                  ))}
+                  {mediaCats.length > 8 && <span className="text-[10px] font-light" style={{ color: vars.g500 }}>+{mediaCats.length - 8} more</span>}
+                </div>
+              )}
+            </Labelled>
+
+            {/* Row 5 — Status + publication date */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Labelled label="Content Status">
+                <div className="flex items-center gap-2">
+                  <select value={contentStatus} onChange={(e) => setContentStatus(e.target.value as "Draft" | "Review" | "Final")} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    {(["Draft", "Review", "Final"] as const).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <InfoTip text="Draft is editable. Review is shared. Final pushes to the Comms Planner as Approved." />
+                </div>
+              </Labelled>
+              <Labelled label="Publication date" hint="Places this item on the Comms Planner">
+                <div className="flex items-center gap-2">
+                  <input type="date" value={pubDate} onChange={(e) => setPubDate(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
+                  <InfoTip text="Setting a date adds the content to the Comms Planner row for that week. Leave blank to skip." />
+                </div>
+              </Labelled>
+            </div>
+
+            {/* Row 6 — Body editor */}
+            <Labelled label="Paste your content" hint="Press releases, articles, whitepapers, case studies — up to ~3,000 words">
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
                 <div className="flex items-center gap-1 px-2 py-1.5 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }} className="px-2 py-1 rounded text-xs font-bold hover:bg-white" style={{ color: vars.navy }} title="Bold">B</button>
@@ -1724,25 +1923,93 @@ function OptimiserPage({
                   <span className="w-px h-4 mx-1" style={{ background: vars.g200 }} />
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Link URL'); if (url) document.execCommand('createLink', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Link"><LinkIcon size={12} /> Link</button>
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Image URL'); if (url) document.execCommand('insertImage', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Image"><ImageIcon size={12} /> Image</button>
+                  <span className="ml-auto text-[10px] font-light" style={{ color: vars.g400 }}>{countWords(bodyText)} words</span>
                 </div>
-                <div
-                  contentEditable
-                  suppressContentEditableWarning
-                  className="p-4 min-h-[160px] text-sm outline-none"
-                  style={{ color: vars.navy }}
-                  data-placeholder="Paste your press release, article, case study or whitepaper here..."
-                />
+                <textarea value={bodyText} onChange={(e) => setBodyText(e.target.value)} rows={9} className="w-full p-4 text-sm outline-none resize-vertical" style={{ color: vars.navy, border: "none" }}
+                  placeholder="Paste your press release, article, case study or whitepaper here…" />
               </div>
+            </Labelled>
+
+            {/* LLM brief callout */}
+            <div className="rounded-xl p-4" style={{ background: vars.cream, border: `1px solid ${vars.gold}33` }}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: vars.gold }}>LLM brief — what we send to the model</p>
+              <p className="text-[12px] font-light italic leading-relaxed" style={{ color: vars.navy }}>
+                "Using the accepted Project Data for {intake?.formData["1.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 4.1–4.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
+              </p>
             </div>
-            <button
-              onClick={() => setShowResults(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90"
-              style={{ background: "#2896b9" }}
-            >
-              <Sparkles size={16} /> Optimise Content
-            </button>
+
+            {/* Action bar */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t" style={{ borderColor: vars.g100 }}>
+              <button onClick={() => setShowResults(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
+                <Sparkles size={14} /> Optimise
+              </button>
+              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <Archive size={14} /> Archive
+              </button>
+              <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <Send size={14} /> Share draft
+              </button>
+              <button onClick={downloadDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <Download size={14} /> Download
+              </button>
+              {canResearch && (
+                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.gold, color: "#7A5E25", background: "rgba(201,160,78,0.06)" }}>
+                  <Target size={14} /> Media Research
+                </button>
+              )}
+              <button onClick={pushToPlanner} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold ml-auto" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+                <Calendar size={14} /> Push to Comms Planner
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Retrieve content modal */}
+        {showRetrieve && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowRetrieve(false)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+                <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                  <Archive size={16} color={vars.accent} /> Retrieve content draft
+                </h2>
+                <button onClick={() => setShowRetrieve(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              </div>
+              <div className="px-6 py-3 border-b" style={{ borderColor: vars.g100 }}>
+                <input value={retrieveQuery} onChange={(e) => setRetrieveQuery(e.target.value)} placeholder="Search by title or body…" className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {filteredArchive.length === 0 ? (
+                  <p className="text-[13px] font-light text-center py-8" style={{ color: vars.g500 }}>{archiveAll.length === 0 ? "Archive is empty." : "No matches."}</p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredArchive.map((a) => (
+                      <button key={a.id} onClick={() => handleRetrieve(a)} className="w-full text-left rounded-lg border p-3 hover:shadow-sm" style={{ borderColor: vars.g200 }}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>{a.title}</p>
+                            <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{a.contentType}{a.spokesperson ? ` · ${a.spokesperson}` : ""}</p>
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style={{ background: a.status === "Final" ? "rgba(61,155,107,0.12)" : "rgba(212,146,42,0.12)", color: a.status === "Final" ? vars.green : vars.amber }}>{a.status}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category picker */}
+        {showCatPicker && (
+          <CategoryPickerModal
+            all={TRADE_MEDIA_CATEGORIES}
+            selected={mediaCats}
+            projectSet={projectCategories}
+            onClose={() => setShowCatPicker(false)}
+            onSave={(next) => { setMediaCats(next); setShowCatPicker(false); }}
+          />
+        )}
       </div>
     );
   }
@@ -2204,12 +2471,27 @@ function OptimiserPage({
   );
 }
 
-function PlannerPage() {
+function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [projects, setProjects] = useState<PlannerProject[]>(loadPlannerProjects());
   const [editing, setEditing] = useState<PlannerProject | null>(null);
+  const [showArchivePicker, setShowArchivePicker] = useState(false);
+  const [showMethodology, setShowMethodology] = useState(false);
+  const archive = useMemo(() => loadArchive(), [showArchivePicker]);
+
+  const sendToOptimiser = (archiveId?: string) => {
+    if (archiveId) {
+      try { localStorage.setItem("aio.optimiser.preload", archiveId); } catch { /* noop */ }
+    }
+    onNavigate("optimiser");
+  };
+  const sendToMediaResearch = (archiveId: string) => {
+    try { localStorage.setItem("aio.research.preload", archiveId); } catch { /* noop */ }
+    onNavigate("media-research");
+  };
+  const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
   const [cfg, setCfg] = useState<ScoringConfig>(loadScoringConfig());
   const [showSettings, setShowSettings] = useState(false);
-  const [view, setView] = useState<"cards" | "spreadsheet">("cards");
+  const [view, setView] = useState<"cards" | "spreadsheet">("spreadsheet");
   const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
   const updateCfg = (next: ScoringConfig) => {
     setCfg(next); saveScoringConfig(next);
@@ -2273,23 +2555,29 @@ function PlannerPage() {
     <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Authority Planner</h1>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Plan and score your forward PR and marketing schedule for AI authority impact.</p>
+          <h1 className="text-3xl sm:text-4xl mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
+          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Plan and score the PR and marketing schedule for AI authority impact. Click any row to open it in the Content Optimiser.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="inline-flex rounded-lg border bg-white p-0.5" style={{ borderColor: vars.g200 }} role="group" aria-label="Planner view">
-            <button onClick={() => setView("cards")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "cards" ? vars.navy : "transparent", color: view === "cards" ? "white" : vars.g500 }}>
-              Cards
-            </button>
             <button onClick={() => setView("spreadsheet")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "spreadsheet" ? vars.navy : "transparent", color: view === "spreadsheet" ? "white" : vars.g500 }}>
-              Spreadsheet
+              Calendar
+            </button>
+            <button onClick={() => setView("cards")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "cards" ? vars.navy : "transparent", color: view === "cards" ? "white" : vars.g500 }}>
+              List
             </button>
           </div>
-          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Scoring settings">
-            <Shield size={14} /> Scoring settings
+          <button onClick={() => setShowMethodology(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Scoring methodology">
+            <HelpCircle size={14} /> Methodology
           </button>
-          <button onClick={addProject} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
-            <Plus size={14} /> New project
+          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Score settings">
+            <Shield size={14} /> Score settings
+          </button>
+          <button onClick={() => setShowArchivePicker(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <Archive size={14} /> Select Archived Content
+          </button>
+          <button onClick={() => sendToOptimiser()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
+            <Plus size={14} /> Add Content
           </button>
         </div>
       </div>
@@ -2341,12 +2629,23 @@ function PlannerPage() {
         const SLOT_BG_A = "#F2F8F9";
         const SLOT_BG_B = "#E6F0F2";
         const HEADER_BG = "#9FD0D7";
-        const COLS = ["Week of", "Project Title", "Content message", "Audience", "Release Channel a.", "Release Channel b.", "Release Channel c.", "Release Channel d.", "Spokes", "Status", "Release Date", "Notes", "Score"];
+        const COLS = ["Week of", "Content Title", "Content message", "Audience", "Release Channel a.", "Release Channel b.", "Release Channel c.", "Release Channel d.", "Spokes", "Status", "Release Date", "Notes", "Score"];
         return (
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g200 }}>
+          <div>
+            {/* Status key — horizontal strip ABOVE the calendar so it never obscures entries */}
+            <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Status key:</span>
+              {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((st) => {
+                const cs = STATUS_COLOURS[st];
+                return (
+                  <span key={st} className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: cs.bg, color: cs.fg }}>{st}</span>
+                );
+              })}
+            </div>
+            <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2" style={{ borderColor: vars.g200 }}>
                 <h3 className="text-[15px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
+                <span className="text-[11px] font-light" style={{ color: vars.g400 }}>Click any row to open in the Content Optimiser</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[11px] border-collapse">
@@ -2377,17 +2676,17 @@ function PlannerPage() {
                             )}
                             {p ? (
                               <>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.navy }}>{p.title}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 200 }}>{p.keyMessage || ""}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.audience || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer hover:opacity-80" style={{ background: slotBg, borderColor: "white", color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 200 }}>{p.keyMessage || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.audience || ""}</td>
                                 {[0, 1, 2, 3].map((idx) => (
-                                  <td key={idx} onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{ch[idx] || ""}</td>
+                                  <td key={idx} onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{ch[idx] || ""}</td>
                                 ))}
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.status}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 180 }}>{p.notes || ""}</td>
-                                <td onClick={() => setEditing(p)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.accent }}>{Math.round(s!.visibility + s!.authority)}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
+                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 180 }}>{p.notes || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.accent }}>{Math.round(s!.visibility + s!.authority)}</td>
                               </>
                             ) : (
                               Array.from({ length: 12 }).map((__, c) => (
@@ -2410,17 +2709,6 @@ function PlannerPage() {
                 </table>
               </div>
             </div>
-            <div className="bg-white border rounded-xl p-3 w-[140px] flex-shrink-0" style={{ borderColor: vars.g200 }}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] mb-2 text-center" style={{ color: vars.g500 }}>Status Key</p>
-              <div className="space-y-1.5">
-                {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((st) => {
-                  const cs = STATUS_COLOURS[st];
-                  return (
-                    <div key={st} className="text-center text-[11px] font-semibold py-1.5 rounded" style={{ background: cs.bg, color: cs.fg }}>{st}</div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         );
       })()}
@@ -2431,40 +2719,53 @@ function PlannerPage() {
           <table className="w-full text-[12px]">
             <thead style={{ background: vars.g50 }}>
               <tr>
-                <th className="px-3 py-3 text-left font-semibold sticky left-0 z-10" style={{ color: vars.g500, background: vars.g50, minWidth: 90 }}>Week</th>
-                <th className="px-3 py-3 text-left font-semibold" style={{ color: vars.g500 }}>Projects</th>
+                <th className="px-3 py-3 text-left font-semibold sticky left-0 z-10" style={{ color: vars.g500, background: vars.g50, minWidth: 100 }}>WC date</th>
+                <th className="px-3 py-3 text-left font-semibold" style={{ color: vars.g500 }}>Content</th>
               </tr>
             </thead>
             <tbody>
               {weeks.map((w) => {
                 const wkProjects = projects.filter((p) => p.week === w);
                 const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p, cfg); return s + sc.visibility + sc.authority; }, 0);
+                const wcLabel = weekDateLabel(w);
                 return (
                   <tr key={w} className="border-t" style={{ borderColor: vars.g100 }}>
-                    <td className="px-3 py-3 align-top sticky left-0 z-10 bg-white" style={{ minWidth: 90 }}>
-                      <div className="text-[13px] font-semibold" style={{ color: vars.navy }}>W{w}</div>
+                    <td className="px-3 py-3 align-top sticky left-0 z-10 bg-white" style={{ minWidth: 100 }}>
+                      <div className="text-[13px] font-semibold" style={{ color: vars.navy }}>w/c {wcLabel}</div>
+                      <div className="text-[10px] font-light mt-0.5" style={{ color: vars.g400 }}>Week {w}</div>
                       {wkScore > 0 && <div className="text-[10px] font-semibold mt-1 px-1.5 py-0.5 rounded inline-block" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>{Math.round(wkScore)} pts</div>}
                     </td>
                     <td className="px-3 py-3">
                       {wkProjects.length === 0 ? (
-                        <button onClick={() => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); }} className="text-[11px] font-medium px-2 py-1 rounded border border-dashed" style={{ color: vars.g400, borderColor: vars.g300 }}>+ Add to W{w}</button>
+                        <button onClick={() => sendToOptimiser()} className="text-[11px] font-medium px-2 py-1 rounded border border-dashed" style={{ color: vars.g400, borderColor: vars.g300 }}>+ Add to w/c {wcLabel}</button>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {wkProjects.map((p) => {
                             const s = scoreProject(p, cfg);
                             const cs = STATUS_COLOURS[p.status];
+                            const canResearch = RESEARCH_TYPES.includes(p.contentType);
                             return (
-                              <button key={p.id} onClick={() => setEditing(p)} className="text-left rounded-lg border p-3 hover:shadow-sm transition-all min-w-[220px] max-w-[280px] bg-white" style={{ borderColor: vars.g200 }}>
-                                <div className="flex items-start justify-between gap-2 mb-1">
-                                  <p className="text-[13px] font-semibold leading-tight" style={{ color: vars.navy }}>{p.title}</p>
-                                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
+                              <div key={p.id} className="rounded-lg border p-3 transition-all min-w-[240px] max-w-[300px] bg-white" style={{ borderColor: vars.g200 }}>
+                                <button onClick={() => sendToOptimiser(p.id)} className="text-left w-full">
+                                  <div className="flex items-start justify-between gap-2 mb-1">
+                                    <p className="text-[13px] font-semibold leading-tight" style={{ color: vars.navy }}>{p.title}</p>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cs.bg, color: cs.fg }}>{p.status}</span>
+                                  </div>
+                                  <p className="text-[11px] font-light mb-2" style={{ color: vars.g500 }}>{p.contentType}{p.spokesperson ? ` · ${p.spokesperson}` : ""}</p>
+                                  <div className="flex items-center justify-between text-[11px] mb-2">
+                                    <span style={{ color: vars.g400 }}>{p.channels.length} channel{p.channels.length === 1 ? "" : "s"}</span>
+                                    <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.visibility + s.authority)} pts</span>
+                                  </div>
+                                </button>
+                                <div className="flex items-center gap-1 pt-2 border-t" style={{ borderColor: vars.g100 }}>
+                                  <button onClick={() => setEditing(p)} className="text-[10px] font-semibold px-2 py-1 rounded" style={{ background: vars.g100, color: vars.g500 }} title="Quick edit">Edit</button>
+                                  {canResearch && (
+                                    <button onClick={() => sendToMediaResearch(p.id)} className="text-[10px] font-semibold px-2 py-1 rounded ml-auto" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }} title="Send to Media Research">
+                                      <Target size={10} className="inline mr-1" /> Media Research
+                                    </button>
+                                  )}
                                 </div>
-                                <p className="text-[11px] font-light mb-2" style={{ color: vars.g500 }}>{p.contentType}{p.spokesperson ? ` · ${p.spokesperson}` : ""}</p>
-                                <div className="flex items-center justify-between text-[11px]">
-                                  <span style={{ color: vars.g400 }}>{p.channels.length} channel{p.channels.length === 1 ? "" : "s"}</span>
-                                  <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.visibility + s.authority)} pts</span>
-                                </div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -2477,6 +2778,89 @@ function PlannerPage() {
           </table>
         </div>
       </div>
+      )}
+
+      {/* Methodology modal */}
+      {showMethodology && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowMethodology(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <HelpCircle size={16} color={vars.accent} /> Comms Planner methodology
+              </h2>
+              <button onClick={() => setShowMethodology(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="p-6 text-[13px] font-light leading-relaxed space-y-4" style={{ color: vars.g600 }}>
+              <p>The Comms Planner ranks and combines a 12-week schedule of communications activity across <strong style={{ color: vars.navy }}>three categories of GEO content</strong>. Each item is scored on two dimensions, each out of 10:</p>
+              <ul className="space-y-2 pl-4 list-disc">
+                <li><strong style={{ color: vars.navy }}>Authority</strong> — how strongly the content type contributes to LLM citation. Trade publication articles score highest (9/10).</li>
+                <li><strong style={{ color: vars.navy }}>Visibility</strong> — how many channels and audiences see it. Press releases and social posts score high here.</li>
+              </ul>
+              <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below — change any value in <em>Score settings</em>.</p>
+              <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
+                <table className="w-full text-[12px]">
+                  <thead style={{ background: vars.g50 }}>
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold" style={{ color: vars.g500 }}>Content type</th>
+                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Authority</th>
+                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Visibility</th>
+                      <th className="px-3 py-2 text-right font-semibold" style={{ color: vars.g500 }}>Combined</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(DEFAULT_SCORING.typeWeights).map(([t, w]) => (
+                      <tr key={t} className="border-t" style={{ borderColor: vars.g100 }}>
+                        <td className="px-3 py-2" style={{ color: vars.navy }}>{t}</td>
+                        <td className="px-3 py-2 text-right font-semibold" style={{ color: vars.teal }}>{w.auth}</td>
+                        <td className="px-3 py-2 text-right font-semibold" style={{ color: vars.accent }}>{w.vis}</td>
+                        <td className="px-3 py-2 text-right font-bold" style={{ color: vars.navy }}>{((w.auth + w.vis) / 2).toFixed(1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[12px] italic" style={{ color: vars.g500 }}>Status (Approved / Review / Drafting / Planned) and the number of release channels also factor in as multipliers. Items still in Planned earn 50% of their potential score.</p>
+            </div>
+            <div className="px-6 py-3 border-t flex justify-end" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setShowMethodology(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Got it</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive picker */}
+      {showArchivePicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowArchivePicker(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <Archive size={16} color={vars.accent} /> Select archived content
+              </h2>
+              <button onClick={() => setShowArchivePicker(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {archive.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-[13px] font-light" style={{ color: vars.g500 }}>The Archive is empty. Save a piece from the Optimiser or Creator first.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {archive.map((a) => (
+                    <button key={a.id} onClick={() => { sendToOptimiser(a.id); setShowArchivePicker(false); }} className="w-full text-left rounded-lg border p-3 hover:shadow-sm transition-all" style={{ borderColor: vars.g200 }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>{a.title}</p>
+                          <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{a.contentType}{a.spokesperson ? ` · ${a.spokesperson}` : ""}</p>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style={{ background: a.status === "Final" ? "rgba(61,155,107,0.12)" : "rgba(212,146,42,0.12)", color: a.status === "Final" ? vars.green : vars.amber }}>{a.status}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {editing && (
@@ -3132,18 +3516,21 @@ type ScoringConfig = {
   statusMultipliers: Record<PlannerStatus, number>;
 };
 
+// Default scoring table per Patrick's d2 brief — Authority and Visibility scored
+// independently, with Combined as the shown average. Article (Trade Publication)
+// is the gold standard at 9/9 → 9.0 combined.
 const DEFAULT_SCORING: ScoringConfig = {
   typeWeights: {
-    "Press release":      { vis: 8,  auth: 7 },
-    "Article":            { vis: 7,  auth: 8 },
-    "Case study":         { vis: 6,  auth: 9 },
-    "Whitepaper":         { vis: 5,  auth: 10 },
-    "Blog post":          { vis: 6,  auth: 5 },
-    "Social post":        { vis: 8,  auth: 3 },
-    "Event copy":         { vis: 5,  auth: 6 },
-    "Speaker submission": { vis: 4,  auth: 8 },
-    "Award submission":   { vis: 4,  auth: 9 },
-    "Directory entry":    { vis: 3,  auth: 4 },
+    "Press release":      { vis: 8, auth: 6 },
+    "Article":            { vis: 9, auth: 9 },
+    "Case study":         { vis: 6, auth: 7 },
+    "Whitepaper":         { vis: 5, auth: 8 },
+    "Blog post":          { vis: 7, auth: 5 },
+    "Social post":        { vis: 8, auth: 2 },
+    "Event copy":         { vis: 4, auth: 3 },
+    "Speaker submission": { vis: 3, auth: 6 },
+    "Award submission":   { vis: 2, auth: 8 },
+    "Directory entry":    { vis: 6, auth: 5 },
   },
   channels: ["Priority", "National", "Specialist A", "Specialist B", "Specialist C", "Specialist D", "Owned", "LinkedIn"],
   channelBase: 0.5,
@@ -3298,20 +3685,51 @@ function ReleaseGatewayPage() {
   );
 }
 
-function ArchivePage() {
+function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
+  const intake = loadIntakeData();
+  const projectName = (intake?.formData["1.1"] as string) || "your project";
+  const keyMessages = getKeyMessages();
+  const intakeSpeakers = getSpokespeople();
+
   const [archive, setArchive] = useState<ArchiveItem[]>(loadArchive());
   const [query, setQuery] = useState("");
+  const [periodFilter, setPeriodFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [messageFilter, setMessageFilter] = useState<string[]>([]);
   const [spokespersonFilter, setSpokespersonFilter] = useState<string>("");
 
-  const allTypes = Array.from(new Set(archive.map((a) => a.contentType))).sort();
-  const allSpeakers = Array.from(new Set(archive.map((a) => a.spokesperson).filter(Boolean))) as string[];
+  const allSpeakers = Array.from(new Set([
+    ...intakeSpeakers.map((s) => s.name),
+    ...archive.map((a) => a.spokesperson).filter(Boolean) as string[],
+  ]));
+
+  const periodMatches = (createdAt: string): boolean => {
+    if (!periodFilter) return true;
+    const d = new Date(createdAt);
+    const now = new Date();
+    if (periodFilter === "month") {
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }
+    if (periodFilter === "quarter") {
+      const q = Math.floor(now.getMonth() / 3);
+      const dq = Math.floor(d.getMonth() / 3);
+      return d.getFullYear() === now.getFullYear() && dq === q;
+    }
+    if (periodFilter === "year") {
+      return d.getFullYear() === now.getFullYear();
+    }
+    return true;
+  };
 
   const filtered = archive.filter((item) => {
     if (typeFilter && item.contentType !== typeFilter) return false;
-    if (statusFilter && item.status !== statusFilter) return false;
     if (spokespersonFilter && item.spokesperson !== spokespersonFilter) return false;
+    if (!periodMatches(item.createdAt)) return false;
+    if (messageFilter.length > 0) {
+      const hay = (item.title + " " + (item.body || "") + " " + (item.tags || []).join(" ")).toLowerCase();
+      const anyHit = messageFilter.some((m) => hay.includes(m.toLowerCase().slice(0, 40)));
+      if (!anyHit) return false;
+    }
     if (query) {
       const q = query.toLowerCase();
       const hay = [item.title, item.body, ...(item.tags || []), item.spokesperson || ""].join(" ").toLowerCase();
@@ -3327,55 +3745,106 @@ function ArchivePage() {
     saveArchive(updated);
   };
 
+  const sendToOptimiser = (id: string) => {
+    try { localStorage.setItem("aio.optimiser.preload", id); } catch { /* noop */ }
+    onNavigate("optimiser");
+  };
+
+  const clearFilters = () => {
+    setQuery(""); setPeriodFilter(""); setTypeFilter(""); setMessageFilter([]); setSpokespersonFilter("");
+  };
+
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Archive</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>All approved and draft content stored and searchable by tag, type, message and spokesperson.</p>
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+          <Archive size={22} color={vars.accent} /> Archive — {projectName}
+        </h1>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          The full library of accepted, drafted and reviewed PR and marketing content for this project — searchable by message, spokesperson, content type and time period. Click any card to send it back to the Content Optimiser.
+        </p>
       </div>
 
-      <div className="bg-white border rounded-2xl p-4 mb-6" style={{ borderColor: vars.g200 }}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="md:col-span-2">
-            <input
-              type="text"
-              placeholder="Search title, message, tags..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border text-[13px]"
-              style={{ borderColor: vars.g200 }}
-            />
-          </div>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-            <option value="">All types</option>
-            {allTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-            <option value="">All status</option>
-            <option value="Draft">Draft</option>
-            <option value="Final">Final</option>
-          </select>
+      {/* Search panel */}
+      <div className="bg-white border rounded-2xl p-5 mb-6" style={{ borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[14px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
+            <Search size={14} color={vars.accent} /> Search panel
+            <InfoTip text="Filter the archive by free-text keyword, time period, content type, project message and spokesperson. All filters combine." />
+          </h2>
+          {(query || periodFilter || typeFilter || messageFilter.length > 0 || spokespersonFilter) && (
+            <button onClick={clearFilters} className="text-[11px] font-medium hover:underline" style={{ color: vars.accent }}>Clear filters</button>
+          )}
         </div>
-        {allSpeakers.length > 0 && (
-          <div className="mt-3">
-            <select value={spokespersonFilter} onChange={(e) => setSpokespersonFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="lg:col-span-2">
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Enter key word</label>
+            <input type="text" placeholder="e.g. agentic, benchmarking, launch…" value={query} onChange={(e) => setQuery(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Time Period</label>
+            <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              <option value="">All time</option>
+              <option value="month">This month</option>
+              <option value="quarter">This quarter</option>
+              <option value="year">This year</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Content Type</label>
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              <option value="">All types</option>
+              {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Spokesperson</label>
+            <select value={spokespersonFilter} onChange={(e) => setSpokespersonFilter(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
               <option value="">All spokespeople</option>
               {allSpeakers.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-        )}
+          <div className="lg:col-span-3">
+            <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>
+              Project Message <span className="font-light">(multi-select from 4.2 + 4.3)</span>
+            </label>
+            <div className="rounded-lg border p-2 min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: "white" }}>
+              {keyMessages.length === 0 && (
+                <span className="text-[11px] font-light italic self-center" style={{ color: vars.g400 }}>No messages — set in Project Set-Up</span>
+              )}
+              {keyMessages.map((m) => {
+                const label = m.short || m.long;
+                const on = messageFilter.includes(label);
+                return (
+                  <button key={`${m.tag}-${label}`} onClick={() => setMessageFilter(on ? messageFilter.filter((x) => x !== label) : [...messageFilter, label])}
+                    className="text-[10px] font-semibold px-2 py-1 rounded-full border"
+                    style={{ borderColor: on ? vars.accent : vars.g200, background: on ? "rgba(31,116,143,0.1)" : "white", color: on ? vars.accent : vars.g500 }}
+                    title={m.long}>
+                    [{m.tag}] {label.length > 50 ? `${label.slice(0, 50)}…` : label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 text-[11px] font-light" style={{ color: vars.g500 }}>
+          Showing <strong style={{ color: vars.navy }}>{filtered.length}</strong> of {archive.length} archived items.
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={28} color={vars.g400} className="mx-auto mb-3" />
           <p className="text-[14px] font-medium" style={{ color: vars.navy }}>{archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
-          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{archive.length === 0 ? "Archive a draft or final from the Content Optimiser to start building your library." : "Try clearing your filters."}</p>
+          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map((item) => (
-            <div key={item.id} className="bg-white border rounded-xl p-5" style={{ borderColor: vars.g200 }}>
+            <div key={item.id} className="bg-white border rounded-xl p-5 transition-all hover:shadow-sm cursor-pointer" style={{ borderColor: vars.g200 }} onClick={() => sendToOptimiser(item.id)}>
               <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -3393,7 +3862,12 @@ function ArchivePage() {
                     </div>
                   )}
                 </div>
-                <button onClick={() => handleDelete(item.id)} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={(e) => { e.stopPropagation(); sendToOptimiser(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+                    Open in Optimiser
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
+                </div>
               </div>
               <p className="text-[12px] font-light leading-relaxed line-clamp-3" style={{ color: vars.g500 }}>
                 {item.body.slice(0, 240)}{item.body.length > 240 ? "..." : ""}
@@ -3495,69 +3969,513 @@ function PlaceholderPage({
   );
 }
 
-function ContentCreatorPage() {
+function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
+  const intake = loadIntakeData();
+  const spokesList = getSpokespeople();
+  const projectCategories = getProjectMediaCategories();
+
+  const [projectName, setProjectName] = useState(() => (intake?.formData["1.1"] as string) || "");
+  const [contentType, setContentType] = useState("Article");
+  const [headline, setHeadline] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [spokesperson, setSpokesperson] = useState(spokesList[0]?.name || "");
+  const [spokesLi, setSpokesLi] = useState(spokesList[0]?.linkedin || "");
+  const [mediaTarget, setMediaTarget] = useState<string[]>([]);
+  const [contentStatus, setContentStatus] = useState<"Draft" | "Review" | "Final">("Draft");
+  const [pubDate, setPubDate] = useState("");
+  const [showCatPicker, setShowCatPicker] = useState(false);
+
+  const headlineWords = countWords(headline);
+  const transcriptWords = countWords(transcript);
+  const headlineOver = headlineWords > 150;
+  const transcriptOver = transcriptWords > 3000;
+
+  const onPickSpokesperson = (name: string) => {
+    setSpokesperson(name);
+    const s = spokesList.find((x) => x.name === name);
+    setSpokesLi(s?.linkedin || "");
+  };
+
+  const archiveItem = () => {
+    const items = loadArchive();
+    const item: ArchiveItem = {
+      id: `arch-${Date.now()}`,
+      title: headline.split("\n")[0].slice(0, 120) || projectName || "Untitled draft",
+      contentType,
+      spokesperson,
+      status: contentStatus === "Final" ? "Final" : "Draft",
+      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
+      body: transcript || "(No transcript supplied — generated from headline only)",
+      createdAt: new Date().toISOString(),
+    };
+    saveArchive([item, ...items]);
+    alert(`Saved "${item.title}" to Archive.`);
+  };
+
+  const downloadDoc = () => {
+    const txt = `Project: ${projectName}\nContent type: ${contentType}\nSpokesperson: ${spokesperson}\nLinkedIn: ${spokesLi}\nMedia target: ${mediaTarget.join(", ")}\nStatus: ${contentStatus}\nPublication date: ${pubDate || "TBD"}\n\nHEADLINE / IDEA\n${headline}\n\nTRANSCRIPT / NOTES\n${transcript}\n`;
+    const blob = new Blob([txt], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${projectName || "creator-brief"}.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <PlaceholderPage
-      title="Content Creator"
-      intro="Create AI-optimised media pitches, draft articles and case studies from raw transcripts and notes, using the signed-off Project Data as the authority brief."
-      badge="In build"
-      badgeColor="#D4922A"
-      icon={PenLine}
-      features={[
-        { heading: "Project name picker", copy: "Pulls in messaging entered in Project Set-Up parts 4 and 6." },
-        { heading: "Content type selector", copy: "Press release, article, case study, blog, social post." },
-        { heading: "Headline / subject", copy: "Up to 150 words for the brief idea or angle." },
-        { heading: "Transcript or notes", copy: "Up to 3,000 words of raw material to work from." },
-        { heading: "Spokesperson + LinkedIn", copy: "Pulled from the Project Data spokesperson list." },
-        { heading: "Media target", copy: "Multi-select drawn from the Trade Media Categories list (4.9)." },
-        { heading: "Generate pitch + 900-word draft", copy: "Searches the last six months for supporting research and evidence." },
-        { heading: "Status, date, archive, download", copy: "Mirrors the Content Optimiser action bar; pushes to Comms Planner calendar." },
-      ]}
-    />
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <PenLine size={20} color={vars.coral} />
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
+        </div>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          Generate AI-optimised media pitches, draft articles and case studies from raw transcripts and notes, using the signed-off Project Data as the authority brief.
+        </p>
+      </div>
+
+      {/* LLM brief call-out */}
+      <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief used by this tool</p>
+        <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+          "Develop an article synopsis and draft 900-word article based on the entries below. Please search more widely for research and news evidence within the last six months to back up this idea. And add additional points and arguments where appropriate."
+        </p>
+      </div>
+
+      <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5" style={{ borderColor: vars.g200 }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Labelled label="Project name" hint="Pulls in messaging from Project Set-Up parts 4 and 6.">
+            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="e.g. Q2 thought leadership programme" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+          </Labelled>
+          <Labelled label="Content type" hint="Press release, article, case study, blog, social post.">
+            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </Labelled>
+        </div>
+
+        <Labelled label="Headline / subject" hint={`Up to 150 words for the brief idea or angle. (${headlineWords} / 150)`}>
+          <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: headlineOver ? vars.red : vars.g200 }} />
+          {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
+        </Labelled>
+
+        <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`}>
+          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border text-[13px] leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : vars.g200 }} />
+          {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
+        </Labelled>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Labelled label="Spokesperson" hint="Pulled from the Project Data spokesperson list (4.8).">
+            <select value={spokesperson} onChange={(e) => onPickSpokesperson(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              <option value="">— Select spokesperson —</option>
+              <option value="NA">NA</option>
+              {spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` · ${s.title}` : ""}</option>)}
+            </select>
+          </Labelled>
+          <Labelled label="Spokesperson LinkedIn" hint="Pre-fills from the spokesperson record; can be overridden.">
+            <input value={spokesLi} onChange={(e) => setSpokesLi(e.target.value)} placeholder="https://www.linkedin.com/in/..." className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+          </Labelled>
+        </div>
+
+        <Labelled label="Media target" hint="Multi-select drawn from the Trade Media Categories list (4.9).">
+          <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
+            {mediaTarget.length === 0 ? (
+              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected — pick from the project categories or the full alphabetical list.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {mediaTarget.map((cat) => (
+                  <span key={cat} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>
+                    {cat}
+                    <button onClick={() => setMediaTarget(mediaTarget.filter((c) => c !== cat))}><XCircle size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Choose categories</button>
+            {projectCategories.length > 0 && (
+              <button
+                onClick={() => setMediaTarget(Array.from(new Set([...mediaTarget, ...projectCategories])))}
+                className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
+                style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
+                title={`Add the ${projectCategories.length} categories selected in Project Set-Up 4.9`}
+              >
+                Use Project Set-Up categories ({projectCategories.length})
+              </button>
+            )}
+          </div>
+        </Labelled>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Labelled label="Content Status" hint="Draft / Review / Final.">
+            <select value={contentStatus} onChange={(e) => setContentStatus(e.target.value as "Draft" | "Review" | "Final")} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              <option value="Draft">Draft</option>
+              <option value="Review">Review</option>
+              <option value="Final">Final</option>
+            </select>
+          </Labelled>
+          <Labelled label="Publication date" hint="Sends an entry to the Comms Planner calendar on save.">
+            <input type="date" value={pubDate} onChange={(e) => setPubDate(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
+          </Labelled>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-4 border-t" style={{ borderColor: vars.g100 }}>
+          <button onClick={() => alert("Pitch synopsis + 900-word article generated (demo).")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
+            <Sparkles size={14} /> Generate pitch + 900-word draft
+          </button>
+          <button onClick={archiveItem} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <Archive size={12} /> Archive
+          </button>
+          <button onClick={downloadDoc} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.teal }}>
+            <Download size={12} /> Download
+          </button>
+          <button
+            onClick={() => {
+              if (pubDate) alert(`Sent to Comms Planner for ${pubDate} (demo).`);
+              onNavigate("planner");
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white"
+            style={{ borderColor: vars.g200, color: vars.navy }}
+          >
+            <Calendar size={12} /> Send to Comms Planner
+          </button>
+        </div>
+      </div>
+
+      {showCatPicker && (
+        <CategoryPickerModal
+          all={TRADE_MEDIA_CATEGORIES}
+          selected={mediaTarget}
+          projectSet={projectCategories}
+          onClose={() => setShowCatPicker(false)}
+          onSave={(next) => { setMediaTarget(next); setShowCatPicker(false); }}
+        />
+      )}
+    </div>
   );
 }
 
 function MediaResearchPage() {
+  const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study"].includes(a.contentType));
+  const messages = getKeyMessages();
+  const projectCats = getProjectMediaCategories();
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    try { return localStorage.getItem("aio.research.preload") || ""; } catch { return ""; }
+  });
+  const [mode, setMode] = useState<"none" | "publications" | "journalists">("none");
+
+  useEffect(() => {
+    try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
+  }, []);
+
+  const selected = archive.find((a) => a.id === selectedId);
+
+  // Demo data
+  const demoPublications = [
+    { name: "PRWeek UK", authority: 92, audience: "Senior PR / comms directors", category: "Public Relations & Communications" },
+    { name: "Campaign", authority: 88, audience: "Marketing & advertising leaders", category: "Marketing" },
+    { name: "Marketing Week", authority: 85, audience: "Brand and marketing teams", category: "Marketing" },
+    { name: "The Drum", authority: 82, audience: "Agencies, brands, tech", category: "Marketing" },
+    { name: "B2B Marketing", authority: 78, audience: "B2B marketers", category: "Marketing" },
+    { name: "Influence Magazine (CIPR)", authority: 76, audience: "CIPR member PR practitioners", category: "Public Relations & Communications" },
+  ];
+  const demoJournalists = [
+    { name: "John Harrington", outlet: "PRWeek", beat: "Agency news, sector trends", recent: "AI agents reshape PR pitching workflows", email: "john.harrington@prweek.com" },
+    { name: "Frances Ball", outlet: "Marketing Week", beat: "Marketing technology, AI", recent: "How GEO is redefining brand authority", email: "frances.ball@marketingweek.com" },
+    { name: "Beau Jackson", outlet: "The Drum", beat: "Agency profiles, AI ethics", recent: "When AI writes the press release", email: "beau.jackson@thedrum.com" },
+    { name: "Amy Houston", outlet: "Campaign", beat: "Marketing leaders, transformation", recent: "Inside the AI-first marketing org", email: "amy.houston@campaignlive.co.uk" },
+  ];
+
   return (
-    <PlaceholderPage
-      title="Media Research"
-      intro="Take an approved piece of content from the Calendar, Optimiser or Archive and ask LLMs to recommend the publications and journalists most likely to run it."
-      badge="In build"
-      badgeColor="#D4922A"
-      icon={Target}
-      features={[
-        { heading: "Select Content", copy: "Pull a piece from the Archive or send straight from the Optimiser." },
-        { heading: "Selected content summary", copy: "Title, spokesperson, LLM target, key messages, selected media categories." },
-        { heading: "Recommend Publications", copy: "Ranked publications for the chosen media categories with authority score." },
-        { heading: "Recommend Journalists", copy: "Ranked journalists with recent related coverage and contact email." },
-        { heading: "Downloadable report", copy: "Word or PDF export of the recommended outreach list." },
-        { heading: "Press releases, articles, case studies only (V1)", copy: "Other content types added in V2." },
-      ]}
-    />
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Target size={20} color={vars.gold} />
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
+        </div>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          Take an approved piece of content and ask the LLM to recommend the publications and journalists most likely to run it.
+        </p>
+      </div>
+
+      {/* Select Content */}
+      <div className="bg-white rounded-2xl border p-5 sm:p-6 mb-6" style={{ borderColor: vars.g200 }}>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.gold }}>1. Select Content</p>
+        {archive.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-6 text-center" style={{ borderColor: vars.g300 }}>
+            <p className="text-[13px] font-light" style={{ color: vars.g500 }}>No press releases, articles or case studies in the Archive yet.</p>
+            <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Send a piece from the Optimiser or Creator to start.</p>
+          </div>
+        ) : (
+          <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMode("none"); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+            <option value="">— Choose a piece from Archive —</option>
+            {archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}
+          </select>
+        )}
+      </div>
+
+      {selected && (
+        <>
+          {/* Selected content summary */}
+          <div className="bg-white rounded-2xl border p-5 sm:p-6 mb-6" style={{ borderColor: vars.g200 }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.gold }}>2. Selected content</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <SummaryRow label="Title" value={selected.title} />
+              <SummaryRow label="Content type" value={selected.contentType} />
+              <SummaryRow label="Spokesperson" value={selected.spokesperson || "—"} />
+              <SummaryRow label="LLM target" value={selected.tags?.find((t) => t.startsWith("llm-")) || "General (All LLMs)"} />
+              <SummaryRow label="Key messages" value={messages.slice(0, 3).map((m) => m.short).join(" · ") || "—"} />
+              <SummaryRow label="Media categories" value={projectCats.length > 0 ? `${projectCats.length} from Project Data` : "—"} />
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            <button onClick={() => setMode("publications")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.gold }}>
+              <Eye size={14} /> Recommend Publications
+            </button>
+            <button onClick={() => setMode("journalists")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
+              <Users size={14} /> Recommend Journalists
+            </button>
+            <button onClick={() => alert("Recommendations exported as Word + PDF (demo).")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <Download size={14} /> Download report
+            </button>
+          </div>
+
+          {/* LLM brief reveal */}
+          {mode !== "none" && (
+            <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief</p>
+              <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+                {mode === "publications"
+                  ? "Using the Project Data document and the selected piece of content, recommend the top trade publications most likely to run this story. Rank by authority score across the LLM agents (ChatGPT, Claude, Perplexity, Gemini, CoPilot), audience overlap with the selected media categories, and recent appetite for similar content. Provide a short rationale for each."
+                  : "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 4.9 trade media categories."}
+              </p>
+            </div>
+          )}
+
+          {/* Results */}
+          {mode === "publications" && (
+            <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g100 }}>
+                <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended publications</h3>
+              </div>
+              <table className="w-full text-[13px]">
+                <thead style={{ background: vars.g50 }}>
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Publication</th>
+                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Audience</th>
+                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Category</th>
+                    <th className="px-4 py-2.5 text-right font-semibold" style={{ color: vars.g500 }}>Authority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demoPublications.map((p) => (
+                    <tr key={p.name} className="border-t" style={{ borderColor: vars.g100 }}>
+                      <td className="px-4 py-2.5 font-semibold" style={{ color: vars.navy }}>{p.name}</td>
+                      <td className="px-4 py-2.5 font-light" style={{ color: vars.g500 }}>{p.audience}</td>
+                      <td className="px-4 py-2.5 font-light" style={{ color: vars.g500 }}>{p.category}</td>
+                      <td className="px-4 py-2.5 text-right font-bold" style={{ color: vars.gold }}>{p.authority}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {mode === "journalists" && (
+            <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g100 }}>
+                <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended journalists</h3>
+              </div>
+              <div className="divide-y" style={{ borderColor: vars.g100 }}>
+                {demoJournalists.map((j) => (
+                  <div key={j.name} className="p-4 flex items-start justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>{j.name} <span className="font-light" style={{ color: vars.g500 }}>· {j.outlet}</span></p>
+                      <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>{j.beat}</p>
+                      <p className="text-[12px] font-light italic mt-1" style={{ color: vars.g400 }}>Recent: "{j.recent}"</p>
+                    </div>
+                    <a href={`mailto:${j.email}`} className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+                      <Mail size={12} /> {j.email}
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 function MarketingIntelligencePage() {
+  const projectCategories = getProjectMediaCategories();
+  const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
+  const [categories, setCategories] = useState<string[]>(projectCategories.slice(0, 3));
+  const [period, setPeriod] = useState<"6m" | "12m">("6m");
+  const [region, setRegion] = useState<"UK" | "NA">("UK");
+  const [showCatPicker, setShowCatPicker] = useState(false);
+  const [results, setResults] = useState<typeof demoEvents | null>(null);
+
+  const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards"];
+
+  const search = () => setResults(demoEvents);
+
   return (
-    <PlaceholderPage
-      title="Marketing Intelligence"
-      intro="Combine Project Data with LLM instructions to produce a tailored list of recommended awards, conferences and speaker platforms — scored on the AI authority each delivers."
-      badge="In build"
-      badgeColor="#D4922A"
-      icon={Award}
-      features={[
-        { heading: "Select Marketing Type", copy: "Trade conferences, conference sponsorships, trade speaker opportunities, trade awards." },
-        { heading: "Select Category", copy: "Multi-select from the Trade Media Categories list (same as 4.9)." },
-        { heading: "Select Period", copy: "Search 6-month or 12-month windows." },
-        { heading: "Select Region", copy: "UK or North America (more in V2)." },
-        { heading: "Search Events", copy: "Ranked guide with relevance score, LLM authority score and overall score out of 10." },
-        { heading: "Cost estimates", copy: "Award entry, sponsorship and speaker participation where available." },
-        { heading: "Top 3 immediately actionable", copy: "Events with open entry windows, deadlines or live pitch processes." },
-        { heading: "Download Report", copy: "Word or PDF report of the recommended events." },
-      ]}
-    />
+    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Award size={20} color={vars.coral} />
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
+        </div>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          Use the Project Data brief plus an LLM search to produce a tailored list of recommended awards, conferences and speaker platforms — scored on the AI authority each delivers.
+        </p>
+      </div>
+
+      {/* LLM brief call-out */}
+      <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief used by this tool</p>
+        <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+          "Using the Project Data document, search for suitable [event types selected] in the [industry sectors selected] over [time period selected] and market [market selected]. Create a ranked guide in order of relevance to the project as well as the LLM visibility and authority that these events deliver, providing an estimated score for each out of 10. Also provide a short summary of each event and costs for speaker participation, event sponsorship and award entry (if relevant). Provide a downloadable report in word or pdf format. Prioritise events where we could enter on behalf of clients, secure speaking slots for agency principals, or gain meaningful new business visibility. LLM visibility and authority — how likely participation, a win or a shortlisting is to generate indexed content that AI systems (ChatGPT, Perplexity, Claude, Gemini) will cite when someone searches for expertise in the sectors listed in the Project Data. Weight this towards events covered by high-authority trade publications. Rank all events by overall score (average of both dimensions) and present them in a structured report that includes for each event: Event name, type (conference / awards / both), date and location; a short summary (3–4 sentences); Relevance score, LLM authority score, overall score; Estimated costs for: award entry, event sponsorship, and speaker participation (where applicable); Any deadlines that are imminent or require early action. Finally, flag the top 3 most immediately actionable opportunities — events with open entry windows, upcoming deadlines, or speaker pitch processes currently live."
+        </p>
+      </div>
+
+      {/* Form */}
+      <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5 mb-6" style={{ borderColor: vars.g200 }}>
+        <Labelled label="Marketing Type" hint="Choose one or more event types.">
+          <div className="flex flex-wrap gap-2">
+            {MARKETING_TYPES.map((mt) => {
+              const on = marketingType.includes(mt);
+              return (
+                <button key={mt} onClick={() => setMarketingType(on ? marketingType.filter((x) => x !== mt) : [...marketingType, mt])} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-colors" style={{ borderColor: on ? vars.coral : vars.g200, background: on ? "rgba(224,120,86,0.1)" : "white", color: on ? vars.coral : vars.g500 }}>
+                  {mt}
+                </button>
+              );
+            })}
+          </div>
+        </Labelled>
+
+        <Labelled label="Category" hint="Multi-select from the Trade Media Categories list (4.9).">
+          <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
+            {categories.length === 0 ? (
+              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No categories selected.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((cat) => (
+                  <span key={cat} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>
+                    {cat}
+                    <button onClick={() => setCategories(categories.filter((c) => c !== cat))}><XCircle size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Choose categories</button>
+        </Labelled>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Labelled label="Period" hint="Search 6-month or 12-month windows.">
+            <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: vars.g200 }}>
+              {(["6m", "12m"] as const).map((p) => (
+                <button key={p} onClick={() => setPeriod(p)} className="px-4 py-1.5 rounded text-[12px] font-semibold" style={{ background: period === p ? vars.coral : "transparent", color: period === p ? "white" : vars.g500 }}>
+                  {p === "6m" ? "Next 6 months" : "Next 12 months"}
+                </button>
+              ))}
+            </div>
+          </Labelled>
+          <Labelled label="Region" hint="UK or North America (more in V2).">
+            <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: vars.g200 }}>
+              {(["UK", "NA"] as const).map((r) => (
+                <button key={r} onClick={() => setRegion(r)} className="px-4 py-1.5 rounded text-[12px] font-semibold" style={{ background: region === r ? vars.gold : "transparent", color: region === r ? "white" : vars.g500 }}>
+                  {r === "UK" ? "United Kingdom" : "North America"}
+                </button>
+              ))}
+            </div>
+          </Labelled>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: vars.g100 }}>
+          <button onClick={search} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
+            <Search size={14} /> Search Events
+          </button>
+          <button onClick={() => alert("Report exported as Word + PDF (demo).")} disabled={!results} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold border bg-white disabled:opacity-40" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <Download size={14} /> Download Report
+          </button>
+        </div>
+      </div>
+
+      {/* Results */}
+      {results && (
+        <div className="space-y-4">
+          <div className="rounded-2xl p-5" style={{ background: "rgba(224,120,86,0.08)", border: `1px solid rgba(224,120,86,0.25)` }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable</p>
+            <ul className="space-y-1.5">
+              {results.filter((e) => e.actionable).slice(0, 3).map((e) => (
+                <li key={e.name} className="text-[13px]" style={{ color: vars.navy }}>
+                  <span className="font-semibold">{e.name}</span> — {e.deadline}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
+            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100 }}>
+              <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
+              <span className="text-[11px]" style={{ color: vars.g400 }}>Ranked by overall score</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: vars.g100 }}>
+              {results.map((e) => (
+                <div key={e.name} className="p-5">
+                  <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>{e.name}</p>
+                      <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                        {e.type} · {e.date} · {e.location}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ScorePill label="Relevance" score={e.relevance} color={vars.teal} />
+                      <ScorePill label="LLM authority" score={e.authority} color={vars.gold} />
+                      <ScorePill label="Overall" score={(e.relevance + e.authority) / 2} color={vars.coral} />
+                    </div>
+                  </div>
+                  <p className="text-[12px] font-light leading-relaxed mb-2" style={{ color: vars.g600 }}>{e.summary}</p>
+                  <div className="flex flex-wrap gap-3 text-[11px]" style={{ color: vars.g500 }}>
+                    {e.costEntry && <span><strong style={{ color: vars.navy }}>Award entry:</strong> {e.costEntry}</span>}
+                    {e.costSponsor && <span><strong style={{ color: vars.navy }}>Sponsorship:</strong> {e.costSponsor}</span>}
+                    {e.costSpeaker && <span><strong style={{ color: vars.navy }}>Speaker:</strong> {e.costSpeaker}</span>}
+                    {e.deadline && <span style={{ color: e.actionable ? vars.coral : vars.g500 }}><strong>Deadline:</strong> {e.deadline}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCatPicker && (
+        <CategoryPickerModal
+          all={TRADE_MEDIA_CATEGORIES}
+          selected={categories}
+          projectSet={projectCategories}
+          onClose={() => setShowCatPicker(false)}
+          onSave={(next) => { setCategories(next); setShowCatPicker(false); }}
+        />
+      )}
+    </div>
   );
 }
+
+const demoEvents = [
+  { name: "PRWeek Awards UK 2026", type: "Awards", date: "Sep 2026", location: "London", summary: "The benchmark UK PR awards covered by every trade title. A shortlisting alone generates indexed PRWeek and Campaign coverage that AI systems heavily cite when ranking PR agencies.", relevance: 9.2, authority: 9.5, costEntry: "£395 / category", costSponsor: "From £18,000", costSpeaker: undefined, deadline: "Entries close 19 May", actionable: true },
+  { name: "B2B Marketing Expo", type: "Conference", date: "Mar 2026", location: "ExCeL London", summary: "Largest B2B marketing event in the UK. Speaker slots receive amplified LinkedIn and Marketing Week recap coverage that LLMs index for B2B authority queries.", relevance: 8.6, authority: 8.2, costEntry: undefined, costSponsor: "From £9,500", costSpeaker: "Pitch by 28 Apr", deadline: "Speaker submissions close 28 Apr", actionable: true },
+  { name: "Cannes Lions International Festival of Creativity", type: "Both", date: "Jun 2026", location: "Cannes, France", summary: "Highest LLM authority of any creative industry event globally. Even shortlistings generate hundreds of indexed citations in trade and mainstream media.", relevance: 7.4, authority: 9.8, costEntry: "From €795 / entry", costSponsor: "Bespoke", costSpeaker: undefined, deadline: "Final entry deadline 28 Apr", actionable: true },
+  { name: "DMA Awards", type: "Awards", date: "Nov 2026", location: "London", summary: "Direct, data and digital marketing awards. Strong LLM authority for performance and CRM categories. Winning entries are cited in over 30 trade publications.", relevance: 7.8, authority: 7.6, costEntry: "£325 / category", costSponsor: "From £6,000", costSpeaker: undefined, deadline: "Entries close 14 Jul", actionable: false },
+  { name: "Festival of Marketing", type: "Conference", date: "Oct 2026", location: "London", summary: "Marketing Week's flagship event. Strong LLM authority for brand strategy and CMO insight content. Speaker slots are competitive but highly cited in trade coverage.", relevance: 8.1, authority: 8.4, costEntry: undefined, costSponsor: "From £14,000", costSpeaker: "Pitch via Marketing Week", deadline: "Sponsorship deadline 30 Jun", actionable: false },
+  { name: "Drum Awards for B2B", type: "Awards", date: "Sep 2026", location: "London", summary: "Smaller awards programme but well covered by The Drum's editorial team. A shortlisting generates two to three indexed pieces of coverage that LLMs cite for B2B queries.", relevance: 7.2, authority: 7.0, costEntry: "£275 / category", costSponsor: undefined, costSpeaker: undefined, deadline: "Entries close 6 Jun", actionable: false },
+];
 
 function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, dark }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
   const bg = dark ? vars.navy : "#FAFAFA";
@@ -4266,12 +5184,12 @@ function App() {
         )}
         {currentPage === "seo-audit" && <SeoAuditPage />}
         {currentPage === "geo-content" && <GeoContentPage />}
-        {currentPage === "planner" && <PlannerPage />}
-        {currentPage === "creator" && <ContentCreatorPage />}
+        {currentPage === "planner" && <PlannerPage onNavigate={setCurrentPage} />}
+        {currentPage === "creator" && <ContentCreatorPage onNavigate={setCurrentPage} />}
         {currentPage === "media-research" && <MediaResearchPage />}
         {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
         {currentPage === "gateway" && <ReleaseGatewayPage />}
-        {currentPage === "archive" && <ArchivePage />}
+        {currentPage === "archive" && <ArchivePage onNavigate={setCurrentPage} />}
         {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={setCurrentPage} />}
       </main>
     </div>
