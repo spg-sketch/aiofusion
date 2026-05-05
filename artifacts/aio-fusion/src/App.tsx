@@ -2710,16 +2710,6 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
 
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden" style={{ background: vars.navy }}>
         <div className="absolute inset-0 overflow-hidden">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute w-full h-full object-cover opacity-65 scale-[2.25]"
-            style={{ filter: "brightness(0.9) saturate(0.8)" }}
-          >
-            <source src={`${import.meta.env.BASE_URL}videos/hero-backdrop.mp4`} type="video/mp4" />
-          </video>
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,0.25) 0%, rgba(22,82,101,0.55) 50%, rgba(22,82,101,0.92) 100%)" }} />
           <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #1f748f 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
           <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
