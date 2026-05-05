@@ -2779,7 +2779,7 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
               { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing." },
               { icon: Search, title: "Media Research", desc: "Fuel your media relations with AI recommended journalist contacts." },
               { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards." },
-              { icon: LineChart, title: "Measure & Report", desc: "Build detailed AI authority, PR and marketing activity reports revealing progress and predicting effectiveness." },
+              { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth." },
               { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time building a powerful library of insights and activity." },
               { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility and align it with your PR and marketing to create a powerful up-lift in AI performance." },
               { icon: Code2, title: "Website Technical GEO", desc: "Support your AIO PR and marketing strategy with back-end instructions to maximise the AI effectiveness of your website." },
