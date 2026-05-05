@@ -1,0 +1,109 @@
+
+Thank you for the depth of the d2 feedback, the new wireframe doc.
+
+(AIO_Fusion_content_and_wire_frame_010526) and the 20-odd notes that came in via the in-page feedback widget. I've now reconciled all three sources against each other and worked through everything that could be actioned in this pass. 
+
+The full set is live in the demo build for you to click through end-to-end same URL as before, all data is ​fake/mock and saved locally so you can break things without consequence.
+
+Below is a quick summary of what's now done, then a short list of open questions I'd love your steer on before we move into d3.
+
+What's now live
+
+Marketing site
+
+New top nav order (Features · For In-house · For PR Agencies · Insights · Contact · About · Platform Login). "For Agencies" renamed "For PR Agencies" everywhere.
+
+Front page hero, three big feature boxes, the new row of three smaller boxes (Comms Planner / Media and Marketing Intelligence / Measure & Report) and How It Works are all carrying your new copy verbatim.
+
+Features page rebuilt around your "AIO for business PR and marketing" framing - the 12 Key Features tiles, the One/Two intro block and the Optimised-for LLM logos all corrected.
+New full-width "An AIO platform built by comms professionals" section between Insights and the final CTA.
+
+For In-house and For PR Agencies pages have your new headlines and box copy, plus a "Book a Demo" primary CTA.
+
+Bottom of the homepage rebalanced - more whitespace, cream / coral / gold accents, illustrations and image slots so it no longer reads as wall-of-blue. Blog tiles now have images.
+
+Platform
+
+Platform Login lands on a Project Hub with four big action cards (Create Project / Current Projects / Archived Projects / Guidance) and the AIO Marketing Loop panel above. Project cards illuminate on hover; "Create Project" drops you into a fresh Project Set-Up.
+
+Sidebar rebuilt into the three colour-coded sections with descriptors on every item.
+Main dashboard has the Authority Score box, the reordered big-box grid, the simplified Score / Earned / Website trend tiles, and the renamed Activity Pipeline. SEO Health gone.
+
+Project Set-Up fully rewritten - outer tabs Business Profile / Business Messaging, inner switch reversed and relabelled PR Set-Up | Website Set-Up, Section 5 moved across, your 4.x copy applied, 4.8 carries a LinkedIn URL field, 4.9 multi-selects against the 110-row list, 5.5 deleted, S5 renamed Consistency Check, four top action buttons (Create / Optimise / Accept / Edit Project Data) wired up.
+
+Comms Planner - Calendar View on the left by default, status legend no longer obscures entries, "Add Content" routes to the Optimiser, "Select Archived Content" opens the archive picker, default scoring table wired in, week column shows WC dates, Methodology side-panel carries the scoring philosophy.
+
+Content Optimiser & Editor has the renamed inputs, ? tooltips, NA spokesperson, multi-select Key Messages and Media Categories, Content Status dropdown, Publication date that writes to the planner, and the full action bar.
+
+Three new modules built: Content Creator, Marketing Intelligence, Media Research - each with the inputs, dropdowns, action buttons and LLM brief shown as a fixed call-out.
+
+Archive has the new search panel (key word + Time Period + Content Type + Project Message + Spokesperson), is per-project, and every row opens straight into the Optimiser.
+
+Measure & Report renamed Authority & Activity Report, Action Plan deleted, four tabs in the new order, all per-tab updates applied, and the new Earned Media Tracker built end to end (AI Coverage Search + Detailed Search + Manual Entry spreadsheet).
+
+Website Content GEO no longer a placeholder - Scan Site Content, scoring tiles, six-page table, itemised action report, Download / Push to Project Set-Up buttons.
+
+That covers all 14 d2 comments, every instruction in the new wireframe doc, and every one of the 23 in-page feedback notes.
+
+What I need from you
+
+Excel Sheet.
+
+In your earlier feedback you mentioned you've got an Excel sheet of journalists, and that you'd format it so it lines up with the trade media categories from Project Set-Up section 4.9 (the 110-row list — "B2B Tech", "Financial Services Trade", "HR Trade" etc).
+I'm just asking you to confirm two things:
+
+One tab per category — i.e. the spreadsheet has a tab called "B2B Tech" with all the B2B Tech journalists in it, a tab called "HR Trade" with the HR journalists in it, and so on. That way when a user picks "B2B Tech" in 4.9 of Project Set-Up, the Media Research module knows exactly which tab to read from with no guessing or manual mapping.
+
+What columns each row in those tabs should have. My suggestion is:
+category (so the Media Research module can confirm the match)
+publication (e.g. "TechCrunch")
+journalist name
+email
+LinkedIn URL
+preferred topics (a few keywords — what they like to write about, so the AI can rank who's the best fit for a given pitch)
+recent bylines (a few recent article titles or links — same reason, gives the AI something to match against)
+
+Right now Media Research returns mock journalist names. 
+
+Can we restructure the journalist xlsx so its tabs mirror the 4.9 trade media categories? 
+
+Suggested schema: category, publication, journalist name, email, LinkedIn, preferred topics, recent bylines.
+
+Once you send me the actual file in this format, I can wire it in so the "Recommend Journalists" button on Media Research returns real contacts filtered to the categories the user picked in Project Set-Up.
+
+Does that make sense? If you'd rather keep the spreadsheet structure you've already got and have me adapt to it, just send it over and I'll work to whatever shape it's in.
+
+None of these block the demo working - they'd all get folded into d3.
+
+Journalist contact list. 
+
+Website GEO scorecard - six metrics. I've used: tech = Schema coverage, Crawlability, Page speed; content = Entity clarity, Q&A snippet density, Internal authority graph. 
+
+Happy to swap any of them.
+
+
+Re-run / Refresh button scope. T
+
+oday it only re-scores the LLM check. The wireframe hints at a single Refresh Total Authority button covering earned + website + tracker - confirm and I'll sort it.
+
+Release Gateway. OK to park for V2? 
+
+V1 publish would just flip the planner row to "Published" and write to the Earned Media Tracker.
+
+Branded photography for hero, six How-It-Works steps, three Insights blog tiles, and the "Built by comms professionals" section - landing before d3, or do I move to licensed stock (we will need to purchase, unless you can find unlicensed?) 
+
+Insights articles 2-4 - real titles, one-paragraph excerpts and URLs?
+
+Contact page socials - LinkedIn and Substack URLs to un-grey the (coming soon) labels.
+Trade media categories - confirm the 110-row list is final and matches the journalist xlsx exactly.
+
+"Strategic Partnership with Simpatico PR" mock press release in the Archive - keep, swap headline, or remove?
+
+Authentication for d3 - real auth (Clerk / Replit Auth / your own SSO), or staying mocked for the demo cycle?
+
+Have a click around when you get a moment. Anything I've missed, give me a shout and I'll fold it into d3.
+
+Best,
+
+Spencer
+
