@@ -3368,7 +3368,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
 
 function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   return (
-    <MarketingPage title="Control and scale your PR and AI Visibility" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} dark {...props}>
+    <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} dark {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
         When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion will transform the performance of your PR and marketing and put you in control.
       </p>
@@ -3378,10 +3378,10 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
       <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for you</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
         {[
-          { title: "Evolve from SEO to AI visibility", desc: "Move beyond search-optimised content to content AI engines actually surface and cite." },
-          { title: "Create a PR programme at scale", desc: "Plan, optimise and measure all your marketing output without buying full agency service." },
-          { title: "Always-on, cost-effective platform", desc: "Coherent planning and measurable outcomes from PR and marketing investment." },
-          { title: "Measure your AI authority over time", desc: "See how each piece of content moves the needle on AI citation and recommendation." },
+          { title: "AIO marketing strategy", desc: "Start your unified AI Authority, PR and marketing strategy across earned and owned media channels." },
+          { title: "Create a PR programme at scale", desc: "Plan, optimise, speed-up and measure all your PR output without buying full agency service." },
+          { title: "One cost-effective platform", desc: "All your optimised communications content managed and measured in one place delivering consistent, measurable outcomes from PR and marketing investment." },
+          { title: "Measure your AI authority over time", desc: "See how each piece of content and marketing activity moves the needle on AI citation and recommendation." },
         ].map((it) => (
           <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="flex items-start gap-3">
@@ -3397,8 +3397,8 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
         ))}
       </div>
       <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Add expert PR & media relations</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Add expert PR content and media relations consultancy to your AIO Fusion platform from Simpatico PR. Get in touch to find out more.</p>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Add expert PR consultancy</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Add human consultancy to your AIO Fusion platform. We will define your comms strategy and enhance your thought leadership ideas with expert, senior consultancy. Get in touch to find out more.</p>
       </div>
       <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
         <Mail size={16} /> Book a Demo
