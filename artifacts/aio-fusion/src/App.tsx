@@ -4,6 +4,16 @@ import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
+import heroBg from "./assets/hero-bg.png";
+import step1Img from "./assets/step-1-diagnose.png";
+import step2Img from "./assets/step-2-strategy.png";
+import step3Img from "./assets/step-3-plan.png";
+import step4Img from "./assets/step-4-optimise.png";
+import step5Img from "./assets/step-5-measure.png";
+import step6Img from "./assets/step-6-agentic.png";
+import blogTile1 from "./assets/blog-tile-1.png";
+import blogTile2 from "./assets/blog-tile-2.png";
+import blogTile3 from "./assets/blog-tile-3.png";
 import { useState } from "react";
 import {
   ChevronRight,
@@ -250,6 +260,11 @@ const vars = {
   green: "#3D9B6B",
   amber: "#D4922A",
   red: "#C94A3E",
+  coral: "#E07856",
+  coralSoft: "#FFE5DC",
+  gold: "#C9A04E",
+  cream: "#F8F2E8",
+  creamDeep: "#F2E9D8",
   lightBg: "#e0f2f7",
   lightAccent: "#b7e1ed",
   g50: "#FAFAFA",
@@ -2770,46 +2785,51 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
         )}
       </nav>
 
-      <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden" style={{ background: vars.navy }}>
+      <section className="relative flex items-center justify-center overflow-hidden py-24 sm:py-28 md:py-36" style={{ background: vars.navy, minHeight: "min(92vh, 920px)" }}>
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,0.25) 0%, rgba(22,82,101,0.55) 50%, rgba(22,82,101,0.92) 100%)" }} />
-          <div className="absolute w-[600px] h-[600px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #1f748f 0%, transparent 70%)", top: "10%", right: "-10%", animation: "float1 20s ease-in-out infinite" }} />
-          <div className="absolute w-[500px] h-[500px] rounded-full opacity-10" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "5%", left: "-5%", animation: "float2 25s ease-in-out infinite" }} />
-          <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+          <img src={heroBg} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.55 }} />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,0.45) 0%, rgba(22,82,101,0.35) 45%, rgba(22,82,101,0.95) 100%)" }} />
+          <div className="absolute w-[600px] h-[600px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "8%", right: "-12%", animation: "float1 22s ease-in-out infinite" }} />
+          <div className="absolute w-[520px] h-[520px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "0%", left: "-6%", animation: "float2 26s ease-in-out infinite" }} />
+          <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         </div>
         <style>{`
           @keyframes float1 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-40px, 30px) scale(1.1); } }
           @keyframes float2 { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.15); } }
+          @keyframes pulse-glow { 0%, 100% { filter: drop-shadow(0 8px 32px rgba(224,120,86,0.25)); } 50% { filter: drop-shadow(0 12px 48px rgba(224,120,86,0.45)); } }
         `}</style>
         <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-8 text-center pt-16">
           <img
             src={`${import.meta.env.BASE_URL}images/logo-white.png`}
             alt="AIO Fusion"
-            className="mx-auto mb-10 h-32 sm:h-44 md:h-56 drop-shadow-2xl"
-            style={{ filter: "drop-shadow(0 8px 32px rgba(0,0,0,0.45))" }}
+            className="mx-auto mb-10 h-40 sm:h-52 md:h-64"
+            style={{ animation: "pulse-glow 4s ease-in-out infinite" }}
           />
-          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-8" style={{ background: "rgba(31,116,143,0.2)", border: "1px solid rgba(31,116,143,0.3)" }}>
+          <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] text-white/85 mb-8" style={{ background: "rgba(224,120,86,0.18)", border: "1px solid rgba(224,120,86,0.4)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-8" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-5xl md:text-[5.5rem] text-white leading-[1.05] mb-6" style={{ fontFamily: "'Alice', Georgia, serif" }}>
             Business visibility<br />
-            for the <span style={{ color: vars.accent }}>AI Age</span>
+            for the <span style={{ color: vars.coral }}>AI Age</span>
           </h1>
-          <p className="text-lg md:text-xl text-white/60 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
+          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto mb-4 leading-snug" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+            The AI Authority Platform for PR and marketing professionals
+          </p>
+          <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
             With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
               onClick={onLogin}
-              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]"
-              style={{ background: vars.accent }}
+              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02] shadow-lg"
+              style={{ background: vars.coral, boxShadow: "0 12px 32px rgba(224,120,86,0.35)" }}
             >
               <LogIn size={18} /> See the Platform
             </button>
             <a
               href="#features"
-              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/90 transition-all hover:bg-white/15"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+              className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white/95 transition-all hover:bg-white/15"
+              style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)" }}
             >
               Explore Features <ArrowRight size={16} />
             </a>
@@ -2817,19 +2837,104 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
         </div>
       </section>
 
-      <section id="features" className="py-20 sm:py-24" style={{ background: "#FAFAFA" }}>
+      {/* Three feature boxes — Patrick C11 */}
+      <section className="py-16 sm:py-20" style={{ background: vars.cream }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+          <div className="text-center mb-12 max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility</h2>
+            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g500 }}>
+              From diagnosis through to delivery — the full GEO, PR and marketing content workflow in one platform.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                title: "AI Visibility Diagnostic",
+                copy: "Audit the performance of your earned media and website in the eyes of LLMs like Claude and ChatGPT. See exactly where you're strong and what needs work.",
+                icon: Search,
+                accent: vars.accent,
+                soft: "rgba(31,116,143,0.10)",
+                strip: vars.teal,
+              },
+              {
+                title: "Optimise PR and Marketing",
+                copy: "Maximise the impact your PR and marketing has on humans and AI, with easy-to-use content optimisation tools that will give you consistent authority from press releases to award entries.",
+                icon: FileEdit,
+                accent: vars.coral,
+                soft: "rgba(224,120,86,0.12)",
+                strip: vars.coral,
+              },
+              {
+                title: "Automate your Communications",
+                copy: "AIO Fusion enables in-house marketers and communications professionals to rapidly research, plan, scale and predict the impact of content and marketing activity.",
+                icon: Bot,
+                accent: vars.gold,
+                soft: "rgba(201,160,78,0.14)",
+                strip: vars.gold,
+              },
+            ].map((box) => (
+              <div key={box.title} className="bg-white rounded-2xl overflow-hidden shadow-sm transition-all hover:shadow-xl hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}` }}>
+                <div className="h-2 w-full" style={{ background: box.strip }} />
+                <div className="p-7">
+                  <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-5" style={{ background: box.soft }}>
+                    <box.icon size={24} color={box.accent} />
+                  </div>
+                  <h3 className="text-[20px] font-semibold mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{box.title}</h3>
+                  <p className="text-[14px] font-light leading-[1.75]" style={{ color: vars.g500 }}>{box.copy}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works — Patrick C11 with 6 steps and illustrations */}
+      <section className="py-20 sm:py-24" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="text-center mb-14 max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing</h2>
-            <p className="text-lg mx-auto font-light leading-relaxed mb-8" style={{ color: vars.g500 }}>
-              Designed to AI Optimise PR and marketing at scale.
+            <span className="inline-block text-[11px] font-bold uppercase tracking-[0.22em] mb-4 px-3 py-1 rounded-full" style={{ background: vars.coralSoft, color: vars.coral }}>How It Works</span>
+            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>The cost-effective B2B PR technology for the age of AI</h2>
+            <p className="text-[15px] font-light leading-[1.85]" style={{ color: vars.g500 }}>
+              The platform enhances your PR and marketing and supports your business or brand's AI and human visibility at the same time. AIO Fusion is designed to give businesses the tools to control and deliver high-quality PR and marketing output at scale. Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all.
             </p>
-            <div className="text-left space-y-4 text-[15px] font-light leading-[1.8]" style={{ color: vars.g500 }}>
-              <p>AIO Fusion is designed to transform PR and marketing for the AI age in two ways:</p>
-              <p><strong className="font-semibold" style={{ color: vars.navy }}>One:</strong> Enables in-house teams and agencies to consistently enhance AI visibility and authority for a business or brand.</p>
-              <p><strong className="font-semibold" style={{ color: vars.navy }}>Two:</strong> Enables marketing and communications professionals to automate, optimise and score PR and marketing output making investment more effective and achievable.</p>
-              <p>It's one platform that brings together everything you need to scale high-quality marketing and achieve AI optimised communications.</p>
-            </div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-8 sm:gap-10">
+            {[
+              { n: 1, img: step1Img, title: "Diagnose your AI visibility", body: "AIO Fusion diagnoses the status of your business or brand visibility with LLM agents such as ChatGPT, Claude, Perplexity, CoPilot and Gemini. It audits your earned media as well as the AI performance of your website.", accent: vars.teal },
+              { n: 2, img: step2Img, title: "Build a GEO strategy", body: "Create a GEO (Generative Engine Optimisation) strategy combining optimised content and technical AIO steps for your website and all your future PR and marketing output.", accent: vars.coral },
+              { n: 3, img: step3Img, title: "Plan and predict impact", body: "Optimise and predict the impact of your forward marketing and PR plan for AI authority and search and score potential PR, marketing activity and events.", accent: vars.gold },
+              { n: 4, img: step4Img, title: "Optimise content output", body: "Optimise your on-going PR and marketing content output using a tailored AI authority editor and create optimised editorial and media pitches from raw content.", accent: vars.green },
+              { n: 5, img: step5Img, title: "Measure, report and predict", body: "Measure, report and predict marketing performance and AI visibility, tracking business messages, spokespeople, earned media and marketing investments — and watch your AI authority and human audience grow.", accent: vars.accent },
+              { n: 6, img: step6Img, title: "Always-on agentic media relations", body: "Coming soon — AIO Fusion will enable always-on agentic PR management and media relations, offering you a cost-effective and powerful B2B PR and marketing solution.", accent: vars.amber, soon: true },
+            ].map((s) => (
+              <div key={s.n} className="bg-white rounded-2xl overflow-hidden shadow-sm transition-all hover:shadow-lg" style={{ border: `1px solid ${vars.g200}` }}>
+                <div className="flex flex-col sm:flex-row">
+                  <div className="sm:w-2/5 relative aspect-square sm:aspect-auto" style={{ background: vars.navy }}>
+                    <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
+                    <div className="absolute top-4 left-4 w-12 h-12 rounded-full flex items-center justify-center text-white text-[18px] font-bold" style={{ background: s.accent, fontFamily: "'Alice', Georgia, serif", boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{s.n}</div>
+                    {s.soon && (
+                      <span className="absolute top-4 right-4 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em] text-white" style={{ background: vars.coral }}>Coming soon</span>
+                    )}
+                  </div>
+                  <div className="sm:w-3/5 p-6 sm:p-7 flex flex-col justify-center">
+                    <h3 className="text-[19px] font-semibold mb-3" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
+                    <p className="text-[13.5px] font-light leading-[1.75]" style={{ color: vars.g500 }}>{s.body}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className="py-20 sm:py-24" style={{ background: vars.creamDeep }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+          <div className="text-center mb-14 max-w-3xl mx-auto">
+            <span className="inline-block text-[11px] font-bold uppercase tracking-[0.22em] mb-4 px-3 py-1 rounded-full" style={{ background: "rgba(31,116,143,0.10)", color: vars.accent }}>Platform</span>
+            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Twelve tools, one workflow</h2>
+            <p className="text-lg mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
+              Everything in-house teams and agencies need to scale high-quality, AI-optimised PR and marketing — from first audit through to measurement.
+            </p>
           </div>
 
           <h3 className="text-2xl md:text-3xl mb-8 text-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Key features</h3>
@@ -2874,46 +2979,57 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
         </div>
       </section>
 
-      <section id="insights" className="py-14 sm:py-16" style={{ background: "#F5F3F0" }}>
-        <div className="max-w-4xl mx-auto px-4 sm:px-8">
-          <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
-            <div className="flex-1">
-              <h2 className="text-2xl md:text-3xl mb-3 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                The B2B Marketer's Fast Guide to Winning AI Authority in 2026
-              </h2>
-              <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g500 }}>
-                What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing and get practical help now.
-              </p>
-            </div>
-            <a
-              href="https://simpaticopraiauthorityguide.carrd.co/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110"
-              style={{ background: vars.accent }}
-            >
-              <BookOpen size={16} /> Read the Guide
-            </a>
+      <section id="insights" className="py-20 sm:py-24" style={{ background: vars.cream }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+          <div className="text-center mb-12 max-w-3xl mx-auto">
+            <span className="inline-block text-[11px] font-bold uppercase tracking-[0.22em] mb-4 px-3 py-1 rounded-full" style={{ background: "rgba(201,160,78,0.18)", color: vars.gold }}>Insights</span>
+            <h2 className="text-3xl md:text-5xl mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Practical thinking on AI visibility</h2>
+            <p className="text-base font-light leading-relaxed" style={{ color: vars.g500 }}>
+              Cut through the hype on AI, GEO and the future of PR — and get useful, plain-spoken help.
+            </p>
           </div>
-          <div className="mt-6 text-center">
+          <div className="grid md:grid-cols-3 gap-6 mb-10">
+            {[
+              { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype.", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.accent },
+              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", external: false, accent: vars.coral },
+              { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: "#", external: false, accent: vars.gold },
+            ].map((a) => (
+              <a key={a.title} href={a.url} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block rounded-2xl overflow-hidden bg-white transition-all hover:shadow-xl hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}` }}>
+                <div className="aspect-[16/10] overflow-hidden" style={{ background: vars.navy }}>
+                  <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                </div>
+                <div className="p-6">
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
+                  <h3 className="text-[17px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                  <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
+                  <span className="inline-flex items-center gap-1 text-[12px] font-semibold mt-4" style={{ color: a.accent }}>Read <ArrowUpRight size={12} /></span>
+                </div>
+              </a>
+            ))}
+          </div>
+          <div className="text-center">
             <button onClick={() => onNavigate("insights")} className="text-[13px] font-semibold inline-flex items-center gap-1" style={{ color: vars.accent }}>
-              See more insights <ArrowRight size={14} />
+              See all insights <ArrowRight size={14} />
             </button>
           </div>
         </div>
       </section>
 
-      <section className="py-16 sm:py-20" style={{ background: vars.g50 }}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
-          <p className="text-[15px] mb-10 leading-relaxed font-light" style={{ color: vars.g500 }}>
+      <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${vars.navy} 0%, #0e3a47 100%)` }}>
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute w-[500px] h-[500px] rounded-full opacity-25" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "-15%", right: "-10%" }} />
+          <div className="absolute w-[420px] h-[420px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #C9A04E 0%, transparent 70%)", bottom: "-15%", left: "-8%" }} />
+        </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-8 text-center relative z-10">
+          <h2 className="text-3xl md:text-5xl mb-5 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
+          <p className="text-[15px] mb-10 leading-relaxed font-light text-white/80">
             Get in touch to book a platform demo and find out about pricing.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="mailto:info@aiofusion.ai" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+            <a href="mailto:info@aiofusion.ai" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]" style={{ background: vars.coral, boxShadow: "0 12px 32px rgba(224,120,86,0.4)" }}>
               <Mail size={18} /> Contact Us
             </a>
-            <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium transition-all hover:brightness-95" style={{ background: "#fff", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+            <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)" }}>
               <LogIn size={16} /> See the Platform
             </button>
           </div>
@@ -3592,26 +3708,33 @@ function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNav
 
 function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   const articles = [
-    { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide" },
-    { title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", tag: "Article" },
-    { title: "The 6 GEO signal categories every brand should track", excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.", url: "#", tag: "Article" },
-    { title: "From SEO to AIO: a transition playbook for marketing teams", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: "#", tag: "Playbook" },
+    { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide", img: blogTile1, accent: vars.accent, external: true },
+    { title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", tag: "Article", img: blogTile2, accent: vars.coral, external: false },
+    { title: "The 6 GEO signal categories every brand should track", excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.", url: "#", tag: "Article", img: blogTile3, accent: vars.gold, external: false },
+    { title: "From SEO to AIO: a transition playbook for marketing teams", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: "#", tag: "Playbook", img: blogTile1, accent: vars.green, external: false },
   ];
   return (
     <MarketingPage title="Insights" eyebrow={<><BookOpen size={12} /> Library</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         Practical thinking on AI visibility, GEO, and the future of PR and marketing.
       </p>
-      <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-6">
         {articles.map((a) => (
-          <a key={a.title} href={a.url} target="_blank" rel="noopener noreferrer" className="block p-5 sm:p-6 rounded-2xl border bg-white transition-all hover:shadow-md hover:-translate-y-0.5" style={{ borderColor: vars.g200 }}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <span className="inline-block text-[10px] font-semibold uppercase tracking-[0.18em] mb-2 px-2 py-0.5 rounded" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>{a.tag}</span>
-                <h3 className="text-[18px] font-semibold mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
-                <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
-              </div>
-              <ArrowUpRight size={20} color={vars.accent} className="flex-shrink-0" />
+          <a
+            key={a.title}
+            href={a.url}
+            {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            className="group block rounded-2xl overflow-hidden bg-white transition-all hover:shadow-xl hover:-translate-y-1"
+            style={{ border: `1px solid ${vars.g200}` }}
+          >
+            <div className="aspect-[16/10] overflow-hidden" style={{ background: vars.navy }}>
+              <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            </div>
+            <div className="p-6">
+              <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
+              <h3 className="text-[18px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+              <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
+              <span className="inline-flex items-center gap-1 text-[12px] font-semibold mt-4" style={{ color: a.accent }}>Read <ArrowUpRight size={12} /></span>
             </div>
           </a>
         ))}

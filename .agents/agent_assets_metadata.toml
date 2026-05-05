@@ -18,6 +18,66 @@ uri = "file://artifacts/aio-fusion/public/images/story-geo-reshaping.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "tNOYFJ_0xNGPy8SigVbvI"
+uri = "file://artifacts/aio-fusion/src/assets/hero-bg.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "d7INSmejoRR-Sy0cSLJDb"
+uri = "file://artifacts/aio-fusion/src/assets/step-1-diagnose.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "eYKYJJWsm9aMV81qTws2n"
+uri = "file://artifacts/aio-fusion/src/assets/step-2-strategy.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "3pQA-RHuMsfWKzH7hhoO6"
+uri = "file://artifacts/aio-fusion/src/assets/step-3-plan.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "gqCcM0KONOQMCVMPKvwZi"
+uri = "file://artifacts/aio-fusion/src/assets/step-4-optimise.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "a8ZoYWTwotC5FdhwiRJKZ"
+uri = "file://artifacts/aio-fusion/src/assets/step-5-measure.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "gLahEFUq_SO3VShlAVD4I"
+uri = "file://artifacts/aio-fusion/src/assets/step-6-agentic.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "NHF5CGeBcvPiriHK9-yfb"
+uri = "file://artifacts/aio-fusion/src/assets/blog-tile-1.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "7XMWMZ3Uovp6HOjuL5cKx"
+uri = "file://artifacts/aio-fusion/src/assets/blog-tile-2.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "-T90x9s-lyJrLWCYTZPje"
+uri = "file://artifacts/aio-fusion/src/assets/blog-tile-3.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "epTCa_t7Z4honvy8uHpVo"
 uri = "file://attached_assets/Meeting-Notes-Patrick-Spencer-Mar27-Clean.md"
