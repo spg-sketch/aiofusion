@@ -3409,22 +3409,25 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
 
 function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   return (
-    <MarketingPage title="Integrate AI optimisation into your client service" eyebrow={<><Users size={12} /> For Agencies</> as any} dark {...props}>
+    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For Agencies</> as any} dark {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
-        Run every client programme on a single platform built for the AI age. AIO Fusion gives PR and marketing agencies one workspace per client, scored content, predictable planning and the measurement story their clients are starting to ask for.
+        Elevate your agency capability for the AI era with tailored, measurable optimisation for each client. One platform to enhance your team and service performance helping you harness the power of answer engines.
+      </p>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+        Run every client programme on a single platform built for the AI age. Optimise every piece of content you develop from press releases to awards entries, speed up new content development, score AI authority across your programme, store all client content in one place and measure and predict the impact of your work.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(255,255,255,0.75)" }}>
-        Add AI visibility to your existing service without rebuilding your tech stack, hiring new specialists or rewriting client retainers.
+        Add AI visibility and automation to your agency fast without building your own tech stack or hiring new specialists.
       </p>
       <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
         {[
-          { title: "One workspace per client", desc: "Spin up a fully isolated programme for every client, with their own intake, plan, archive and reporting." },
-          { title: "Multi-client dashboard", desc: "Switch between clients in a click; see programme health and scores across your whole book of business." },
-          { title: "Optional client review access", desc: "Invite your client in as a reviewer or viewer when you want their sign-off, keep them out when you don't." },
-          { title: "Scored, defensible plans", desc: "Every project carries a visibility and authority score so client conversations move from opinion to evidence." },
-          { title: "Productise your AI offering", desc: "Package GEO, AI authority audits and AI-ready content as new retainers without building tooling from scratch." },
-          { title: "Measurement clients will pay for", desc: "Coverage per key message, audience reach, ideas-to-outcomes ratio and AI authority growth, per client." },
+          { title: "Multi-client management", desc: "Separate workspaces per client with their own project data, content pipeline, and reporting." },
+          { title: "AIO with human editing", desc: "Develop AI optimised pitches, press releases, articles and marketing content fast from raw briefing content and edit to deliver maximum quality." },
+          { title: "Dual-engine AI analysis", desc: "Every diagnostic runs through both Claude and ChatGPT for robust, balanced scoring. Expand LLM references for maximum AI intelligence." },
+          { title: "Integrated comms planner", desc: "Plan your PR and marketing activity and score its likely impact on AI authority, manage each piece of content from draft to approved." },
+          { title: "Marketing Intelligence", desc: "Research media contacts and future events and awards tailored to each client project, score activity for AI and audience reach." },
+          { title: "Report and Archive", desc: "Combine AI authority scores across earned and owned media with PR reporting and access all your client content in one dedicated, searchable archive." },
         ].map((it) => (
           <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="flex items-start gap-3">
@@ -3440,12 +3443,20 @@ function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNav
         ))}
       </div>
       <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Partner with Simpatico</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Designed by working PR consultants, AIO Fusion is built to slot into how agencies already operate. Talk to us about partner pricing, white-labelled reporting and onboarding for your team.</p>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: vars.teal }}>An AIO platform built by comms professionals</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
-      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
-        <Mail size={16} /> Talk to Us
-      </a>
+      <div className="flex flex-wrap gap-3">
+        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+          <Calendar size={16} /> Book a Demo
+        </button>
+        <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold transition-all hover:bg-white/5" style={{ color: "white", border: "1px solid rgba(255,255,255,0.2)" }}>
+          <Mail size={16} /> Talk to Us
+        </a>
+      </div>
     </MarketingPage>
   );
 }
