@@ -203,39 +203,39 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
   );
 }
 
-type NavItem = { label: string; id: string; locked?: boolean };
-type NavSection = { section: string; items: NavItem[] };
+type NavItem = { label: string; id: string; locked?: boolean; sub?: string };
+type NavSection = { section: string; color: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
-    section: "Overview",
+    section: "Set-Up & AI Audit",
+    color: "#1f748f",
     items: [
-      { label: "Dashboard", id: "dashboard" },
-      { label: "Client Intake", id: "intake" },
+      { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
+      { label: "Earned Media Audit", id: "llm-check", sub: "Score AI brand mentions" },
+      { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
     ],
   },
   {
-    section: "AIO Audit",
+    section: "Project Management",
+    color: "#D4922A",
     items: [
-      { label: "AIO Diagnostic", id: "diagnostic" },
-      { label: "Earned Visibility", id: "llm-check" },
+      { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
+      { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
+      { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
+      { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
+      { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
+      { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
+      { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
+      { label: "Archive", id: "archive", sub: "Searchable content library" },
     ],
   },
   {
-    section: "Website AI Optimisation",
+    section: "Website AIO",
+    color: "#3D9B6B",
     items: [
-      { label: "SEO Assessment", id: "seo-audit" },
-      { label: "GEO Content Optimisation", id: "geo-content" },
-    ],
-  },
-  {
-    section: "Content & Release",
-    items: [
-      { label: "Content Optimiser", id: "optimiser" },
-      { label: "Authority Planner", id: "planner" },
-      { label: "Release Gateway", id: "gateway" },
-      { label: "Archive", id: "archive" },
-      { label: "Measure & Report", id: "measure" },
+      { label: "Website Content GEO", id: "geo-content", sub: "Optimise site content for AI" },
+      { label: "Website Technical GEO", id: "seo-audit", sub: "Site GEO and schema audit" },
     ],
   },
 ];
@@ -333,11 +333,27 @@ function SidebarContent({
           </button>
         )}
       </div>
-      <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto">
+      <nav className="flex-1 py-3 px-3 space-y-4 overflow-y-auto">
+        <button
+          onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
+          className="flex items-center gap-2.5 w-full rounded-lg px-4 py-3 text-[14px] font-bold transition-colors"
+          style={{
+            background: currentPage === "dashboard" ? "rgba(31,116,143,0.08)" : "transparent",
+            color: currentPage === "dashboard" ? vars.accent : vars.navy,
+            border: `1px solid ${currentPage === "dashboard" ? vars.accent : vars.g200}`,
+          }}
+        >
+          <BarChart3 size={16} />
+          <span className="flex-1 text-left">Dashboard</span>
+          {currentPage === "dashboard" && <ChevronRight size={14} />}
+        </button>
         {navSections.map((section) => (
           <div key={section.section}>
-            <div className="px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>
-              {section.section}
+            <div className="px-3 pb-2 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: section.color }} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
+                {section.section}
+              </span>
             </div>
             <div className="space-y-0.5">
               {section.items.map((item) => {
@@ -347,21 +363,34 @@ function SidebarContent({
                   <button
                     key={item.id}
                     onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
-                    className="flex items-center gap-3 w-full rounded-lg px-4 py-2.5 text-[13px] font-medium transition-colors"
+                    disabled={isLocked}
+                    aria-disabled={isLocked}
+                    title={isLocked ? `${item.label} is coming in V2` : undefined}
+                    className="flex items-start gap-3 w-full rounded-lg px-3 py-2 text-left transition-colors"
                     style={{
-                      background: isActive ? "rgba(31,116,143,0.06)" : "transparent",
-                      color: isActive ? vars.accent : isLocked ? vars.g400 : vars.g600,
+                      background: isActive ? `${section.color}10` : "transparent",
+                      borderLeft: `3px solid ${isActive ? section.color : "transparent"}`,
+                      color: isActive ? section.color : isLocked ? vars.g400 : vars.g600,
                       cursor: isLocked ? "not-allowed" : "pointer",
-                      opacity: isLocked ? 0.55 : 1,
+                      opacity: isLocked ? 0.6 : 1,
                     }}
                   >
-                    <span className="flex-1 text-left">{item.label}</span>
-                    {isLocked && (
-                      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g400 }}>
-                        <Lock size={10} /> V2
-                      </span>
-                    )}
-                    {isActive && <ChevronRight size={14} />}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] font-semibold truncate">{item.label}</span>
+                        {isLocked && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g500 }}>
+                            <Lock size={9} /> V2
+                          </span>
+                        )}
+                      </div>
+                      {item.sub && (
+                        <div className="text-[10.5px] font-light leading-snug mt-0.5" style={{ color: isActive ? section.color : vars.g400 }}>
+                          {item.sub}
+                        </div>
+                      )}
+                    </div>
+                    {isActive && <ChevronRight size={14} className="mt-0.5 flex-shrink-0" />}
                   </button>
                 );
               })}
@@ -693,22 +722,22 @@ function DashboardPage({
   };
 
   const quickActions = [
-    { icon: Eye, label: "Earned Visibility", sub: "Check AI brand mentions", action: "llm-check" },
-    { icon: Search, label: "Run Diagnostic", sub: "Analyse content with AI", action: "diagnostic" },
-    { icon: Globe, label: "SEO Assessment", sub: "Technical site audit", action: "seo-audit" },
-    { icon: FileEdit, label: "Optimise Content", sub: "Transform for AI citation", action: "optimiser" },
-    { icon: BarChart3, label: "View Report", sub: "Measure & track progress", action: "measure" },
-    { icon: ClipboardPaste, label: "Complete Intake", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
+    { icon: Eye, label: "Earned Media Audit", sub: "Score AI brand mentions", action: "llm-check" },
+    { icon: Search, label: "Website Visibility Audit", sub: "Score the site for AI", action: "diagnostic" },
+    { icon: Globe, label: "Website Technical GEO", sub: "Schema and crawlability", action: "seo-audit" },
+    { icon: FileEdit, label: "Content Optimiser", sub: "Optimise and edit drafts", action: "optimiser" },
+    { icon: BarChart3, label: "Measure & Report", sub: "Track AI authority and PR impact", action: "measure" },
+    { icon: ClipboardPaste, label: "Project Set-Up", sub: `${intakeProgress.completed}/${intakeProgress.total} sections done`, action: "intake" },
   ];
 
   const cycle = loadCycle(activeClient.id);
   const loopSteps: { label: string; sub: string; icon: any; action: string }[] = [
-    { label: "Intake", sub: "Capture", icon: ClipboardPaste, action: "intake" },
-    { label: "Diagnose", sub: "Audit", icon: Search, action: "diagnostic" },
-    { label: "Visibility", sub: "Check AI", icon: Eye, action: "llm-check" },
+    { label: "Set-Up", sub: "Project Data", icon: ClipboardPaste, action: "intake" },
+    { label: "Audit", sub: "Earned + Site", icon: Search, action: "diagnostic" },
     { label: "Optimise", sub: "Content", icon: FileEdit, action: "optimiser" },
     { label: "Plan", sub: "Schedule", icon: Calendar, action: "planner" },
-    { label: "Release", sub: "Publish", icon: Send, action: "gateway" },
+    { label: "Target", sub: "Media + Events", icon: Target, action: "media-research" },
+    { label: "Release", sub: "V2", icon: Send, action: "gateway-locked" },
     { label: "Measure", sub: "Outcomes", icon: BarChart3, action: "measure" },
   ];
 
@@ -741,9 +770,22 @@ function DashboardPage({
         <div className="flex items-stretch gap-1 sm:gap-2 overflow-x-auto">
           {loopSteps.map((s, i) => {
             const Icon = s.icon;
+            const isLockedStep = s.action === "gateway-locked";
             return (
               <div key={s.label} className="flex items-center flex-shrink-0">
-                <button onClick={() => onNavigate(s.action)} className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all hover:bg-gray-50 min-w-[64px]">
+                <button
+                  onClick={() => { if (!isLockedStep) onNavigate(s.action); }}
+                  disabled={isLockedStep}
+                  aria-disabled={isLockedStep}
+                  title={isLockedStep ? "Release Gateway is coming in V2" : undefined}
+                  className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all min-w-[64px]"
+                  style={{
+                    cursor: isLockedStep ? "not-allowed" : "pointer",
+                    opacity: isLockedStep ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!isLockedStep) e.currentTarget.style.background = vars.g100; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                >
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
                     <Icon size={16} />
                   </div>
@@ -778,8 +820,8 @@ function DashboardPage({
 
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Client Intake
-            <InfoTip text="The onboarding questionnaire that captures your business details, target audience, key spokespersons, and GEO goals. Complete all sections for the best diagnostic results." />
+            Project Set-Up
+            <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
           </h3>
           <div className="flex items-center gap-3 mb-3">
             <div className="relative w-14 h-14">
@@ -808,14 +850,14 @@ function DashboardPage({
             ))}
           </div>
           <button onClick={() => onNavigate("intake")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            {intakePct < 100 ? "Continue Intake" : "View Intake"} <ArrowRight size={12} />
+            {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
           </button>
         </div>
 
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Authority Planner
-            <InfoTip text="Your content plan for building AI authority. Track press releases, research, speaking engagements and other content through draft, review and publication stages." />
+            Comms Planner
+            <InfoTip text="Your forward plan of PR and marketing activity. Each item is scored for predicted AI authority impact and tracked through draft, review and approved stages." />
           </h3>
           <div className="flex items-baseline gap-1 mb-3">
             <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerItems.total}</span>
@@ -849,17 +891,17 @@ function DashboardPage({
             <div className="h-full" style={{ width: `${(plannerItems.drafts / plannerItems.total) * 100}%`, background: vars.amber }} />
           </div>
           <button onClick={() => onNavigate("planner")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Open Planner <ArrowRight size={12} />
+            Open Comms Planner <ArrowRight size={12} />
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Overall readiness score based on your latest AIO diagnostic results." },
-          { label: "Earned Visibility", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
-          { label: "SEO Health", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical SEO score from your last site audit - meta tags, schema, speed, and AI crawler access." },
-          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How your authority score has changed over the last 30 days." },
+          { label: "Authority Score", value: String(authorityScore), icon: Sparkles, tip: "Combined earned media and website authority score for the project." },
+          { label: "Earned Media Audit", value: `${llmVisibility.score}%`, icon: Eye, tip: "Percentage of AI model queries where your brand was mentioned. Higher is better." },
+          { label: "Website Technical GEO", value: `${seoHealth.score}/100`, icon: Globe, tip: "Technical site score from your last audit - schema, crawlability, AI agent access." },
+          { label: "Score Trend", value: activeClient.scoreTrend > 0 ? `+${activeClient.scoreTrend}` : String(activeClient.scoreTrend), icon: TrendingUp, positive: activeClient.scoreTrend > 0, tip: "How the combined authority score has changed over the last 30 days." },
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-2">
@@ -913,7 +955,7 @@ function DashboardPage({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Eye size={18} color={vars.accent} />
-              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
+              <h3 className="text-base font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Audit <InfoTip text="Shows whether AI models like ChatGPT and Claude mention your brand when asked about your sector. We send real questions and check the responses." /></h3>
             </div>
             <span className="text-[10px]" style={{ color: vars.g400 }}>Last: {llmVisibility.lastChecked}</span>
           </div>
@@ -1126,12 +1168,12 @@ function DiagnosticPage({
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#1f748f" />
             <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-              AIO Diagnostic
-              <InfoTip text="Runs an AI-powered audit of your content (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
+              Website Visibility Audit
+              <InfoTip text="Runs an AI-powered audit of your website (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Authority and Visibility Diagnostic for AI engines.
+            Score your site for AI agent visibility and citation.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
@@ -3283,6 +3325,124 @@ function GeoContentPage() {
   );
 }
 
+function PlaceholderPage({
+  title,
+  intro,
+  features,
+  badge,
+  badgeColor,
+  icon: Icon,
+}: {
+  title: string;
+  intro: string;
+  features: { heading: string; copy: string }[];
+  badge?: string;
+  badgeColor?: string;
+  icon: any;
+}) {
+  return (
+    <div className="p-6 sm:p-10 max-w-5xl mx-auto">
+      <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
+          <p className="text-[14px] font-light max-w-3xl" style={{ color: vars.g500 }}>{intro}</p>
+        </div>
+        {badge && (
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full" style={{ background: `${badgeColor || vars.accent}15`, color: badgeColor || vars.accent }}>
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="bg-white border rounded-2xl p-6 sm:p-8" style={{ borderColor: vars.g200 }}>
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${badgeColor || vars.accent}10` }}>
+            <Icon size={20} color={badgeColor || vars.accent} />
+          </div>
+          <div>
+            <h2 className="text-[18px] font-semibold mb-1" style={{ color: vars.navy }}>What this page will do</h2>
+            <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Designed in the wireframe doc; build scheduled in this iteration.</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {features.map((f) => (
+            <div key={f.heading} className="p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Check size={14} color={badgeColor || vars.accent} />
+                <span className="text-[13px] font-semibold" style={{ color: vars.navy }}>{f.heading}</span>
+              </div>
+              <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{f.copy}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentCreatorPage() {
+  return (
+    <PlaceholderPage
+      title="Content Creator"
+      intro="Create AI-optimised media pitches, draft articles and case studies from raw transcripts and notes, using the signed-off Project Data as the authority brief."
+      badge="In build"
+      badgeColor="#D4922A"
+      icon={PenLine}
+      features={[
+        { heading: "Project name picker", copy: "Pulls in messaging entered in Project Set-Up parts 4 and 6." },
+        { heading: "Content type selector", copy: "Press release, article, case study, blog, social post." },
+        { heading: "Headline / subject", copy: "Up to 150 words for the brief idea or angle." },
+        { heading: "Transcript or notes", copy: "Up to 3,000 words of raw material to work from." },
+        { heading: "Spokesperson + LinkedIn", copy: "Pulled from the Project Data spokesperson list." },
+        { heading: "Media target", copy: "Multi-select drawn from the Trade Media Categories list (4.9)." },
+        { heading: "Generate pitch + 900-word draft", copy: "Searches the last six months for supporting research and evidence." },
+        { heading: "Status, date, archive, download", copy: "Mirrors the Content Optimiser action bar; pushes to Comms Planner calendar." },
+      ]}
+    />
+  );
+}
+
+function MediaResearchPage() {
+  return (
+    <PlaceholderPage
+      title="Media Research"
+      intro="Take an approved piece of content from the Calendar, Optimiser or Archive and ask LLMs to recommend the publications and journalists most likely to run it."
+      badge="In build"
+      badgeColor="#D4922A"
+      icon={Target}
+      features={[
+        { heading: "Select Content", copy: "Pull a piece from the Archive or send straight from the Optimiser." },
+        { heading: "Selected content summary", copy: "Title, spokesperson, LLM target, key messages, selected media categories." },
+        { heading: "Recommend Publications", copy: "Ranked publications for the chosen media categories with authority score." },
+        { heading: "Recommend Journalists", copy: "Ranked journalists with recent related coverage and contact email." },
+        { heading: "Downloadable report", copy: "Word or PDF export of the recommended outreach list." },
+        { heading: "Press releases, articles, case studies only (V1)", copy: "Other content types added in V2." },
+      ]}
+    />
+  );
+}
+
+function MarketingIntelligencePage() {
+  return (
+    <PlaceholderPage
+      title="Marketing Intelligence"
+      intro="Combine Project Data with LLM instructions to produce a tailored list of recommended awards, conferences and speaker platforms — scored on the AI authority each delivers."
+      badge="In build"
+      badgeColor="#D4922A"
+      icon={Award}
+      features={[
+        { heading: "Select Marketing Type", copy: "Trade conferences, conference sponsorships, trade speaker opportunities, trade awards." },
+        { heading: "Select Category", copy: "Multi-select from the Trade Media Categories list (same as 4.9)." },
+        { heading: "Select Period", copy: "Search 6-month or 12-month windows." },
+        { heading: "Select Region", copy: "UK or North America (more in V2)." },
+        { heading: "Search Events", copy: "Ranked guide with relevance score, LLM authority score and overall score out of 10." },
+        { heading: "Cost estimates", copy: "Award entry, sponsorship and speaker participation where available." },
+        { heading: "Top 3 immediately actionable", copy: "Events with open entry windows, deadlines or live pitch processes." },
+        { heading: "Download Report", copy: "Word or PDF report of the recommended events." },
+      ]}
+    />
+  );
+}
+
 function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, dark }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
   const bg = dark ? vars.navy : "#FAFAFA";
   const textCol = dark ? "white" : vars.navy;
@@ -3551,11 +3711,11 @@ function PlatformHomePage({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const loopSteps: { label: string; sub: string; icon: any }[] = [
-    { label: "Intake", sub: "Capture", icon: ClipboardPaste },
-    { label: "Diagnose", sub: "Audit", icon: Search },
-    { label: "Visibility", sub: "Check AI", icon: Eye },
+    { label: "Set-Up", sub: "Project Data", icon: ClipboardPaste },
+    { label: "Audit", sub: "Earned + Site", icon: Search },
     { label: "Optimise", sub: "Content", icon: FileEdit },
     { label: "Plan", sub: "Schedule", icon: Calendar },
+    { label: "Target", sub: "Media + Events", icon: Target },
     { label: "Release", sub: "Publish", icon: Send },
     { label: "Measure", sub: "Outcomes", icon: BarChart3 },
   ];
@@ -3675,7 +3835,7 @@ function PlatformHomePage({
               </div>
             </div>
             <p className="text-[12px] font-light mt-4 leading-relaxed" style={{ color: vars.g500 }}>
-              The AIO Marketing Loop runs through every project: capture intake, diagnose visibility, optimise content, plan releases, measure impact, then repeat.
+              The AIO Marketing Loop runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
             </p>
           </div>
         </div>
@@ -3984,6 +4144,9 @@ function App() {
         {currentPage === "seo-audit" && <SeoAuditPage />}
         {currentPage === "geo-content" && <GeoContentPage />}
         {currentPage === "planner" && <PlannerPage />}
+        {currentPage === "creator" && <ContentCreatorPage />}
+        {currentPage === "media-research" && <MediaResearchPage />}
+        {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
         {currentPage === "gateway" && <ReleaseGatewayPage />}
         {currentPage === "archive" && <ArchivePage />}
         {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={setCurrentPage} />}
