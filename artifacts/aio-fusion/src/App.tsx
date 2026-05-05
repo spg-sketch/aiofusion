@@ -5,7 +5,6 @@ import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
-import heroBg from "./assets/hero-bg.png";
 import step1Img from "./assets/step-1-diagnose.png";
 import step2Img from "./assets/step-2-strategy.png";
 import step3Img from "./assets/step-3-plan.png";
@@ -3176,8 +3175,7 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
 
       <section className="relative flex items-center justify-center overflow-hidden py-24 sm:py-28 md:py-36" style={{ background: vars.navy, minHeight: "min(92vh, 920px)" }}>
         <div className="absolute inset-0 overflow-hidden">
-          <img src={heroBg} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: 0.55 }} />
-          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,0.45) 0%, rgba(22,82,101,0.35) 45%, rgba(22,82,101,0.95) 100%)" }} />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,82,101,1) 0%, rgba(22,82,101,0.92) 45%, rgba(22,82,101,1) 100%)" }} />
           <div className="absolute w-[600px] h-[600px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "8%", right: "-12%", animation: "float1 22s ease-in-out infinite" }} />
           <div className="absolute w-[520px] h-[520px] rounded-full opacity-15" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "0%", left: "-6%", animation: "float2 26s ease-in-out infinite" }} />
           <div className="absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
