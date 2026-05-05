@@ -3103,24 +3103,29 @@ const llmLogos = [
     <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>
   )},
   { name: "Perplexity", color: "#20808D", icon: (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
-      <path d="M12 2.5 L20.5 7.75 V16.25 L12 21.5 L3.5 16.25 V7.75 Z"/>
-      <path d="M12 2.5 V21.5"/>
-      <path d="M3.5 7.75 L12 12 L20.5 7.75"/>
-      <path d="M3.5 16.25 L12 12 L20.5 16.25"/>
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M3 12 L21 12"/>
+      <path d="M12 3 C8 7 8 17 12 21"/>
+      <path d="M12 3 C16 7 16 17 12 21"/>
     </svg>
   )},
   { name: "Claude", color: "#CC785C", icon: (
     <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-      <ellipse cx="12" cy="12" rx="1.6" ry="9.5"/>
-      <ellipse cx="12" cy="12" rx="9.5" ry="1.6"/>
-      <ellipse cx="12" cy="12" rx="1.6" ry="9.5" transform="rotate(45 12 12)"/>
-      <ellipse cx="12" cy="12" rx="1.6" ry="9.5" transform="rotate(-45 12 12)"/>
+      <path d="M5.5 18 L9.5 6 H11 L7 18 Z"/>
+      <path d="M13 6 H14.5 L18.5 18 H17 L16 15 H11.5 L13 6 Z M12.2 13.5 H15.4 L13.8 8.6 Z"/>
     </svg>
   )},
   { name: "Gemini", color: "#4285F4", icon: (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-      <path d="M12 2 C12 7 7 12 2 12 C7 12 12 17 12 22 C12 17 17 12 22 12 C17 12 12 7 12 2 Z"/>
+    <svg viewBox="0 0 24 24" width="28" height="28">
+      <defs>
+        <linearGradient id="geminiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#4285F4"/>
+          <stop offset="50%" stopColor="#9B72F2"/>
+          <stop offset="100%" stopColor="#D96570"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#geminiGrad)" d="M12 2 C12.5 6.5 17.5 11.5 22 12 C17.5 12.5 12.5 17.5 12 22 C11.5 17.5 6.5 12.5 2 12 C6.5 11.5 11.5 6.5 12 2 Z"/>
     </svg>
   )},
 ];
@@ -3138,10 +3143,10 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Features</a>
             <button onClick={() => onNavigate("for-inhouse")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For In-house</button>
-            <button onClick={onNavigateAgencies} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For Agencies</button>
+            <button onClick={onNavigateAgencies} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">For PR Agencies</button>
             <button onClick={() => onNavigate("insights")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Insights</button>
-            <button onClick={() => onNavigate("about")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">About</button>
             <button onClick={() => onNavigate("contact")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">Contact</button>
+            <button onClick={() => onNavigate("about")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors tracking-wide">About</button>
             <button
               onClick={onLogin}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110"
@@ -3158,10 +3163,10 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
           <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: "rgba(22,82,101,0.98)" }}>
             <a href="#features" onClick={() => setMenuOpen(false)} className="text-[13px] font-light text-white/60 py-2">Features</a>
             <button onClick={() => { setMenuOpen(false); onNavigate("for-inhouse"); }} className="text-[13px] font-light text-white/60 py-2 text-left">For In-house</button>
-            <button onClick={() => { setMenuOpen(false); onNavigateAgencies(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For Agencies</button>
+            <button onClick={() => { setMenuOpen(false); onNavigateAgencies(); }} className="text-[13px] font-light text-white/60 py-2 text-left">For PR Agencies</button>
             <button onClick={() => { setMenuOpen(false); onNavigate("insights"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Insights</button>
-            <button onClick={() => { setMenuOpen(false); onNavigate("about"); }} className="text-[13px] font-light text-white/60 py-2 text-left">About</button>
             <button onClick={() => { setMenuOpen(false); onNavigate("contact"); }} className="text-[13px] font-light text-white/60 py-2 text-left">Contact</button>
+            <button onClick={() => { setMenuOpen(false); onNavigate("about"); }} className="text-[13px] font-light text-white/60 py-2 text-left">About</button>
             <button onClick={() => { setMenuOpen(false); onLogin(); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <LogIn size={14} /> Platform Login
             </button>
@@ -3272,6 +3277,29 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
         </div>
       </section>
 
+      {/* Small Boxes — Wireframe 010526: Comms Planner / Media & Marketing Intelligence / Measure & Report */}
+      <section className="py-14 sm:py-16" style={{ background: "#FFFFFF" }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+          <div className="grid md:grid-cols-3 gap-5">
+            {[
+              { icon: Calendar, title: "Comms Planner", copy: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.accent },
+              { icon: Search, title: "Media and Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: vars.coral },
+              { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
+            ].map((b) => (
+              <div key={b.title} className="rounded-xl p-6 transition-all hover:shadow-md" style={{ background: vars.cream, border: `1px solid ${vars.g200}` }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${b.accent}18` }}>
+                    <b.icon size={18} color={b.accent} />
+                  </div>
+                  <h3 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
+                </div>
+                <p className="text-[13.5px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{b.copy}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* How It Works — Patrick C11 with 6 steps and illustrations */}
       <section className="py-20 sm:py-24" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
@@ -3313,12 +3341,19 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
 
       <section id="features" className="py-20 sm:py-24" style={{ background: vars.creamDeep }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-14 max-w-3xl mx-auto">
+          <div className="text-center mb-10 max-w-3xl mx-auto">
             <span className="inline-block text-[11px] font-bold uppercase tracking-[0.22em] mb-4 px-3 py-1 rounded-full" style={{ background: "rgba(31,116,143,0.10)", color: vars.accent }}>Platform</span>
-            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Twelve tools, one workflow</h2>
+            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing</h2>
             <p className="text-lg mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              Everything in-house teams and agencies need to scale high-quality, AI-optimised PR and marketing — from first audit through to measurement.
+              Designed to AI Optimise PR and marketing at scale.
             </p>
+          </div>
+
+          <div className="max-w-3xl mx-auto mb-14 space-y-4 text-[15px] font-light leading-[1.85]" style={{ color: vars.g500 }}>
+            <p>AIO Fusion is designed to transform PR and marketing for the AI age in two ways:</p>
+            <p><span className="font-semibold" style={{ color: vars.navy }}>One:</span> Enables in-house teams and agencies to consistently enhance AI visibility and authority for a business or brand.</p>
+            <p><span className="font-semibold" style={{ color: vars.navy }}>Two:</span> Enables marketing and communications professionals to automate, optimise and score PR and marketing output making investment more effective and achievable.</p>
+            <p>It's one platform that brings together everything you need to scale high-quality marketing and achieve AI optimised communications.</p>
           </div>
 
           <h3 className="text-2xl md:text-3xl mb-8 text-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Key features</h3>
@@ -3399,6 +3434,22 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
         </div>
       </section>
 
+      {/* Built by comms professionals — Wireframe 010526 */}
+      <section className="py-20 sm:py-24" style={{ background: vars.cream }}>
+        <div className="max-w-4xl mx-auto px-4 sm:px-8">
+          <div className="text-center mb-10">
+            <span className="inline-block text-[11px] font-bold uppercase tracking-[0.22em] mb-4 px-3 py-1 rounded-full" style={{ background: "rgba(31,116,143,0.10)", color: vars.accent }}>Made by PR & marketing experts</span>
+            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>An AIO platform built by comms professionals</h2>
+          </div>
+          <div className="space-y-5 text-[15.5px] font-light leading-[1.85]" style={{ color: vars.g500 }}>
+            <p>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
+            <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind — to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
+            <p>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.</p>
+            <p className="font-semibold" style={{ color: vars.navy }}>We believe it will transform PR and marketing for good.</p>
+          </div>
+        </div>
+      </section>
+
       <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${vars.navy} 0%, #0e3a47 100%)` }}>
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute w-[500px] h-[500px] rounded-full opacity-25" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "-15%", right: "-10%" }} />
@@ -3409,9 +3460,12 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
           <p className="text-[15px] mb-10 leading-relaxed font-light text-white/80">
             Get in touch to book a platform demo and find out about pricing.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="mailto:info@aiofusion.ai" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]" style={{ background: vars.coral, boxShadow: "0 12px 32px rgba(224,120,86,0.4)" }}>
-              <Mail size={18} /> Contact Us
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap">
+            <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:brightness-110 hover:scale-[1.02]" style={{ background: vars.coral, boxShadow: "0 12px 32px rgba(224,120,86,0.4)" }}>
+              <Calendar size={18} /> Book a Demo
+            </a>
+            <a href="mailto:info@aiofusion.ai" className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-semibold text-white transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)" }}>
+              <Mail size={16} /> Talk to Us
             </a>
             <button onClick={onLogin} className="flex items-center gap-2.5 px-10 py-4 rounded-lg text-[15px] font-medium text-white transition-all hover:bg-white/15" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.25)" }}>
               <LogIn size={16} /> See the Platform
@@ -3429,10 +3483,10 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
             <div className="flex items-center gap-6 text-[13px] font-light flex-wrap justify-center" style={{ color: vars.g400 }}>
               <a href="#features" className="hover:underline">Features</a>
               <button onClick={() => onNavigate("for-inhouse")} className="hover:underline">For In-house</button>
-              <button onClick={onNavigateAgencies} className="hover:underline">For Agencies</button>
+              <button onClick={onNavigateAgencies} className="hover:underline">For PR Agencies</button>
               <button onClick={() => onNavigate("insights")} className="hover:underline">Insights</button>
-              <button onClick={() => onNavigate("about")} className="hover:underline">About</button>
               <button onClick={() => onNavigate("contact")} className="hover:underline">Contact</button>
+              <button onClick={() => onNavigate("about")} className="hover:underline">About</button>
               <button onClick={() => onNavigate("for-agents")} className="hover:underline opacity-70">For AI agents</button>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
@@ -3881,36 +3935,135 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
 }
 
 function GeoContentPage() {
+  const [scanning, setScanning] = useState(false);
+  const [hasResults, setHasResults] = useState(false);
+  const corePages = [
+    { url: "/about", title: "About Us", contentScore: 78, alignmentScore: 82, status: "Optimised" },
+    { url: "/products", title: "Products & Solutions", contentScore: 64, alignmentScore: 71, status: "Needs work" },
+    { url: "/services", title: "Services", contentScore: 71, alignmentScore: 76, status: "Optimised" },
+    { url: "/leadership", title: "Leadership Team", contentScore: 58, alignmentScore: 62, status: "Needs work" },
+    { url: "/case-studies", title: "Case Studies", contentScore: 81, alignmentScore: 79, status: "Optimised" },
+    { url: "/insights", title: "Insights / Blog", contentScore: 69, alignmentScore: 73, status: "Needs work" },
+  ];
+  const recommendations = [
+    { page: "/products", priority: "High", action: "Add structured product schema (Product + Offer markup) and Q&A snippets for top 5 questions.", impact: "+18 LLM citation likelihood" },
+    { page: "/leadership", priority: "High", action: "Add Person schema with credentials, link spokesperson LinkedIn URLs from Project Set-Up 4.8.", impact: "+22 expert authority signal" },
+    { page: "/about", priority: "Medium", action: "Embed core key messages from Project Set-Up 4.2 verbatim in opening paragraph.", impact: "+12 message consistency" },
+    { page: "/services", priority: "Medium", action: "Add FAQ block answering top 8 buyer questions with conversational phrasing.", impact: "+15 answer-engine match" },
+    { page: "/insights", priority: "Low", action: "Strengthen internal linking — add author-byline links pointing to leadership pages.", impact: "+8 internal authority graph" },
+  ];
+  const overall = Math.round(corePages.reduce((s, p) => s + (p.contentScore + p.alignmentScore) / 2, 0) / corePages.length);
   return (
-    <div className="p-6 sm:p-10 max-w-5xl mx-auto">
+    <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>GEO Content Optimisation</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Define and refine your core business messaging and on-site content to maximise consistent AI recognition.</p>
+        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Website Content GEO</h1>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (Section 5).</p>
       </div>
-      <div className="bg-white border rounded-2xl p-8" style={{ borderColor: vars.g200 }}>
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(31,116,143,0.06)" }}>
-            <MessageSquareQuote size={20} color={vars.accent} />
-          </div>
-          <div>
-            <h2 className="text-[18px] font-semibold mb-1" style={{ color: vars.navy }}>Coming soon</h2>
-            <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g500 }}>The GEO Content Optimisation engine analyses your website's core message pages (about, products, services, leadership) and rewrites them for AI citation - structured snippets, schema markup, semantic Q&A and authority signals. Available in the next platform update.</p>
+
+      <div className="bg-white border rounded-xl p-5 mb-5" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.04)" }}>
+        <div className="flex items-start gap-3">
+          <MessageSquareQuote size={16} color={vars.accent} className="flex-shrink-0 mt-0.5" />
+          <div className="text-[12.5px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+            <span className="font-semibold" style={{ color: vars.navy }}>LLM brief:</span> Using Project Data Section 5 (website content set-up), score the alignment between each core page and the business's PR key messages (Project Data 4.2 + 4.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood.
           </div>
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          {[
-            "Core message audit (claims, proof points, differentiators)",
-            "Schema & structured data recommendations",
-            "Q&A snippet generation tuned for answer engines",
-            "Internal authority graph (who-said-what across the site)",
-          ].map((it) => (
-            <div key={it} className="flex items-start gap-2 p-3 rounded-lg" style={{ background: vars.g50 }}>
-              <Check size={14} color={vars.accent} className="flex-shrink-0 mt-0.5" />
-              <span className="text-[12px] font-light" style={{ color: vars.g600 }}>{it}</span>
+      </div>
+
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <button onClick={() => { setScanning(true); setTimeout(() => { setScanning(false); setHasResults(true); }, 1100); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: vars.accent }}>
+          <Search size={14} /> {hasResults ? "Re-scan Site" : "Scan Site Content"}
+        </button>
+        {hasResults && (
+          <>
+            <button onClick={() => alert("Action report downloaded (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: vars.cream, color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              <Download size={14} /> Download Action Report
+            </button>
+            <button onClick={() => alert("Recommendations pushed to Project Set-Up Section 5 (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: "white", color: vars.accent, border: `1px solid ${vars.accent}` }}>
+              <Zap size={14} /> Push to Project Set-Up
+            </button>
+          </>
+        )}
+      </div>
+
+      {scanning && (
+        <div className="bg-white border rounded-xl p-8 text-center" style={{ borderColor: vars.g200 }}>
+          <div className="text-[13px] font-medium" style={{ color: vars.accent }}>Scanning core message pages…</div>
+        </div>
+      )}
+
+      {hasResults && !scanning && (
+        <>
+          <div className="grid md:grid-cols-3 gap-4 mb-6">
+            <div className="rounded-xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${vars.navy} 0%, #0e3a47 100%)` }}>
+              <div className="text-[11px] uppercase tracking-wider opacity-80 mb-1">Overall Content GEO</div>
+              <div className="text-4xl font-bold mb-1">{overall}<span className="text-lg opacity-70">/100</span></div>
+              <div className="text-[11px] opacity-80">Across {corePages.length} core pages</div>
             </div>
-          ))}
+            <div className="rounded-xl p-5 bg-white border" style={{ borderColor: vars.g200 }}>
+              <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: vars.g400 }}>Pages Optimised</div>
+              <div className="text-4xl font-bold mb-1" style={{ color: vars.accent }}>{corePages.filter(p => p.status === "Optimised").length}<span className="text-lg" style={{ color: vars.g400 }}>/{corePages.length}</span></div>
+              <div className="text-[11px]" style={{ color: vars.g500 }}>{corePages.filter(p => p.status === "Needs work").length} need work</div>
+            </div>
+            <div className="rounded-xl p-5 bg-white border" style={{ borderColor: vars.g200 }}>
+              <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: vars.g400 }}>Action Items</div>
+              <div className="text-4xl font-bold mb-1" style={{ color: vars.coral }}>{recommendations.length}</div>
+              <div className="text-[11px]" style={{ color: vars.g500 }}>{recommendations.filter(r => r.priority === "High").length} high priority</div>
+            </div>
+          </div>
+
+          <div className="bg-white border rounded-xl p-6 mb-6" style={{ borderColor: vars.g200 }}>
+            <h3 className="text-[15px] font-semibold mb-4" style={{ color: vars.navy }}>Core Page Scores</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr style={{ color: vars.g500 }} className="text-left border-b" >
+                    <th className="py-2 pr-3 font-medium">Page</th>
+                    <th className="py-2 pr-3 font-medium">URL</th>
+                    <th className="py-2 pr-3 font-medium">Content Score</th>
+                    <th className="py-2 pr-3 font-medium">Message Alignment</th>
+                    <th className="py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corePages.map(p => (
+                    <tr key={p.url} className="border-b" style={{ borderColor: vars.g100 }}>
+                      <td className="py-3 pr-3 font-medium" style={{ color: vars.navy }}>{p.title}</td>
+                      <td className="py-3 pr-3 font-mono text-[11.5px]" style={{ color: vars.g500 }}>{p.url}</td>
+                      <td className="py-3 pr-3"><span style={{ color: p.contentScore >= 75 ? vars.accent : p.contentScore >= 65 ? vars.gold : vars.coral }}>{p.contentScore}</span></td>
+                      <td className="py-3 pr-3"><span style={{ color: p.alignmentScore >= 75 ? vars.accent : p.alignmentScore >= 65 ? vars.gold : vars.coral }}>{p.alignmentScore}</span></td>
+                      <td className="py-3"><span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: p.status === "Optimised" ? "rgba(31,116,143,0.10)" : "rgba(224,120,86,0.12)", color: p.status === "Optimised" ? vars.accent : vars.coral }}>{p.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white border rounded-xl p-6" style={{ borderColor: vars.g200 }}>
+            <h3 className="text-[15px] font-semibold mb-4" style={{ color: vars.navy }}>Itemised Action Report</h3>
+            <div className="space-y-3">
+              {recommendations.map((r, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg" style={{ background: vars.g50 }}>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0 mt-0.5" style={{ background: r.priority === "High" ? vars.coral : r.priority === "Medium" ? vars.gold : vars.accent, color: "white" }}>{r.priority}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-mono mb-1" style={{ color: vars.accent }}>{r.page}</div>
+                    <div className="text-[13px] mb-1" style={{ color: vars.navy }}>{r.action}</div>
+                    <div className="text-[11.5px] font-light" style={{ color: vars.g500 }}>Predicted impact: <span style={{ color: vars.accent }}>{r.impact}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!hasResults && !scanning && (
+        <div className="bg-white border rounded-xl p-10 text-center" style={{ borderColor: vars.g200 }}>
+          <Globe size={40} color={vars.g300} className="mx-auto mb-4" />
+          <h3 className="text-[16px] font-semibold mb-2" style={{ color: vars.navy }}>Ready to scan</h3>
+          <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>Click <strong>Scan Site Content</strong> to audit your core message pages against your Project Data Section 5 inputs and generate an itemised action report.</p>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -4491,10 +4644,10 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
             {[
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
-              { l: "For Agencies", v: "for-agencies" },
+              { l: "For PR Agencies", v: "for-agencies" },
               { l: "Insights", v: "insights" },
-              { l: "About", v: "about" },
               { l: "Contact", v: "contact" },
+              { l: "About", v: "about" },
             ].map((it) => (
               <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[13px] font-light hover:opacity-100 transition-colors tracking-wide" style={{ color: dark ? "rgba(255,255,255,0.6)" : vars.g500 }}>
                 {it.l}
@@ -4572,7 +4725,7 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
 
 function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   return (
-    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For Agencies</> as any} dark {...props}>
+    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} dark {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
         Elevate your agency capability for the AI era with tailored, measurable optimisation for each client. One platform to enhance your team and service performance helping you harness the power of answer engines.
       </p>
@@ -4739,11 +4892,13 @@ function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigat
 }
 
 function PlatformHomePage({
+  onCreateProject,
   onContinueToProjects,
   onArchivedProjects,
   onGuidance,
   onBackToLanding,
 }: {
+  onCreateProject: () => void;
   onContinueToProjects: () => void;
   onArchivedProjects: () => void;
   onGuidance: () => void;
@@ -4761,7 +4916,7 @@ function PlatformHomePage({
     { label: "Measure", sub: "Outcomes", icon: BarChart3 },
   ];
   const buttons = [
-    { icon: Plus, title: "Create Project", desc: "Start a new client or in-house programme.", onClick: onContinueToProjects },
+    { icon: Plus, title: "Create Project", desc: "Start a new client or in-house programme.", onClick: onCreateProject },
     { icon: FolderOpen, title: "Current Projects", desc: "Open the Project Hub to manage live programmes.", onClick: onContinueToProjects },
     { icon: Archive, title: "Archived Projects", desc: "Browse past projects stored in the archive.", onClick: onArchivedProjects },
     { icon: BookOpen, title: "Guidance", desc: "How-to articles and short videos for AIO Fusion.", onClick: onGuidance },
@@ -5054,6 +5209,10 @@ function App() {
   if (view === "platform-home") {
     return (
       <PlatformHomePage
+        onCreateProject={() => {
+          setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
+          setCurrentPage("intake");
+        }}
         onContinueToProjects={() => setView("platform")}
         onArchivedProjects={() => setView("archived-projects")}
         onGuidance={() => setView("guidance")}
