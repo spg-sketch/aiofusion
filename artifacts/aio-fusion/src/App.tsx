@@ -4231,6 +4231,154 @@ function savePlannerProjects(items: PlannerProject[]) {
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(items));
 }
 
+const SEED_KEY = "aio.seed.demo.v1";
+
+function seedDemoDataIfEmpty() {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(SEED_KEY)) return;
+    const hasArchive = (localStorage.getItem(ARCHIVE_KEY) || "[]") !== "[]";
+    const hasPlanner = (localStorage.getItem(PROJECTS_KEY) || "[]") !== "[]";
+    if (hasArchive || hasPlanner) {
+      localStorage.setItem(SEED_KEY, "skipped-existing");
+      return;
+    }
+
+    const now = new Date();
+    const baseWeek = getISOWeek(now);
+    const id = (n: number) => `seed-${n}-${Date.now().toString(36)}`;
+    const dateForWeek = (offset: number) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() + offset * 7);
+      return d.toISOString();
+    };
+
+    const plannerSeed: PlannerProject[] = [
+      {
+        id: id(1),
+        title: "The Agency Agentic Collective — launch press release",
+        contentType: "Press release",
+        spokesperson: "Spencer Gallagher",
+        keyMessage: "Independent agencies represented by dedicated AI agents",
+        audience: "Agency leaders, marketing press",
+        channels: ["National", "Priority", "LinkedIn"],
+        week: baseWeek - 1,
+        status: "Approved",
+        releaseDate: dateForWeek(-1).slice(0, 10),
+        notes: "Distributed via PA Media + agency trade titles. Earned coverage tracked separately.",
+      },
+      {
+        id: id(2),
+        title: "How Bluhalo's 75-metric benchmark redefines agency advisory",
+        contentType: "Article",
+        spokesperson: "Mark Sainthill",
+        keyMessage: "Proprietary benchmarking dataset of 196 live engagements",
+        audience: "Agency CFOs, agency M&A advisors",
+        channels: ["Specialist A", "Specialist B", "LinkedIn", "Owned"],
+        week: baseWeek,
+        status: "Drafting",
+        releaseDate: dateForWeek(0).slice(0, 10),
+        notes: "Trade publication article — Campaign / PRWeek / The Drum target.",
+      },
+      {
+        id: id(3),
+        title: "Case study: 196 advisory engagements, 12 months in",
+        contentType: "Case study",
+        spokesperson: "Spencer Gallagher",
+        keyMessage: "Gross profit margin, revenue per head, utilisation rates",
+        audience: "Independent agency owners",
+        channels: ["Owned", "LinkedIn", "Specialist C"],
+        week: baseWeek + 1,
+        status: "Review",
+        releaseDate: dateForWeek(1).slice(0, 10),
+        notes: "Co-authored with Bluhalo data team. Charts being produced.",
+      },
+      {
+        id: id(4),
+        title: "Spencer Gallagher on agency authority — Festival of Marketing",
+        contentType: "Speaker submission",
+        spokesperson: "Spencer Gallagher",
+        keyMessage: "Agency Authority and the AI representation gap",
+        audience: "Festival of Marketing 2026 programme committee",
+        channels: ["Specialist D"],
+        week: baseWeek + 2,
+        status: "Planned",
+        releaseDate: dateForWeek(2).slice(0, 10),
+        notes: "Submission deadline mid-month. Drawing on Agentic Collective launch data.",
+      },
+      {
+        id: id(5),
+        title: "PRWeek Agency of the Year — Bluhalo entry",
+        contentType: "Award submission",
+        spokesperson: "Mark Sainthill",
+        keyMessage: "Independent agency advisory and intelligence practice",
+        audience: "PRWeek judging panel",
+        channels: ["Specialist B"],
+        week: baseWeek + 3,
+        status: "Planned",
+        releaseDate: dateForWeek(3).slice(0, 10),
+        notes: "Use 196-engagement dataset and Agentic Collective as flagship proof points.",
+      },
+    ];
+
+    const archiveSeed: ArchiveItem[] = [
+      {
+        id: id(10),
+        title: "The Agency Agentic Collective — launch press release",
+        contentType: "Press release",
+        spokesperson: "Spencer Gallagher",
+        status: "Final",
+        tags: ["Launch", "AI agents", "Networking", "Independent agencies"],
+        body: "Spencer Gallagher and Mark Sainthill, co-founders of Bluhalo, the independent agency advisory and intelligence practice, today announced the launch of The Agency Agentic Collective.\n\nThe Agency Agentic Collective is the first professional network where independent agencies are represented by dedicated AI agents. Launched by Spencer Gallagher and Mark Sainthill of Bluhalo, the platform replaces passive networking with autonomous peer intelligence.\n\nThe platform launches with Bluhalo's proprietary agency benchmarking dataset covering 75 performance metrics including gross profit margin, revenue per head, and utilisation rates, drawn from 196 live advisory engagements.",
+        createdAt: dateForWeek(-2),
+        releasedAt: dateForWeek(-1),
+        releaseChannel: "National",
+      },
+      {
+        id: id(11),
+        title: "Why earned media beats paid in the AI era",
+        contentType: "Article",
+        spokesperson: "Mark Sainthill",
+        status: "Final",
+        tags: ["GEO", "Earned media", "AIO", "PR strategy"],
+        body: "Earned media has always carried more weight than paid placement, but the rise of generative engines has multiplied that gap. When ChatGPT or Perplexity vouches for a brand, it does so off the back of editorial citations, not banner inventory. This article walks through the four reasons earned outperforms paid inside AI Authority models, and what it means for B2B PR teams.",
+        createdAt: dateForWeek(-3),
+        releasedAt: dateForWeek(-2),
+        releaseChannel: "Specialist A",
+      },
+      {
+        id: id(12),
+        title: "Bluhalo Q1 2026 advisory snapshot",
+        contentType: "Whitepaper",
+        spokesperson: "Spencer Gallagher",
+        status: "Final",
+        tags: ["Benchmarking", "Quarterly", "Agency advisory"],
+        body: "The Bluhalo Q1 2026 snapshot covers 196 live advisory engagements across the UK and US independent agency market. Key findings include median gross margin movement, the spread of revenue per head by discipline, and an updated view on utilisation rates following the Q4 contraction.",
+        createdAt: dateForWeek(-4),
+        releasedAt: dateForWeek(-3),
+        releaseChannel: "Owned",
+      },
+      {
+        id: id(13),
+        title: "From SEO to AIO — a transition playbook (draft)",
+        contentType: "Article",
+        spokesperson: "Spencer Gallagher",
+        status: "Draft",
+        tags: ["AIO", "SEO", "Transition", "Playbook"],
+        body: "A practical playbook for in-house comms teams moving from a search-engine-led visibility model to an AI-engine-led one. Covers schema priorities, content rebalancing, the role of earned media, and how to brief agencies. Currently with editorial review.",
+        createdAt: dateForWeek(0),
+        releaseChannel: "Owned",
+      },
+    ];
+
+    saveArchive(archiveSeed);
+    savePlannerProjects(plannerSeed);
+    localStorage.setItem(SEED_KEY, "v1");
+  } catch {
+    /* noop — never block app boot */
+  }
+}
+
 function getISOWeek(d: Date) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
@@ -5865,6 +6013,8 @@ function App() {
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
+
+  useEffect(() => { seedDemoDataIfEmpty(); }, []);
 
   const handleLogoUpdate = (clientId: string, logoDataUrl: string) => {
     setClientLogos((prev) => ({ ...prev, [clientId]: logoDataUrl }));
