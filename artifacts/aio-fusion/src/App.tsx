@@ -3129,11 +3129,12 @@ const llmLogos = [
   )},
 ];
 
-function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () => void; onNavigateAgencies: () => void; onNavigate: (v: string) => void }) {
+function LandingPage({ onLogin, onNavigateAgencies, onNavigate, variant, onPickVariant }: { onLogin: () => void; onNavigateAgencies: () => void; onNavigate: (v: string) => void; variant?: "a" | "b" | "c"; onPickVariant?: (v: "a" | "b" | "c") => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="font-['Inter',sans-serif] text-[#1C1C1C]" style={{ background: "#FAFAFA" }}>
+      {variant && onPickVariant && <VariantPicker current={variant} onPick={onPickVariant} />}
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -3503,20 +3504,25 @@ function VariantPicker({ current, onPick }: { current: "a" | "b" | "c"; onPick: 
   return (
     <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-1 px-2 py-1.5 rounded-full shadow-lg backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)", border: "1px solid rgba(255,255,255,0.18)" }}>
       <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60 px-2">Layout</span>
-      {(["a", "b", "c"] as const).map((v) => (
-        <button
-          key={v}
-          onClick={() => onPick(v)}
-          className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.18em] transition-all"
-          style={{
-            background: current === v ? vars.coral : "transparent",
-            color: current === v ? "white" : "rgba(255,255,255,0.65)",
-          }}
-          title={v === "a" ? "Original" : v === "b" ? "Light inverted" : "Editorial"}
-        >
-          {v}
-        </button>
-      ))}
+      {(["a", "b", "c"] as const).map((v) => {
+        const label = v === "a" ? "Original (navy hero)" : v === "b" ? "Light inverted" : "Editorial magazine";
+        return (
+          <button
+            key={v}
+            onClick={() => onPick(v)}
+            aria-label={`Switch to layout ${v.toUpperCase()} — ${label}`}
+            aria-pressed={current === v}
+            className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.18em] transition-all"
+            style={{
+              background: current === v ? vars.coral : "transparent",
+              color: current === v ? "white" : "rgba(255,255,255,0.65)",
+            }}
+            title={label}
+          >
+            {v}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -3820,6 +3826,7 @@ function LandingPageB({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <button onClick={() => onNavigate("insights")} className="hover:underline">Insights</button>
               <button onClick={() => onNavigate("contact")} className="hover:underline">Contact</button>
               <button onClick={() => onNavigate("about")} className="hover:underline">About</button>
+              <button onClick={() => onNavigate("for-agents")} className="hover:underline opacity-70">For AI agents</button>
             </div>
             <p className="text-[12px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
           </div>
@@ -4136,6 +4143,7 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <button onClick={() => onNavigate("insights")} className="hover:opacity-60">Insights</button>
               <button onClick={() => onNavigate("contact")} className="hover:opacity-60">Contact</button>
               <button onClick={() => onNavigate("about")} className="hover:opacity-60">About</button>
+              <button onClick={() => onNavigate("for-agents")} className="hover:opacity-60 opacity-70">For AI agents</button>
             </div>
             <p className="text-[11px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion 2026</p>
           </div>
@@ -5814,7 +5822,14 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
 }
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
+  const initialVariant = ((): "a" | "b" | "c" => {
+    if (typeof window === "undefined") return "a";
+    const v = new URLSearchParams(window.location.search).get("v");
+    return v === "b" || v === "c" ? v : "a";
+  })();
+  const initialView: "landing" | "landing-b" | "landing-c" = initialVariant === "b" ? "landing-b" : initialVariant === "c" ? "landing-c" : "landing";
+  const [view, setView] = useState<"landing" | "landing-b" | "landing-c" | "platform-home" | "platform" | "guidance" | "archived-projects" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">(initialView);
+  const [lastLanding, setLastLanding] = useState<"a" | "b" | "c">(initialVariant);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
@@ -5824,12 +5839,42 @@ function App() {
     setActiveClient((prev) => (prev && prev.id === clientId ? { ...prev, logo: logoDataUrl } : prev));
   };
 
+  const syncVariantUrl = (v: "a" | "b" | "c") => {
+    try {
+      const url = new URL(window.location.href);
+      if (v === "a") url.searchParams.delete("v"); else url.searchParams.set("v", v);
+      window.history.replaceState({}, "", url.toString());
+    } catch { /* noop */ }
+  };
+
+  const pickVariant = (v: "a" | "b" | "c") => {
+    const target = v === "b" ? "landing-b" : v === "c" ? "landing-c" : "landing";
+    setView(target);
+    setLastLanding(v);
+    window.scrollTo(0, 0);
+    syncVariantUrl(v);
+  };
+
+  const goHome = () => {
+    const target = lastLanding === "b" ? "landing-b" : lastLanding === "c" ? "landing-c" : "landing";
+    setView(target);
+    window.scrollTo(0, 0);
+    syncVariantUrl(lastLanding);
+  };
+
+  const currentVariant: "a" | "b" | "c" = view === "landing-b" ? "b" : view === "landing-c" ? "c" : "a";
+
   const goToView = (v: string) => {
-    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "landing") {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies") {
       setView(v as any);
       window.scrollTo(0, 0);
+    } else if (v === "landing" || v === "landing-b" || v === "landing-c") {
+      const variant: "a" | "b" | "c" = v === "landing-b" ? "b" : v === "landing-c" ? "c" : "a";
+      pickVariant(variant);
     } else if (v === "landing#features") {
-      setView("landing");
+      const homeView = lastLanding === "b" ? "landing-b" : lastLanding === "c" ? "landing-c" : "landing";
+      setView(homeView);
+      syncVariantUrl(lastLanding);
       setTimeout(() => { document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }, 100);
     }
   };
@@ -5837,22 +5882,28 @@ function App() {
   const enterPlatform = () => setView("platform-home");
 
   if (view === "landing") {
-    return <LandingPage onLogin={enterPlatform} onNavigateAgencies={() => setView("for-agencies")} onNavigate={goToView} />;
+    return <LandingPage onLogin={enterPlatform} onNavigateAgencies={() => setView("for-agencies")} onNavigate={goToView} variant={currentVariant} onPickVariant={pickVariant} />;
+  }
+  if (view === "landing-b") {
+    return <LandingPageB onLogin={enterPlatform} onNavigate={goToView} variant={currentVariant} onPickVariant={pickVariant} />;
+  }
+  if (view === "landing-c") {
+    return <LandingPageC onLogin={enterPlatform} onNavigate={goToView} variant={currentVariant} onPickVariant={pickVariant} />;
   }
   if (view === "for-inhouse") {
-    return <ForInhousePage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ForInhousePage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
   }
   if (view === "for-agencies") {
-    return <ForAgenciesPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ForAgenciesPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
   }
   if (view === "insights") {
-    return <InsightsPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
   }
   if (view === "about") {
-    return <AboutPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <AboutPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
   }
   if (view === "contact") {
-    return <ContactPage onLogin={enterPlatform} onBack={() => setView("landing")} onNavigate={goToView} />;
+    return <ContactPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
   }
   if (view === "platform-home") {
     return (
