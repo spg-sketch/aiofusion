@@ -2653,22 +2653,16 @@ const llmLogos = [
   { name: "ChatGPT", color: "#10A37F", icon: (
     <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>
   )},
-  { name: "Perplexity", color: "#1FB8CD", icon: (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 1L4 5v6.5L1.5 13v5L4 19.5V23l8-4 8 4v-3.5L22.5 18v-5L20 11.5V5L12 1zm0 2.2l6 3v5.3l-6 3-6-3V6.2l6-3zM3.5 14.2l1.5-.8v2.1l4 2v2.3l-5.5-2.7v-2.9zm17 0v2.9l-5.5 2.7v-2.3l4-2v-2.1l1.5.8z"/></svg>
+  { name: "Perplexity", color: "#20808D", icon: (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18"/><path d="M3 8.5l9-5.5 9 5.5"/><path d="M3 15.5l9 5.5 9-5.5"/><path d="M3 8.5v7"/><path d="M21 8.5v7"/></svg>
   )},
   { name: "Claude", color: "#D97757", icon: (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.5v-3.07c-3.39-.49-6-3.4-6-6.93h2c0 2.76 2.24 5 5 5s5-2.24 5-5h2c0 3.53-2.61 6.44-6 6.93V17.5h3v2H8v-2h3z"/></svg>
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.2 18.4l4.6-11.3h2.4l4.6 11.3h-2.3l-1-2.6H9.5l-1 2.6H6.2zm4-4.5h3.6L12 9.1l-1.8 4.8z"/></svg>
   )},
   { name: "Gemini", color: "#4285F4", icon: (
-    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15h-2v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3l-.5 3H13v6.95c5.05-.5 9-4.76 9-9.95 0-5.52-4.48-10-10-10z"/></svg>
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 2c.5 4.6 3.4 7.5 8 8-4.6.5-7.5 3.4-8 8-.5-4.6-3.4-7.5-8-8 4.6-.5 7.5-3.4 8-8z"/></svg>
   )},
 ];
-
-const agencyBrands = [
-  "Bluhalo", "Merkle", "Kepler", "Havas",
-  "the7stars", "Fjord", "Mindshare", "OMD UK",
-];
-
 
 function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () => void; onNavigateAgencies: () => void; onNavigate: (v: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2773,49 +2767,46 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
 
       <section id="features" className="py-20 sm:py-24" style={{ background: "#FAFAFA" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility</h2>
-            <p className="text-lg max-w-2xl mx-auto font-light leading-relaxed" style={{ color: vars.g500 }}>
-              From diagnosis through to delivery - the full GEO workflow in one platform.
+          <div className="text-center mb-14 max-w-3xl mx-auto">
+            <h2 className="text-3xl md:text-5xl mb-5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing</h2>
+            <p className="text-lg mx-auto font-light leading-relaxed mb-8" style={{ color: vars.g500 }}>
+              Designed to AI Optimise PR and marketing at scale.
             </p>
+            <div className="text-left space-y-4 text-[15px] font-light leading-[1.8]" style={{ color: vars.g500 }}>
+              <p>AIO Fusion is designed to transform PR and marketing for the AI age in two ways:</p>
+              <p><strong className="font-semibold" style={{ color: vars.navy }}>One:</strong> Enables in-house teams and agencies to consistently enhance AI visibility and authority for a business or brand.</p>
+              <p><strong className="font-semibold" style={{ color: vars.navy }}>Two:</strong> Enables marketing and communications professionals to automate, optimise and score PR and marketing output making investment more effective and achievable.</p>
+              <p>It's one platform that brings together everything you need to scale high-quality marketing and achieve AI optimised communications.</p>
+            </div>
           </div>
-          <div className="grid md:grid-cols-3 gap-6 sm:gap-8 mb-8">
+
+          <h3 className="text-2xl md:text-3xl mb-8 text-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Key features</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 mb-10">
             {[
-              { title: "AIO Diagnostic", desc: "Create your website GEO score powered by Claude and ChatGPT across 6 signal categories. See exactly where you're strong and what needs work.", color: vars.accent, gradient: "linear-gradient(135deg, #1f748f, #165265)", icon: Search, tag: "Audit" },
-              { title: "Earned Visibility", desc: "Audit your earned media visibility with leading AI agents. Score your company or brand for visibility against common lines of enquiry.", color: vars.teal, gradient: "linear-gradient(135deg, #2896b9, #237474)", icon: Eye, tag: "Audit" },
-              { title: "GEO Content Optimisation", desc: "Define and refine your core business messaging and content to maximise consistent AI recognition.", color: "#6366F1", gradient: "linear-gradient(135deg, #6366F1, #4F46E5)", icon: MessageSquareQuote, tag: "Optimise" },
+              { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your communication strategy and audit your AI authority across earned and owned media." },
+              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact." },
+              { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit everything from press releases and thought leadership articles to events and awards content." },
+              { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing." },
+              { icon: Search, title: "Media Research", desc: "Fuel your media relations with AI recommended journalist contacts." },
+              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards." },
+              { icon: LineChart, title: "Measure & Report", desc: "Build detailed AI authority, PR and marketing activity reports revealing progress and predicting effectiveness." },
+              { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time building a powerful library of insights and activity." },
+              { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility and align it with your PR and marketing to create a powerful up-lift in AI performance." },
+              { icon: Code2, title: "Website Technical GEO", desc: "Support your AIO PR and marketing strategy with back-end instructions to maximise the AI effectiveness of your website." },
+              { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations offering you a cost effective and powerful B2B PR and marketing solution.", soon: true },
+              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO strategy with the new tactics of AI optimisation for earned and owned media.", soon: true },
             ].map((tool) => (
-              <div key={tool.title} className="bg-white rounded-2xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style={{ borderColor: vars.g200 }}>
-                <div className="h-1.5" style={{ background: tool.gradient }} />
-                <div className="p-7 sm:p-8">
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${tool.color}0A` }}>
-                      <tool.icon size={22} color={tool.color} />
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: `${tool.color}0A`, color: tool.color }}>{tool.tag}</span>
+              <div key={tool.title} className="bg-white rounded-xl border p-5 sm:p-6 transition-all hover:shadow-md hover:-translate-y-0.5 relative" style={{ borderColor: vars.g200 }}>
+                {tool.soon && (
+                  <span className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>Coming soon</span>
+                )}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(31,116,143,0.06)" }}>
+                    <tool.icon size={18} color={vars.accent} />
                   </div>
-                  <h3 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{tool.title}</h3>
-                  <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
+                  <h4 className="text-[15px] font-semibold pr-16" style={{ color: vars.navy }}>{tool.title}</h4>
                 </div>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 sm:gap-6 mb-10">
-            {[
-              { icon: FileEdit, title: "Content Optimiser", desc: "Rewrite and optimise PR and marketing content for AI citation." },
-              { icon: BarChart3, title: "Authority Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact." },
-              { icon: Send, title: "Release Gateway", desc: "Release approved content via media APIs and download for manual management." },
-              { icon: LineChart, title: "Measure & Report", desc: "Measure AI authority growth across optimisation, content and released coverage." },
-              { icon: Archive, title: "Archive", desc: "Store approved and draft content and curate your content marketing over time." },
-            ].map((tool) => (
-              <div key={tool.title} className="bg-white rounded-xl border p-5 sm:p-6" style={{ borderColor: vars.g200 }}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(31,116,143,0.06)" }}>
-                    <tool.icon size={16} color={vars.accent} />
-                  </div>
-                  <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>{tool.title}</h3>
-                </div>
-                <p className="text-[12px] leading-[1.7] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
+                <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g500 }}>{tool.desc}</p>
               </div>
             ))}
           </div>
@@ -2828,38 +2819,6 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate }: { onLogin: () 
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section id="how-it-works" className="py-20 sm:py-24" style={{ background: "#fff" }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl mb-5 leading-[1.15]" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>How it works</h2>
-            <p className="text-[15px] font-light leading-[1.8] max-w-3xl mx-auto" style={{ color: vars.g500 }}>
-              AIO Fusion enhances your PR and marketing and supports your brand's AI visibility at the same time. Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all.
-            </p>
-          </div>
-          <div className="space-y-4">
-            {[
-              { n: "1", title: "Diagnose", desc: "AIO Fusion diagnoses the status of your business or brand visibility with LLM agents such as ChatGPT, Claude, Perplexity, Copilot and Gemini. It audits your earned media as well as the AI performance of your website." },
-              { n: "2", title: "Strategise", desc: "Create a GEO (Generative Engine Optimisation) strategy including optimised content and technical AIO steps for your website and all your future PR and marketing output." },
-              { n: "3", title: "Plan", desc: "Optimise your forward marketing and PR plan for AI authority." },
-              { n: "4", title: "Optimise & Release", desc: "Optimise your on-going PR and marketing content using a tailored AI authority editor and release optimised content via media management and monitoring APIs. Agentic media relations and management are coming soon." },
-              { n: "5", title: "Measure", desc: "Measure and report the impact of AIO on your PR and marketing effectiveness. Continually score your AI optimisation performance over time and adjust your tactics." },
-              { n: "6", title: "Coming soon", desc: "AIO Fusion will enable always-on agentic PR management and media relations - offering a cost-effective and powerful B2B PR and marketing solution." },
-            ].map((step) => (
-              <div key={step.n} className="flex items-start gap-5 p-5 sm:p-6 rounded-2xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[18px] font-bold" style={{ background: vars.accent, fontFamily: "'Alice', Georgia, serif" }}>{step.n}</div>
-                <div>
-                  <h3 className="text-[16px] font-semibold mb-1" style={{ color: vars.navy }}>{step.title}</h3>
-                  <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{step.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-center text-[13px] font-light mt-8 italic" style={{ color: vars.g400 }}>
-            AIO Fusion is designed to enable human experts to control and oversee authority strategy and content management.
-          </p>
         </div>
       </section>
 
