@@ -14,6 +14,7 @@ import step6Img from "./assets/step-6-agentic.png";
 import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
+import heroBgImg from "./assets/hero-bg.png";
 import { useState, useEffect, useMemo } from "react";
 import {
   ChevronRight,
