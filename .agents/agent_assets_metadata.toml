@@ -107,3 +107,9 @@ id = "pUOB0IlskzDSc_RnYtAPh"
 uri = "file://.local/patrick_feedback/email_followup_examples.md"
 type = "text"
 title = "Follow-up email to Patrick — example outputs"
+
+[[outputs]]
+id = "RM427gbuRRBzQzMoU4E3H"
+uri = "file://.local/patrick_feedback/pricing_discussion.md"
+type = "text"
+title = "AIO Fusion — Pricing Discussion (for Patrick)"
