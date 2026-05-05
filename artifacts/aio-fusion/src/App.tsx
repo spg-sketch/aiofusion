@@ -3505,7 +3505,7 @@ function VariantPicker({ current, onPick }: { current: "a" | "b" | "c"; onPick: 
     <div className="fixed bottom-5 right-5 z-[60] flex items-center gap-1 px-2 py-1.5 rounded-full shadow-lg backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)", border: "1px solid rgba(255,255,255,0.18)" }}>
       <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60 px-2">Layout</span>
       {(["a", "b", "c"] as const).map((v) => {
-        const label = v === "a" ? "Original (navy hero)" : v === "b" ? "Light inverted" : "Editorial magazine";
+        const label = v === "a" ? "Original (navy hero)" : v === "b" ? "Light inverted" : "Vibrant / image-led";
         return (
           <button
             key={v}
@@ -3837,21 +3837,16 @@ function LandingPageB({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
 }
 
 /* ============================================================
-   LANDING PAGE C  -  Editorial Magazine
-   Single uniform off-white. Big serif type, split hero, chapter
-   numbers replace coloured stripes, marginalia rules between sections.
+   LANDING PAGE C  -  Vibrant / Image-led
+   Per Patrick d2 feedback (C12-14): more colour, more imagery,
+   less navy-dominant, less text-heavy bottom half. Cream paper base,
+   colour-blocked feature panels (coral / teal / gold), image-rich
+   How It Works grid, warm coral final CTA.
    ============================================================ */
 function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin: () => void; onNavigate: (v: string) => void; variant: "a" | "b" | "c"; onPickVariant: (v: "a" | "b" | "c") => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const paper = "#FBFAF7";
-  const ink = "#0E2933";
-  const Chapter = ({ n, label }: { n: string; label: string }) => (
-    <div className="flex items-center gap-4 mb-8 max-w-6xl mx-auto px-4 sm:px-8">
-      <span className="text-[42px] leading-none" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.coral }}>{n}</span>
-      <div className="flex-1 h-px" style={{ background: vars.g300 }} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.g500 }}>{label}</span>
-    </div>
-  );
+  const paper = "#FBF6EC";
+  const ink = "#102B36";
   return (
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <VariantPicker current={variant} onPick={onPickVariant} />
@@ -3896,44 +3891,50 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         )}
       </nav>
 
-      {/* HERO - editorial split */}
-      <section className="pt-[100px] sm:pt-[120px] pb-12 sm:pb-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-end">
+      {/* HERO - image-led with warm overlay */}
+      <section className="relative pt-[100px] sm:pt-[120px] pb-12 sm:pb-16 overflow-hidden">
+        <div className="absolute inset-0" aria-hidden="true">
+          <img src={heroBgImg} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(120deg, ${paper} 0%, ${paper}EE 38%, ${paper}A8 62%, transparent 100%)` }} />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 0%, ${paper}66 80%, ${paper} 100%)` }} />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             <div className="lg:col-span-7">
-              <div className="flex items-center gap-3 mb-6">
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>Issue 01</span>
-                <span className="h-px flex-1 max-w-[80px]" style={{ background: vars.g300 }} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.g500 }}>Generative Engine Optimisation</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: vars.coralSoft, border: `1px solid ${vars.coral}40` }}>
+                <Sparkles size={12} color={vars.coral} />
+                <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.coral }}>Generative Engine Optimisation</span>
               </div>
-              <h1 className="text-6xl md:text-8xl lg:text-9xl leading-[0.95] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                Business<br />visibility<br /><span style={{ color: vars.coral }}>for the<br /><em style={{ fontStyle: "italic" }}>AI Age.</em></span>
+              <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] leading-[1.02] mb-6" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                Business visibility<br />for the <span style={{ color: vars.coral }}>AI Age</span>
               </h1>
-              <p className="text-xl md:text-2xl max-w-xl leading-snug font-light mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+              <p className="text-xl md:text-2xl max-w-xl leading-snug font-light mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
                 The AI Authority Platform for PR and marketing professionals.
               </p>
-              <p className="text-[15px] max-w-lg leading-[1.85] font-light mb-10" style={{ color: vars.g600 }}>
+              <p className="text-[15px] max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
                 With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
               </p>
-              <div className="flex flex-wrap items-center gap-4">
-                <button onClick={onLogin} className="flex items-center gap-2.5 px-8 py-3.5 text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: vars.coral, color: "white" }}>
-                  See the Platform <ArrowRight size={14} />
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={onLogin} className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 shadow-lg" style={{ background: vars.coral, color: "white", boxShadow: "0 12px 28px rgba(224,120,86,0.32)" }}>
+                  <LogIn size={15} /> See the Platform
                 </button>
-                <a href="#features" className="flex items-center gap-2.5 px-8 py-3.5 text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5" style={{ color: ink, border: `1px solid ${ink}` }}>
-                  Explore Features
+                <a href="#features" className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5" style={{ color: ink, border: `1.5px solid ${ink}30` }}>
+                  Explore Features <ArrowRight size={14} />
                 </a>
               </div>
             </div>
-            <div className="lg:col-span-5 relative">
-              <div className="aspect-[4/5] rounded-sm relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${vars.navy} 0%, #0E2933 100%)` }}>
-                <div className="absolute w-[400px] h-[400px] rounded-full opacity-30" style={{ background: "radial-gradient(circle, #E07856 0%, transparent 70%)", top: "-10%", right: "-15%" }} />
-                <div className="absolute w-[320px] h-[320px] rounded-full opacity-20" style={{ background: "radial-gradient(circle, #2896b9 0%, transparent 70%)", bottom: "-10%", left: "-15%" }} />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-3/5 max-w-[280px]" />
-                </div>
-                <div className="absolute bottom-5 left-5 right-5 flex items-center justify-between text-white/70 text-[10px] font-bold uppercase tracking-[0.22em]">
-                  <span>The AI Authority Platform</span>
-                  <span>2026</span>
+            <div className="lg:col-span-5 hidden lg:flex justify-center">
+              <div className="relative w-full max-w-[360px]">
+                <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full" style={{ background: vars.gold, opacity: 0.25 }} />
+                <div className="absolute -bottom-6 -left-6 w-40 h-40 rounded-full" style={{ background: vars.teal, opacity: 0.2 }} />
+                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ background: `linear-gradient(135deg, ${vars.coral} 0%, #d96546 100%)`, boxShadow: "0 30px 60px -20px rgba(224,120,86,0.45)" }}>
+                  <div className="absolute inset-0 flex items-center justify-center p-10">
+                    <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-full max-w-[220px]" />
+                  </div>
+                  <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between text-white/80 text-[10px] font-bold uppercase tracking-[0.2em]">
+                    <span>The AI Authority Platform</span>
+                    <span>2026</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3941,57 +3942,63 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         </div>
       </section>
 
-      {/* CHAPTER 01 - Three feature boxes as editorial tiles */}
-      <Chapter n="01" label="The Platform" />
-      <section className="pb-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="max-w-3xl mb-14">
-            <h2 className="text-4xl md:text-6xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
+      {/* FEATURE PANELS - three full-colour blocks (coral, teal, gold) */}
+      <section className="pb-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 mb-10">
+          <div className="max-w-3xl">
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>The Platform</span>
+            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
             <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery — the full GEO, PR and marketing content workflow in one platform.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-10">
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="grid md:grid-cols-3 gap-5">
             {[
-              { n: "i.",   title: "AI Visibility Diagnostic", copy: "Audit the performance of your earned media and website in the eyes of LLMs like Claude and ChatGPT. See exactly where you're strong and what needs work.", icon: Search, accent: vars.accent },
-              { n: "ii.",  title: "Optimise PR and Marketing", copy: "Maximise the impact your PR and marketing has on humans and AI, with easy-to-use content optimisation tools that will give you consistent authority from press releases to award entries.", icon: FileEdit, accent: vars.coral },
-              { n: "iii.", title: "Automate your Communications", copy: "AIO Fusion enables in-house marketers and communications professionals to rapidly research, plan, scale and predict the impact of content and marketing activity.", icon: Bot, accent: vars.gold },
+              { title: "AI Visibility Diagnostic", copy: "Audit the performance of your earned media and website in the eyes of LLMs like Claude and ChatGPT. See exactly where you're strong and what needs work.", icon: Search, bg: vars.teal, tint: "#9DD6E8" },
+              { title: "Optimise PR and Marketing", copy: "Maximise the impact your PR and marketing has on humans and AI, with easy-to-use content optimisation tools that will give you consistent authority from press releases to award entries.", icon: FileEdit, bg: vars.coral, tint: "#FBC4B0" },
+              { title: "Automate your Communications", copy: "AIO Fusion enables in-house marketers and communications professionals to rapidly research, plan, scale and predict the impact of content and marketing activity.", icon: Bot, bg: vars.gold, tint: "#EFD49B" },
             ].map((box) => (
-              <div key={box.title} className="border-t-2 pt-6" style={{ borderColor: box.accent }}>
-                <div className="flex items-baseline gap-3 mb-4">
-                  <span className="text-[24px] font-light" style={{ color: box.accent, fontFamily: "'Alice', Georgia, serif" }}>{box.n}</span>
-                  <box.icon size={20} color={box.accent} />
+              <div key={box.title} className="relative p-7 sm:p-8 rounded-2xl overflow-hidden" style={{ background: box.bg, color: "white" }}>
+                <div className="absolute -bottom-12 -right-12 w-44 h-44 rounded-full opacity-25" style={{ background: box.tint }} />
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" }}>
+                    <box.icon size={22} color="white" />
+                  </div>
+                  <h3 className="text-[24px] mb-3 leading-tight" style={{ fontFamily: "'Alice', Georgia, serif" }}>{box.title}</h3>
+                  <p className="text-[14px] font-light leading-[1.7] text-white/90">{box.copy}</p>
                 </div>
-                <h3 className="text-[24px] mb-3 leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{box.title}</h3>
-                <p className="text-[14px] font-light leading-[1.85]" style={{ color: vars.g600 }}>{box.copy}</p>
               </div>
             ))}
           </div>
-          <div className="grid md:grid-cols-3 gap-6 mt-16">
+          <div className="grid md:grid-cols-3 gap-5 mt-5">
             {[
-              { icon: Calendar, title: "Comms Planner", copy: "Plan and score your PR and marketing schedule for predicted AI authority impact." },
-              { icon: Search, title: "Media and Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact." },
-              { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth." },
+              { icon: Calendar, title: "Comms Planner", copy: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.teal },
+              { icon: Lightbulb, title: "Media & Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: vars.coral },
+              { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
             ].map((b) => (
-              <div key={b.title} className="p-5 border" style={{ borderColor: vars.g200, background: "white" }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <b.icon size={16} color={ink} />
-                  <h3 className="text-[14px] font-bold uppercase tracking-[0.1em]" style={{ color: ink }}>{b.title}</h3>
+              <div key={b.title} className="p-5 rounded-2xl bg-white" style={{ border: `1px solid ${b.accent}30`, boxShadow: `0 4px 14px -6px ${b.accent}25` }}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${b.accent}18` }}>
+                    <b.icon size={16} color={b.accent} />
+                  </div>
+                  <h3 className="text-[14px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{b.title}</h3>
                 </div>
-                <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{b.copy}</p>
+                <p className="text-[13px] font-light leading-[1.7] pl-12" style={{ color: vars.g600 }}>{b.copy}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CHAPTER 02 - How It Works */}
-      <Chapter n="02" label="How It Works" />
-      <section className="pb-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+      {/* HOW IT WORKS - colourful image grid (3x2 cards) */}
+      <section className="py-20 mt-12" style={{ background: "white" }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
-            <h2 className="text-4xl md:text-6xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>The cost-effective B2B PR technology for the age of AI.</h2>
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.teal }}>How it works</span>
+            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>The cost-effective B2B PR technology for the age of AI.</h2>
             <p className="text-[15px] font-light leading-[1.85]" style={{ color: vars.g600 }}>Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all.</p>
           </div>
-          <div className="space-y-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { n: "01", img: step1Img, title: "Diagnose your AI visibility", body: "AIO Fusion diagnoses your business or brand visibility with LLM agents such as ChatGPT, Claude, Perplexity, CoPilot and Gemini.", accent: vars.teal },
               { n: "02", img: step2Img, title: "Build a GEO strategy", body: "Create a GEO strategy combining optimised content and technical AIO steps for your website and all your future PR and marketing output.", accent: vars.coral },
@@ -3999,20 +4006,18 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               { n: "04", img: step4Img, title: "Optimise content output", body: "Optimise your on-going PR and marketing content output using a tailored AI authority editor.", accent: vars.green },
               { n: "05", img: step5Img, title: "Measure, report and predict", body: "Measure, report and predict marketing performance and AI visibility, tracking business messages, spokespeople and earned media.", accent: vars.accent },
               { n: "06", img: step6Img, title: "Always-on agentic media relations", body: "Coming soon — AIO Fusion will enable always-on agentic PR management and media relations.", accent: vars.amber, soon: true },
-            ].map((s, i) => (
-              <div key={s.n} className={`grid md:grid-cols-12 gap-6 md:gap-10 items-center ${i % 2 === 1 ? "md:[direction:rtl]" : ""}`}>
-                <div className="md:col-span-5 [direction:ltr]">
-                  <div className="aspect-[4/3] overflow-hidden" style={{ background: vars.navy }}>
-                    <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
-                  </div>
+            ].map((s) => (
+              <div key={s.n} className="rounded-2xl overflow-hidden bg-white flex flex-col transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
+                <div className="aspect-[16/10] overflow-hidden relative" style={{ background: s.accent }}>
+                  <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
+                  <div className="absolute top-3 left-3 w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold" style={{ background: "white", color: s.accent }}>{s.n}</div>
+                  {s.soon && (
+                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "white", color: vars.coral }}>Coming soon</span>
+                  )}
                 </div>
-                <div className="md:col-span-7 [direction:ltr]">
-                  <div className="flex items-center gap-4 mb-3">
-                    <span className="text-[36px] font-light" style={{ color: s.accent, fontFamily: "'Alice', Georgia, serif" }}>{s.n}</span>
-                    {s.soon && (<span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: vars.coralSoft, color: vars.coral }}>Coming soon</span>)}
-                  </div>
-                  <h3 className="text-[28px] mb-3 leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
-                  <p className="text-[14.5px] font-light leading-[1.85]" style={{ color: vars.g600 }}>{s.body}</p>
+                <div className="p-5 flex-1 flex flex-col">
+                  <h3 className="text-[19px] mb-2 leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
+                  <p className="text-[13.5px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{s.body}</p>
                 </div>
               </div>
             ))}
@@ -4020,40 +4025,42 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         </div>
       </section>
 
-      {/* CHAPTER 03 - Features */}
-      <Chapter n="03" label="Key Features" />
-      <section id="features" className="pb-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+      {/* KEY FEATURES - compact pill tags grouped by accent */}
+      <section id="features" className="py-20" style={{ background: vars.creamDeep }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
-            <h2 className="text-4xl md:text-6xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing.</h2>
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>Key features</span>
+            <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>AIO for business PR and marketing.</h2>
             <p className="text-[15px] font-light leading-relaxed" style={{ color: vars.g600 }}>Designed to AI Optimise PR and marketing at scale.</p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-10 mb-10">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your strategy and audit AI authority across earned and owned media." },
-              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact." },
-              { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit press releases, articles, events and awards content." },
-              { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing." },
-              { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts." },
-              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards." },
-              { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth." },
-              { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time." },
-              { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift." },
-              { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website." },
-              { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations.", soon: true },
-              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", soon: true },
+              { icon: ShieldCheck, title: "Strategy & Audit", desc: "Build the foundations of your strategy and audit AI authority across earned and owned media.", accent: vars.teal },
+              { icon: Calendar, title: "Comms Planner", desc: "Plan and score your PR and marketing schedule for predicted AI authority impact.", accent: vars.coral },
+              { icon: FileEdit, title: "Content Optimiser & Editor", desc: "Create, optimise and edit press releases, articles, events and awards content.", accent: vars.gold },
+              { icon: Sparkles, title: "Content Creator", desc: "Create optimised content from raw information for PR and marketing.", accent: vars.green },
+              { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts.", accent: vars.accent },
+              { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: vars.coral },
+              { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.teal },
+              { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
+              { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
+              { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
+              { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations.", accent: vars.amber, soon: true },
+              { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: vars.coral, soon: true },
             ].map((tool) => (
-              <div key={tool.title} className="border-l-2 pl-5" style={{ borderColor: vars.coral }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <tool.icon size={16} color={ink} />
-                  <h4 className="text-[14px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{tool.title}</h4>
-                  {tool.soon && (<span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: vars.coral }}>Soon</span>)}
+              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${tool.accent}25` }}>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tool.accent}18` }}>
+                    <tool.icon size={14} color={tool.accent} />
+                  </div>
+                  <h4 className="text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{tool.title}</h4>
+                  {tool.soon && (<span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: `${tool.accent}18`, color: tool.accent }}>Soon</span>)}
                 </div>
-                <p className="text-[13px] leading-[1.75] font-light" style={{ color: vars.g600 }}>{tool.desc}</p>
+                <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g600 }}>{tool.desc}</p>
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-6 pt-8 border-t" style={{ borderColor: vars.g200 }}>
+          <div className="flex flex-wrap items-center justify-center gap-6 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
             {llmLogos.map((llm) => (
               <div key={llm.name} className="flex items-center gap-2">
@@ -4065,66 +4072,85 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
         </div>
       </section>
 
-      {/* CHAPTER 04 - Insights */}
-      <Chapter n="04" label="Insights" />
-      <section className="pb-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
-          <div className="max-w-3xl mb-12">
-            <h2 className="text-4xl md:text-6xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Practical thinking on AI visibility.</h2>
+      {/* INSIGHTS - image-led blog tiles */}
+      <section className="py-20" style={{ background: paper }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="flex items-end justify-between flex-wrap gap-4 mb-10">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.gold }}>Insights</span>
+              <h2 className="text-4xl md:text-5xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Practical thinking on AI visibility.</h2>
+            </div>
+            <button onClick={() => onNavigate("insights")} className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70" style={{ color: vars.coral }}>
+              All articles <ArrowRight size={14} />
+            </button>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.accent },
+              { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
               { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation.", url: "#", external: false, accent: vars.coral },
               { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme.", url: "#", external: false, accent: vars.gold },
             ].map((a) => (
-              <a key={a.title} href={a.url} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block transition-all hover:opacity-90">
-                <div className="aspect-[16/10] overflow-hidden mb-4" style={{ background: vars.navy }}>
+              <a key={a.title} href={a.url} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
+                <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
                   <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
-                <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: a.accent }}>{a.tag}</span>
-                <h3 className="text-[20px] mb-2 leading-snug" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
-                <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{a.excerpt}</p>
+                <div className="p-5">
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-2 px-2 py-1 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
+                  <h3 className="text-[18px] mb-2 leading-snug" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                  <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{a.excerpt}</p>
+                </div>
               </a>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CHAPTER 05 - Built by comms - editorial pull-quote */}
-      <Chapter n="05" label="Made by Comms Experts" />
-      <section className="pb-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-8">
-          <div className="border-l-4 pl-8" style={{ borderColor: vars.coral }}>
-            <p className="text-3xl md:text-4xl mb-8 leading-[1.3]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-              "An AIO platform built by comms professionals. We believe it will transform PR and marketing for good."
-            </p>
-            <div className="space-y-4 text-[15px] font-light leading-[1.85]" style={{ color: vars.g600 }}>
-              <p>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
-              <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind — to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
-              <p>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.</p>
+      {/* MADE BY COMMS - warm colour-blocked panel */}
+      <section className="py-20" style={{ background: vars.coralSoft }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+          <div className="grid md:grid-cols-12 gap-10 items-center">
+            <div className="md:col-span-5">
+              <div className="aspect-square rounded-2xl overflow-hidden relative" style={{ background: `linear-gradient(135deg, ${vars.coral} 0%, #c75a3d 100%)`, boxShadow: "0 30px 60px -20px rgba(224,120,86,0.4)" }}>
+                <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full" style={{ background: vars.gold, opacity: 0.4 }} />
+                <div className="absolute -bottom-10 -left-10 w-52 h-52 rounded-full" style={{ background: vars.teal, opacity: 0.3 }} />
+                <div className="absolute inset-0 flex items-center justify-center p-12">
+                  <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-full max-w-[200px]" />
+                </div>
+              </div>
+            </div>
+            <div className="md:col-span-7">
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>Made by Comms Experts</span>
+              <p className="text-2xl md:text-3xl mt-3 mb-5 leading-[1.3]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                "An AIO platform built by comms professionals. We believe it will transform PR and marketing for good."
+              </p>
+              <div className="space-y-3 text-[14.5px] font-light leading-[1.75]" style={{ color: vars.g600 }}>
+                <p>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
+                <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day — designed to help you maximise the potential of your expertise and deliver measurable results.</p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* FINAL CTA - dark editorial */}
-      <section className="py-20 sm:py-24" style={{ background: ink, color: paper }}>
-        <div className="max-w-5xl mx-auto px-4 sm:px-8">
+      {/* FINAL CTA - warm coral block (not navy) */}
+      <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(120deg, ${vars.coral} 0%, #d96546 60%, ${vars.gold} 130%)`, color: "white" }}>
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full opacity-20" style={{ background: vars.cream }} />
+        <div className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full opacity-15" style={{ background: vars.teal }} />
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-8">
           <div className="grid md:grid-cols-12 gap-8 items-center">
             <div className="md:col-span-7">
-              <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.coral }}>End notes</span>
-              <h2 className="text-4xl md:text-6xl mt-4 mb-5 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
-              <p className="text-[15px] leading-relaxed font-light text-white/70 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
+              <span className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/80">Get started</span>
+              <h2 className="text-4xl md:text-6xl mt-3 mb-5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI authority?</h2>
+              <p className="text-[15px] leading-relaxed font-light text-white/85 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
-              <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center justify-between gap-2.5 px-6 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: vars.coral, color: "white" }}>
+              <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: vars.coral }}>
                 <span className="flex items-center gap-2"><Calendar size={16} /> Book a Demo</span> <ArrowRight size={14} />
               </a>
-              <a href="mailto:info@aiofusion.ai" className="flex items-center justify-between gap-2.5 px-6 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/5 text-white" style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
+              <a href="mailto:info@aiofusion.ai" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
                 <span className="flex items-center gap-2"><Mail size={16} /> Talk to Us</span> <ArrowRight size={14} />
               </a>
-              <button onClick={onLogin} className="flex items-center justify-between gap-2.5 px-6 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/5 text-white" style={{ border: "1px solid rgba(255,255,255,0.3)" }}>
+              <button onClick={onLogin} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
                 <span className="flex items-center gap-2"><LogIn size={16} /> See the Platform</span> <ArrowRight size={14} />
               </button>
             </div>
