@@ -101,3 +101,9 @@ id = "vSQTxMdY-DnWm9Gb5_KDF"
 uri = "file://COVERAGE_CHECKLIST.md"
 type = "text"
 title = "AIO Fusion — Build Coverage Checklist (with scoring)"
+
+[[outputs]]
+id = "pUOB0IlskzDSc_RnYtAPh"
+uri = "file://.local/patrick_feedback/email_followup_examples.md"
+type = "text"
+title = "Follow-up email to Patrick — example outputs"
