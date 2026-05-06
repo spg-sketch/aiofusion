@@ -361,7 +361,7 @@ export default function SeoAuditPage() {
               </div>
             )}
 
-            <Section title="Meta Tags & SEO" icon={Tag} score={result.scores.meta} findings={result.meta} defaultOpen={true} />
+            <Section title="Meta Tags & Discoverability" icon={Tag} score={result.scores.meta} findings={result.meta} defaultOpen={true} />
             <Section title="Heading Structure" icon={FileText} score={result.scores.headings} findings={result.headings} />
             <Section title="Schema & Structured Data" icon={Code2} score={result.scores.schema} findings={result.schema} />
             <Section title="Links & Authority Signals" icon={Link} score={result.scores.links} defaultOpen={false}>
@@ -420,8 +420,8 @@ export default function SeoAuditPage() {
             </div>
             <p className="text-[15px] font-semibold" style={{ color: vars.navy }}>Enter a URL to begin</p>
             <p className="text-[12px] mt-1 text-center max-w-md" style={{ color: vars.g400 }}>
-              Get a full technical SEO analysis including meta tags, heading structure, schema markup,
-              AI crawler readiness, Google PageSpeed scores, and prioritised recommendations.
+              Get a full technical website analysis including meta tags, heading structure, schema markup,
+              AI crawler readiness, Google PageSpeed scores, and prioritised GEO recommendations.
             </p>
           </div>
         )}
