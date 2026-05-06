@@ -236,11 +236,11 @@ export default function SeoAuditPage() {
             </div>
             <div>
               <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
-                SEO Assessment
-                <InfoTip text="Crawls a URL and checks meta tags, headings, schema markup, links, images, AI crawler access, and Google PageSpeed scores. Returns prioritised fixes to improve both human SEO and AI discoverability." width={260} />
+                Website GEO Assessment
+                <InfoTip text="Crawls a URL and checks meta tags, headings, schema markup, links, images, AI crawler access, and Google PageSpeed scores. Returns prioritised fixes to improve AI discoverability and citation-worthiness." width={260} />
               </h1>
               <p className="text-[13px]" style={{ color: vars.g500 }}>
-                Technical SEO analysis with AI readiness scoring
+                Technical website analysis with AI readiness scoring
               </p>
             </div>
           </div>
