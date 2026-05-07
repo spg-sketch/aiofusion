@@ -21,13 +21,13 @@ import {
 } from "lucide-react";
 
 const vars = {
-  navy: "#165265",
-  accent: "#1f748f",
-  teal: "#2896b9",
+  navy: "#102B36",
+  accent: "#C8497A",
+  teal: "#C8497A",
   green: "#3D9B6B",
   amber: "#D4922A",
   red: "#C94A3E",
-  lightBg: "#e0f2f7",
+  lightBg: "#FBE3ED",
   g50: "#FAFAFA",
   g100: "#F3F3F3",
   g200: "#E5E5E5",

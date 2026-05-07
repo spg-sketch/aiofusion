@@ -24,13 +24,13 @@ import {
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
 const vars = {
-  navy: "#165265",
-  accent: "#1f748f",
-  teal: "#2896b9",
+  navy: "#102B36",
+  accent: "#C8497A",
+  teal: "#C8497A",
   green: "#3D9B6B",
   amber: "#D4922A",
-  coral: "#E07856",
-  cream: "#F8F2E8",
+  coral: "#C8497A",
+  cream: "#FBF6EC",
   gold: "#C9A04E",
   g50: "#FAFAFA",
   g100: "#F3F3F3",
