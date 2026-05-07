@@ -2508,6 +2508,7 @@ function OptimiserPage({
 function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [projects, setProjects] = useState<PlannerProject[]>(loadPlannerProjects());
   const [editing, setEditing] = useState<PlannerProject | null>(null);
+  const plannerKeyMessages = useMemo(() => getKeyMessages(), [editing?.id]);
   const [showArchivePicker, setShowArchivePicker] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
   const archive = useMemo(() => loadArchive(), [showArchivePicker]);
@@ -2956,7 +2957,28 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Key message</label>
-                <input type="text" value={editing.keyMessage} onChange={(e) => setEditing({ ...editing, keyMessage: e.target.value })} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                {plannerKeyMessages.length === 0 ? (
+                  <div className="rounded-lg border p-2.5 text-[12px] font-light italic" style={{ borderColor: vars.g200, color: vars.g400, background: "white" }}>
+                    No key messages set. Add them in <button type="button" onClick={() => onNavigate("intake")} className="underline" style={{ color: "#C8497A" }}>Project Set-Up</button> (sections 4.2 + 4.3).
+                  </div>
+                ) : (
+                  <select
+                    value={editing.keyMessage}
+                    onChange={(e) => setEditing({ ...editing, keyMessage: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                    style={{ borderColor: vars.g200, color: vars.navy }}
+                  >
+                    <option value="">— Choose a key message from Project Data —</option>
+                    {plannerKeyMessages.map((m) => {
+                      const label = m.short || m.long;
+                      const display = label.length > 90 ? `${label.slice(0, 90)}…` : label;
+                      return <option key={`${m.tag}-${label}`} value={label}>[{m.tag}] {display}</option>;
+                    })}
+                    {editing.keyMessage && !plannerKeyMessages.some((m) => (m.short || m.long) === editing.keyMessage) && (
+                      <option value={editing.keyMessage}>{editing.keyMessage} (custom)</option>
+                    )}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Release channels (multi-select)</label>
