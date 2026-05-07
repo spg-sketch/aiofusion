@@ -5913,22 +5913,48 @@ function PlatformHomePage({
           })}
         </div>
 
-        {/* HOW IT WORKS — three colour blocks (Variant C language) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+        {/* HOW AIO FUSION WORKS — four guidance articles */}
+        <div className="flex items-end justify-between mb-5 sm:mb-6">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Guidance</span>
+            <h2 className="text-2xl sm:text-3xl mt-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
+          </div>
+          <button
+            onClick={onGuidance}
+            className="hidden sm:flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+            style={{ color: ink }}
+          >
+            View all <ArrowRight size={13} />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {[
-            { num: "01", title: "Audit", desc: "Diagnose AI visibility and pinpoint the messages, content and citations that drive AI authority.", bg: vars.teal },
-            { num: "02", title: "Optimise", desc: "Improve content and website signals so AI models can find, trust and recommend the business.", bg: accent },
-            { num: "03", title: "Release & Measure", desc: "Plan and publish PR and marketing activity, then track AI authority growth over time.", bg: vars.gold },
-          ].map((s) => (
-            <div key={s.num} className="relative rounded-2xl p-6 sm:p-7 overflow-hidden" style={{ background: s.bg, color: "white" }}>
-              <div className="absolute -bottom-10 -right-10 w-36 h-36 rounded-full opacity-20" style={{ background: "white" }} />
-              <div className="relative">
-                <div className="text-[11px] font-bold uppercase tracking-[0.22em] mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>{s.num}</div>
-                <h3 className="text-[22px] mb-2 leading-tight" style={{ fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
-                <p className="text-[13px] font-light leading-[1.7] text-white/90">{s.desc}</p>
-              </div>
-            </div>
-          ))}
+            { title: "Getting started with AIO Fusion", desc: "A walk-through of the platform, from intake to measurement.", type: "Article", tint: accent, icon: BookOpen },
+            { title: "Running an AIO Diagnostic", desc: "How to interpret the diagnostic score and pick the first fixes.", type: "Article", tint: vars.teal, icon: Search },
+            { title: "Building a comms plan that scores", desc: "Turning the Comms Planner into AI authority impact.", type: "Article", tint: vars.gold, icon: Calendar },
+            { title: "Optimising content for AI citation", desc: "Tracked-changes editing for press releases, articles and case studies.", type: "Video", tint: vars.green, icon: FileEdit },
+          ].map((a) => {
+            const Icon = a.icon;
+            return (
+              <button
+                key={a.title}
+                onClick={onGuidance}
+                className="text-left rounded-2xl p-5 sm:p-6 transition-all hover:-translate-y-1 flex flex-col"
+                style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -8px rgba(16,43,54,0.08)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = a.tint; e.currentTarget.style.boxShadow = `0 12px 28px -10px ${a.tint}40`; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; e.currentTarget.style.boxShadow = "0 4px 14px -8px rgba(16,43,54,0.08)"; }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${a.tint}18`, color: a.tint }}>
+                    <Icon size={17} />
+                  </div>
+                  <span className="text-[9px] font-bold uppercase tracking-[0.18em] px-2 py-1 rounded-full" style={{ background: `${a.tint}15`, color: a.tint }}>{a.type}</span>
+                </div>
+                <h3 className="text-[15px] font-bold mb-1.5 leading-snug" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                <p className="text-[12.5px] font-light leading-[1.65]" style={{ color: vars.g600 }}>{a.desc}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
