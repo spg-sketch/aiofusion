@@ -431,7 +431,7 @@ const sections: SectionDef[] = [
       },
       { id: "h-kt", label: "Key Takeaways", type: "heading" },
       {
-        id: "5.6",
+        id: "5.5",
         label: "5–8 most important facts every visitor should leave knowing",
         hint: "These become structured key takeaways, summary boxes and schema-ready content.",
         type: "textarea",
