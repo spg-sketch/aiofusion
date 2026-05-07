@@ -643,81 +643,97 @@ export default function IntakePage() {
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
 
-        {/* Top action buttons */}
-        <div className="flex flex-wrap gap-2 mb-5">
-          <button
-            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-            style={{ borderColor: vars.g200, color: vars.navy }}
-            title="Reset and draft a fresh Project Data report"
-          >
-            <Plus size={13} /> Create Project Data
-          </button>
-          <button
-            onClick={() => { setShowOptimiseModal(true); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white"
-            style={{ background: vars.teal }}
-            title="Send Parts 4.1–4.5 to the LLM optimiser"
-          >
-            <Sparkles size={13} /> Optimise Project Data
-          </button>
-          <button
-            onClick={() => {
-              setIntakeStatus("Accepted");
-              setAcceptedAt(new Date().toISOString());
-              alert("Project Data accepted. The signed-off brief is now available to every other module.");
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white"
-            style={{ background: vars.green }}
-          >
-            <FileCheck2 size={13} /> Accept Project Data
-          </button>
-          <button
-            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-            style={{ borderColor: vars.g200, color: vars.navy }}
-            title="Re-open the Project Data for editing"
-          >
-            <Pencil size={13} /> Edit Project Data
-          </button>
+        {/* Top action buttons — Variant C ink/paper/raspberry */}
+        <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all"
+              style={{ background: "#FBF6EC", color: "#102B36" }}
+              title="Reset and draft a fresh Project Data report"
+            >
+              <Plus size={14} /> Create Project Data
+            </button>
+            <button
+              onClick={() => { setShowOptimiseModal(true); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
+              style={{ background: "#C8497A" }}
+              title="Send Parts 4.1–4.5 to the LLM optimiser"
+            >
+              <Sparkles size={14} /> Optimise Project Data
+            </button>
+            <button
+              onClick={() => {
+                setIntakeStatus("Accepted");
+                setAcceptedAt(new Date().toISOString());
+                alert("Project Data accepted. The signed-off brief is now available to every other module.");
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
+              style={{ background: vars.green }}
+            >
+              <FileCheck2 size={14} /> Accept Project Data
+            </button>
+            <button
+              onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
+              style={{ background: "#C94A3E" }}
+              title="Re-open the Project Data for editing"
+            >
+              <Pencil size={14} /> Edit Project Data
+            </button>
+          </div>
         </div>
 
-        {/* Track switch — PR Set-Up on the LEFT first */}
-        <div className="inline-flex p-1 rounded-xl border" style={{ background: "white", borderColor: vars.g200 }}>
-          {([
-            { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging" },
-            { key: "web" as Track, primary: "Website Set-Up", subtitle: "Business Profile" },
-          ]).map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTrack(t.key)}
-              className="px-5 py-2.5 rounded-lg text-left transition-all"
-              style={{
-                background: track === t.key ? vars.accent : "transparent",
-                color: track === t.key ? "white" : vars.g500,
-              }}
-            >
-              <div className="text-[13px] font-bold">{t.primary}</div>
-              <div className="text-[10px] font-light opacity-80">{t.subtitle}</div>
-            </button>
-          ))}
+        {/* Track switch + progress — Variant C panel */}
+        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row gap-2">
+              {([
+                { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging" },
+                { key: "web" as Track, primary: "Website Set-Up", subtitle: "Business Profile" },
+              ]).map((t) => {
+                const isActive = track === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setTrack(t.key)}
+                    className="px-5 py-3 rounded-xl text-left transition-all border-2"
+                    style={{
+                      background: isActive ? "#102B36" : "#FBF6EC",
+                      borderColor: isActive ? "#102B36" : "rgba(16,43,54,0.15)",
+                      color: isActive ? "#FBF6EC" : "#102B36",
+                    }}
+                  >
+                    <div className="text-[14px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>{t.primary}</div>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.14em] mt-0.5 opacity-80">{t.subtitle}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex-1 lg:max-w-md lg:ml-6">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>Set-Up Progress</span>
+                <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{progressPct}%</span>
+              </div>
+              <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
+                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
         {/* Sidebar */}
         <div className="w-full lg:w-72 lg:flex-shrink-0">
-          <div className="rounded-2xl border p-5 mb-4" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>Progress</span>
-              <span className="text-xs font-bold" style={{ color: vars.accent }}>{progressPct}%</span>
+          <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
+            <div className="px-4 py-3 border-b-2" style={{ background: "#102B36", borderColor: "#102B36" }}>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Sections</span>
             </div>
-            <div className="w-full h-2 rounded-full" style={{ background: vars.g200 }}>
-              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: vars.accent }} />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
             {visibleSections.map((sec, idx) => {
               const isActive = idx === activeSection;
               const isDone = completed.has(idx);
@@ -727,19 +743,23 @@ export default function IntakePage() {
                   key={sec.id}
                   onClick={() => setActiveSection(idx)}
                   className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors border-b last:border-b-0"
-                  style={{ borderColor: vars.g100, background: isActive ? "rgba(31,116,143,0.04)" : "transparent" }}
+                  style={{
+                    borderColor: vars.g100,
+                    background: isActive ? "#FBE3ED" : "transparent",
+                    borderLeft: `3px solid ${isActive ? "#C8497A" : "transparent"}`,
+                  }}
                 >
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
                     style={{
-                      background: isDone ? vars.green : isActive ? vars.accent : vars.g200,
+                      background: isDone ? vars.green : isActive ? "#C8497A" : vars.g200,
                       color: isDone || isActive ? "white" : vars.g500,
                     }}
                   >
                     {isDone ? <Check size={14} /> : sec.number}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-medium truncate" style={{ color: isActive ? vars.navy : vars.g500 }}>{sec.title}</p>
+                    <p className="text-[12px] font-semibold truncate" style={{ color: isActive ? "#102B36" : vars.g600 }}>{sec.title}</p>
                   </div>
                   {!isDone && hasData && (
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: vars.amber }} title="In progress" />
@@ -752,24 +772,27 @@ export default function IntakePage() {
 
         {/* Section body */}
         <div className="flex-1 min-w-0">
-          <div className="rounded-2xl border" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="px-8 py-6 border-b" style={{ borderColor: vars.g100 }}>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(31,116,143,0.06)" }}>
-                  <section.icon size={18} color={vars.accent} />
+          <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
+            <div className="px-8 py-6" style={{ background: "#102B36" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#FBE3ED" }}>
+                  <section.icon size={20} color="#C8497A" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                    Section {section.number}: {section.title}
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
+                    Section {section.number}
+                  </div>
+                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>
+                    {section.title}
                   </h2>
-                  <p className="text-xs font-light" style={{ color: vars.g400 }}>{section.subtitle}</p>
+                  <p className="text-xs font-light mt-0.5" style={{ color: "rgba(251,246,236,0.7)" }}>{section.subtitle}</p>
                 </div>
               </div>
             </div>
 
-            <div className="px-8 py-6">
-              <div className="rounded-xl p-4 mb-8" style={{ background: "rgba(31,116,143,0.03)", border: `1px solid rgba(31,116,143,0.08)` }}>
-                <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>{section.intro}</p>
+            <div className="px-8 py-6" style={{ background: "#FBF6EC" }}>
+              <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
+                <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>{section.intro}</p>
               </div>
 
               <div className="space-y-6">
