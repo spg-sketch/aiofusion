@@ -194,13 +194,22 @@ function StatTile({ label, value, sub, color, icon: Icon }: { label: string; val
 }
 
 function CalloutBrief({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border p-3 sm:p-4 mb-4" style={{ background: vars.cream, borderColor: "#E6D7BC" }}>
-      <div className="flex items-center gap-2 mb-1.5">
-        <Sparkles size={14} color={vars.gold} />
-        <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.gold }}>{title}</span>
-      </div>
-      <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g600 }}>{children}</p>
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] border-2 transition-colors"
+        style={{ borderColor: "#C8497A", color: open ? "white" : "#C8497A", background: open ? "#C8497A" : "white" }}
+      >
+        <Sparkles size={12} /> {open ? `Hide ${title}` : title}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-xl p-3 sm:p-4" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+          <p className="text-[12px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>{children}</p>
+        </div>
+      )}
     </div>
   );
 }
