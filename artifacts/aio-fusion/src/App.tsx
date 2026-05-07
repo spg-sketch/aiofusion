@@ -6133,11 +6133,11 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
 
 function App() {
   const initialVariant = ((): "a" | "b" | "c" => {
-    if (typeof window === "undefined") return "a";
+    if (typeof window === "undefined") return "c";
     const v = new URLSearchParams(window.location.search).get("v");
-    return v === "b" || v === "c" ? v : "a";
+    return v === "a" || v === "b" ? v : "c";
   })();
-  const initialView: "landing" | "landing-b" | "landing-c" = initialVariant === "b" ? "landing-b" : initialVariant === "c" ? "landing-c" : "landing";
+  const initialView: "landing" | "landing-b" | "landing-c" = initialVariant === "b" ? "landing-b" : initialVariant === "a" ? "landing" : "landing-c";
   const [view, setView] = useState<"landing" | "landing-b" | "landing-c" | "platform-home" | "platform" | "guidance" | "archived-projects" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">(initialView);
   const [lastLanding, setLastLanding] = useState<"a" | "b" | "c">(initialVariant);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
@@ -6154,7 +6154,7 @@ function App() {
   const syncVariantUrl = (v: "a" | "b" | "c") => {
     try {
       const url = new URL(window.location.href);
-      if (v === "a") url.searchParams.delete("v"); else url.searchParams.set("v", v);
+      if (v === "c") url.searchParams.delete("v"); else url.searchParams.set("v", v);
       window.history.replaceState({}, "", url.toString());
     } catch { /* noop */ }
   };
@@ -6228,7 +6228,7 @@ function App() {
         onContinueToProjects={() => setView("platform")}
         onArchivedProjects={() => setView("archived-projects")}
         onGuidance={() => setView("guidance")}
-        onBackToLanding={() => setView("landing")}
+        onBackToLanding={() => goHome()}
       />
     );
   }
@@ -6244,11 +6244,11 @@ function App() {
       <div className="font-['Inter',sans-serif] text-[#1C1C1C] min-h-screen" style={{ background: vars.navy }}>
         <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(22,82,101,0.92)" }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
-            <button onClick={() => setView("landing")} className="flex items-center gap-3">
+            <button onClick={() => goHome()} className="flex items-center gap-3">
               <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
             </button>
             <div className="flex items-center gap-6">
-              <button onClick={() => setView("landing")} className="text-[13px] font-light text-white/60 hover:text-white transition-colors">
+              <button onClick={() => goHome()} className="text-[13px] font-light text-white/60 hover:text-white transition-colors">
                 <ArrowLeft size={14} className="inline mr-1" /> Back
               </button>
               <button
@@ -6305,7 +6305,7 @@ function App() {
                 <LogIn size={16} /> See the Platform
               </button>
               <button
-                onClick={() => setView("landing")}
+                onClick={() => goHome()}
                 className="flex items-center justify-center gap-2.5 px-8 py-4 rounded-lg text-[15px] font-medium transition-all hover:brightness-95"
                 style={{ background: "rgba(255,255,255,0.08)", color: "white", border: "1px solid rgba(255,255,255,0.12)" }}
               >
