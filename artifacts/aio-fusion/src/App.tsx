@@ -5881,12 +5881,7 @@ function PlatformHomePage({
     { label: "Release", sub: "Publish", icon: Send },
     { label: "Measure", sub: "Outcomes", icon: BarChart3 },
   ];
-  const buttons = [
-    { icon: Plus, title: "Create Project", desc: "Start a new client or in-house programme.", onClick: onCreateProject },
-    { icon: FolderOpen, title: "Current Projects", desc: "Open the Project Hub to manage live programmes.", onClick: onContinueToProjects },
-    { icon: Archive, title: "Archived Projects", desc: "Browse past projects stored in the archive.", onClick: onArchivedProjects },
-    { icon: BookOpen, title: "Guidance", desc: "How-to articles and short videos for AIO Fusion.", onClick: onGuidance },
-  ];
+  void onCreateProject; void onArchivedProjects;
   const paper = "#FBF6EC";
   const ink = "#102B36";
   const accent = "#C8497A";
@@ -6010,31 +6005,6 @@ function PlatformHomePage({
           <p className="text-[13px] font-light mt-6 leading-[1.7] max-w-3xl" style={{ color: "rgba(251,246,236,0.8)" }}>
             The AIO Marketing Loop runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
           </p>
-        </div>
-
-        {/* QUICK ACTIONS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
-          {buttons.map((b, i) => {
-            const Icon = b.icon;
-            const tints = [accent, vars.teal, vars.gold, vars.green];
-            const tint = tints[i % tints.length];
-            return (
-              <button
-                key={b.title}
-                onClick={b.onClick}
-                className="text-left rounded-2xl p-6 transition-all hover:-translate-y-1"
-                style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -8px rgba(16,43,54,0.08)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = tint; e.currentTarget.style.boxShadow = `0 12px 28px -10px ${tint}40`; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; e.currentTarget.style.boxShadow = "0 4px 14px -8px rgba(16,43,54,0.08)"; }}
-              >
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style={{ background: `${tint}18`, color: tint }}>
-                  <Icon size={20} />
-                </div>
-                <h3 className="text-[15px] font-bold mb-1.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
-                <p className="text-[12.5px] font-light leading-[1.65]" style={{ color: vars.g600 }}>{b.desc}</p>
-              </button>
-            );
-          })}
         </div>
 
         {/* HOW AIO FUSION WORKS — four guidance articles */}
