@@ -96,7 +96,7 @@ const sections: SectionDef[] = [
       {
         id: "4.2",
         label: "Primary Message",
-        hint: "Provide both a ≤6-word summary and a ≤25-word longer version. The single most important thing you want journalists, editors and AI systems to associate with your brand.",
+        hint: "Enter a Primary Message providing a short summary (no more than six words). And a longer version of no more than 25 words.",
         type: "dual",
         shortPlaceholder: "≤6 words — e.g. AI authority for PR",
         longPlaceholder: "≤25 words — the longer version that adds proof and context",
@@ -104,7 +104,7 @@ const sections: SectionDef[] = [
       {
         id: "4.3",
         label: "Additional Messages",
-        hint: "Same dual-format for each additional message. Add 3–5 supporting proof points that back up your primary message — each should be a factual, concrete claim.",
+        hint: "For each additional message provide a short summary (no more than six words). And a longer version of no more than 25 words.",
         type: "dual-list",
         shortPlaceholder: "≤6 words",
         longPlaceholder: "≤25 words",
@@ -126,7 +126,7 @@ const sections: SectionDef[] = [
       {
         id: "4.6",
         label: "Preferred terms, phrases and category descriptors",
-        hint: "Include category labels, technology descriptors, industry terms.",
+        hint: "Enter a list of short phrases or sentences. Include category labels, technology descriptors, industry terms.",
         type: "textarea",
       },
       {
@@ -797,6 +797,9 @@ export default function IntakePage() {
 
               <div className="space-y-6">
                 {section.fields.map((field) => {
+                  const displayId = /^\d+\.\d+$/.test(field.id)
+                    ? `${section.number}.${field.id.split(".")[1]}`
+                    : field.id;
                   if (field.type === "heading") {
                     return (
                       <div key={field.id} className="pt-6 pb-1 first:pt-0">
@@ -814,7 +817,7 @@ export default function IntakePage() {
                   if (field.id === "4.8") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
@@ -851,7 +854,7 @@ export default function IntakePage() {
                   if (field.id === "4.9") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {mediaCategories.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
@@ -892,7 +895,7 @@ export default function IntakePage() {
                     const v = duals[field.id] || { short: "", long: "" };
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
@@ -924,7 +927,7 @@ export default function IntakePage() {
                     const list = dualLists[field.id] || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No additional messages yet.</p>
@@ -964,7 +967,7 @@ export default function IntakePage() {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
@@ -993,7 +996,7 @@ export default function IntakePage() {
 
                   return (
                     <div key={field.id}>
-                      <FieldLabel id={field.id} label={field.label} hint={field.hint} />
+                      <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                       {field.type === "textarea" ? (
                         <textarea
                           value={(formData[field.id] as string) || ""}
