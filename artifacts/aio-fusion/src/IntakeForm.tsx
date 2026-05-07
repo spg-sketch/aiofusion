@@ -154,7 +154,7 @@ const sections: SectionDef[] = [
     track: "pr",
     number: 2,
     title: "FAQ Page: Facts, Policies & Common Questions",
-    subtitle: "AEO-ready answers to what your audience actually asks",
+    subtitle: "AI-ready answers to what your audience actually asks",
     icon: HelpCircle,
     intro:
       "FAQ pages with FAQ Schema markup are one of the most reliable AEO tactics. Google's AI Overviews and voice search assistants regularly pull directly from FAQ content.",
