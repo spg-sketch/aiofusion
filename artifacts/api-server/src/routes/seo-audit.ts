@@ -90,36 +90,74 @@ async function validateUrl(url: string): Promise<void> {
   }
 }
 
-async function fetchPage(url: string): Promise<{ html: string; statusCode: number; headers: Record<string, string>; responseTime: number }> {
-  await validateUrl(url);
-  const start = Date.now();
+const MAX_REDIRECTS = 5;
+
+async function fetchWithSsrfSafeRedirects(
+  url: string,
+  reqHeaders: Record<string, string>,
+  timeoutMs: number,
+): Promise<Awaited<ReturnType<typeof fetch>>> {
+  let currentUrl = url;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "AIOFusion-SEOAudit/1.0 (compatible; bot)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-    });
-    const contentLength = res.headers.get("content-length");
-    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-      throw new Error("Response too large");
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      await validateUrl(currentUrl);
+      const res = await fetch(currentUrl, {
+        signal: controller.signal,
+        headers: reqHeaders,
+        redirect: "manual",
+      });
+
+      const isRedirect = res.status >= 300 && res.status < 400;
+      if (!isRedirect) {
+        return res;
+      }
+
+      const location = res.headers.get("location");
+      if (!location) {
+        throw new Error("Redirect with no Location header");
+      }
+
+      currentUrl = new URL(location, currentUrl).href;
+
+      if (hop === MAX_REDIRECTS) {
+        throw new Error("Too many redirects");
+      }
     }
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > MAX_RESPONSE_SIZE) {
-      throw new Error("Response too large");
-    }
-    const html = new TextDecoder().decode(buffer);
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => { headers[k] = v; });
-    return { html, statusCode: res.status, headers, responseTime: Date.now() - start };
   } finally {
     clearTimeout(timeout);
   }
+
+  throw new Error("Unexpected end of redirect loop");
+}
+
+async function fetchPage(url: string): Promise<{ html: string; statusCode: number; headers: Record<string, string>; responseTime: number }> {
+  await validateUrl(url);
+  const start = Date.now();
+
+  const res = await fetchWithSsrfSafeRedirects(
+    url,
+    {
+      "User-Agent": "AIOFusion-SEOAudit/1.0 (compatible; bot)",
+      Accept: "text/html,application/xhtml+xml",
+    },
+    FETCH_TIMEOUT,
+  );
+
+  const contentLength = res.headers.get("content-length");
+  if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+    throw new Error("Response too large");
+  }
+  const buffer = await res.arrayBuffer();
+  if (buffer.byteLength > MAX_RESPONSE_SIZE) {
+    throw new Error("Response too large");
+  }
+  const html = new TextDecoder().decode(buffer);
+  const headers: Record<string, string> = {};
+  res.headers.forEach((v, k) => { headers[k] = v; });
+  return { html, statusCode: res.status, headers, responseTime: Date.now() - start };
 }
 
 async function fetchPageSpeed(url: string): Promise<any | null> {
@@ -140,11 +178,7 @@ async function fetchRobotsTxt(url: string): Promise<string | null> {
   try {
     const parsed = new URL(url);
     const robotsUrl = `${parsed.protocol}//${parsed.host}/robots.txt`;
-    await validateUrl(robotsUrl);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(robotsUrl, { signal: controller.signal, headers: { "User-Agent": "AIOFusion-SEOAudit/1.0" } });
-    clearTimeout(timeout);
+    const res = await fetchWithSsrfSafeRedirects(robotsUrl, { "User-Agent": "AIOFusion-SEOAudit/1.0" }, 8000);
     if (!res.ok) return null;
     const text = await res.text();
     return text.substring(0, 100000);
