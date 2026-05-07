@@ -5763,159 +5763,172 @@ function PlatformHomePage({
     { icon: Archive, title: "Archived Projects", desc: "Browse past projects stored in the archive.", onClick: onArchivedProjects },
     { icon: BookOpen, title: "Guidance", desc: "How-to articles and short videos for AIO Fusion.", onClick: onGuidance },
   ];
+  const paper = "#FBF6EC";
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const accentSoft = "#FBE3ED";
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
-      <header className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </button>
-        <button onClick={onBackToLanding} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
-          <ArrowLeft size={14} /> Back to website
+        <button
+          onClick={onBackToLanding}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+          style={{ background: ink, color: paper }}
+        >
+          <ArrowLeft size={16} /> Back to website
         </button>
       </header>
-      <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-6xl mx-auto">
+
+      <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
         <div className="mb-8 sm:mb-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-            <Sparkles size={12} /> Platform Home
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+            <Sparkles size={12} color={accent} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Platform Home</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-            Welcome to AIO Fusion
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+            Welcome to <span style={{ color: accent }}>AIO Fusion</span>
           </h1>
-          <p className="text-[15px] font-light mt-2 max-w-2xl" style={{ color: vars.g500 }}>
+          <p className="text-[16px] sm:text-[17px] font-light mt-4 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-7 mb-8 sm:mb-10">
-          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
-                <LogIn size={16} />
-              </div>
-              <div>
-                <h2 className="text-[15px] font-bold" style={{ color: vars.navy }}>Sign in to the platform</h2>
-                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+        {/* LOGIN — full-width across the page */}
+        <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+              <LogIn size={18} />
+            </div>
+            <div>
+              <h2 className="text-[20px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+            </div>
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); onContinueToProjects(); }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end">
+            <div className="lg:col-span-5">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Email</label>
+              <div className="relative">
+                <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                />
               </div>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); onContinueToProjects(); }} className="space-y-4">
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Email</label>
-                <div className="relative">
-                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: vars.accent }}
-                  />
-                </div>
+            <div className="lg:col-span-4">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Password</label>
+              <div className="relative">
+                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                />
               </div>
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Password</label>
-                <div className="relative">
-                  <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: vars.accent }}
-                  />
-                </div>
-              </div>
+            </div>
+            <div className="lg:col-span-3">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110"
-                style={{ background: vars.accent }}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                style={{ background: accent, boxShadow: `0 12px 28px ${accent}40` }}
               >
-                <LogIn size={14} /> Continue
+                <LogIn size={15} /> Continue
               </button>
-              <p className="text-[11px] font-light text-center" style={{ color: vars.g400 }}>
-                Demo build &middot; any details continue to your projects.
-              </p>
-            </form>
-          </div>
-
-          <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
-                <Repeat size={16} />
-              </div>
-              <div>
-                <h2 className="text-[15px] font-bold" style={{ color: vars.navy }}>The AIO Marketing Loop</h2>
-                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>Each pass moves the needle on AI citations.</p>
-              </div>
             </div>
-            <div className="flex items-stretch gap-1 sm:gap-2 overflow-x-auto pb-1">
-              {loopSteps.map((s, i) => {
-                const Icon = s.icon;
-                return (
-                  <div key={s.label} className="flex items-center flex-shrink-0">
-                    <div className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg min-w-[64px]">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
-                        <Icon size={16} />
-                      </div>
-                      <span className="text-[11px] font-semibold text-center" style={{ color: vars.navy }}>{s.label}</span>
-                      <span className="text-[10px] font-light text-center" style={{ color: vars.g400 }}>{s.sub}</span>
-                    </div>
-                    {i < loopSteps.length - 1 && (
-                      <ChevronRight size={14} className="flex-shrink-0" style={{ color: vars.g300 }} />
-                    )}
-                  </div>
-                );
-              })}
-              <div className="flex items-center flex-shrink-0 pl-1">
-                <Repeat size={16} style={{ color: vars.accent }} />
-                <span className="text-[10px] font-semibold ml-1 hidden sm:inline" style={{ color: vars.accent }}>Repeat</span>
-              </div>
-            </div>
-            <p className="text-[12px] font-light mt-4 leading-relaxed" style={{ color: vars.g500 }}>
-              The AIO Marketing Loop runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
+            <p className="lg:col-span-12 text-[11px] font-light text-center mt-1" style={{ color: vars.g400 }}>
+              Demo build &middot; any details continue to your projects.
             </p>
-          </div>
+          </form>
         </div>
 
+        {/* AIO MARKETING LOOP — full-width below login so all 7 steps fit */}
+        <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+          <div className="flex items-center gap-3 mb-6 sm:mb-7">
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
+              <Repeat size={18} color={paper} />
+            </div>
+            <div>
+              <h2 className="text-[20px] font-bold" style={{ color: paper, fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h2>
+              <p className="text-[13px] font-light" style={{ color: "rgba(251,246,236,0.7)" }}>Each pass moves the needle on AI citations.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-2 items-stretch">
+            {loopSteps.map((s, i) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="relative flex flex-col items-center text-center gap-2 px-2 py-3 rounded-xl" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                  <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                    <Icon size={17} />
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: paper }}>{s.label}</div>
+                  <div className="text-[10px] font-light" style={{ color: "rgba(251,246,236,0.6)" }}>{s.sub}</div>
+                  {i < loopSteps.length - 1 && (
+                    <ChevronRight size={14} className="hidden lg:block absolute top-1/2 -right-2.5 -translate-y-1/2" style={{ color: "rgba(251,246,236,0.3)" }} />
+                  )}
+                </div>
+              );
+            })}
+            <div className="flex flex-col items-center justify-center gap-2 px-2 py-3 rounded-xl" style={{ background: accent, color: "white" }}>
+              <Repeat size={20} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em]">Repeat</span>
+            </div>
+          </div>
+          <p className="text-[13px] font-light mt-6 leading-[1.7] max-w-3xl" style={{ color: "rgba(251,246,236,0.8)" }}>
+            The AIO Marketing Loop runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
+          </p>
+        </div>
+
+        {/* QUICK ACTIONS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-8 sm:mb-10">
-          {buttons.map((b) => {
+          {buttons.map((b, i) => {
             const Icon = b.icon;
+            const tints = [accent, vars.teal, vars.gold, vars.green];
+            const tint = tints[i % tints.length];
             return (
               <button
                 key={b.title}
                 onClick={b.onClick}
-                className="text-left rounded-2xl border-2 p-5 transition-all hover:shadow-lg hover:-translate-y-1"
-                style={{ background: "white", borderColor: vars.g200 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = vars.accent; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; }}
+                className="text-left rounded-2xl p-6 transition-all hover:-translate-y-1"
+                style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -8px rgba(16,43,54,0.08)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = tint; e.currentTarget.style.boxShadow = `0 12px 28px -10px ${tint}40`; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = vars.g200; e.currentTarget.style.boxShadow = "0 4px 14px -8px rgba(16,43,54,0.08)"; }}
               >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style={{ background: vars.lightBg, color: vars.accent }}>
-                  <Icon size={18} />
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style={{ background: `${tint}18`, color: tint }}>
+                  <Icon size={20} />
                 </div>
-                <h3 className="text-[14px] font-bold mb-1" style={{ color: vars.navy }}>{b.title}</h3>
-                <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{b.desc}</p>
+                <h3 className="text-[15px] font-bold mb-1.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
+                <p className="text-[12.5px] font-light leading-[1.65]" style={{ color: vars.g600 }}>{b.desc}</p>
               </button>
             );
           })}
         </div>
 
-        <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-          <h2 className="text-[15px] font-bold mb-1" style={{ color: vars.navy }}>How AIO Fusion works</h2>
-          <p className="text-[12px] font-light mb-5" style={{ color: vars.g500 }}>Three movements, one continuous loop.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { num: "01", title: "Audit", desc: "Diagnose AI visibility and pinpoint the messages, content and citations that drive AI authority." },
-              { num: "02", title: "Optimise", desc: "Improve content and website signals so AI models can find, trust and recommend the business." },
-              { num: "03", title: "Release & Measure", desc: "Plan and publish PR and marketing activity, then track AI authority growth over time." },
-            ].map((s) => (
-              <div key={s.num} className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                <div className="text-[11px] font-bold tracking-[0.18em]" style={{ color: vars.accent }}>{s.num}</div>
-                <h3 className="text-[14px] font-bold mt-1 mb-1" style={{ color: vars.navy }}>{s.title}</h3>
-                <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g500 }}>{s.desc}</p>
+        {/* HOW IT WORKS — three colour blocks (Variant C language) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+          {[
+            { num: "01", title: "Audit", desc: "Diagnose AI visibility and pinpoint the messages, content and citations that drive AI authority.", bg: vars.teal },
+            { num: "02", title: "Optimise", desc: "Improve content and website signals so AI models can find, trust and recommend the business.", bg: accent },
+            { num: "03", title: "Release & Measure", desc: "Plan and publish PR and marketing activity, then track AI authority growth over time.", bg: vars.gold },
+          ].map((s) => (
+            <div key={s.num} className="relative rounded-2xl p-6 sm:p-7 overflow-hidden" style={{ background: s.bg, color: "white" }}>
+              <div className="absolute -bottom-10 -right-10 w-36 h-36 rounded-full opacity-20" style={{ background: "white" }} />
+              <div className="relative">
+                <div className="text-[11px] font-bold uppercase tracking-[0.22em] mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>{s.num}</div>
+                <h3 className="text-[22px] mb-2 leading-tight" style={{ fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
+                <p className="text-[13px] font-light leading-[1.7] text-white/90">{s.desc}</p>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
