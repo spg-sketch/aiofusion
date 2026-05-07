@@ -5570,15 +5570,19 @@ const demoEvents = [
   { name: "DigiMarCon UK 2026", type: "Conference", date: "3–4 September 2026", location: "InterContinental London Park Lane", summary: "Two-day conference covering AdTech, MarTech, SaaS, AI and digital marketing strategy with open speaker submissions. One of the more accessible platforms for clients to establish thought leadership in digital marketing and advertising, with virtual pass options for distributed reach.", relevance: 7, authority: 7, costEntry: "Attendance ~£595–£895 + VAT in-person · virtual pass available at lower cost", costSponsor: "Multiple packages — enquire at digimarconuk.co.uk", costSpeaker: "Speaker submissions actively encouraged — open pitch process, strong acceptance rate", deadline: "Speaker pitches open spring 2026", actionable: false },
 ];
 
-function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, dark }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
-  const bg = dark ? vars.navy : "#FAFAFA";
-  const textCol = dark ? "white" : vars.navy;
+function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
+  // Variant C aesthetic across all marketing pages: cream surface, ink type,
+  // raspberry accents and Alice serif headings. Content unchanged.
+  const cream = "#FBF6EC";
+  const ink = "#102B36";
+  const raspberry = "#C8497A";
+  const accentSoft = "#FBE3ED";
   return (
-    <div className="font-['Inter',sans-serif] min-h-screen" style={{ background: bg, color: textCol }}>
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: dark ? "rgba(22,82,101,0.92)" : "rgba(255,255,255,0.92)", borderBottom: dark ? "none" : `1px solid ${vars.g200}` }}>
+    <div className="font-['Inter',sans-serif] min-h-screen" style={{ background: cream, color: ink }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(251,246,236,0.92)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[72px] sm:h-[96px] flex items-center justify-between">
           <button onClick={onBack} className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/${dark ? "logo-white" : "logo-color"}.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-20" />
           </button>
           <div className="hidden md:flex items-center gap-8">
             {[
@@ -5589,33 +5593,33 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
               { l: "Contact", v: "contact" },
               { l: "About", v: "about" },
             ].map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[13px] font-light hover:opacity-100 transition-colors tracking-wide" style={{ color: dark ? "rgba(255,255,255,0.6)" : vars.g500 }}>
+              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors hover:opacity-100" style={{ color: "rgba(16,43,54,0.65)" }}>
                 {it.l}
               </button>
             ))}
-            <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+            <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110" style={{ background: ink }}>
               <LogIn size={14} /> Platform Login
             </button>
           </div>
         </div>
       </nav>
-      <section className="pt-[120px] sm:pt-[160px] pb-0 px-4 sm:px-8" style={{ background: dark ? vars.navy : "#fff" }}>
+      <section className="pt-[120px] sm:pt-[160px] pb-0 px-4 sm:px-8" style={{ background: cream }}>
         <div className="max-w-4xl mx-auto">
           {eyebrow && (
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: dark ? "rgba(40,150,185,0.15)" : "rgba(31,116,143,0.06)", color: dark ? vars.teal : vars.accent }}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em] mb-5" style={{ background: accentSoft, color: raspberry }}>
               {eyebrow}
             </div>
           )}
-          <h1 className="text-4xl md:text-5xl mb-0 leading-[1.1]" style={{ color: textCol, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
+          <h1 className="text-4xl md:text-5xl mb-0 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{title}</h1>
         </div>
       </section>
-      <section className="pt-6 sm:pt-8 pb-12 sm:pb-16 px-4 sm:px-8" style={{ background: bg }}>
+      <section className="pt-6 sm:pt-8 pb-12 sm:pb-16 px-4 sm:px-8" style={{ background: cream }}>
         <div className="max-w-4xl mx-auto">{children}</div>
       </section>
-      <footer className="py-10 border-t" style={{ background: dark ? "rgba(0,0,0,0.2)" : "#fff", borderColor: dark ? "rgba(255,255,255,0.1)" : vars.g200 }}>
+      <footer className="py-10 border-t" style={{ background: cream, borderColor: "rgba(16,43,54,0.1)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-[12px] font-light" style={{ color: dark ? "rgba(255,255,255,0.4)" : vars.g400 }}>&copy; AIO Fusion. All rights reserved.</p>
-          <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: dark ? "rgba(255,255,255,0.6)" : vars.g500 }}>info@aiofusion.ai</a>
+          <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
+          <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
         </div>
       </footer>
     </div>
@@ -5624,14 +5628,14 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
 
 function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   return (
-    <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} dark {...props}>
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+    <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion will transform the performance of your PR and marketing and put you in control.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(255,255,255,0.75)" }}>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(16,43,54,0.75)" }}>
         Make your communications work harder, build optimised plans and content fast, and measure your AI authority as it grows over time.
       </p>
-      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for you</h2>
+      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for you</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
         {[
           { title: "AIO marketing strategy", desc: "Start your unified AI Authority, PR and marketing strategy across earned and owned media channels." },
@@ -5639,24 +5643,24 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
           { title: "One cost-effective platform", desc: "All your optimised communications content managed and measured in one place delivering consistent, measurable outcomes from PR and marketing investment." },
           { title: "Measure your AI authority over time", desc: "See how each piece of content and marketing activity moves the needle on AI citation and recommendation." },
         ].map((it) => (
-          <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.08)" }}>
             <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.2)" }}>
-                <Check size={11} color={vars.teal} />
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#FBE3ED" }}>
+                <Check size={11} color="#C8497A" />
               </div>
               <div>
-                <p className="text-[14px] font-semibold text-white mb-0.5">{it.title}</p>
-                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>{it.desc}</p>
+                <p className="text-[14px] font-semibold mb-0.5" style={{ color: "#102B36" }}>{it.title}</p>
+                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(16,43,54,0.6)" }}>{it.desc}</p>
               </div>
             </div>
           </div>
         ))}
       </div>
-      <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.teal }}>Add expert PR consultancy</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>Add human consultancy to your AIO Fusion platform. We will define your comms strategy and enhance your thought leadership ideas with expert, senior consultancy. Get in touch to find out more.</p>
+      <div className="p-6 rounded-2xl mb-10" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.25)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>Add expert PR consultancy</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>Add human consultancy to your AIO Fusion platform. We will define your comms strategy and enhance your thought leadership ideas with expert, senior consultancy. Get in touch to find out more.</p>
       </div>
-      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
         <Mail size={16} /> Book a Demo
       </a>
     </MarketingPage>
@@ -5665,17 +5669,17 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
 
 function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
   return (
-    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} dark {...props}>
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         Elevate your agency capability for the AI era with tailored, measurable optimisation for each client. One platform to enhance your team and service performance helping you harness the power of answer engines.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(255,255,255,0.75)" }}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         Run every client programme on a single platform built for the AI age. Optimise every piece of content you develop from press releases to awards entries, speed up new content development, score AI authority across your programme, store all client content in one place and measure and predict the impact of your work.
       </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(255,255,255,0.75)" }}>
+      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(16,43,54,0.75)" }}>
         Add AI visibility and automation to your agency fast without building your own tech stack or hiring new specialists.
       </p>
-      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
+      <h2 className="text-[20px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
         {[
           { title: "Multi-client management", desc: "Separate workspaces per client with their own project data, content pipeline, and reporting." },
@@ -5685,31 +5689,31 @@ function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNav
           { title: "Marketing Intelligence", desc: "Research media contacts and future events and awards tailored to each client project, score activity for AI and audience reach." },
           { title: "Report and Archive", desc: "Combine AI authority scores across earned and owned media with PR reporting and access all your client content in one dedicated, searchable archive." },
         ].map((it) => (
-          <div key={it.title} className="p-4 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.08)" }}>
             <div className="flex items-start gap-3">
-              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "rgba(40,150,185,0.2)" }}>
-                <Check size={11} color={vars.teal} />
+              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#FBE3ED" }}>
+                <Check size={11} color="#C8497A" />
               </div>
               <div>
-                <p className="text-[14px] font-semibold text-white mb-0.5">{it.title}</p>
-                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>{it.desc}</p>
+                <p className="text-[14px] font-semibold mb-0.5" style={{ color: "#102B36" }}>{it.title}</p>
+                <p className="text-[13px] font-light leading-relaxed" style={{ color: "rgba(16,43,54,0.6)" }}>{it.desc}</p>
               </div>
             </div>
           </div>
         ))}
       </div>
-      <div className="p-6 rounded-2xl mb-10" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: vars.teal }}>An AIO platform built by comms professionals</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>We believe it will transform PR and marketing for good.</p>
+      <div className="p-6 rounded-2xl mb-10" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.25)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "#C8497A" }}>An AIO platform built by comms professionals</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT, Claude, Gemini and Perplexity.</p>
+        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
       <div className="flex flex-wrap gap-3">
-        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.teal }}>
+        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
           <Calendar size={16} /> Book a Demo
         </button>
-        <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold transition-all hover:bg-white/5" style={{ color: "white", border: "1px solid rgba(255,255,255,0.2)" }}>
+        <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold transition-all hover:bg-white" style={{ color: "#102B36", border: "1.5px solid #102B36" }}>
           <Mail size={16} /> Talk to Us
         </a>
       </div>
