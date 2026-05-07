@@ -1624,6 +1624,7 @@ function OptimiserPage({
   const [bodyText, setBodyText] = useState("");
   const [showRetrieve, setShowRetrieve] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
+  const [showMsgPicker, setShowMsgPicker] = useState(false);
   const [retrieveQuery, setRetrieveQuery] = useState("");
 
   const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
@@ -1865,26 +1866,49 @@ function OptimiserPage({
 
             {/* Row 3 — Key messages multi (4.2/4.3) */}
             <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 4.2 + 4.3">
-              <div className="rounded-lg border p-2.5 min-h-[80px]" style={{ borderColor: vars.g200 }}>
-                {keyMessages.length === 0 ? (
+              {keyMessages.length === 0 ? (
+                <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
                   <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {keyMessages.map((m) => {
-                      const label = m.short || m.long;
-                      const on = selectedMessages.includes(label);
-                      return (
-                        <button key={`${m.tag}-${label}`} onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== label) : [...selectedMessages, label])}
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-full border text-left max-w-full"
-                          style={{ borderColor: on ? vars.accent : vars.g200, background: on ? "rgba(31,116,143,0.1)" : "white", color: on ? vars.accent : vars.g500 }}
-                          title={m.long}>
-                          <span className="opacity-70 mr-1">[{m.tag}]</span>{label.length > 70 ? `${label.slice(0, 70)}…` : label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <button type="button" onClick={() => setShowMsgPicker((v) => !v)} className="w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                    <span>{selectedMessages.length === 0 ? "Choose key messages…" : `${selectedMessages.length} message${selectedMessages.length === 1 ? "" : "s"} selected`}</span>
+                    <ChevronDown size={14} color={vars.g400} style={{ transform: showMsgPicker ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                  </button>
+                  {showMsgPicker && (
+                    <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border bg-white shadow-lg max-h-[280px] overflow-y-auto" style={{ borderColor: vars.g200 }}>
+                      {keyMessages.map((m) => {
+                        const label = m.short || m.long;
+                        const on = selectedMessages.includes(label);
+                        return (
+                          <button key={`${m.tag}-${label}`} type="button" onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== label) : [...selectedMessages, label])}
+                            className="w-full text-left px-3 py-2 flex items-start gap-2.5 border-b last:border-b-0 hover:bg-[rgba(200,73,122,0.06)]"
+                            style={{ borderColor: vars.g100 }} title={m.long}>
+                            <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: on ? "#C8497A" : vars.g300, background: on ? "#C8497A" : "white" }}>
+                              {on && <Check size={11} color="white" />}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="text-[10px] font-bold uppercase tracking-[0.14em] mr-1.5" style={{ color: "#C8497A" }}>[{m.tag}]</span>
+                              <span className="text-[12px]" style={{ color: vars.navy }}>{label}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedMessages.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {selectedMessages.map((label) => (
+                        <span key={label} className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: "#FBE3ED", color: "#C8497A", border: "1px solid rgba(200,73,122,0.3)" }}>
+                          {label.length > 60 ? `${label.slice(0, 60)}…` : label}
+                          <button type="button" onClick={() => setSelectedMessages(selectedMessages.filter((x) => x !== label))} aria-label="Remove"><X size={10} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </Labelled>
 
             {/* Row 4 — Media categories (replaces Purpose) */}
