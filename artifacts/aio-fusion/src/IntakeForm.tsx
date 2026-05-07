@@ -640,7 +640,7 @@ export default function IntakePage() {
           </span>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          Capture the business profile and messaging that becomes your signed-off Project Data brief — the authority brief used by Optimiser, Creator, Media Research and Marketing Intelligence.
+          Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
 
         {/* Top action buttons */}
