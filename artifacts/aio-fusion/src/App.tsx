@@ -857,66 +857,75 @@ function DashboardPage({
     { label: "Measure", sub: "Outcomes", icon: BarChart3, action: "measure" },
   ];
 
+  const ink = "#102B36";
+  const paper = "#FBF6EC";
+  const accentPink = "#C8497A";
+  const accentSoft = "#FBE3ED";
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-xl sm:text-2xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          {activeClient.name} - Authority Dashboard
+    <div className="px-4 sm:px-8 py-8 sm:py-10 max-w-6xl mx-auto">
+      <div className="mb-7 sm:mb-9">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-3" style={{ background: accentSoft, border: `1px solid ${accentPink}40` }}>
+          <Sparkles size={12} color={accentPink} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Authority Dashboard</span>
+        </div>
+        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          {activeClient.name}
         </h1>
-        <p className="text-[14px] font-light mt-1" style={{ color: vars.g500 }}>
-          Your AI authority performance at a glance
+        <p className="text-[15px] font-light mt-2" style={{ color: vars.g600 }}>
+          Your AI authority performance at a glance.
         </p>
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: vars.lightBg }}>
-              <Repeat size={16} style={{ color: vars.accent }} />
+      <div className="rounded-2xl p-5 sm:p-7 mb-6 sm:mb-8" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center justify-between mb-5 sm:mb-6 flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
+              <Repeat size={17} color={paper} />
             </div>
             <div>
-              <h3 className="text-[13px] font-bold" style={{ color: vars.navy }}>The AIO Marketing Loop</h3>
-              <p className="text-[11px] font-light" style={{ color: vars.g500 }}>Each pass should move the needle on AI citations</p>
+              <h3 className="text-[16px] font-bold" style={{ color: paper, fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h3>
+              <p className="text-[12px] font-light" style={{ color: "rgba(251,246,236,0.7)" }}>Each pass moves the needle on AI citations.</p>
             </div>
           </div>
-          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full" style={{ background: accentPink, color: "white" }}>
             <Repeat size={11} className="inline mr-1" /> Cycle {cycle.cycle || 1}
           </span>
         </div>
-        <div className="flex items-stretch gap-1 sm:gap-2 overflow-x-auto">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-2 items-stretch">
           {loopSteps.map((s, i) => {
             const Icon = s.icon;
             const isLockedStep = s.action === "gateway-locked";
             return (
-              <div key={s.label} className="flex items-center flex-shrink-0">
-                <button
-                  onClick={() => { if (!isLockedStep) onNavigate(s.action); }}
-                  disabled={isLockedStep}
-                  aria-disabled={isLockedStep}
-                  title={isLockedStep ? "Release Gateway is coming in V2" : undefined}
-                  className="flex flex-col items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg transition-all min-w-[64px]"
-                  style={{
-                    cursor: isLockedStep ? "not-allowed" : "pointer",
-                    opacity: isLockedStep ? 0.5 : 1,
-                  }}
-                  onMouseEnter={(e) => { if (!isLockedStep) e.currentTarget.style.background = vars.g100; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                >
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
-                    <Icon size={16} />
-                  </div>
-                  <span className="text-[11px] font-semibold text-center" style={{ color: vars.navy }}>{s.label}</span>
-                  <span className="text-[10px] font-light text-center" style={{ color: vars.g400 }}>{s.sub}</span>
-                </button>
+              <button
+                key={s.label}
+                onClick={() => { if (!isLockedStep) onNavigate(s.action); }}
+                disabled={isLockedStep}
+                aria-disabled={isLockedStep}
+                title={isLockedStep ? "Release Gateway is coming in V2" : undefined}
+                className="relative flex flex-col items-center text-center gap-2 px-2 py-3 rounded-xl transition-all"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  cursor: isLockedStep ? "not-allowed" : "pointer",
+                  opacity: isLockedStep ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => { if (!isLockedStep) e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+              >
+                <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accentPink }}>
+                  <Icon size={17} />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: paper }}>{s.label}</span>
+                <span className="text-[10px] font-light" style={{ color: "rgba(251,246,236,0.6)" }}>{s.sub}</span>
                 {i < loopSteps.length - 1 && (
-                  <ChevronRight size={14} className="flex-shrink-0" style={{ color: vars.g300 }} />
+                  <ChevronRight size={14} className="hidden lg:block absolute top-1/2 -right-2.5 -translate-y-1/2" style={{ color: "rgba(251,246,236,0.3)" }} />
                 )}
-              </div>
+              </button>
             );
           })}
-          <div className="flex items-center flex-shrink-0 pl-1">
-            <Repeat size={16} style={{ color: vars.accent }} />
-            <span className="text-[10px] font-semibold ml-1 hidden sm:inline" style={{ color: vars.accent }}>Repeat</span>
+          <div className="flex flex-col items-center justify-center gap-2 px-2 py-3 rounded-xl" style={{ background: accentPink, color: "white" }}>
+            <Repeat size={20} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">Repeat</span>
           </div>
         </div>
       </div>
@@ -6248,7 +6257,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+    <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: "#FBF6EC" }}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={setCurrentPage}
@@ -6256,7 +6265,7 @@ function App() {
         onBackToClients={() => setActiveClient(null)}
         onLogoUpdate={handleLogoUpdate}
       />
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: vars.g50 }}>
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#FBF6EC" }}>
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
