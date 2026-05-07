@@ -5229,14 +5229,18 @@ function MediaResearchPage() {
     { name: "Amy Houston", outlet: "Campaign", beat: "Marketing leaders, transformation", recent: "Inside the AI-first marketing org", email: "amy.houston@campaignlive.co.uk" },
   ];
 
+  const ink = "#102B36";
+  const accentPink = "#C8497A";
+  const accentSoft = "#FBE3ED";
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+    <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Target size={20} color={vars.gold} />
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-3" style={{ background: accentSoft, border: `1px solid ${accentPink}40` }}>
+          <Target size={12} color={accentPink} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Media Research</span>
         </div>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+        <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
+        <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>
           Take an approved piece of content and ask the LLM to recommend the publications and journalists most likely to run it.
         </p>
       </div>
