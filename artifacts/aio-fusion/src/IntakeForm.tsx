@@ -799,9 +799,15 @@ export default function IntakePage() {
                 {section.fields.map((field) => {
                   if (field.type === "heading") {
                     return (
-                      <h3 key={field.id} className="text-xs font-bold uppercase tracking-[0.15em] pt-4 pb-1" style={{ color: vars.accent }}>
-                        {field.label}
-                      </h3>
+                      <div key={field.id} className="pt-6 pb-1 first:pt-0">
+                        <div className="flex items-center gap-3">
+                          <span className="w-1 h-6 rounded-full flex-shrink-0" style={{ background: "#C8497A" }} />
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "#102B36" }}>
+                            {field.label}
+                          </h3>
+                          <span className="flex-1 h-px" style={{ background: "rgba(16,43,54,0.12)" }} />
+                        </div>
+                      </div>
                     );
                   }
 
@@ -811,7 +817,7 @@ export default function IntakePage() {
                         <FieldLabel id={field.id} label={field.label} hint={field.hint} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
-                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="grid grid-cols-12 gap-2 mb-2">
                                 <input value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="Name" className="col-span-3 px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
                                 <input value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="Title" className="col-span-4 px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
@@ -889,24 +895,24 @@ export default function IntakePage() {
                         <FieldLabel id={field.id} label={field.label} hint={field.hint} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.g500 }}>(a) ≤6-word summary</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
                             <input
                               value={v.short}
                               onChange={(e) => setDual(field.id, "short", e.target.value)}
                               placeholder={field.shortPlaceholder}
-                              className="w-full px-4 py-3 rounded-xl border text-[14px] font-light"
-                              style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                              className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
+                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
                             />
                           </div>
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.g500 }}>(b) ≤25-word longer version</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(b) ≤25-word longer version</p>
                             <textarea
                               value={v.long}
                               onChange={(e) => setDual(field.id, "long", e.target.value)}
                               placeholder={field.longPlaceholder}
                               rows={2}
-                              className="w-full px-4 py-3 rounded-xl border text-[14px] font-light"
-                              style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                              className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
+                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
                             />
                           </div>
                         </div>
@@ -924,9 +930,9 @@ export default function IntakePage() {
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No additional messages yet.</p>
                           )}
                           {list.map((item, i) => (
-                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Message {i + 1}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Message {i + 1}</span>
                                 <button onClick={() => removeDualListItem(field.id, i)} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -959,24 +965,27 @@ export default function IntakePage() {
                     return (
                       <div key={field.id}>
                         <FieldLabel id={field.id} label={field.label} hint={field.hint} />
-                        <div className="space-y-2">
-                          {field.options.map((opt) => (
-                            <label key={opt} className="flex items-start gap-3 cursor-pointer group">
-                              <div
-                                className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors"
-                                style={{
-                                  borderColor: selected.includes(opt) ? vars.accent : vars.g300,
-                                  background: selected.includes(opt) ? vars.accent : "transparent",
-                                }}
-                                onClick={() => toggleCheckbox(field.id, opt)}
-                              >
-                                {selected.includes(opt) && <Check size={12} color="white" />}
-                              </div>
-                              <span className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }} onClick={() => toggleCheckbox(field.id, opt)}>
-                                {opt}
-                              </span>
-                            </label>
-                          ))}
+                        <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
+                          {field.options.map((opt) => {
+                            const isOn = selected.includes(opt);
+                            return (
+                              <label key={opt} className="flex items-start gap-3 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#FBF6EC]">
+                                <div
+                                  className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors"
+                                  style={{
+                                    borderColor: isOn ? "#C8497A" : "rgba(16,43,54,0.25)",
+                                    background: isOn ? "#C8497A" : "transparent",
+                                  }}
+                                  onClick={() => toggleCheckbox(field.id, opt)}
+                                >
+                                  {isOn && <Check size={12} color="white" />}
+                                </div>
+                                <span className="text-[13px] leading-relaxed" style={{ color: isOn ? "#102B36" : "#374151", fontWeight: isOn ? 600 : 400 }} onClick={() => toggleCheckbox(field.id, opt)}>
+                                  {opt}
+                                </span>
+                              </label>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -990,8 +999,8 @@ export default function IntakePage() {
                           value={(formData[field.id] as string) || ""}
                           onChange={(e) => updateField(field.id, e.target.value)}
                           rows={4}
-                          className="w-full px-4 py-3 rounded-xl border text-[14px] font-light outline-none transition-colors focus:ring-2 resize-y"
-                          style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                          className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
+                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
                           placeholder="Type your answer here..."
                         />
                       ) : (
@@ -999,8 +1008,8 @@ export default function IntakePage() {
                           type="text"
                           value={(formData[field.id] as string) || ""}
                           onChange={(e) => updateField(field.id, e.target.value)}
-                          className="w-full px-4 py-3 rounded-xl border text-[14px] font-light outline-none transition-colors focus:ring-2"
-                          style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy }}
+                          className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A]"
+                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
                           placeholder="Type your answer here..."
                         />
                       )}
@@ -1159,13 +1168,15 @@ export default function IntakePage() {
 
 function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: string }) {
   return (
-    <>
-      <label className="block text-sm font-medium mb-1.5" style={{ color: vars.navy }}>
-        {id.match(/^\d/) && <span className="text-xs font-bold mr-2" style={{ color: vars.accent }}>{id}</span>}
-        {label}
+    <div className="mb-2.5">
+      <label className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+        {id.match(/^\d/) && (
+          <span className="inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "#FBE3ED", color: "#C8497A", fontFamily: "Inter, sans-serif" }}>{id}</span>
+        )}
+        <span>{label}</span>
       </label>
-      {hint && <p className="text-xs font-light mb-2" style={{ color: vars.g400 }}>{hint}</p>}
-    </>
+      {hint && <p className="text-[12px] font-light leading-relaxed mt-1.5 pl-0.5" style={{ color: "#374151" }}>{hint}</p>}
+    </div>
   );
 }
 
