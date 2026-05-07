@@ -5,12 +5,13 @@ import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
-import step1Img from "./assets/step-1-diagnose.png";
-import step2Img from "./assets/step-2-strategy.png";
-import step3Img from "./assets/step-3-plan.png";
-import step4Img from "./assets/step-4-optimise.png";
-import step5Img from "./assets/step-5-measure.png";
-import step6Img from "./assets/step-6-agentic.png";
+import step1Img from "./assets/photos/photo-diagnose.jpg";
+import step2Img from "./assets/photos/photo-strategy.jpg";
+import step3Img from "./assets/photos/photo-plan.jpg";
+import step4Img from "./assets/photos/photo-optimise.jpg";
+import step5Img from "./assets/photos/photo-measure.jpg";
+import step6Img from "./assets/photos/photo-agentic.jpg";
+import heroTeamImg from "./assets/photos/hero-team.jpg";
 import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
@@ -2150,23 +2151,6 @@ function OptimiserPage({
             <ChevronDown size={14} style={{ color: vars.g400 }} />
           </div>
         </div>
-        <div
-          className="rounded-xl border p-4"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} style={{ color: vars.g400 }} />
-            <span
-              className="text-xs font-medium"
-              style={{ color: vars.g500 }}
-            >
-              Purpose
-            </span>
-          </div>
-          <p className="text-sm font-medium" style={{ color: vars.navy }}>
-            Product Launch
-          </p>
-        </div>
       </div>
       <div
         className="rounded-xl border p-4 mb-6"
@@ -4009,11 +3993,10 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               <div className="relative w-full max-w-[360px]">
                 <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full" style={{ background: vars.gold, opacity: 0.25 }} />
                 <div className="absolute -bottom-6 -left-6 w-40 h-40 rounded-full" style={{ background: vars.teal, opacity: 0.2 }} />
-                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accentDark} 100%)`, boxShadow: "0 30px 60px -20px rgba(200,73,122,0.45)" }}>
-                  <div className="absolute inset-0 flex items-center justify-center p-10">
-                    <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-full max-w-[220px]" />
-                  </div>
-                  <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between text-white/80 text-[10px] font-bold uppercase tracking-[0.2em]">
+                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 30px 60px -20px rgba(200,73,122,0.45)" }}>
+                  <img src={heroTeamImg} alt="PR agency team meeting in a modern office" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${ink}CC 100%)` }} />
+                  <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between text-white/90 text-[10px] font-bold uppercase tracking-[0.2em]">
                     <span>The AI Authority Platform</span>
                     <span>2026</span>
                   </div>
