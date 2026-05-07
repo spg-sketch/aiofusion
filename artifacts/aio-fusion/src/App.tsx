@@ -3282,14 +3282,11 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate, variant, onPickV
           <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.2em] text-white/85 mb-4" style={{ background: "rgba(224,120,86,0.18)", border: "1px solid rgba(224,120,86,0.4)" }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-[3.75rem] lg:text-[4.25rem] text-white leading-[1.05] mb-3" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            Business visibility<br />
-            for the <span style={{ color: vars.coral }}>AI Age</span>
+          <h1 className="text-4xl sm:text-5xl md:text-[3.75rem] lg:text-[4.25rem] text-white leading-[1.05] mb-5" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+            The AI Authority Platform<br />
+            for <span style={{ color: vars.coral }}>PR and Marketing Professionals</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-[1.25rem] text-white/90 max-w-3xl mx-auto mb-2 leading-snug" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-            The AI Authority Platform for PR and marketing professionals
-          </p>
-          <p className="text-sm sm:text-[15px] text-white/80 max-w-2xl mx-auto mb-5 leading-relaxed font-light">
+          <p className="text-sm sm:text-[15px] md:text-base text-white/85 max-w-2xl mx-auto mb-5 leading-relaxed font-light">
             With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -3679,12 +3676,9 @@ function LandingPageB({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
           <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.2em] mb-8" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral, border: `1px solid ${vars.coralSoft}` }}>
             <Sparkles size={12} /> Generative Engine Optimisation
           </div>
-          <h1 className="text-5xl md:text-[5.5rem] leading-[1.05] mb-6" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-            Business visibility<br />for the <span style={{ color: vars.coral }}>AI Age</span>
+          <h1 className="text-5xl md:text-[4.75rem] leading-[1.05] mb-8" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            The AI Authority Platform<br />for <span style={{ color: vars.coral }}>PR and Marketing Professionals</span>
           </h1>
-          <p className="text-xl md:text-2xl max-w-3xl mx-auto mb-4 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-            The AI Authority Platform for PR and marketing professionals
-          </p>
           <p className="text-base md:text-lg max-w-2xl mx-auto mb-12 leading-relaxed font-light" style={{ color: vars.g600 }}>
             With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
           </p>
@@ -3996,13 +3990,10 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
                 <Sparkles size={12} color={accent} />
                 <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
               </div>
-              <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] leading-[1.02] mb-6" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                Business visibility<br />for the <span style={{ color: accent }}>AI Age</span>
+              <h1 className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                The AI Authority Platform<br />for <span style={{ color: accent }}>PR and Marketing Professionals</span>
               </h1>
-              <p className="text-xl md:text-2xl max-w-xl leading-snug font-light mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                The AI Authority Platform for PR and marketing professionals.
-              </p>
-              <p className="text-[15px] max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
+              <p className="text-[15px] md:text-base max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
                 With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
               </p>
               <div className="flex flex-wrap items-center gap-3">
