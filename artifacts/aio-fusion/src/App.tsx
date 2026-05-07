@@ -4858,6 +4858,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
 function GeoContentPage() {
   const [scanning, setScanning] = useState(false);
   const [hasResults, setHasResults] = useState(false);
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const corePages = [
     { url: "/about", title: "About Us", contentScore: 78, alignmentScore: 82, status: "Optimised" },
     { url: "/products", title: "Products & Solutions", contentScore: 64, alignmentScore: 71, status: "Needs work" },
@@ -4879,15 +4880,6 @@ function GeoContentPage() {
       <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Website Content GEO</h1>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (Section 5).</p>
-      </div>
-
-      <div className="bg-white border rounded-xl p-5 mb-5" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.04)" }}>
-        <div className="flex items-start gap-3">
-          <MessageSquareQuote size={16} color={vars.accent} className="flex-shrink-0 mt-0.5" />
-          <div className="text-[12.5px] font-light leading-relaxed" style={{ color: vars.g600 }}>
-            <span className="font-semibold" style={{ color: vars.navy }}>LLM brief:</span> Using Project Data Section 5 (website content set-up), score the alignment between each core page and the business's PR key messages (Project Data 4.2 + 4.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood.
-          </div>
-        </div>
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -4985,6 +4977,21 @@ function GeoContentPage() {
           <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>Click <strong>Scan Site Content</strong> to audit your core message pages against your Project Data Section 5 inputs and generate an itemised action report.</p>
         </div>
       )}
+
+      {/* LLM Brief — bottom toggle */}
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+        </button>
+        {showLLMBrief && (
+          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief used by this tool</p>
+            <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+              "Using Project Data Section 5 (website content set-up), score the alignment between each core page and the business's PR key messages (Project Data 4.2 + 4.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood."
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
