@@ -1864,7 +1864,7 @@ function OptimiserPage({
             </div>
 
             {/* Row 3 — Key messages multi (4.2/4.3) */}
-            <Labelled label="Select Key Messages" hint="Multi-select from Project Data sections 4.2 + 4.3">
+            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 4.2 + 4.3">
               <div className="rounded-lg border p-2.5 min-h-[80px]" style={{ borderColor: vars.g200 }}>
                 {keyMessages.length === 0 ? (
                   <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
