@@ -5455,7 +5455,7 @@ function MarketingIntelligencePage() {
           </div>
         </Labelled>
 
-        <Labelled label="Category" hint="Multi-select from the Trade Media Categories list (4.9).">
+        <Labelled label="Select Category" hint="Multi-select from the business categories list.">
           <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
             {categories.length === 0 ? (
               <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No categories selected.</p>
