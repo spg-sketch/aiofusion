@@ -80,6 +80,7 @@ import {
   Repeat,
   TrendingDown,
   FolderOpen,
+  List as ListIcon,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -2560,76 +2561,97 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const visPct = Math.min(100, Math.round((totals.visibility / 50) * 100));
   const authPct = Math.min(100, Math.round((totals.authority / 50) * 100));
 
+  const ink = "#102B36";
+  const paper = "#FBF6EC";
+  const accentPink = "#C8497A";
+  const accentSoft = "#FBE3ED";
   return (
     <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
-      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl sm:text-4xl mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Plan and score the PR and marketing schedule for AI authority impact. Click any row to open it in the Content Optimiser.</p>
+      <div className="mb-6">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-3" style={{ background: accentSoft, border: `1px solid ${accentPink}40` }}>
+          <Calendar size={12} color={accentPink} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Comms Planner</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="inline-flex rounded-lg border bg-white p-0.5" style={{ borderColor: vars.g200 }} role="group" aria-label="Planner view">
-            <button onClick={() => setView("spreadsheet")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "spreadsheet" ? vars.navy : "transparent", color: view === "spreadsheet" ? "white" : vars.g500 }}>
-              Calendar
-            </button>
-            <button onClick={() => setView("cards")} className="px-3 py-2 rounded-md text-[12px] font-semibold transition-colors" style={{ background: view === "cards" ? vars.navy : "transparent", color: view === "cards" ? "white" : vars.g500 }}>
-              List
-            </button>
-          </div>
-          <button onClick={() => setShowMethodology(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Scoring methodology">
-            <HelpCircle size={14} /> Methodology
-          </button>
-          <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }} title="Score settings">
-            <Shield size={14} /> Score settings
-          </button>
-          <button onClick={() => setShowArchivePicker(true)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-            <Archive size={14} /> Select Archived Content
-          </button>
-          <button onClick={() => sendToOptimiser()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
-            <Plus size={14} /> Add Content
-          </button>
-        </div>
+        <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
+        <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>Plan and score your PR and marketing schedule for AI authority impact. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border rounded-xl p-5" style={{ borderColor: vars.g200 }}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Projected total score</p>
-          <p className="text-3xl font-bold mt-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{projectedTotal}<span className="text-[14px] font-light" style={{ color: vars.g400 }}> / 100</span></p>
-          <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>{projects.length} project{projects.length === 1 ? "" : "s"} in plan</p>
-        </div>
-        <div className="bg-white border rounded-xl p-5" style={{ borderColor: vars.g200 }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Visibility</p>
-            <p className="text-[13px] font-bold" style={{ color: vars.accent }}>{Math.round(totals.visibility)}/50</p>
+      {/* Action toolbar — Variant C ink panel */}
+      <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: ink, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
+            <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view">
+              <button onClick={() => setView("spreadsheet")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+                <Calendar size={12} /> Calendar View
+              </button>
+              <button onClick={() => setView("cards")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+                <ListIcon size={12} /> List View
+              </button>
+            </div>
           </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: vars.g100 }}>
-            <div className="h-full rounded-full" style={{ width: `${visPct}%`, background: vars.accent }} />
-          </div>
-        </div>
-        <div className="bg-white border rounded-xl p-5" style={{ borderColor: vars.g200 }}>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>Authority</p>
-            <p className="text-[13px] font-bold" style={{ color: vars.teal }}>{Math.round(totals.authority)}/50</p>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: vars.g100 }}>
-            <div className="h-full rounded-full" style={{ width: `${authPct}%`, background: vars.teal }} />
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => setShowMethodology(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
+              <HelpCircle size={13} /> Methodology
+            </button>
+            <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
+              <Shield size={13} /> Score Settings
+            </button>
+            <button onClick={() => setShowArchivePicker(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: paper, color: ink }}>
+              <Archive size={13} /> Select Archived
+            </button>
+            <button onClick={() => sendToOptimiser()} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-colors" style={{ background: accentPink }}>
+              <Plus size={13} /> Add Content
+            </button>
           </div>
         </div>
       </div>
 
-      {Object.keys(totals.byType).length > 0 && (
-        <div className="bg-white border rounded-xl p-5 mb-6" style={{ borderColor: vars.g200 }}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g400 }}>Score breakdown by content type</p>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(totals.byType).sort((a, b) => b[1] - a[1]).map(([t, s]) => (
-              <div key={t} className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
-                <span className="text-[12px] font-medium" style={{ color: vars.navy }}>{t}</span>
-                <span className="text-[12px] font-bold" style={{ color: vars.accent }}>{Math.round(s)}</span>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="rounded-2xl p-5" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Projected total score</p>
+          <p className="text-4xl font-bold mt-2" style={{ color: paper, fontFamily: "'Alice', Georgia, serif" }}>{projectedTotal}<span className="text-[14px] font-light" style={{ color: "rgba(251,246,236,0.5)" }}> / 100</span></p>
+          <p className="text-[12px] font-light mt-1" style={{ color: "rgba(251,246,236,0.7)" }}>{projects.length} project{projects.length === 1 ? "" : "s"} in plan</p>
+        </div>
+        <div className="rounded-2xl p-5 border-2" style={{ background: "white", borderColor: `${accentPink}30` }}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Visibility</p>
+            <p className="text-[16px] font-bold" style={{ color: accentPink, fontFamily: "'Alice', Georgia, serif" }}>{Math.round(totals.visibility)}<span className="text-[12px] font-light" style={{ color: vars.g400 }}>/50</span></p>
+          </div>
+          <div className="h-3 rounded-full overflow-hidden" style={{ background: accentSoft }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${visPct}%`, background: accentPink }} />
+          </div>
+        </div>
+        <div className="rounded-2xl p-5 border-2" style={{ background: "white", borderColor: `${vars.teal}30` }}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Authority</p>
+            <p className="text-[16px] font-bold" style={{ color: vars.teal, fontFamily: "'Alice', Georgia, serif" }}>{Math.round(totals.authority)}<span className="text-[12px] font-light" style={{ color: vars.g400 }}>/50</span></p>
+          </div>
+          <div className="h-3 rounded-full overflow-hidden" style={{ background: "rgba(40,150,185,0.15)" }}>
+            <div className="h-full rounded-full transition-all" style={{ width: `${authPct}%`, background: vars.teal }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border-2 overflow-hidden mb-6" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
+        <div className="px-5 py-3 flex items-center gap-3" style={{ background: ink }}>
+          <span className="w-1 h-5 rounded-full" style={{ background: accentPink }} />
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Score Breakdown by Content Type</p>
+          <span className="text-[10px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.6)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
+        </div>
+        <div className="p-5 flex flex-wrap gap-2">
+          {Object.keys(cfg.typeWeights).sort((a, b) => (totals.byType[b] || 0) - (totals.byType[a] || 0)).map((t) => {
+            const s = totals.byType[t] || 0;
+            const hasScore = s > 0;
+            return (
+              <div key={t} className="flex items-center gap-2 px-3 py-1.5 rounded-full border" style={{ background: hasScore ? accentSoft : paper, borderColor: hasScore ? `${accentPink}40` : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
+                <span className="text-[12px] font-semibold" style={{ color: ink }}>{t}</span>
+                <span className="text-[12px] font-bold" style={{ color: hasScore ? accentPink : vars.g400 }}>{Math.round(s)}</span>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {view === "spreadsheet" && (() => {
         const SLOTS_PER_WEEK = 6;
