@@ -11,7 +11,6 @@ import step3Img from "./assets/photos/photo-plan.jpg";
 import step4Img from "./assets/photos/photo-optimise.jpg";
 import step5Img from "./assets/photos/photo-measure.jpg";
 import step6Img from "./assets/photos/photo-agentic.jpg";
-import heroTeamImg from "./assets/photos/hero-team.jpg";
 import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
@@ -3989,20 +3988,6 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
                 </a>
               </div>
             </div>
-            <div className="lg:col-span-5 hidden lg:flex justify-center">
-              <div className="relative w-full max-w-[360px]">
-                <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full" style={{ background: vars.gold, opacity: 0.25 }} />
-                <div className="absolute -bottom-6 -left-6 w-40 h-40 rounded-full" style={{ background: vars.teal, opacity: 0.2 }} />
-                <div className="relative aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 30px 60px -20px rgba(200,73,122,0.45)" }}>
-                  <img src={heroTeamImg} alt="PR agency team meeting in a modern office" className="absolute inset-0 w-full h-full object-cover" />
-                  <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, transparent 40%, ${ink}CC 100%)` }} />
-                  <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between text-white/90 text-[10px] font-bold uppercase tracking-[0.2em]">
-                    <span>The AI Authority Platform</span>
-                    <span>2026</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -5593,7 +5578,11 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate }
               { l: "Contact", v: "contact" },
               { l: "About", v: "about" },
             ].map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors hover:opacity-100" style={{ color: "rgba(16,43,54,0.65)" }}>
+              <button
+                key={it.l}
+                onClick={() => onNavigate(it.v)}
+                className="marketing-nav-link text-[13px] font-semibold uppercase tracking-[0.14em] transition-colors"
+              >
                 {it.l}
               </button>
             ))}

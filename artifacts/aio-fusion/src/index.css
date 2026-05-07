@@ -71,3 +71,28 @@
   font-style: italic;
   color: #6B7280;
 }
+
+/* Marketing top-nav hover — clear visual feedback */
+.marketing-nav-link {
+  position: relative;
+  color: rgba(16, 43, 54, 0.65);
+  padding-bottom: 4px;
+}
+.marketing-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: #C8497A;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 180ms ease;
+}
+.marketing-nav-link:hover {
+  color: #C8497A;
+}
+.marketing-nav-link:hover::after {
+  transform: scaleX(1);
+}
