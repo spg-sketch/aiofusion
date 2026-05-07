@@ -6112,6 +6112,7 @@ function App() {
         onCreateProject={() => {
           setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
           setCurrentPage("intake");
+          setView("platform");
         }}
         onContinueToProjects={() => setView("platform")}
         onArchivedProjects={() => setView("archived-projects")}
