@@ -1625,6 +1625,7 @@ function OptimiserPage({
   const [showRetrieve, setShowRetrieve] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showMsgPicker, setShowMsgPicker] = useState(false);
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const [retrieveQuery, setRetrieveQuery] = useState("");
 
   const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
@@ -1963,14 +1964,6 @@ function OptimiserPage({
                   placeholder="Paste your press release, article, case study or whitepaper here…" />
               </div>
             </Labelled>
-
-            {/* LLM brief callout */}
-            <div className="rounded-xl p-4" style={{ background: vars.cream, border: `1px solid ${vars.gold}33` }}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: vars.gold }}>LLM brief — what we send to the model</p>
-              <p className="text-[12px] font-light italic leading-relaxed" style={{ color: vars.navy }}>
-                "Using the accepted Project Data for {intake?.formData["1.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 4.1–4.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
-              </p>
-            </div>
 
             {/* Action bar */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t" style={{ borderColor: vars.g100 }}>
@@ -2500,6 +2493,21 @@ function OptimiserPage({
             </p>
           </button>
         </div>
+      </div>
+
+      {/* LLM Brief — bottom toggle */}
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+        </button>
+        {showLLMBrief && (
+          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief — what we send to the model</p>
+            <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+              "Using the accepted Project Data for {intake?.formData["1.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 4.1–4.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5036,6 +5044,7 @@ function PlaceholderPage({
 }
 
 function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
   const spokesList = getSpokespeople();
   const projectCategories = getProjectMediaCategories();
@@ -5095,14 +5104,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
           Generate AI-optimised media pitches, draft articles and case studies from raw transcripts and notes, using the signed-off Project Data as the authority brief.
-        </p>
-      </div>
-
-      {/* LLM brief call-out */}
-      <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief used by this tool</p>
-        <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
-          "Develop an article synopsis and draft 900-word article based on the entries below. Please search more widely for research and news evidence within the last six months to back up this idea. And add additional points and arguments where appropriate."
         </p>
       </div>
 
@@ -5216,11 +5217,27 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           onSave={(next) => { setMediaTarget(next); setShowCatPicker(false); }}
         />
       )}
+
+      {/* LLM Brief — bottom toggle */}
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+        </button>
+        {showLLMBrief && (
+          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief used by this tool</p>
+            <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+              "Develop an article synopsis and draft 900-word article based on the entries below. Please search more widely for research and news evidence within the last six months to back up this idea. And add additional points and arguments where appropriate."
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function MediaResearchPage() {
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study"].includes(a.contentType));
   const messages = getKeyMessages();
   const projectCats = getProjectMediaCategories();
@@ -5311,18 +5328,6 @@ function MediaResearchPage() {
             </button>
           </div>
 
-          {/* LLM brief reveal */}
-          {mode !== "none" && (
-            <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief</p>
-              <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
-                {mode === "publications"
-                  ? "Using the Project Data document and the selected piece of content, recommend the top trade publications most likely to run this story. Rank by authority score across the LLM agents (ChatGPT, Claude, Perplexity, Gemini, CoPilot), audience overlap with the selected media categories, and recent appetite for similar content. Provide a short rationale for each."
-                  : "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 4.9 trade media categories."}
-              </p>
-            </div>
-          )}
-
           {/* Results */}
           {mode === "publications" && (
             <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
@@ -5375,11 +5380,35 @@ function MediaResearchPage() {
           )}
         </>
       )}
+
+      {/* LLM Brief — bottom toggle */}
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+        </button>
+        {showLLMBrief && (
+          <div className="w-full rounded-2xl p-5 space-y-3" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: "#C8497A" }}>Recommend Publications</p>
+              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+                "Using the Project Data document and the selected piece of content, recommend the top trade publications most likely to run this story. Rank by authority score across the LLM agents (ChatGPT, Claude, Perplexity, Gemini, CoPilot), audience overlap with the selected media categories, and recent appetite for similar content. Provide a short rationale for each."
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: "#C8497A" }}>Recommend Journalists</p>
+              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+                "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 4.9 trade media categories."
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function MarketingIntelligencePage() {
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const projectCategories = getProjectMediaCategories();
   const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
   const [categories, setCategories] = useState<string[]>(projectCategories.slice(0, 3));
@@ -5401,14 +5430,6 @@ function MarketingIntelligencePage() {
         </div>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
           Use the Project Data brief plus an LLM search to produce a tailored list of recommended awards, conferences and speaker platforms — scored on the AI authority each delivers.
-        </p>
-      </div>
-
-      {/* LLM brief call-out */}
-      <div className="rounded-2xl p-5 mb-6" style={{ background: vars.cream, border: `1px solid ${vars.creamDeep}` }}>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>LLM brief used by this tool</p>
-        <p className="text-[12px] font-light leading-relaxed" style={{ color: vars.g600 }}>
-          "Using the Project Data document, search for suitable [event types selected] in the [industry sectors selected] over [time period selected] and market [market selected]. Create a ranked guide in order of relevance to the project as well as the LLM visibility and authority that these events deliver, providing an estimated score for each out of 10. Also provide a short summary of each event and costs for speaker participation, event sponsorship and award entry (if relevant). Provide a downloadable report in word or pdf format. Prioritise events where we could enter on behalf of clients, secure speaking slots for agency principals, or gain meaningful new business visibility. LLM visibility and authority — how likely participation, a win or a shortlisting is to generate indexed content that AI systems (ChatGPT, Perplexity, Claude, Gemini) will cite when someone searches for expertise in the sectors listed in the Project Data. Weight this towards events covered by high-authority trade publications. Rank all events by overall score (average of both dimensions) and present them in a structured report that includes for each event: Event name, type (conference / awards / both), date and location; a short summary (3–4 sentences); Relevance score, LLM authority score, overall score; Estimated costs for: award entry, event sponsorship, and speaker participation (where applicable); Any deadlines that are imminent or require early action. Finally, flag the top 3 most immediately actionable opportunities — events with open entry windows, upcoming deadlines, or speaker pitch processes currently live."
         </p>
       </div>
 
@@ -5534,6 +5555,21 @@ function MarketingIntelligencePage() {
           onSave={(next) => { setCategories(next); setShowCatPicker(false); }}
         />
       )}
+
+      {/* LLM Brief — bottom toggle */}
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+        </button>
+        {showLLMBrief && (
+          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief used by this tool</p>
+            <p className="text-[12px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
+              "Using the Project Data document, search for suitable [event types selected] in the [industry sectors selected] over [time period selected] and market [market selected]. Create a ranked guide in order of relevance to the project as well as the LLM visibility and authority that these events deliver, providing an estimated score for each out of 10. Also provide a short summary of each event and costs for speaker participation, event sponsorship and award entry (if relevant). Provide a downloadable report in word or pdf format. Prioritise events where we could enter on behalf of clients, secure speaking slots for agency principals, or gain meaningful new business visibility. LLM visibility and authority — how likely participation, a win or a shortlisting is to generate indexed content that AI systems (ChatGPT, Perplexity, Claude, Gemini) will cite when someone searches for expertise in the sectors listed in the Project Data. Weight this towards events covered by high-authority trade publications. Rank all events by overall score (average of both dimensions) and present them in a structured report that includes for each event: Event name, type (conference / awards / both), date and location; a short summary (3–4 sentences); Relevance score, LLM authority score, overall score; Estimated costs for: award entry, event sponsorship, and speaker participation (where applicable); Any deadlines that are imminent or require early action. Finally, flag the top 3 most immediately actionable opportunities — events with open entry windows, upcoming deadlines, or speaker pitch processes currently live."
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
