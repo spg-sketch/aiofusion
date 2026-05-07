@@ -3368,14 +3368,14 @@ function LandingPage({ onLogin, onNavigateAgencies, onNavigate, variant, onPickV
               { icon: Search, title: "Media and Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: vars.coral },
               { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
             ].map((b) => (
-              <div key={b.title} className="rounded-xl p-6 transition-all hover:shadow-md" style={{ background: vars.cream, border: `1px solid ${vars.g200}` }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${b.accent}18` }}>
-                    <b.icon size={18} color={b.accent} />
+              <div key={b.title} className="rounded-2xl p-7 sm:p-8 transition-all hover:-translate-y-1" style={{ background: "white", border: `2px solid ${b.accent}`, boxShadow: `0 14px 32px -12px ${b.accent}55` }}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: b.accent }}>
+                    <b.icon size={22} color="white" />
                   </div>
-                  <h3 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
+                  <h3 className="text-[20px] font-bold leading-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
                 </div>
-                <p className="text-[13.5px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{b.copy}</p>
+                <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{b.copy}</p>
               </div>
             ))}
           </div>
@@ -3730,14 +3730,14 @@ function LandingPageB({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               { icon: Search, title: "Media and Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: vars.coral },
               { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
             ].map((b) => (
-              <div key={b.title} className="rounded-xl p-6 transition-all hover:shadow-md bg-white" style={{ border: `1px solid ${vars.g200}` }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${b.accent}18` }}>
-                    <b.icon size={18} color={b.accent} />
+              <div key={b.title} className="rounded-2xl p-7 sm:p-8 transition-all hover:-translate-y-1 bg-white" style={{ border: `2px solid ${b.accent}`, boxShadow: `0 14px 32px -12px ${b.accent}55` }}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: b.accent }}>
+                    <b.icon size={22} color="white" />
                   </div>
-                  <h3 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
+                  <h3 className="text-[20px] font-bold leading-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
                 </div>
-                <p className="text-[13.5px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{b.copy}</p>
+                <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{b.copy}</p>
               </div>
             ))}
           </div>
@@ -4058,14 +4058,14 @@ function LandingPageC({ onLogin, onNavigate, variant, onPickVariant }: { onLogin
               { icon: Lightbulb, title: "Media & Marketing Intelligence", copy: "Research media contacts and assess future marketing activity based on AI Authority impact.", accent: accent },
               { icon: LineChart, title: "Measure & Report", copy: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.gold },
             ].map((b) => (
-              <div key={b.title} className="p-5 rounded-2xl bg-white" style={{ border: `1px solid ${b.accent}30`, boxShadow: `0 4px 14px -6px ${b.accent}25` }}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${b.accent}18` }}>
-                    <b.icon size={16} color={b.accent} />
+              <div key={b.title} className="p-7 sm:p-8 rounded-2xl bg-white transition-all hover:-translate-y-1" style={{ border: `2px solid ${b.accent}`, boxShadow: `0 14px 32px -12px ${b.accent}55` }}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: b.accent }}>
+                    <b.icon size={22} color="white" />
                   </div>
-                  <h3 className="text-[14px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{b.title}</h3>
+                  <h3 className="text-[20px] font-bold leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{b.title}</h3>
                 </div>
-                <p className="text-[13px] font-light leading-[1.7] pl-12" style={{ color: vars.g600 }}>{b.copy}</p>
+                <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g600 }}>{b.copy}</p>
               </div>
             ))}
           </div>
