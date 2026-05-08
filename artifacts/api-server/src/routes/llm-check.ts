@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from "express";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
+import { llmCheckLimiter } from "../middleware/rate-limit";
+import { requireAuth } from "../middleware/require-auth";
 
 const llmCheckRouter = Router();
 
@@ -144,7 +146,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
   }
 }
 
-llmCheckRouter.post("/llm-check", async (req: Request, res: Response) => {
+llmCheckRouter.post("/llm-check", llmCheckLimiter, requireAuth, async (req: Request, res: Response) => {
   const { companyName, sector, keywords } = req.body;
 
   if (!companyName || typeof companyName !== "string") {

@@ -5,6 +5,7 @@ import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
+import { useAuth } from "@workspace/replit-auth-web";
 import step1Img from "./assets/photos/photo-diagnose.jpg";
 import step2Img from "./assets/photos/photo-strategy.jpg";
 import step3Img from "./assets/photos/photo-plan.jpg";
@@ -1255,6 +1256,7 @@ function DiagnosticPage({
   onNavigate: (p: string) => void;
   activeClient: Client;
 }) {
+  const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1262,6 +1264,10 @@ function DiagnosticPage({
   const [result, setResult] = useState<DiagnosticResult | null>(null);
 
   const handleRunDiagnostic = async () => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
     if (!contentInput.trim() && !urlInput.trim()) {
       setError("Please enter a URL or paste content to analyse.");
       return;
@@ -1273,6 +1279,7 @@ function DiagnosticPage({
       const resp = await fetch(`${apiBase}/api/diagnostic`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           content: contentInput.trim() || undefined,
           url: urlInput.trim() || undefined,
