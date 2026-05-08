@@ -6,6 +6,19 @@ import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
 import { useAuth } from "@workspace/replit-auth-web";
+import {
+  type Session as LocalSession,
+  type User as LocalUser,
+  type Role as LocalRole,
+  seedAdminIfEmpty,
+  getSession as getLocalSession,
+  clearSession as clearLocalSession,
+  login as localLogin,
+  getUsers as getLocalUsers,
+  addUser as addLocalUser,
+  deleteUser as deleteLocalUser,
+  changePassword as changeLocalPassword,
+} from "./lib/auth";
 import step1Img from "./assets/photos/photo-diagnose.jpg";
 import step2Img from "./assets/photos/photo-strategy.jpg";
 import step3Img from "./assets/photos/photo-plan.jpg";
@@ -69,6 +82,9 @@ import {
   Eye,
   Building2,
   ArrowLeft,
+  LogOut,
+  Trash2,
+  KeyRound,
   Users,
   Activity,
   Play,
@@ -5136,15 +5152,24 @@ function PlatformHomePage({
   onArchivedProjects,
   onGuidance,
   onBackToLanding,
+  session,
+  onLoginSuccess,
+  onSignOut,
+  onManageUsers,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
   onArchivedProjects: () => void;
   onGuidance: () => void;
   onBackToLanding: () => void;
+  session: LocalSession | null;
+  onLoginSuccess: (s: LocalSession) => void;
+  onSignOut: () => void;
+  onManageUsers: () => void;
 }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
   const loopSteps: { label: string; sub: string; icon: any }[] = [
     { label: "Set-Up", sub: "Project Data", icon: ClipboardPaste },
     { label: "Audit", sub: "Earned + Site", icon: Search },
@@ -5188,60 +5213,127 @@ function PlatformHomePage({
           </p>
         </div>
 
-        {/* LOGIN — full-width across the page */}
-        <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
-              <LogIn size={18} />
+        {/* LOGIN / SESSION — full-width across the page */}
+        {!session ? (
+          <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                <LogIn size={18} />
+              </div>
+              <div>
+                <h2 className="text-[20px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
+                <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-[20px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
-              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setLoginError(null);
+                const result = localLogin(username, password);
+                if (result.ok) {
+                  setUsername("");
+                  setPassword("");
+                  onLoginSuccess(result.session);
+                } else {
+                  setLoginError(result.error);
+                }
+              }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
+            >
+              <div className="lg:col-span-5">
+                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Username</label>
+                <div className="relative">
+                  <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="username"
+                    autoComplete="username"
+                    className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                  />
+                </div>
+              </div>
+              <div className="lg:col-span-4">
+                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Password</label>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                  />
+                </div>
+              </div>
+              <div className="lg:col-span-3">
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                  style={{ background: accent, boxShadow: `0 12px 28px ${accent}40` }}
+                >
+                  <LogIn size={15} /> Sign in
+                </button>
+              </div>
+              {loginError && (
+                <p className="lg:col-span-12 text-[12px] font-semibold text-center" style={{ color: accent }}>
+                  {loginError}
+                </p>
+              )}
+              <p className="lg:col-span-12 text-[11px] font-light text-center mt-1" style={{ color: vars.g400 }}>
+                Demo build &middot; default admin: <strong>admin</strong> / <strong>admin123</strong>
+              </p>
+            </form>
+          </div>
+        ) : (
+          <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                  <User size={20} />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Signed in as</p>
+                  <h2 className="text-[18px] font-bold leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                    {session.username}
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : accentSoft, color: session.role === "admin" ? paper : accent }}>
+                      {session.role}
+                    </span>
+                  </h2>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={onContinueToProjects}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                  style={{ background: accent }}
+                >
+                  Continue to Project Hub <ArrowRight size={14} />
+                </button>
+                {session.role === "admin" && (
+                  <button
+                    onClick={onManageUsers}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                    style={{ color: ink, border: `1.5px solid ${ink}30` }}
+                  >
+                    <Users size={14} /> Manage Users
+                  </button>
+                )}
+                <button
+                  onClick={onSignOut}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                  style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
             </div>
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); onContinueToProjects(); }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end">
-            <div className="lg:col-span-5">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Email</label>
-              <div className="relative">
-                <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                />
-              </div>
-            </div>
-            <div className="lg:col-span-4">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Password</label>
-              <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                />
-              </div>
-            </div>
-            <div className="lg:col-span-3">
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
-                style={{ background: accent, boxShadow: `0 12px 28px ${accent}40` }}
-              >
-                <LogIn size={15} /> Continue
-              </button>
-            </div>
-            <p className="lg:col-span-12 text-[11px] font-light text-center mt-1" style={{ color: vars.g400 }}>
-              Demo build &middot; any details continue to your projects.
-            </p>
-          </form>
-        </div>
+        )}
 
         {/* AIO MARKETING LOOP — full-width below login so all 7 steps fit */}
         <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
@@ -5322,6 +5414,223 @@ function PlatformHomePage({
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: () => void }) {
+  const paper = "#FBF6EC";
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const accentSoft = "#FBE3ED";
+  const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<LocalRole>("user");
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addSuccess, setAddSuccess] = useState<string | null>(null);
+  const [pwUser, setPwUser] = useState<string | null>(null);
+  const [pwValue, setPwValue] = useState("");
+  const [pwError, setPwError] = useState<string | null>(null);
+
+  const refresh = () => setUsers(getLocalUsers());
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError(null);
+    setAddSuccess(null);
+    const result = addLocalUser(newUsername, newPassword, newRole);
+    if (result.ok) {
+      setAddSuccess(`Created ${newRole} '${newUsername.trim()}'.`);
+      setNewUsername("");
+      setNewPassword("");
+      setNewRole("user");
+      refresh();
+    } else {
+      setAddError(result.error);
+    }
+  };
+
+  const handleDelete = (username: string) => {
+    if (!confirm(`Delete user '${username}'? This cannot be undone.`)) return;
+    const result = deleteLocalUser(username);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    refresh();
+  };
+
+  const handleSavePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    if (!pwUser) return;
+    const result = changeLocalPassword(pwUser, pwValue);
+    if (!result.ok) {
+      setPwError(result.error);
+      return;
+    }
+    setPwUser(null);
+    setPwValue("");
+    refresh();
+  };
+
+  return (
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
+        <button onClick={onBack} className="flex items-center gap-3.5">
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+        </button>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+          style={{ background: ink, color: paper }}
+        >
+          <ArrowLeft size={16} /> Back to platform
+        </button>
+      </header>
+
+      <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">
+        <div className="mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+            <Users size={12} color={accent} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Admin · User Management</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+            Manage platform users
+          </h1>
+          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+            Add, remove and reset passwords for everyone with access to the platform. Admins can manage users; users have access to projects only.
+          </p>
+        </div>
+
+        {/* ADD USER */}
+        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new user</h2>
+          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
+            <div className="md:col-span-4">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username</label>
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="e.g. patrick"
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-4">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+              <input
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="min 4 characters"
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Role</label>
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as LocalRole)}
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                style={{ background: accent }}
+              >
+                <Plus size={14} /> Add
+              </button>
+            </div>
+            {addError && (
+              <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>
+            )}
+            {addSuccess && (
+              <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>
+            )}
+          </form>
+        </div>
+
+        {/* USERS LIST */}
+        <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>All users ({users.length})</h2>
+          </div>
+          <ul className="divide-y" style={{ borderColor: vars.g200 }}>
+            {users.map((u) => {
+              const isMe = u.username.toLowerCase() === session.username.toLowerCase();
+              const editingPw = pwUser === u.username;
+              return (
+                <li key={u.username} className="px-6 py-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                        <User size={16} />
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-bold" style={{ color: ink }}>
+                          {u.username}
+                          {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
+                        </p>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
+                          {u.role}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                      >
+                        <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(u.username)}
+                        disabled={isMe}
+                        title={isMe ? "You cannot delete your own account" : "Delete user"}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
+                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                  {editingPw && (
+                    <form onSubmit={handleSavePassword} className="mt-3 flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={pwValue}
+                        onChange={(e) => setPwValue(e.target.value)}
+                        placeholder="New password (min 4 chars)"
+                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                        style={{ background: accent }}
+                      >
+                        Save
+                      </button>
+                      {pwError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{pwError}</span>}
+                    </form>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       </div>
     </div>
@@ -5414,12 +5723,34 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
 }
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
+  const [session, setSessionState] = useState<LocalSession | null>(() => {
+    if (typeof window === "undefined") return null;
+    seedAdminIfEmpty();
+    return getLocalSession();
+  });
 
   useEffect(() => { seedDemoDataIfEmpty(); }, []);
+
+  const handleSignOut = () => {
+    clearLocalSession();
+    setSessionState(null);
+    setActiveClient(null);
+    setView("landing");
+    window.scrollTo(0, 0);
+  };
+
+  const requireSessionThen = (next: () => void) => {
+    if (!session) {
+      setView("platform-home");
+      window.scrollTo(0, 0);
+      return;
+    }
+    next();
+  };
 
   const handleLogoUpdate = (clientId: string, logoDataUrl: string) => {
     setClientLogos((prev) => ({ ...prev, [clientId]: logoDataUrl }));
@@ -5467,17 +5798,28 @@ function App() {
   if (view === "platform-home") {
     return (
       <PlatformHomePage
-        onCreateProject={() => {
+        session={session}
+        onLoginSuccess={(s) => setSessionState(s)}
+        onSignOut={handleSignOut}
+        onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
+        onCreateProject={() => requireSessionThen(() => {
           setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
           setCurrentPage("intake");
           setView("platform");
-        }}
-        onContinueToProjects={() => setView("platform")}
-        onArchivedProjects={() => setView("archived-projects")}
+        })}
+        onContinueToProjects={() => requireSessionThen(() => setView("platform"))}
+        onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
         onGuidance={() => setView("guidance")}
         onBackToLanding={() => goHome()}
       />
     );
+  }
+  if (view === "users-admin") {
+    if (!session || session.role !== "admin") {
+      setTimeout(() => setView("platform-home"), 0);
+      return null;
+    }
+    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} />;
   }
   if (view === "guidance") {
     return <GuidancePage onBack={() => setView("platform-home")} />;
