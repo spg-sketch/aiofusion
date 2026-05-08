@@ -332,7 +332,7 @@ const navSections: NavSection[] = [
     color: "#1f748f",
     items: [
       { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
-      { label: "Earned Media Audit", id: "llm-check", sub: "Score AI brand mentions" },
+      { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
     ],
   },
@@ -857,7 +857,7 @@ function DashboardPage({
 
   const quickActions = [
     { icon: ClipboardPaste, label: "Project Set-Up", sub: "Capture business profile and messaging", action: "intake" },
-    { icon: Eye, label: "Earned Media Audit", sub: "Score AI brand mentions", action: "llm-check" },
+    { icon: Eye, label: "Earned Media Visibility Audit", sub: "Score AI brand mentions", action: "llm-check" },
     { icon: Search, label: "Website Visibility Audit", sub: "Score your site for AI citation", action: "diagnostic" },
     { icon: Calendar, label: "Comms Planner", sub: "Plan and score the PR / marketing schedule", action: "planner" },
     { icon: FileEdit, label: "Content Optimiser & Editor", sub: "Optimise and edit drafts", action: "optimiser" },
@@ -963,7 +963,7 @@ function DashboardPage({
 
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Earned Media Audit
+            Earned Media Visibility Audit
             <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
           </h3>
           <div className="flex items-center gap-4 mb-4">
@@ -996,7 +996,7 @@ function DashboardPage({
             </div>
           </div>
           <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Run Earned Media Audit <ArrowRight size={12} />
+            Run Earned Media Visibility Audit <ArrowRight size={12} />
           </button>
         </div>
 

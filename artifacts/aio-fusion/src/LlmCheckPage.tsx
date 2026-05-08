@@ -248,7 +248,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             </div>
             <div>
               <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
-                Earned Visibility Check
+                Earned Media Visibility Audit
                 <InfoTip text="Sends real questions about your sector to ChatGPT and Claude, then checks whether your brand is mentioned in their answers. This is the test that matters - it measures actual AI citation behaviour." width={260} />
               </h1>
               <p className="text-[13px]" style={{ color: vars.g500 }}>
