@@ -3229,7 +3229,7 @@ const llmLogos = [
    colour-blocked feature panels (teal / raspberry / gold), image-rich
    How It Works grid, raspberry→gold gradient final CTA.
    ============================================================ */
-function LandingPageC({ onLogin, onNavigate }: { onLogin: () => void; onNavigate: (v: string) => void }) {
+function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const paper = "#FBF6EC";
   const ink = "#102B36";
@@ -3257,7 +3257,7 @@ function LandingPageC({ onLogin, onNavigate }: { onLogin: () => void; onNavigate
               <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: ink }}>{it.l}</button>
             ))}
             <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
-              Platform Login
+              {isAuthed ? <><User size={14} /> My Account</> : <>Platform Login</>}
             </button>
           </div>
           <button className="md:hidden" style={{ color: ink }} onClick={() => setMenuOpen(!menuOpen)}>
@@ -3276,7 +3276,7 @@ function LandingPageC({ onLogin, onNavigate }: { onLogin: () => void; onNavigate
             ].map((it) => (
               <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
             ))}
-            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: ink, color: paper }}>Platform Login</button>
+            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : "Platform Login"}</button>
           </div>
         )}
       </nav>
@@ -4877,7 +4877,7 @@ const demoEvents = [
   { name: "DigiMarCon UK 2026", type: "Conference", date: "3–4 September 2026", location: "InterContinental London Park Lane", summary: "Two-day conference covering AdTech, MarTech, SaaS, AI and digital marketing strategy with open speaker submissions. One of the more accessible platforms for clients to establish thought leadership in digital marketing and advertising, with virtual pass options for distributed reach.", relevance: 7, authority: 7, costEntry: "Attendance ~£595–£895 + VAT in-person · virtual pass available at lower cost", costSponsor: "Multiple packages — enquire at digimarconuk.co.uk", costSpeaker: "Speaker submissions actively encouraged — open pitch process, strong acceptance rate", deadline: "Speaker pitches open spring 2026", actionable: false },
 ];
 
-function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean }) {
+function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, isAuthed }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean; isAuthed?: boolean }) {
   // Variant C aesthetic across all marketing pages: cream surface, ink type,
   // raspberry accents and Alice serif headings. Content unchanged.
   const cream = "#FBF6EC";
@@ -4909,7 +4909,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate }
               </button>
             ))}
             <button onClick={onLogin} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110" style={{ background: ink }}>
-              <LogIn size={14} /> Platform Login
+              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
             </button>
           </div>
         </div>
@@ -4937,7 +4937,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate }
   );
 }
 
-function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
@@ -4978,7 +4978,7 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
   );
 }
 
-function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
@@ -5032,7 +5032,7 @@ function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNav
   );
 }
 
-function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   const articles = [
     { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide", img: blogTile1, accent: vars.accent, external: true },
     { title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", tag: "Article", img: blogTile2, accent: vars.coral, external: false },
@@ -5069,7 +5069,7 @@ function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNaviga
   );
 }
 
-function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Designed by PR consultants. Built with deep tech expertise." eyebrow={<><Users size={12} /> About AIO Fusion</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
@@ -5104,7 +5104,7 @@ function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate:
   );
 }
 
-function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void }) {
+function ContactPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Get in touch" eyebrow={<><Mail size={12} /> Contact</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
@@ -5777,23 +5777,24 @@ function App() {
 
   const enterPlatform = () => setView("platform-home");
 
+  const isAuthed = !!session;
   if (view === "landing") {
-    return <LandingPageC onLogin={enterPlatform} onNavigate={goToView} />;
+    return <LandingPageC onLogin={enterPlatform} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "for-inhouse") {
-    return <ForInhousePage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
+    return <ForInhousePage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "for-agencies") {
-    return <ForAgenciesPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
+    return <ForAgenciesPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "insights") {
-    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
+    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "about") {
-    return <AboutPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
+    return <AboutPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "contact") {
-    return <ContactPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} />;
+    return <ContactPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "platform-home") {
     return (
