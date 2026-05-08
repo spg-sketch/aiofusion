@@ -12,12 +12,12 @@ export type Session = {
   role: Role;
 };
 
-const USERS_KEY = "aio.auth.users";
-const SESSION_KEY = "aio.auth.session";
+const USERS_KEY = "aio.auth.users.v2";
+const SESSION_KEY = "aio.auth.session.v2";
 
 const DEFAULT_ADMIN: User = {
-  username: "admin",
-  password: "admin123",
+  username: "/admin",
+  password: "K9mt-4Rxq-7NzPv2",
   role: "admin",
   createdAt: Date.now(),
 };

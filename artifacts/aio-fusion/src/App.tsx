@@ -5284,9 +5284,6 @@ function PlatformHomePage({
                   {loginError}
                 </p>
               )}
-              <p className="lg:col-span-12 text-[11px] font-light text-center mt-1" style={{ color: vars.g400 }}>
-                Demo build &middot; default admin: <strong>admin</strong> / <strong>admin123</strong>
-              </p>
             </form>
           </div>
         ) : (
