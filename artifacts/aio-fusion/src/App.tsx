@@ -5090,13 +5090,6 @@ function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate:
         Our ambition is to make the fusion of human expertise and a pioneering AI communications technology available to in-house PR and marketing teams as well as PR agencies and consultants - enabling you to leverage the power of answer engines with a single automated platform.
       </p>
 
-      <div className="p-6 rounded-2xl mb-10" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: vars.accent }}>Developed by Bluhalo</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: vars.g500 }}>
-          The AIO Fusion platform is engineered in partnership with Bluhalo, an independent agency advisory and intelligence practice with deep technology and AI delivery expertise.
-        </p>
-      </div>
-
       <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
         <Mail size={16} /> Get in Touch
       </a>
