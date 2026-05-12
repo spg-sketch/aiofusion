@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { logger } from "../lib/logger";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { requireAuth } from "../middleware/require-auth";
+import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 
 const diagnosticRouter = Router();
 
@@ -206,7 +207,7 @@ function mergeResults(claudeResult: any, openaiResult: any): any {
   };
 }
 
-diagnosticRouter.post("/diagnostic", diagnosticLimiter, requireAuth, async (req: Request, res: Response) => {
+diagnosticRouter.post("/diagnostic", diagnosticLimiter, requireAuth, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
   const { content, url } = req.body;
 
   if (!content && !url) {

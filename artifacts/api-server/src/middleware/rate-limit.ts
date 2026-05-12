@@ -31,3 +31,11 @@ export const llmCheckLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many LLM check requests. Please wait before running another check." },
 });
+
+export const seoAuditLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many audit requests. Please wait before running another audit." },
+});

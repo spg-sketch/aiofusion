@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@workspace/replit-auth-web";
 import InfoTip from "./InfoTip";
 import {
   Globe,
@@ -193,6 +194,7 @@ function PriorityBadge({ priority }: { priority: string }) {
 }
 
 export default function SeoAuditPage() {
+  const { isAuthenticated, login } = useAuth();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -200,6 +202,10 @@ export default function SeoAuditPage() {
 
   async function runAudit() {
     if (!url.trim()) return;
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
     setLoading(true);
     setError("");
     setResult(null);
@@ -209,6 +215,7 @@ export default function SeoAuditPage() {
       const resp = await fetch(`${apiBase}/api/seo-audit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ url: url.trim() }),
       });
 
