@@ -22,7 +22,8 @@
     "openai": "^6.34.0",
     "openid-client": "^6.8.4",
     "pino": "^9",
-    "pino-http": "^10"
+    "pino-http": "^10",
+    "undici": "^8.2.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

@@ -4,6 +4,7 @@ import { logger } from "../lib/logger";
 import { URL } from "url";
 import * as dns from "dns/promises";
 import * as net from "net";
+import { Agent, buildConnector } from "undici";
 
 const seoAuditRouter = Router();
 
@@ -69,7 +70,7 @@ function isPrivateIP(ip: string): boolean {
   return false;
 }
 
-async function validateUrl(url: string): Promise<void> {
+async function validateUrl(url: string): Promise<string> {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Only http and https URLs are allowed");
@@ -79,15 +80,25 @@ async function validateUrl(url: string): Promise<void> {
   }
   if (net.isIP(parsed.hostname)) {
     if (isPrivateIP(parsed.hostname)) throw new Error("Private IP addresses are not allowed");
-  } else {
-    const addresses = await dns.resolve4(parsed.hostname).catch(() => []);
-    const addresses6 = await dns.resolve6(parsed.hostname).catch(() => []);
-    const allAddresses = [...addresses, ...addresses6];
-    if (allAddresses.length === 0) throw new Error("Could not resolve hostname");
-    for (const addr of allAddresses) {
-      if (isPrivateIP(addr)) throw new Error("URL resolves to a private IP address");
-    }
+    return parsed.hostname;
   }
+  const addresses = await dns.resolve4(parsed.hostname).catch(() => [] as string[]);
+  const addresses6 = await dns.resolve6(parsed.hostname).catch(() => [] as string[]);
+  const allAddresses = [...addresses, ...addresses6];
+  if (allAddresses.length === 0) throw new Error("Could not resolve hostname");
+  for (const addr of allAddresses) {
+    if (isPrivateIP(addr)) throw new Error("URL resolves to a private IP address");
+  }
+  return allAddresses[0];
+}
+
+function createPinnedAgent(pinnedIp: string, servername: string): Agent {
+  const connector = buildConnector({ rejectUnauthorized: true });
+  return new Agent({
+    connect(options: Parameters<typeof connector>[0], callback: Parameters<typeof connector>[1]) {
+      connector({ ...options, hostname: pinnedIp, servername: options.servername ?? servername }, callback);
+    },
+  });
 }
 
 const MAX_REDIRECTS = 5;
@@ -96,24 +107,36 @@ async function fetchWithSsrfSafeRedirects(
   url: string,
   reqHeaders: Record<string, string>,
   timeoutMs: number,
-): Promise<Awaited<ReturnType<typeof fetch>>> {
+): Promise<{ res: Awaited<ReturnType<typeof fetch>>; agent: Agent }> {
   let currentUrl = url;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      await validateUrl(currentUrl);
+      const pinnedIp = await validateUrl(currentUrl);
+      const parsed = new URL(currentUrl);
+      const agent = createPinnedAgent(pinnedIp, parsed.hostname);
+
       const res = await fetch(currentUrl, {
         signal: controller.signal,
         headers: reqHeaders,
         redirect: "manual",
+        // @ts-expect-error - dispatcher is the undici-specific option accepted by Node's built-in fetch
+        dispatcher: agent,
       });
 
       const isRedirect = res.status >= 300 && res.status < 400;
       if (!isRedirect) {
-        return res;
+        // Return the response and its agent so the caller can close the agent
+        // after the response body has been fully consumed.
+        return { res, agent };
       }
+
+      // For redirect hops we do not read the body, so cancel it explicitly
+      // and close the per-hop agent before moving to the next hop.
+      await res.body?.cancel().catch(() => {});
+      await agent.close().catch(() => {});
 
       const location = res.headers.get("location");
       if (!location) {
@@ -134,10 +157,9 @@ async function fetchWithSsrfSafeRedirects(
 }
 
 async function fetchPage(url: string): Promise<{ html: string; statusCode: number; headers: Record<string, string>; responseTime: number }> {
-  await validateUrl(url);
   const start = Date.now();
 
-  const res = await fetchWithSsrfSafeRedirects(
+  const { res, agent } = await fetchWithSsrfSafeRedirects(
     url,
     {
       "User-Agent": "AIOFusion-SEOAudit/1.0 (compatible; bot)",
@@ -146,18 +168,22 @@ async function fetchPage(url: string): Promise<{ html: string; statusCode: numbe
     FETCH_TIMEOUT,
   );
 
-  const contentLength = res.headers.get("content-length");
-  if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-    throw new Error("Response too large");
+  try {
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large");
+    }
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large");
+    }
+    const html = new TextDecoder().decode(buffer);
+    const headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { headers[k] = v; });
+    return { html, statusCode: res.status, headers, responseTime: Date.now() - start };
+  } finally {
+    await agent.close().catch(() => {});
   }
-  const buffer = await res.arrayBuffer();
-  if (buffer.byteLength > MAX_RESPONSE_SIZE) {
-    throw new Error("Response too large");
-  }
-  const html = new TextDecoder().decode(buffer);
-  const headers: Record<string, string> = {};
-  res.headers.forEach((v, k) => { headers[k] = v; });
-  return { html, statusCode: res.status, headers, responseTime: Date.now() - start };
 }
 
 async function fetchPageSpeed(url: string): Promise<any | null> {
@@ -178,10 +204,14 @@ async function fetchRobotsTxt(url: string): Promise<string | null> {
   try {
     const parsed = new URL(url);
     const robotsUrl = `${parsed.protocol}//${parsed.host}/robots.txt`;
-    const res = await fetchWithSsrfSafeRedirects(robotsUrl, { "User-Agent": "AIOFusion-SEOAudit/1.0" }, 8000);
-    if (!res.ok) return null;
-    const text = await res.text();
-    return text.substring(0, 100000);
+    const { res, agent } = await fetchWithSsrfSafeRedirects(robotsUrl, { "User-Agent": "AIOFusion-SEOAudit/1.0" }, 8000);
+    try {
+      if (!res.ok) return null;
+      const text = await res.text();
+      return text.substring(0, 100000);
+    } finally {
+      await agent.close().catch(() => {});
+    }
   } catch {
     return null;
   }
