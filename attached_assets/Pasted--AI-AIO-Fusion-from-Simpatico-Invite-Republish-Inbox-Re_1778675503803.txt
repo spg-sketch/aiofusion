@@ -1,0 +1,29 @@
+
+
+AI
+
+AIO Fusion from Simpatico
+
+
+
+Invite
+
+Republish
+
+
+
+
+
+
+
+
+Inbox
+
+Resolved
+Feature
+
+PB
+patrickbarrett2
+Patrick
+21 hours ago
+Functionality – Set-Up and Project Data Note – the Project Set-Up form needs to be simplified so that it focusses on content that will inform PR and Marketing. It cab then can be used to improve the website GEO/technical in section 3 of dashboard. At the moment we are asking for PR messaging to be entered in PR Set-Up and then in section 5 of Website set up we are asking similar questions regarding messaging on the website. This could cause confusion and produce conflicting data. Also section 3 of Website set up regarding audience would make more sense in PR set up. Therefore we should simplify the Project Set-Up / Project Data doc so there is just one set of messaging information. This will be done by deleting section 5 and adding some of its elements to PR-Set-UP – see instructions regarding Project set up data entry below. This streamlined Project Set-Up doc will also be used in Section 3 of the dashboard as reference data to produce recommended GEO content and technical changes. Instruction - Add Section 3 “Audience & Intent Mapping” of Website Set-Up to PR Set-Up as Section 3 PR Set-Up Section 3 edits 3.2 What phrases language does each audience use when searching for your solutions? Copy - Include informal, colloquial, and category-level terms — not just your preferred terminology entered above. These populate your semantic phrase guide. 3.3 copy - What are the most common pain points, frustrations, or unmet needs your audience has before finding you? What challenges do you solve – add as much detail as possible. 3.4 copy - What outcome does your audience most want to achieve by using your product or service? Please provide examples and links to case studies or evidence. Website Set-Up Section 5. Website Content Architecture Move 5.2 to PR Set-Up Section 2 as 2.6 Move 5.3 to PR Set-Up Section 2 as 2.7 Move 5.6 to PR Set-Up Section 2 as 2.5 Then Delete Section 5 of Website Set Up Instruction – rename “Website Set-Up” button as “AIO Set-Up” Under newly named AIO Set-Up Remaining sections must be renumbered 4 to 7 (Note this is so that LLMs can reference the sections in order without confusion) Note - So we now have PR Set -Up sections 1-3 and AIO Set-Up sections 4-7 Instruction - Functionality Create Project Data – this creates the core Project Data doc used in LLM content optimisation. Project Data docs need to be stored in a separate location to the archive. (Each Project has it’s own archive). Instruction - We need to make sure that all the data on an approved Project Data doc is shown to LLMs to inform their optimisation and searches in: Section 2 of dashbopard: • Comms Planner • Content Optimiser & Editor • Content Creator • Media Research • Marketing Intelligence Section 3 of dashboard : • Website GEO Content • Website Technical GEO Button functionality instructions - Change button name - Optimise Project Data – to “Optimise Project Messages” Optimise Project Messages button can only be used once the Project Data is fully completed. Optimise Project Messages button optimises the PR messaging content in Parts 1.1, 1.2, 1.3, 1.6 and 2.4 of PR Set-Up using prompt below. LLMs will need to read a completed Project Data doc with prompt: “Using all the information about this company contained in this Project Data document, optimise the content in parts 1.1, 1.2, 1.3, 1.6 and 2.4 of PR Set-Up or authority in earned media and align to achieve maximum visibility and authority with LLM agents.” Once Parts 1.1, 1.2, 1.3, 1.6 and 2.4 are optimised these sections need to be presented – with recommended optimised copy in red. We need to instruct users that optimised copy will appear in red – pop up or ? button? Note – Using the buttons in Project Data Actions users can then either accept and save Project Data or Edit Content Parts 1.1, 1.2, 1.3, 1.6 and 2.4 Note - i.e. they may not like the LLM recommendations and which to create hybrid copy for PR and the website. Or they may wish to stick with existing copy. Instruction - Add Button – Reject Optimised Copy – if a user does not like the optimised version, they need a quick way to reject it and go back to the original version that they completed. This button changes parts 1.1, 1.2, 1.3, 1.6 and 2.4 copy back to the pre-optimised version. Button – Edit Project Data – this takes the user back to Part 1 of the Project Set-Up so they can enter revised content into parts 1.1, 1.2, 1.3, 1.6 and 2.4. Button – Accept Project Data – This places the Project Data report in the dedicated project archive. Add Button – Download Project Data – This provides a pdf file of the Project Data in its current form i.e. in-complete, rep-accepted or accepted.
