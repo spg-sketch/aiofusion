@@ -19,6 +19,7 @@ import {
   Pencil,
   Plus,
   X,
+  XCircle,
   Linkedin,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
@@ -643,51 +644,6 @@ export default function IntakePage() {
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
 
-        {/* Top action buttons — Variant C ink/paper/raspberry */}
-        <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all"
-              style={{ background: "#FBF6EC", color: "#102B36" }}
-              title="Reset and draft a fresh Project Data report"
-            >
-              <Plus size={14} /> Create Project Data
-            </button>
-            <button
-              onClick={() => { setShowOptimiseModal(true); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
-              style={{ background: "#C8497A" }}
-              title="Send Parts 4.1–4.5 to the LLM optimiser"
-            >
-              <Sparkles size={14} /> Optimise Project Data
-            </button>
-            <button
-              onClick={() => {
-                setIntakeStatus("Accepted");
-                setAcceptedAt(new Date().toISOString());
-                alert("Project Data accepted. The signed-off brief is now available to every other module.");
-              }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
-              style={{ background: vars.green }}
-            >
-              <FileCheck2 size={14} /> Accept Project Data
-            </button>
-            <button
-              onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all"
-              style={{ background: "#C94A3E" }}
-              title="Re-open the Project Data for editing"
-            >
-              <Pencil size={14} /> Edit Project Data
-            </button>
-          </div>
-        </div>
-
         {/* Track switch + progress — Variant C panel */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1068,6 +1024,64 @@ export default function IntakePage() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Project Data Actions — moved to bottom so it appears after data entry */}
+      <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <button
+            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
+            style={{ background: "#FBF6EC", color: "#102B36" }}
+            title="Reset and draft a fresh Project Data report"
+          >
+            <Plus size={13} /> Create
+          </button>
+          <button
+            onClick={() => { setShowOptimiseModal(true); }}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+            style={{ background: "#C8497A" }}
+            title="Send Parts 4.1–4.5 to the LLM optimiser"
+          >
+            <Sparkles size={13} /> Optimise
+          </button>
+          <button
+            onClick={() => {
+              setIntakeStatus("Accepted");
+              setAcceptedAt(new Date().toISOString());
+              alert("Project Data accepted. The signed-off brief is now available to every other module.");
+            }}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+            style={{ background: vars.green }}
+            title="Sign off the Project Data — locks it in for downstream modules"
+          >
+            <FileCheck2 size={13} /> Accept
+          </button>
+          <button
+            onClick={() => {
+              setIntakeStatus("Draft");
+              alert("Optimised copy rejected. Project Data reverted to Draft so you can edit the original messaging.");
+            }}
+            disabled={intakeStatus !== "Optimised"}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#9C4F47" }}
+            title="Discard the LLM-optimised copy and go back to your original draft"
+          >
+            <XCircle size={13} /> Reject Optimised
+          </button>
+          <button
+            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+            style={{ background: "#C94A3E" }}
+            title="Re-open the Project Data for editing"
+          >
+            <Pencil size={13} /> Edit
+          </button>
         </div>
       </div>
 
