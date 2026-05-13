@@ -941,7 +941,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Media Category</label>
-                <input value={manualForm.category} onChange={e => setManualForm({ ...manualForm, category: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="From 4.9 (e.g. Marketing & PR)" />
+                <input value={manualForm.category} onChange={e => setManualForm({ ...manualForm, category: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="From 1.9 (e.g. Marketing & PR)" />
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>

@@ -21,6 +21,8 @@ import {
   X,
   XCircle,
   Linkedin,
+  Download,
+  Info,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
@@ -70,12 +72,43 @@ type SectionDef = {
 type DualValue = { short: string; long: string };
 type DualListValue = DualValue[];
 
-const INTAKE_KEY = "aio.intake.v1";
+const INTAKE_KEY = "aio.intake.v2";
+const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
-// PR Set-Up sections (Business Messaging) — PR comes first per Patrick.
-// Field IDs preserve their original numbering (4.x, 6.x) so they remain stable
-// references for Optimiser, Comms Planner, Media Research and Marketing Intel.
+// Fields that get rewritten by "Optimise Project Messages" — must be kept in
+// sync with the LLM prompt below and with the snapshot/restore logic.
+export const OPTIMISED_FIELD_IDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
+
+// Demo-only mock outputs from the LLM optimiser. Used so users can see the
+// "optimised copy in red" experience without a live model call. Replaced by
+// the real LLM response when wired to a backend.
+const MOCK_OPTIMISED_FORM_DATA: Record<string, string> = {
+  "1.1":
+    "[Company Name] is the AI-authority partner trusted by [audience] across [geographies] to win measurable visibility in earned media and AI-generated answers. Founded in [year], the company has helped [N] organisations earn citations from outlets including [publications] and references inside ChatGPT, Claude, Gemini and Perplexity. Combining proprietary scoring of LLM citation signals with disciplined PR craft, [Company Name] turns press coverage and owned content into a defensible, machine-readable authority footprint that compounds over time.",
+  "1.6":
+    "AI authority, generative engine optimisation (GEO), answer engine optimisation (AEO), large language model citation, earned media intelligence, AI Overviews, model-cited PR, retrieval-augmented generation source, semantic phrase guide, entity disambiguation, brand-as-source.",
+  "2.4":
+    "How is generative engine optimisation different from traditional SEO? Which AI models cite [industry] sources most reliably, and why? What does it take to be cited inside an AI Overview or a ChatGPT answer? How do PR and content teams measure earned visibility inside LLMs? What schema and structured data signals matter most for AI citation?",
+};
+const MOCK_OPTIMISED_DUALS: Record<string, DualValue> = {
+  "1.2": {
+    short: "AI authority for earned media",
+    long: "The dedicated platform that turns earned media coverage and owned content into measurable AI authority for PR and marketing leaders.",
+  },
+};
+const MOCK_OPTIMISED_DUAL_LISTS: Record<string, DualListValue> = {
+  "1.3": [
+    { short: "Earned + owned in one workflow", long: "Plan, optimise, score and measure both earned and owned media from a single AI-authority workflow." },
+    { short: "Predict before you publish", long: "Predict the AI authority score of every campaign and asset before you commit budget or distribution." },
+    { short: "Cited by ChatGPT, Claude, Gemini", long: "Engineered to make your brand a high-confidence source for the AI models your customers consult before buying." },
+  ],
+};
+
+// PR Set-Up sections 1–3 + AIO Set-Up sections 4–7. Field IDs are renumbered
+// to match the user-visible section numbers so LLMs can reference them
+// unambiguously (e.g. "Part 1.2" = section 1, field 2).
 const sections: SectionDef[] = [
+  // ── PR Set-Up: Section 1 ────────────────────────────────────────────
   {
     id: "earned-media",
     track: "pr",
@@ -88,14 +121,14 @@ const sections: SectionDef[] = [
     fields: [
       { id: "h-bp", label: "Core Boilerplate", type: "heading" },
       {
-        id: "4.1",
+        id: "1.1",
         label: "100-word company descriptor",
         hint: "Enter or draft the raw ingredients for a new 100-word company descriptor for press use.",
         type: "textarea",
       },
       { id: "h-mh", label: "Message Hierarchy", type: "heading" },
       {
-        id: "4.2",
+        id: "1.2",
         label: "Primary Message",
         hint: "Enter a Primary Message providing a short summary (no more than six words). And a longer version of no more than 25 words.",
         type: "dual",
@@ -103,7 +136,7 @@ const sections: SectionDef[] = [
         longPlaceholder: "≤25 words — the longer version that adds proof and context",
       },
       {
-        id: "4.3",
+        id: "1.3",
         label: "Additional Messages",
         hint: "For each additional message provide a short summary (no more than six words). And a longer version of no more than 25 words.",
         type: "dual-list",
@@ -112,198 +145,104 @@ const sections: SectionDef[] = [
       },
       { id: "h-ev", label: "Evidence", type: "heading" },
       {
-        id: "4.4",
+        id: "1.4",
         label: "Online evidence",
         hint: "Cut and paste links to online evidence. Statistics, case studies, awards, certifications, third-party validation.",
         type: "textarea",
       },
       {
-        id: "4.5",
+        id: "1.5",
         label: "What to avoid",
         hint: "Messages, terminology, clients, industry issues, links to media articles, research, data or other information you do not wish to be associated with or wish to avoid.",
         type: "textarea",
       },
       { id: "h-sp", label: "Semantic Phrase Guide & Topics", type: "heading" },
       {
-        id: "4.6",
+        id: "1.6",
         label: "Preferred terms, phrases and category descriptors",
         hint: "Enter a list of short phrases or sentences. Include category labels, technology descriptors, industry terms.",
         type: "textarea",
       },
       {
-        id: "4.7",
+        id: "1.7",
         label: "Topics and themes for spokespeople and contributed content",
         hint: "Note, this should mirror your messaging. These become your GEO content pillars.",
         type: "textarea",
       },
       {
-        id: "4.8",
+        id: "1.8",
         label: "Spokespeople (used by Optimiser, Creator and Media Research)",
         hint: "Add each media spokesperson with name, title, area of expertise, and LinkedIn URL.",
         type: "textarea",
       },
       {
-        id: "4.9",
+        id: "1.9",
         label: "Trade media categories",
         hint: "Multi-select from the alphabetical Trade Media Categories list. These feed the Optimiser, Planner and Media Research dropdowns.",
         type: "textarea",
       },
     ],
   },
+  // ── PR Set-Up: Section 2 (FAQ + 3 items moved from old Web Section 5) ──
   {
     id: "faq",
     track: "pr",
     number: 2,
-    title: "FAQ Page: Facts, Policies & Common Questions",
-    subtitle: "AI-ready answers to what your audience actually asks",
+    title: "FAQ & Customer Questions",
+    subtitle: "AI-ready answers to what your audience actually asks, plus core product / service framing",
     icon: HelpCircle,
     intro:
-      "FAQ pages with FAQ Schema markup are one of the most reliable AEO tactics. Google's AI Overviews and voice search assistants regularly pull directly from FAQ content.",
+      "FAQ pages with FAQ Schema markup are one of the most reliable AEO tactics. Google's AI Overviews and voice search assistants regularly pull directly from FAQ content. The product / service framing in 2.5–2.7 keeps your earned media and website language aligned.",
     fields: [
       {
-        id: "6.1",
+        id: "2.1",
         label: "Top 10–15 questions customers ask before buying or signing up",
         hint: "Write each question exactly as a customer would ask it, and provide the ideal answer in 2–4 sentences.",
         type: "textarea",
       },
       {
-        id: "6.2",
+        id: "2.2",
         label: "Questions customers ask after they become clients",
         hint: "Support, operations, technical. These often reveal unmet informational needs.",
         type: "textarea",
       },
       {
-        id: "6.3",
+        id: "2.3",
         label: "Misconceptions or objections prospects commonly have",
         hint: "Misconception-busting content scores highly in AI answers.",
         type: "textarea",
       },
       {
-        id: "6.4",
+        id: "2.4",
         label: "Industry or category questions your business is uniquely qualified to answer",
         hint: "These are GEO gold: becoming the go-to source for category questions builds AI-model authority over time.",
         type: "textarea",
       },
-    ],
-  },
-  // Website Set-Up sections (Business Profile) — renumbered 1–6 per Patrick.
-  {
-    id: "fundamentals",
-    track: "web",
-    number: 1,
-    title: "Business & Brand Fundamentals",
-    subtitle: "Core identity: who you are and what you do",
-    icon: Building2,
-    intro:
-      "These answers underpin every piece of optimised content. Be as precise as possible: vague inputs produce vague outputs.",
-    fields: [
-      { id: "1.1", label: "Full legal name of the business or brand", type: "text" },
-      { id: "1.2", label: "Trading names, product names or sub-brands", type: "textarea" },
-      {
-        id: "1.3",
-        label: "In one sentence, what does the business do and for whom?",
-        hint: "Think: \"We help [audience] do [outcome] by [method].\" This becomes your AI-readable boilerplate.",
-        type: "textarea",
-      },
-      {
-        id: "1.4",
-        label: "Sector or industry",
-        hint: "Include sub-sectors if relevant. This shapes schema markup and entity classification.",
-        type: "text",
-      },
-      {
-        id: "1.5",
-        label: "Geographies of operation",
-        hint: "List all countries, regions or cities. Local entity signals are critical for GEO.",
-        type: "textarea",
-      },
-      {
-        id: "1.6",
-        label: "Years of operation and key trust signals",
-        hint: "e.g. founding year, accreditations, awards, notable clients, media coverage, certifications",
-        type: "textarea",
-      },
-      {
-        id: "1.7",
-        label: "Primary competitors",
-        hint: "Helps calibrate entity differentiation in AI model training contexts.",
-        type: "textarea",
-      },
-    ],
-  },
-  {
-    id: "priority",
-    track: "web",
-    number: 2,
-    title: "GEO vs AEO Priority Assessment",
-    subtitle: "Determine which optimisation approach should lead",
-    icon: Target,
-    intro:
-      "GEO (Generative Engine Optimisation) focuses on being cited by AI systems like ChatGPT, Claude and Gemini. AEO (Answer Engine Optimisation) focuses on appearing in direct-answer features.",
-    fields: [
-      { id: "h-biz", label: "Business Model Signals", type: "heading" },
-      {
-        id: "2.1",
-        label: "Primary sales or conversion path",
-        type: "checkbox",
-        options: [
-          "People find us via search, read our website, and contact us or buy directly",
-          "People discover us through press, podcasts, social or word of mouth, then research us",
-          "We rely heavily on being recommended by AI tools or voice assistants",
-          "We are a local / regional business where map and local search is critical",
-          "A mix (describe below)",
-        ],
-      },
-      { id: "2.1b", label: "If a mix, describe:", type: "textarea" },
-      {
-        id: "2.2",
-        label: "How best customers typically find you for the first time",
-        hint: "Rank the top 3 channels if you know them.",
-        type: "textarea",
-      },
-      {
-        id: "2.3",
-        label: "Decision speed",
-        type: "checkbox",
-        options: [
-          "Quick / transactional (minutes to hours)",
-          "Considered (days to weeks, research-heavy)",
-          "Complex / enterprise (months, multiple stakeholders)",
-        ],
-      },
-      { id: "h-vis", label: "Content & Visibility Signals", type: "heading" },
-      {
-        id: "2.4",
-        label: "Do you produce thought leadership, guides, reports or commentary that others cite?",
-        type: "checkbox",
-        options: [
-          "Yes, regularly and it performs well",
-          "Yes, but inconsistently",
-          "No: this is new territory for us",
-        ],
-      },
+      { id: "h-pcs", label: "Core Positioning, Products & Phrases", type: "heading" },
       {
         id: "2.5",
-        label: "Has your brand been mentioned in AI-generated answers?",
-        hint: "If yes: what context? Which tools? What is said?",
+        label: "Homepage descriptor or proposed positioning copy",
+        hint: "Enter your current homepage descriptor or your proposed positioning copy – no more than 50 words. (Was Website 5.1.)",
         type: "textarea",
       },
       {
         id: "2.6",
-        label: "Top customer questions before buying (up to 10)",
-        hint: "These become the backbone of your AEO FAQ and answer-first content strategy.",
+        label: "Each core product or service",
+        hint: "For each: name, one-sentence description, primary audience. (Was Website 5.2.)",
         type: "textarea",
       },
       {
         id: "2.7",
-        label: "Industry questions or topics where you have unique expertise or data",
+        label: "Search phrases and questions for each product or service area",
+        hint: "Think in questions as well as keywords. (Was Website 5.3.)",
         type: "textarea",
       },
     ],
   },
+  // ── PR Set-Up: Section 3 (moved from Web, with Patrick's copy edits) ──
   {
     id: "audience",
-    track: "web",
+    track: "pr",
     number: 3,
     title: "Audience & Intent Mapping",
     subtitle: "Who you're talking to and what they need to hear",
@@ -319,26 +258,143 @@ const sections: SectionDef[] = [
       },
       {
         id: "3.2",
-        label: "Language each audience uses when searching",
-        hint: "Include informal, colloquial and category-level terms, not just preferred terminology.",
+        label: "What phrases / language does each audience use when searching for your solutions?",
+        hint: "Include informal, colloquial, and category-level terms — not just your preferred terminology entered above. These populate your semantic phrase guide.",
         type: "textarea",
       },
       {
         id: "3.3",
-        label: "Pain points, frustrations or unmet needs",
+        label: "What are the most common pain points, frustrations, or unmet needs your audience has before finding you? What challenges do you solve – add as much detail as possible.",
         type: "textarea",
       },
       {
         id: "3.4",
-        label: "Outcomes the audience most wants to achieve",
+        label: "What outcome does your audience most want to achieve by using your product or service? Please provide examples and links to case studies or evidence.",
         type: "textarea",
       },
     ],
   },
+  // ── AIO Set-Up: Section 4 (Business & Brand Fundamentals) ────────────
+  {
+    id: "fundamentals",
+    track: "web",
+    number: 4,
+    title: "Business & Brand Fundamentals",
+    subtitle: "Core identity: who you are and what you do",
+    icon: Building2,
+    intro:
+      "These answers underpin every piece of optimised content. Be as precise as possible: vague inputs produce vague outputs.",
+    fields: [
+      { id: "4.1", label: "Full legal name of the business or brand", type: "text" },
+      { id: "4.2", label: "Trading names, product names or sub-brands", type: "textarea" },
+      {
+        id: "4.3",
+        label: "In one sentence, what does the business do and for whom?",
+        hint: "Think: \"We help [audience] do [outcome] by [method].\" This becomes your AI-readable boilerplate.",
+        type: "textarea",
+      },
+      {
+        id: "4.4",
+        label: "Sector or industry",
+        hint: "Include sub-sectors if relevant. This shapes schema markup and entity classification.",
+        type: "text",
+      },
+      {
+        id: "4.5",
+        label: "Geographies of operation",
+        hint: "List all countries, regions or cities. Local entity signals are critical for GEO.",
+        type: "textarea",
+      },
+      {
+        id: "4.6",
+        label: "Years of operation and key trust signals",
+        hint: "e.g. founding year, accreditations, awards, notable clients, media coverage, certifications",
+        type: "textarea",
+      },
+      {
+        id: "4.7",
+        label: "Primary competitors",
+        hint: "Helps calibrate entity differentiation in AI model training contexts.",
+        type: "textarea",
+      },
+    ],
+  },
+  // ── AIO Set-Up: Section 5 (GEO vs AEO Priority Assessment) ───────────
+  {
+    id: "priority",
+    track: "web",
+    number: 5,
+    title: "GEO vs AEO Priority Assessment",
+    subtitle: "Determine which optimisation approach should lead",
+    icon: Target,
+    intro:
+      "GEO (Generative Engine Optimisation) focuses on being cited by AI systems like ChatGPT, Claude and Gemini. AEO (Answer Engine Optimisation) focuses on appearing in direct-answer features.",
+    fields: [
+      { id: "h-biz", label: "Business Model Signals", type: "heading" },
+      {
+        id: "5.1",
+        label: "Primary sales or conversion path",
+        type: "checkbox",
+        options: [
+          "People find us via search, read our website, and contact us or buy directly",
+          "People discover us through press, podcasts, social or word of mouth, then research us",
+          "We rely heavily on being recommended by AI tools or voice assistants",
+          "We are a local / regional business where map and local search is critical",
+          "A mix (describe below)",
+        ],
+      },
+      { id: "5.1b", label: "If a mix, describe:", type: "textarea" },
+      {
+        id: "5.2",
+        label: "How best customers typically find you for the first time",
+        hint: "Rank the top 3 channels if you know them.",
+        type: "textarea",
+      },
+      {
+        id: "5.3",
+        label: "Decision speed",
+        type: "checkbox",
+        options: [
+          "Quick / transactional (minutes to hours)",
+          "Considered (days to weeks, research-heavy)",
+          "Complex / enterprise (months, multiple stakeholders)",
+        ],
+      },
+      { id: "h-vis", label: "Content & Visibility Signals", type: "heading" },
+      {
+        id: "5.4",
+        label: "Do you produce thought leadership, guides, reports or commentary that others cite?",
+        type: "checkbox",
+        options: [
+          "Yes, regularly and it performs well",
+          "Yes, but inconsistently",
+          "No: this is new territory for us",
+        ],
+      },
+      {
+        id: "5.5",
+        label: "Has your brand been mentioned in AI-generated answers?",
+        hint: "If yes: what context? Which tools? What is said?",
+        type: "textarea",
+      },
+      {
+        id: "5.6",
+        label: "Top customer questions before buying (up to 10)",
+        hint: "These become the backbone of your AEO FAQ and answer-first content strategy.",
+        type: "textarea",
+      },
+      {
+        id: "5.7",
+        label: "Industry questions or topics where you have unique expertise or data",
+        type: "textarea",
+      },
+    ],
+  },
+  // ── AIO Set-Up: Section 6 (Schema Markup & Technical Signals) ────────
   {
     id: "schema",
     track: "web",
-    number: 4,
+    number: 6,
     title: "Schema Markup & Technical Signals",
     subtitle: "Organization schema, robots.txt, AI crawlers and structured data",
     icon: ShieldCheck,
@@ -347,27 +403,27 @@ const sections: SectionDef[] = [
     fields: [
       { id: "h-os", label: "Organization Schema", type: "heading" },
       {
-        id: "7.1",
+        id: "6.1",
         label: "Registered business name, company number and registered address",
         hint: "Required for Organization schema. Must match Companies House or equivalent registry.",
         type: "textarea",
       },
-      { id: "7.2", label: "Website URL, primary phone and email", type: "textarea" },
+      { id: "6.2", label: "Website URL, primary phone and email", type: "textarea" },
       {
-        id: "7.3",
+        id: "6.3",
         label: "Social media profile URLs (all active channels)",
         type: "textarea",
       },
       {
-        id: "7.4",
+        id: "6.4",
         label: "Wikidata, Wikipedia or Crunchbase profile?",
         type: "checkbox",
         options: ["Yes (provide URLs below)", "No", "Not sure"],
       },
-      { id: "7.4b", label: "If yes, provide URLs:", type: "textarea" },
+      { id: "6.4b", label: "If yes, provide URLs:", type: "textarea" },
       { id: "h-ac", label: "AI Crawler Access", type: "heading" },
       {
-        id: "7.5",
+        id: "6.5",
         label: "AI crawler access via robots.txt",
         hint: "Key AI crawlers: GPTBot, ClaudeBot, Google-Extended, PerplexityBot, CCBot.",
         type: "checkbox",
@@ -378,71 +434,27 @@ const sections: SectionDef[] = [
           "We want to selectively control access",
         ],
       },
-      { id: "7.5b", label: "If some are blocked, specify:", type: "textarea" },
+      { id: "6.5b", label: "If some are blocked, specify:", type: "textarea" },
       {
-        id: "7.6",
+        id: "6.6",
         label: "Areas of the website you would not want AI crawlers to access",
         hint: "e.g. client portals, pricing pages, staging environments.",
         type: "textarea",
       },
       { id: "h-pt", label: "Page Tag Audit", type: "heading" },
       {
-        id: "7.7",
+        id: "6.7",
         label: "Most important website pages and their current H1 tags",
         hint: "H1–H3 tags are primary signals for AI content parsing.",
         type: "textarea",
       },
     ],
   },
-  {
-    id: "website",
-    track: "web",
-    number: 5,
-    title: "Website Content Architecture",
-    subtitle: "Answer-first copy, key takeaways and FAQ structure",
-    icon: Globe,
-    intro:
-      "AEO-optimised web pages lead with the answer, not the build-up. AI systems scan pages for direct, structured responses: pages that bury the answer in paragraph four are invisible to AI Overviews and voice search.",
-    fields: [
-      { id: "h-wd", label: "Core Website Description", type: "heading" },
-      {
-        id: "5.1",
-        label: "Homepage descriptor or proposed positioning copy",
-        hint: "Enter your current homepage descriptor or your proposed positioning copy – no more than 50 words.",
-        type: "textarea",
-      },
-      {
-        id: "5.2",
-        label: "Each core product or service",
-        hint: "For each: name, one-sentence description, primary audience.",
-        type: "textarea",
-      },
-      { id: "h-ws", label: "Semantic Phrase Guide: Website", type: "heading" },
-      {
-        id: "5.3",
-        label: "Search phrases and questions for each product or service area",
-        hint: "Think in questions as well as keywords.",
-        type: "textarea",
-      },
-      { id: "h-af", label: "Answer-First Page Copy", type: "heading" },
-      {
-        id: "5.4",
-        label: "Single question each key page must answer",
-        type: "textarea",
-      },
-      { id: "h-kt", label: "Key Takeaways", type: "heading" },
-      {
-        id: "5.5",
-        label: "5–8 most important facts every visitor should leave knowing",
-        hint: "These become structured key takeaways, summary boxes and schema-ready content.",
-        type: "textarea",
-      },
-    ],
-  },
+  // ── AIO Set-Up: Section 7 (Consistency Check) ────────────────────────
   {
     id: "consistency",
     track: "web",
-    number: 6,
+    number: 7,
     title: "Consistency Check",
     subtitle: "Cross-source consistency check across all existing content & citations",
     icon: Eye,
@@ -450,7 +462,7 @@ const sections: SectionDef[] = [
       "AI models build their understanding of your brand from multiple sources: your website, press coverage, directory listings, social profiles and third-party reviews. Inconsistency confuses AI entity recognition and dilutes your authority.",
     fields: [
       {
-        id: "8.1",
+        id: "7.1",
         label: "Is your business name, address and phone (NAP) consistent across all channels?",
         type: "checkbox",
         options: [
@@ -461,24 +473,24 @@ const sections: SectionDef[] = [
         ],
       },
       {
-        id: "8.2",
+        id: "7.2",
         label: "Has the business changed name, address, products or core description in the last 3 years?",
         hint: "If yes, list what changed and when.",
         type: "textarea",
       },
       {
-        id: "8.3",
+        id: "7.3",
         label: "URLs for most important third-party profiles and citations",
         hint: "e.g. Google Business Profile, Trustpilot, industry directories, Crunchbase, LinkedIn company page.",
         type: "textarea",
       },
       {
-        id: "8.4",
+        id: "7.4",
         label: "Outdated press releases, articles or web pages that describe your business inaccurately",
         type: "textarea",
       },
       {
-        id: "8.5",
+        id: "7.5",
         label: "Anything else we should know about your brand, content or competitive landscape?",
         type: "textarea",
       },
@@ -541,10 +553,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         INTAKE_KEY,
-        JSON.stringify({ formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt]);
+  }, [formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -580,8 +592,8 @@ export default function IntakePage() {
   const sectionHasData = (idx: number): boolean => {
     return visibleSections[idx].fields.some((f) => {
       if (f.type === "heading") return false;
-      if (f.id === "4.8") return spokespeople.length > 0;
-      if (f.id === "4.9") return mediaCategories.length > 0;
+      if (f.id === "1.8") return spokespeople.length > 0;
+      if (f.id === "1.9") return mediaCategories.length > 0;
       if (f.type === "dual") {
         const v = duals[f.id]; return !!(v && (v.short || v.long));
       }
@@ -599,8 +611,8 @@ export default function IntakePage() {
   );
   const filledFields = visibleSections.reduce((sum, sec) => {
     return sum + sec.fields.filter((f) => f.type !== "heading").reduce((s, f) => {
-      if (f.id === "4.8") return s + (spokespeople.length > 0 ? 1 : 0);
-      if (f.id === "4.9") return s + (mediaCategories.length > 0 ? 1 : 0);
+      if (f.id === "1.8") return s + (spokespeople.length > 0 ? 1 : 0);
+      if (f.id === "1.9") return s + (mediaCategories.length > 0 ? 1 : 0);
       if (f.type === "dual") {
         const v = duals[f.id]; return s + (v && (v.short || v.long) ? 1 : 0);
       }
@@ -613,6 +625,32 @@ export default function IntakePage() {
   }, 0);
   const progressPct = totalFields ? Math.round((filledFields / totalFields) * 100) : 0;
 
+  // Full-form completion across BOTH PR and AIO tracks (independent of which
+  // track is currently visible). Used to gate "Optimise Project Messages".
+  const allTrackProgress = useMemo(() => {
+    let total = 0; let filled = 0;
+    sections.forEach((sec) => {
+      sec.fields.forEach((f) => {
+        if (f.type === "heading") return;
+        total += 1;
+        if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
+        if (f.id === "1.9") { if (mediaCategories.length > 0) filled += 1; return; }
+        if (f.type === "dual") {
+          const v = duals[f.id]; if (v && (v.short || v.long)) filled += 1; return;
+        }
+        if (f.type === "dual-list") {
+          const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
+        }
+        if (f.type === "checkbox") {
+          const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
+        }
+        const v = formData[f.id];
+        if (typeof v === "string" && v.trim().length > 0) filled += 1;
+      });
+    });
+    return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
+  }, [formData, duals, dualLists, spokespeople, mediaCategories]);
+
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
   );
@@ -624,6 +662,111 @@ export default function IntakePage() {
     if (intakeStatus === "Optimised") return { bg: "rgba(40,150,185,0.12)", color: vars.teal, label: "Optimised" };
     return { bg: "rgba(212,146,42,0.14)", color: vars.amber, label: "Draft" };
   })();
+
+  // ── Optimise / Reject / Accept / Edit / Download flow ──────────────
+  const [preOptimiseSnapshot, setPreOptimiseSnapshot] = useState<{
+    formData: Record<string, string | string[]>;
+    duals: Record<string, DualValue>;
+    dualLists: Record<string, DualListValue>;
+  } | null>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
+    return null;
+  });
+
+  const isFullyComplete = allTrackProgress.pct === 100;
+  const isOptimisedField = (id: string) =>
+    intakeStatus === "Optimised" && (OPTIMISED_FIELD_IDS as readonly string[]).includes(id);
+
+  const runOptimisation = () => {
+    // Snapshot current values for the 5 messaging fields so Reject can restore.
+    const snapFormData: Record<string, string | string[]> = {};
+    const snapDuals: Record<string, DualValue> = {};
+    const snapDualLists: Record<string, DualListValue> = {};
+    OPTIMISED_FIELD_IDS.forEach((id) => {
+      if (formData[id] !== undefined) snapFormData[id] = formData[id];
+      if (duals[id] !== undefined) snapDuals[id] = duals[id];
+      if (dualLists[id] !== undefined) snapDualLists[id] = dualLists[id];
+    });
+    setPreOptimiseSnapshot({ formData: snapFormData, duals: snapDuals, dualLists: snapDualLists });
+    setFormData((prev) => ({ ...prev, ...MOCK_OPTIMISED_FORM_DATA }));
+    setDuals((prev) => ({ ...prev, ...MOCK_OPTIMISED_DUALS }));
+    setDualLists((prev) => ({ ...prev, ...MOCK_OPTIMISED_DUAL_LISTS }));
+    setIntakeStatus("Optimised");
+    setShowOptimiseModal(false);
+    setActiveSection(0);
+    setTrack("pr");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const rejectOptimised = () => {
+    if (!preOptimiseSnapshot) {
+      setIntakeStatus("Draft");
+      return;
+    }
+    setFormData((prev) => {
+      const next = { ...prev };
+      OPTIMISED_FIELD_IDS.forEach((id) => {
+        if (preOptimiseSnapshot.formData[id] !== undefined) next[id] = preOptimiseSnapshot.formData[id];
+        else delete next[id];
+      });
+      return next;
+    });
+    setDuals((prev) => {
+      const next = { ...prev };
+      OPTIMISED_FIELD_IDS.forEach((id) => {
+        if (preOptimiseSnapshot.duals[id] !== undefined) next[id] = preOptimiseSnapshot.duals[id];
+        else delete next[id];
+      });
+      return next;
+    });
+    setDualLists((prev) => {
+      const next = { ...prev };
+      OPTIMISED_FIELD_IDS.forEach((id) => {
+        if (preOptimiseSnapshot.dualLists[id] !== undefined) next[id] = preOptimiseSnapshot.dualLists[id];
+        else delete next[id];
+      });
+      return next;
+    });
+    setPreOptimiseSnapshot(null);
+    setIntakeStatus("Draft");
+  };
+
+  const acceptProjectData = () => {
+    const stamp = new Date().toISOString();
+    setIntakeStatus("Accepted");
+    setAcceptedAt(stamp);
+    setPreOptimiseSnapshot(null);
+    try {
+      const raw = localStorage.getItem(PROJECT_DATA_ARCHIVE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      arr.unshift({
+        id: `pd-${Date.now()}`,
+        acceptedAt: stamp,
+        projectName: (formData["4.1"] as string) || "(unnamed project)",
+        formData,
+        duals,
+        dualLists,
+        spokespeople,
+        mediaCategories,
+      });
+      localStorage.setItem(PROJECT_DATA_ARCHIVE_KEY, JSON.stringify(arr.slice(0, 50)));
+    } catch { /* noop */ }
+    alert("Project Data accepted and saved to the dedicated Project Data archive. The signed-off brief is now available to Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO Content and Website Technical GEO.");
+  };
+
+  const editProjectData = () => {
+    setTrack("pr");
+    setActiveSection(0);
+    setIntakeStatus("Draft");
+    setAcceptedAt(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const downloadProjectData = () => {
+    // Demo: browser print dialog → user picks "Save as PDF". Works for any
+    // status (incomplete / optimised / accepted) per Patrick's spec.
+    window.print();
+  };
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
@@ -649,8 +792,8 @@ export default function IntakePage() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex flex-col sm:flex-row gap-2">
               {([
-                { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging" },
-                { key: "web" as Track, primary: "Website Set-Up", subtitle: "Business Profile" },
+                { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)" },
+                { key: "web" as Track, primary: "AIO Set-Up", subtitle: "Business Profile (Sections 4–7)" },
               ]).map((t) => {
                 const isActive = track === t.key;
                 return (
@@ -770,7 +913,7 @@ export default function IntakePage() {
                     );
                   }
 
-                  if (field.id === "4.8") {
+                  if (field.id === "1.8") {
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} />
@@ -807,7 +950,7 @@ export default function IntakePage() {
                     );
                   }
 
-                  if (field.id === "4.9") {
+                  if (field.id === "1.9") {
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} />
@@ -849,6 +992,7 @@ export default function IntakePage() {
 
                   if (field.type === "dual") {
                     const v = duals[field.id] || { short: "", long: "" };
+                    const dualColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} />
@@ -860,7 +1004,7 @@ export default function IntakePage() {
                               onChange={(e) => setDual(field.id, "short", e.target.value)}
                               placeholder={field.shortPlaceholder}
                               className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
                             />
                           </div>
                           <div>
@@ -871,7 +1015,7 @@ export default function IntakePage() {
                               placeholder={field.longPlaceholder}
                               rows={2}
                               className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
                             />
                           </div>
                         </div>
@@ -881,6 +1025,7 @@ export default function IntakePage() {
 
                   if (field.type === "dual-list") {
                     const list = dualLists[field.id] || [];
+                    const listColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} />
@@ -900,7 +1045,7 @@ export default function IntakePage() {
                                   onChange={(e) => updateDualListItem(field.id, i, "short", e.target.value)}
                                   placeholder={field.shortPlaceholder || "≤6 words"}
                                   className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
-                                  style={{ borderColor: vars.g200 }}
+                                  style={{ borderColor: vars.g200, color: listColor }}
                                 />
                                 <textarea
                                   value={item.long}
@@ -908,7 +1053,7 @@ export default function IntakePage() {
                                   placeholder={field.longPlaceholder || "≤25 words"}
                                   rows={2}
                                   className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
-                                  style={{ borderColor: vars.g200 }}
+                                  style={{ borderColor: vars.g200, color: listColor }}
                                 />
                               </div>
                             </div>
@@ -950,6 +1095,7 @@ export default function IntakePage() {
                     );
                   }
 
+                  const baseColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                   return (
                     <div key={field.id}>
                       <FieldLabel id={displayId} label={field.label} hint={field.hint} />
@@ -959,7 +1105,7 @@ export default function IntakePage() {
                           onChange={(e) => updateField(field.id, e.target.value)}
                           rows={4}
                           className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
-                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                           placeholder="Type your answer here..."
                         />
                       ) : (
@@ -968,7 +1114,7 @@ export default function IntakePage() {
                           value={(formData[field.id] as string) || ""}
                           onChange={(e) => updateField(field.id, e.target.value)}
                           className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A]"
-                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                           placeholder="Type your answer here..."
                         />
                       )}
@@ -1027,15 +1173,29 @@ export default function IntakePage() {
         </div>
       </div>
 
-      {/* Project Data Actions — moved to bottom so it appears after data entry */}
+      {/* Project Data Actions — bottom panel, sits after data entry per Patrick's spec */}
       <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+          </div>
+          {intakeStatus === "Optimised" && (
+            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
+              <Info size={12} />
+              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> — Accept, Edit or Reject below</span>
+            </div>
+          )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           <button
-            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+            onClick={() => {
+              if (window.confirm("Create a fresh Project Data report? This will reset the current draft to a blank state.")) {
+                setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setMediaCategories([]);
+                setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
+                setCompleted(new Set()); setActiveSection(0); setTrack("pr");
+              }
+            }}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
             style={{ background: "#FBF6EC", color: "#102B36" }}
             title="Reset and draft a fresh Project Data report"
@@ -1043,29 +1203,27 @@ export default function IntakePage() {
             <Plus size={13} /> Create
           </button>
           <button
-            onClick={() => { setShowOptimiseModal(true); }}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+            onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
+            disabled={!isFullyComplete}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: "#C8497A" }}
-            title="Send Parts 4.1–4.5 to the LLM optimiser"
+            title={isFullyComplete ? "Send Parts 1.1, 1.2, 1.3, 1.6 and 2.4 to the LLM optimiser" : `Complete every field across all 7 sections (PR + AIO) to enable — currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
           >
-            <Sparkles size={13} /> Optimise
+            <Sparkles size={13} /> Optimise Project Messages
           </button>
           <button
-            onClick={() => {
-              setIntakeStatus("Accepted");
-              setAcceptedAt(new Date().toISOString());
-              alert("Project Data accepted. The signed-off brief is now available to every other module.");
-            }}
+            onClick={acceptProjectData}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
             style={{ background: vars.green }}
-            title="Sign off the Project Data — locks it in for downstream modules"
+            title="Sign off the Project Data and save it to the Project Data archive"
           >
             <FileCheck2 size={13} /> Accept
           </button>
           <button
             onClick={() => {
-              setIntakeStatus("Draft");
-              alert("Optimised copy rejected. Project Data reverted to Draft so you can edit the original messaging.");
+              if (window.confirm("Discard the LLM-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
+                rejectOptimised();
+              }
             }}
             disabled={intakeStatus !== "Optimised"}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1075,12 +1233,20 @@ export default function IntakePage() {
             <XCircle size={13} /> Reject Optimised
           </button>
           <button
-            onClick={() => { setIntakeStatus("Draft"); setAcceptedAt(null); }}
+            onClick={editProjectData}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
             style={{ background: "#C94A3E" }}
-            title="Re-open the Project Data for editing"
+            title="Re-open the Project Data for editing — jumps to PR Set-Up Section 1"
           >
             <Pencil size={13} /> Edit
+          </button>
+          <button
+            onClick={downloadProjectData}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
+            style={{ background: "#FBF6EC", color: "#102B36" }}
+            title="Open the browser print dialog so you can save the full Project Data as a PDF"
+          >
+            <Download size={13} /> Download
           </button>
         </div>
       </div>
@@ -1142,23 +1308,22 @@ export default function IntakePage() {
           <div className="bg-white rounded-2xl max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
               <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                <Sparkles size={16} color={vars.teal} /> Optimise Project Data
+                <Sparkles size={16} color={vars.teal} /> Optimise Project Messages
               </h2>
               <button onClick={() => setShowOptimiseModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6">
               <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>LLM brief</p>
               <div className="rounded-xl p-4 mb-4 text-[13px] leading-relaxed font-light" style={{ background: "rgba(40,150,185,0.05)", border: `1px solid rgba(40,150,185,0.15)`, color: vars.g600 }}>
-                Using all the information about this company contained in this report, optimise the content in Parts 4.1 – 4.5 for authority in earned media and align recommendations for 4.1–4.5 with website content included in 5.1 – 5.6 to achieve maximum visibility with LLM agents.
+                Using all the information about this company contained in the Project Data, optimise the PR messaging content in Parts <strong>1.1, 1.2, 1.3, 1.6 and 2.4</strong> of PR Set-Up for authority in earned media and AI-generated answers. Cross-reference AIO Set-Up Sections 4–7 (business fundamentals, GEO/AEO priority, schema and consistency) and PR Set-Up Sections 2.5–2.7 (positioning copy, products / services, search phrases) to maximise visibility with LLM agents. Return optimised copy in the same field structure so it can be reviewed in red and accepted, edited or rejected.
               </div>
+              <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
+                Optimised copy will replace the values in Parts 1.1, 1.2, 1.3, 1.6 and 2.4 and be displayed in red. You can Accept, Edit or Reject the optimised copy from the Project Data Actions panel.
+              </p>
               <div className="flex justify-end gap-2">
                 <button onClick={() => setShowOptimiseModal(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
                 <button
-                  onClick={() => {
-                    setIntakeStatus("Optimised");
-                    setShowOptimiseModal(false);
-                    alert("Project Data optimised. Review the suggested edits, then click 'Accept Project Data' to sign off.");
-                  }}
+                  onClick={runOptimisation}
                   className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white"
                   style={{ background: vars.teal }}
                 >
@@ -1240,15 +1405,15 @@ export function getKeyMessages(): { short: string; long: string; tag: string }[]
       { short: "Predict, don't guess", long: "Predict the AI authority score of every campaign before you commit budget.", tag: "Secondary 2" },
     ];
   }
-  const primary = data.duals["4.2"];
+  const primary = data.duals["1.2"];
   if (primary && (primary.short || primary.long)) {
     out.push({ short: primary.short, long: primary.long, tag: "Primary" });
   }
-  const additional = data.dualLists["4.3"] || [];
+  const additional = data.dualLists["1.3"] || [];
   additional.forEach((m, i) => {
     if (m.short || m.long) out.push({ short: m.short, long: m.long, tag: `Secondary ${i + 1}` });
   });
-  return out.length > 0 ? out : [{ short: "Primary message not yet set", long: "Add your primary message in Project Set-Up section 4.2.", tag: "Primary" }];
+  return out.length > 0 ? out : [{ short: "Primary message not yet set", long: "Add your primary message in Project Set-Up section 1.2.", tag: "Primary" }];
 }
 
 export function getSpokespeople(): Spokesperson[] {

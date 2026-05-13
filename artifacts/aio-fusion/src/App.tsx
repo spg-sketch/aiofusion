@@ -1875,7 +1875,7 @@ function OptimiserPage({
                     }
                     <option value="NA">NA — no spokesperson</option>
                   </select>
-                  <InfoTip text="Pulled from Section 4.8 of the Project Set-Up. NA is allowed for company-issued content." />
+                  <InfoTip text="Pulled from Section 1.8 of the Project Set-Up. NA is allowed for company-issued content." />
                 </div>
               </Labelled>
               <Labelled label="LLM Target">
@@ -1889,7 +1889,7 @@ function OptimiserPage({
             </div>
 
             {/* Row 3 — Key messages multi (4.2/4.3) */}
-            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 4.2 + 4.3">
+            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1.2 + 1.3">
               {keyMessages.length === 0 ? (
                 <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
                   <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
@@ -1936,7 +1936,7 @@ function OptimiserPage({
             </Labelled>
 
             {/* Row 4 — Media categories (replaces Purpose) */}
-            <Labelled label="Select Media Categories" hint="Multi-select from Section 4.9">
+            <Labelled label="Select Media Categories" hint="Multi-select from Section 1.9">
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowCatPicker(true)} className="flex-1 text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between" style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}>
                   <span>{mediaCats.length === 0 ? "Choose categories…" : `${mediaCats.length} categor${mediaCats.length === 1 ? "y" : "ies"} selected`}</span>
@@ -2510,7 +2510,7 @@ function OptimiserPage({
           <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief — what we send to the model</p>
             <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-              "Using the accepted Project Data for {intake?.formData["1.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 4.1–4.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
+              "Using the accepted Project Data for {intake?.formData["4.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 1.1–1.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
             </p>
           </div>
         )}
@@ -2973,7 +2973,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Key message</label>
                 {plannerKeyMessages.length === 0 ? (
                   <div className="rounded-lg border p-2.5 text-[12px] font-light italic" style={{ borderColor: vars.g200, color: vars.g400, background: "white" }}>
-                    No key messages set. Add them in <button type="button" onClick={() => onNavigate("intake")} className="underline" style={{ color: "#C8497A" }}>Project Set-Up</button> (sections 4.2 + 4.3).
+                    No key messages set. Add them in <button type="button" onClick={() => onNavigate("intake")} className="underline" style={{ color: "#C8497A" }}>Project Set-Up</button> (sections 1.2 + 1.3).
                   </div>
                 ) : (
                   <select
@@ -3943,7 +3943,7 @@ function ReleaseGatewayPage() {
 
 function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const intake = loadIntakeData();
-  const projectName = (intake?.formData["1.1"] as string) || "your project";
+  const projectName = (intake?.formData["4.1"] as string) || "your project";
   const keyMessages = getKeyMessages();
   const intakeSpeakers = getSpokespeople();
 
@@ -4064,7 +4064,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
           </div>
           <div className="lg:col-span-3">
             <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>
-              Project Message <span className="font-light">(multi-select from 4.2 + 4.3)</span>
+              Project Message <span className="font-light">(multi-select from 1.2 + 1.3)</span>
             </label>
             <div className="rounded-lg border p-2 min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: "white" }}>
               {keyMessages.length === 0 && (
@@ -4150,8 +4150,8 @@ function GeoContentPage() {
   ];
   const recommendations = [
     { page: "/products", priority: "High", action: "Add structured product schema (Product + Offer markup) and Q&A snippets for top 5 questions.", impact: "+18 LLM citation likelihood" },
-    { page: "/leadership", priority: "High", action: "Add Person schema with credentials, link spokesperson LinkedIn URLs from Project Set-Up 4.8.", impact: "+22 expert authority signal" },
-    { page: "/about", priority: "Medium", action: "Embed core key messages from Project Set-Up 4.2 verbatim in opening paragraph.", impact: "+12 message consistency" },
+    { page: "/leadership", priority: "High", action: "Add Person schema with credentials, link spokesperson LinkedIn URLs from Project Set-Up 1.8.", impact: "+22 expert authority signal" },
+    { page: "/about", priority: "Medium", action: "Embed core key messages from Project Set-Up 1.2 verbatim in opening paragraph.", impact: "+12 message consistency" },
     { page: "/services", priority: "Medium", action: "Add FAQ block answering top 8 buyer questions with conversational phrasing.", impact: "+15 answer-engine match" },
     { page: "/insights", priority: "Low", action: "Strengthen internal linking — add author-byline links pointing to leadership pages.", impact: "+8 internal authority graph" },
   ];
@@ -4160,7 +4160,7 @@ function GeoContentPage() {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Website Content GEO</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (Section 5).</p>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (PR sections 2.5–2.7).</p>
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -4172,7 +4172,7 @@ function GeoContentPage() {
             <button onClick={() => alert("Action report downloaded (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: vars.cream, color: vars.navy, border: `1px solid ${vars.g200}` }}>
               <Download size={14} /> Download Action Report
             </button>
-            <button onClick={() => alert("Recommendations pushed to Project Set-Up Section 5 (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: "white", color: vars.accent, border: `1px solid ${vars.accent}` }}>
+            <button onClick={() => alert("Recommendations pushed to PR Set-Up sections 2.5–2.7 (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: "white", color: vars.accent, border: `1px solid ${vars.accent}` }}>
               <Zap size={14} /> Push to Project Set-Up
             </button>
           </>
@@ -4255,7 +4255,7 @@ function GeoContentPage() {
         <div className="bg-white border rounded-xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Globe size={40} color={vars.g300} className="mx-auto mb-4" />
           <h3 className="text-[16px] font-semibold mb-2" style={{ color: vars.navy }}>Ready to scan</h3>
-          <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>Click <strong>Scan Site Content</strong> to audit your core message pages against your Project Data Section 5 inputs and generate an itemised action report.</p>
+          <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>Click <strong>Scan Site Content</strong> to audit your core message pages against your Project Data PR sections 2.5–2.7 inputs and generate an itemised action report.</p>
         </div>
       )}
 
@@ -4268,7 +4268,7 @@ function GeoContentPage() {
           <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief used by this tool</p>
             <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-              "Using Project Data Section 5 (website content set-up), score the alignment between each core page and the business's PR key messages (Project Data 4.2 + 4.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood."
+              "Using Project Data PR sections 2.5–2.7 (positioning copy, products / services, search phrases), score the alignment between each core page and the business's PR key messages (Project Data 1.2 + 1.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood."
             </p>
           </div>
         )}
@@ -4337,7 +4337,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const spokesList = getSpokespeople();
   const projectCategories = getProjectMediaCategories();
 
-  const [projectName, setProjectName] = useState(() => (intake?.formData["1.1"] as string) || "");
+  const [projectName, setProjectName] = useState(() => (intake?.formData["4.1"] as string) || "");
   const [contentType, setContentType] = useState("Article");
   const [headline, setHeadline] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -4418,7 +4418,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </Labelled>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Labelled label="Spokesperson" hint="Pulled from the Project Data spokesperson list (4.8).">
+          <Labelled label="Spokesperson" hint="Pulled from the Project Data spokesperson list (1.8).">
             <select value={spokesperson} onChange={(e) => onPickSpokesperson(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
               <option value="">— Select spokesperson —</option>
               <option value="NA">NA</option>
@@ -4430,7 +4430,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
-        <Labelled label="Media target" hint="Multi-select drawn from the Trade Media Categories list (4.9).">
+        <Labelled label="Media target" hint="Multi-select drawn from the Trade Media Categories list (1.9).">
           <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
             {mediaTarget.length === 0 ? (
               <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected — pick from the project categories or the full alphabetical list.</p>
@@ -4452,7 +4452,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
                 onClick={() => setMediaTarget(Array.from(new Set([...mediaTarget, ...projectCategories])))}
                 className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
                 style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
-                title={`Add the ${projectCategories.length} categories selected in Project Set-Up 4.9`}
+                title={`Add the ${projectCategories.length} categories selected in Project Set-Up 1.9`}
               >
                 Use Project Set-Up categories ({projectCategories.length})
               </button>
@@ -4685,7 +4685,7 @@ function MediaResearchPage() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: "#C8497A" }}>Recommend Journalists</p>
               <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-                "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 4.9 trade media categories."
+                "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 1.9 trade media categories."
               </p>
             </div>
           </div>
