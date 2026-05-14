@@ -4339,6 +4339,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const [projectName, setProjectName] = useState(() => (intake?.formData["4.1"] as string) || "");
   const [contentType, setContentType] = useState("Article");
+  const [articleHeadline, setArticleHeadline] = useState("");
+  const [standfirst, setStandfirst] = useState("");
   const [headline, setHeadline] = useState("");
   const [transcript, setTranscript] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
@@ -4349,8 +4351,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [pubDate, setPubDate] = useState("");
   const [showCatPicker, setShowCatPicker] = useState(false);
 
+  const articleHeadlineWords = countWords(articleHeadline);
+  const standfirstWords = countWords(standfirst);
   const headlineWords = countWords(headline);
   const transcriptWords = countWords(transcript);
+  const articleHeadlineOver = articleHeadlineWords > 20;
+  const standfirstOver = standfirstWords > 50;
   const headlineOver = headlineWords > 150;
   const transcriptOver = transcriptWords > 3000;
 
@@ -4364,7 +4370,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const items = loadArchive();
     const item: ArchiveItem = {
       id: `arch-${Date.now()}`,
-      title: headline.split("\n")[0].slice(0, 120) || projectName || "Untitled draft",
+      title: articleHeadline.trim().slice(0, 120) || headline.split("\n")[0].slice(0, 120) || projectName || "Untitled draft",
       contentType,
       spokesperson,
       status: contentStatus === "Final" ? "Final" : "Draft",
@@ -4377,7 +4383,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   };
 
   const downloadDoc = () => {
-    const txt = `Project: ${projectName}\nContent type: ${contentType}\nSpokesperson: ${spokesperson}\nLinkedIn: ${spokesLi}\nMedia target: ${mediaTarget.join(", ")}\nStatus: ${contentStatus}\nPublication date: ${pubDate || "TBD"}\n\nHEADLINE / IDEA\n${headline}\n\nTRANSCRIPT / NOTES\n${transcript}\n`;
+    const txt = `Project: ${projectName}\nContent type: ${contentType}\nSpokesperson: ${spokesperson}\nLinkedIn: ${spokesLi}\nMedia target: ${mediaTarget.join(", ")}\nStatus: ${contentStatus}\nPublication date: ${pubDate || "TBD"}\n\nHEADLINE\n${articleHeadline}\n\nSTANDFIRST SUMMARY\n${standfirst}\n\nPITCH IDEA / NEWS HOOK\n${headline}\n\nTRANSCRIPT / NOTES\n${transcript}\n`;
     const blob = new Blob([txt], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `${projectName || "creator-brief"}.txt`; a.click();
@@ -4429,7 +4435,30 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </div>
         </div>
 
-        <Labelled label="Headline / subject" hint={`Up to 150 words for the brief idea or angle. (${headlineWords} / 150)`}>
+        <Labelled label="Headline" hint={`The article headline as it will appear in print — short, bold and punchy. (${articleHeadlineWords} / 20 words)`}>
+          <input
+            value={articleHeadline}
+            onChange={(e) => setArticleHeadline(e.target.value)}
+            placeholder="e.g. AI Authority is the New PR Battleground"
+            className="w-full px-3 py-3 rounded-lg border font-bold"
+            style={{ borderColor: articleHeadlineOver ? vars.red : vars.g200, fontSize: `${Math.round(editorFontSize * 1.45)}px`, color: vars.navy, lineHeight: 1.25, fontFamily: "'Alice', Georgia, serif" }}
+          />
+          {articleHeadlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 20-word limit by {articleHeadlineWords - 20} words.</p>}
+        </Labelled>
+
+        <Labelled label="Standfirst summary" hint={`The short summary that sits under the headline and previews the article. (${standfirstWords} / 50 words)`}>
+          <textarea
+            value={standfirst}
+            onChange={(e) => setStandfirst(e.target.value)}
+            rows={2}
+            placeholder="A one-or-two sentence preview that hooks the reader into the article…"
+            className="w-full px-3 py-2.5 rounded-lg border italic"
+            style={{ borderColor: standfirstOver ? vars.red : vars.g200, fontSize: `${Math.round(editorFontSize * 1.1)}px`, color: vars.g600, lineHeight: 1.45 }}
+          />
+          {standfirstOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 50-word limit by {standfirstWords - 50} words.</p>}
+        </Labelled>
+
+        <Labelled label="Pitch idea / news hook" hint={`Up to 150 words for the angle, news hook and supporting reasoning. (${headlineWords} / 150)`}>
           <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border" style={{ borderColor: headlineOver ? vars.red : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.5 }} />
           {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
         </Labelled>
