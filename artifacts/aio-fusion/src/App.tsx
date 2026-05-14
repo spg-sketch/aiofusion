@@ -1635,7 +1635,6 @@ function OptimiserPage({
   const spokesList = getSpokespeople();
   const projectCategories = getProjectMediaCategories();
 
-  const [showResults, setShowResults] = useState(false);
   const [projectTitle, setProjectTitle] = useState("");
   const [contentType, setContentType] = useState("Press release");
   const [spokesperson, setSpokesperson] = useState<string>(spokesList[0]?.name || "NA");
@@ -1644,12 +1643,22 @@ function OptimiserPage({
   const [contentStatus, setContentStatus] = useState<"Draft" | "Review" | "Final">("Draft");
   const [pubDate, setPubDate] = useState("");
   const [llmTarget, setLlmTarget] = useState("General (All LLMs)");
-  const [bodyText, setBodyText] = useState("");
+  const [articleHeadline, setArticleHeadline] = useState("");
+  const [standfirst, setStandfirst] = useState("");
+  const [bodyCopy, setBodyCopy] = useState("");
+  const [editorFontSize, setEditorFontSize] = useState<number>(13);
+  const [optimised, setOptimised] = useState(false);
+  const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; bodyCopy: string } | null>(null);
+  const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
   const [showRetrieve, setShowRetrieve] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showMsgPicker, setShowMsgPicker] = useState(false);
   const [showLLMBrief, setShowLLMBrief] = useState(false);
+  const [showOptimiseBriefModal, setShowOptimiseBriefModal] = useState(false);
   const [retrieveQuery, setRetrieveQuery] = useState("");
+
+  const PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
+  const promptVariant: "prompt1" | "prompt2" = PROMPT_1_TYPES.includes(contentType) ? "prompt1" : "prompt2";
 
   const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
   const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
@@ -1674,7 +1683,10 @@ function OptimiserPage({
       setProjectTitle(arc.title);
       setContentType(arc.contentType);
       if (arc.spokesperson) setSpokesperson(arc.spokesperson);
-      if (arc.body) setBodyText(arc.body);
+      const parts = splitArchiveBody(arc);
+      setArticleHeadline(parts.headline);
+      setStandfirst(parts.standfirst);
+      setBodyCopy(parts.bodyCopy);
     }
   }, []);
 
@@ -1682,7 +1694,10 @@ function OptimiserPage({
     setProjectTitle(a.title);
     setContentType(a.contentType);
     if (a.spokesperson) setSpokesperson(a.spokesperson);
-    if (a.body) setBodyText(a.body);
+    const parts = splitArchiveBody(a);
+    setArticleHeadline(parts.headline);
+    setStandfirst(parts.standfirst);
+    setBodyCopy(parts.bodyCopy);
     setShowRetrieve(false);
   };
 
@@ -1695,7 +1710,10 @@ function OptimiserPage({
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status,
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), ...mediaCats.slice(0, 3).map((c) => c.toLowerCase().replace(/\s+/g, "-"))],
-      body: bodyText || "Optimised content body. (Demo)",
+      body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n") || "Optimised content body. (Demo)",
+      headline: articleHeadline,
+      standfirst: standfirst,
+      bodyCopy: bodyCopy,
       createdAt: new Date().toISOString(),
     };
     saveArchive([item, ...items]);
@@ -1732,7 +1750,7 @@ function OptimiserPage({
   };
   const downloadDraft = () => {
     const blob = new Blob([
-      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "—"}\n\n---\n\n${bodyText || "(no body content)"}`,
+      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "—"}\n\n---\n\nHEADLINE\n${articleHeadline || "(no headline)"}\n\nSTANDFIRST\n${standfirst || "(no standfirst)"}\n\nBODY COPY\n${bodyCopy || "(no body content)"}`,
     ], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1751,7 +1769,10 @@ function OptimiserPage({
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status: "Draft",
       tags: [contentType.toLowerCase().replace(/\s+/g, "-")],
-      body: bodyText,
+      body: [articleHeadline, standfirst, bodyCopy].filter(Boolean).join("\n\n"),
+      headline: articleHeadline,
+      standfirst: standfirst,
+      bodyCopy: bodyCopy,
       createdAt: new Date().toISOString(),
     }, ...items]);
     try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
@@ -1811,8 +1832,67 @@ function OptimiserPage({
     },
   ];
 
-  if (!showResults) {
-    return (
+  const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
+
+  const runOptimise = () => {
+    if (!hasAnyContent) {
+      alert("Add some content first — at least a headline, standfirst or body copy.");
+      return;
+    }
+    setOptimiseSnapshot({ articleHeadline, standfirst, bodyCopy });
+    const msgs = keyMessages;
+    const selected = selectedMessages.length > 0 ? selectedMessages : msgs.slice(0, 3).map((m) => m.short || m.long);
+    const m1 = selected[0] || "AI authority";
+    const m2 = selected[1] || "expert spokesperson";
+    const m3 = selected[2] || "measurable earned-media impact";
+
+    const newHeadline = articleHeadline
+      ? articleHeadline.replace(/\.$/, "") + ` — ${m1}`
+      : `${projectTitle || "Bluhalo"}: ${m1}`;
+    const newStandfirst = standfirst
+      ? `${standfirst.replace(/\.$/, "")} — building on ${m2} and proving ${m3}.`
+      : `A look at how ${m2} is reshaping the conversation around ${m1}, and what it means for ${m3}.`;
+    const newBody = bodyCopy
+      ? `${bodyCopy}\n\n— Optimisation pass: opening restructured for answer-first retrieval, "${m1}" woven into the intro, "${m2}" anchored mid-section, and "${m3}" surfaced in the closing proof-point.`
+      : bodyCopy;
+
+    setArticleHeadline(newHeadline);
+    setStandfirst(newStandfirst);
+    setBodyCopy(newBody);
+    setChangeLog([
+      { kind: "structure", text: `Rewrote the headline to lead with "${m1}" — strongest LLM-citation anchor for ${projectTitle || "this project"}.` },
+      { kind: "embed", text: `Embedded "${m1}" verbatim in the headline and opening sentence of the standfirst.` },
+      { kind: "embed", text: `Embedded "${m2}" mid-paragraph in the standfirst as the bridge between hook and body.` },
+      { kind: "embed", text: `Embedded "${m3}" in the closing sentence of the body copy as a measurable proof-point.` },
+      { kind: "structure", text: `Reordered the body opening so the news hook leads, followed by spokesperson attribution, then supporting evidence — improves both reader pull-through and LLM extractability.` },
+      ...(promptVariant === "prompt2" ? [{ kind: "structure" as const, text: `Added a counter-argument paragraph rebutting the strongest opposing view — signals intellectual rigour to both readers and LLMs (Prompt 2 enhancement).` }] : []),
+      ...(selected[3] ? [{ kind: "flag" as const, text: `Could not embed "${selected[3]}" naturally — it overlaps thematically with "${m1}". Recommend using it on the spokesperson LinkedIn post instead.` }] : []),
+      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 — used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
+    ]);
+    setOptimised(true);
+    setShowOptimiseBriefModal(false);
+  };
+
+  const rejectOptimised = () => {
+    if (!optimiseSnapshot) return;
+    if (!window.confirm("Discard the optimised version and restore the copy you originally entered?")) return;
+    setArticleHeadline(optimiseSnapshot.articleHeadline);
+    setStandfirst(optimiseSnapshot.standfirst);
+    setBodyCopy(optimiseSnapshot.bodyCopy);
+    setOptimiseSnapshot(null);
+    setChangeLog([]);
+    setOptimised(false);
+  };
+
+  const promptHeadline = promptVariant === "prompt1"
+    ? `LLM Optimisation Prompt 1 — Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
+    : `LLM Optimisation Prompt 2 — Article, Whitepaper, Blog post, Social post`;
+
+  const promptBriefShort = promptVariant === "prompt1"
+    ? `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} for maximum authority, discoverability and accurate representation by LLMs. Retain all facts, titles and structure. Embed the selected key messages verbatim only where they sit naturally. Apply entity clarity, semantic authority signals, citation-ready phrasing, natural-language query alignment, structured clarity and tone discipline. Return the rewritten document plus a bullet-pointed CHANGE LOG noting where each key message was embedded and flagging any that could not be embedded naturally.`
+    : `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} attributed to ${spokesperson === "NA" ? "the company" : spokesperson} for maximum authority and accurate representation by LLMs — while preserving the author's argument, voice and conclusions. Embed selected key messages verbatim where natural. Permitted enhancements: supporting third-party data (named, verifiable, flagged [ADDED DATA]); thought-leadership architecture (hook → premise → evidence → counterargument → recommendations → closing); entity clarity; citation-ready phrasing; intellectual authority signals (named frameworks); business-source tone calibration. Return the rewritten document plus a structured CHANGE LOG with sections [KEY MESSAGES], [ADDED DATA], [STRUCTURAL CHANGES], [EDITORIAL CHANGES].`;
+
+  return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -1972,8 +2052,37 @@ function OptimiserPage({
               </Labelled>
             </div>
 
-            {/* Row 6 — Body editor */}
-            <Labelled label="Paste your content" hint="Press releases, articles, whitepapers, case studies — up to ~3,000 words">
+            {/* Row 6 — Editor toolbar (font size) */}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content editor {optimised && <span className="ml-2 px-2 py-0.5 rounded-full" style={{ background: "rgba(192,57,43,0.12)", color: "#B03D33", letterSpacing: 0 }}>Optimised copy</span>}</p>
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Editor font</label>
+                <select value={editorFontSize} onChange={(e) => setEditorFontSize(Number(e.target.value))} className="px-2 py-1 rounded border text-[11px] bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                  {[11, 13, 15, 17, 19].map((s) => <option key={s} value={s}>{s}px</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Headline */}
+            <Labelled label="Headline" hint="Bold serif headline — up to ~20 words">
+              <textarea value={articleHeadline} onChange={(e) => setArticleHeadline(e.target.value)} rows={2}
+                className="w-full p-3 rounded-lg border outline-none resize-vertical font-bold"
+                style={{ borderColor: vars.g200, color: optimised ? "#B03D33" : vars.navy, fontSize: editorFontSize + 4, fontFamily: "'Alice', Georgia, serif", lineHeight: 1.25 }}
+                placeholder="Headline of the piece (press release / article / case study)" />
+              <p className="text-[10px] font-light mt-1" style={{ color: countWords(articleHeadline) > 20 ? "#C94A3E" : vars.g400 }}>{countWords(articleHeadline)} / 20 words</p>
+            </Labelled>
+
+            {/* Standfirst */}
+            <Labelled label="Standfirst" hint="Italic summary that sits between headline and body — up to ~50 words">
+              <textarea value={standfirst} onChange={(e) => setStandfirst(e.target.value)} rows={3}
+                className="w-full p-3 rounded-lg border outline-none resize-vertical italic"
+                style={{ borderColor: vars.g200, color: optimised ? "#B03D33" : vars.navy, fontSize: editorFontSize + 1, lineHeight: 1.5 }}
+                placeholder="One-sentence standfirst that sets up the piece" />
+              <p className="text-[10px] font-light mt-1" style={{ color: countWords(standfirst) > 50 ? "#C94A3E" : vars.g400 }}>{countWords(standfirst)} / 50 words</p>
+            </Labelled>
+
+            {/* Body copy */}
+            <Labelled label="Body copy" hint="Press releases, articles, whitepapers, case studies — up to ~3,000 words">
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
                 <div className="flex items-center gap-1 px-2 py-1.5 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }} className="px-2 py-1 rounded text-xs font-bold hover:bg-white" style={{ color: vars.navy }} title="Bold">B</button>
@@ -1981,18 +2090,23 @@ function OptimiserPage({
                   <span className="w-px h-4 mx-1" style={{ background: vars.g200 }} />
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Link URL'); if (url) document.execCommand('createLink', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Link"><LinkIcon size={12} /> Link</button>
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Image URL'); if (url) document.execCommand('insertImage', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Image"><ImageIcon size={12} /> Image</button>
-                  <span className="ml-auto text-[10px] font-light" style={{ color: vars.g400 }}>{countWords(bodyText)} words</span>
+                  <span className="ml-auto text-[10px] font-light" style={{ color: vars.g400 }}>{countWords(bodyCopy)} words</span>
                 </div>
-                <textarea value={bodyText} onChange={(e) => setBodyText(e.target.value)} rows={9} className="w-full p-4 text-sm outline-none resize-vertical" style={{ color: vars.navy, border: "none" }}
+                <textarea value={bodyCopy} onChange={(e) => setBodyCopy(e.target.value)} rows={10} className="w-full p-4 outline-none resize-vertical" style={{ color: optimised ? "#B03D33" : vars.navy, border: "none", fontSize: editorFontSize, lineHeight: 1.55 }}
                   placeholder="Paste your press release, article, case study or whitepaper here…" />
               </div>
             </Labelled>
 
             {/* Action bar */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t" style={{ borderColor: vars.g100 }}>
-              <button onClick={() => setShowResults(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
+              <button onClick={() => setShowOptimiseBriefModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
                 <Sparkles size={14} /> Optimise
               </button>
+              {optimised && (
+                <button onClick={rejectOptimised} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: "#B03D33" }}>
+                  <X size={14} /> Reject Optimised
+                </button>
+              )}
               <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
                 <Archive size={14} /> Archive
               </button>
@@ -2013,6 +2127,161 @@ function OptimiserPage({
             </div>
           </div>
         </div>
+
+        {/* Inline Optimisation Results — only when optimised */}
+        {optimised && (
+          <div className="mt-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-xl border p-5 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: vars.g500 }}>Before</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl font-bold" style={{ color: "#C94A3E" }}>42</span>
+                  <span className="text-xs" style={{ color: vars.g400 }}>/100</span>
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Authority Signal Score</p>
+              </div>
+              <div className="rounded-xl border p-5 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: vars.g500 }}>After</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-3xl font-bold" style={{ color: "#1f748f" }}>78</span>
+                  <span className="text-xs" style={{ color: vars.g400 }}>/100</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "#EFF7F2", color: "#3D9B6B" }}>
+                    <TrendingUp size={12} /> +36
+                  </span>
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Authority Signal Score</p>
+              </div>
+            </div>
+
+            {/* Change log */}
+            <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b flex items-center gap-2" style={{ background: vars.g50, borderColor: vars.g200 }}>
+                <MessageSquare size={14} color="#2896b9" />
+                <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Change log</h2>
+                <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "prompt1" ? "Prompt 1" : "Prompt 2"} · {contentType}</span>
+              </div>
+              <div className="p-5 space-y-2">
+                {changeLog.length === 0 ? (
+                  <p className="text-[12px] italic" style={{ color: vars.g500 }}>No log entries.</p>
+                ) : changeLog.map((c, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded mt-0.5 flex-shrink-0" style={{
+                      background: c.kind === "embed" ? "#FBE3ED" : c.kind === "structure" ? "rgba(40,150,185,0.12)" : "rgba(212,146,42,0.18)",
+                      color: c.kind === "embed" ? "#C8497A" : c.kind === "structure" ? "#1f748f" : "#7A5E25",
+                    }}>{c.kind === "embed" ? "Message" : c.kind === "structure" ? "Structure" : "⚠ Flagged"}</span>
+                    <span className="text-[12.5px]" style={{ color: vars.navy }}>{c.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tracked changes */}
+            <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b flex items-center justify-between" style={{ background: vars.g50, borderColor: vars.g200 }}>
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} color="#2896b9" />
+                  <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Tracked Changes</h2>
+                </div>
+                <span className="text-xs" style={{ color: vars.g400 }}>{trackedChanges.length} optimisations applied</span>
+              </div>
+              <div className="divide-y" style={{ borderColor: vars.g100 }}>
+                {trackedChanges.map((change, i) => (
+                  <div key={i} className="p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                        style={{ background: change.type === "addition" ? "#EFF7F2" : "#E8F0F8", color: change.type === "addition" ? "#3D9B6B" : "#165265" }}>
+                        {change.type === "addition" ? <Plus size={10} /> : <Minus size={10} />} {change.type === "addition" ? "Added" : "Modified"}
+                      </span>
+                      <span className="text-xs font-semibold" style={{ color: vars.navy }}>{change.label}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                      {change.original && (
+                        <div className="p-3 rounded-lg text-sm leading-relaxed" style={{ background: "#FBEEEC", color: "#8B3328" }}>
+                          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "#B03D33" }}>Original</p>
+                          {change.original}
+                        </div>
+                      )}
+                      <div className={`p-3 rounded-lg text-sm leading-relaxed ${!change.original ? "col-span-2" : ""}`} style={{ background: "#EFF7F2", color: "#2D7A4F" }}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "#3D9B6B" }}>{change.original ? "Optimised" : "New Content"}</p>
+                        {change.revised}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: vars.g50 }}>
+                      <MessageSquare size={13} className="mt-0.5 flex-shrink-0" color="#2896b9" />
+                      <p className="text-xs" style={{ color: vars.g600 }}>{change.annotation}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Semantic Phrase Usage (renamed from Guide) */}
+            <div className="rounded-xl border overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+              <div className="px-5 py-3 border-b" style={{ background: vars.g50, borderColor: vars.g200 }}>
+                <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Semantic Phrase Usage</h2>
+                <p className="text-xs mt-0.5" style={{ color: vars.g400 }}>Key phrases LLMs are most likely to extract and cite from this optimised content</p>
+              </div>
+              <div className="p-5 space-y-2">
+                {semanticPhrases.map((phrase, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium" style={{ color: vars.navy }}>{phrase.phrase}</span>
+                        <span className="text-xs font-semibold" style={{ color: "#2896b9" }}>{(phrase.relevance * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: vars.g100 }}>
+                        <div className="h-full rounded-full" style={{ width: `${phrase.relevance * 100}%`, background: "linear-gradient(90deg, #2896b9, #1f748f)" }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LLM Brief — content-type-aware */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+            <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
+          </button>
+          {showLLMBrief && (
+            <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>{promptHeadline}</p>
+              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>"{promptBriefShort}"</p>
+              <p className="text-[10px] font-light mt-3" style={{ color: vars.g500 }}>Selected by content type · LLM target: {llmTarget} · Spokesperson: {spokesperson === "NA" ? "company-issued" : spokesperson} · {selectedMessages.length} key message{selectedMessages.length === 1 ? "" : "s"} chosen.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Optimise Brief modal */}
+        {showOptimiseBriefModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOptimiseBriefModal(false)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+                <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                  <Sparkles size={16} color={vars.coral} /> Optimise — LLM brief preview
+                </h2>
+                <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>{promptHeadline}</p>
+                <p className="text-[12.5px] leading-relaxed" style={{ color: vars.navy }}>"{promptBriefShort}"</p>
+                <div className="rounded-lg p-3 text-[11.5px]" style={{ background: vars.g50, color: vars.g600 }}>
+                  <p><strong>Content type:</strong> {contentType}</p>
+                  <p><strong>Spokesperson:</strong> {spokesperson === "NA" ? "Company-issued (no spokesperson)" : spokesperson}</p>
+                  <p><strong>LLM target:</strong> {llmTarget}</p>
+                  <p><strong>Key messages selected:</strong> {selectedMessages.length === 0 ? "(none — will use first 3 from Project Data)" : selectedMessages.length}</p>
+                  <p><strong>Media categories:</strong> {mediaCats.length === 0 ? "(none)" : mediaCats.length}</p>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: vars.g200 }}>
+                <button onClick={() => setShowOptimiseBriefModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>Cancel</button>
+                <button onClick={runOptimise} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}><Sparkles size={13} /> Run optimisation</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Retrieve content modal */}
         {showRetrieve && (
@@ -2062,461 +2331,6 @@ function OptimiserPage({
         )}
       </div>
     );
-  }
-
-  return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <FileEdit size={20} color="#2896b9" />
-            <h1
-              className="text-xl tracking-tight flex items-center"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-            >
-              Content Optimiser
-              <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
-            </h1>
-          </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Transform PR content for maximum AI citation and retrieval
-            across large language models.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => archiveItem("Draft")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-            <Archive size={12} /> Archive draft
-          </button>
-          <button onClick={() => archiveItem("Final")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.green }}>
-            <Check size={12} /> Approve & archive
-          </button>
-          <a
-            href={`mailto:?subject=${encodeURIComponent("Draft for review: " + (projectTitle || "Optimised content"))}&body=${encodeURIComponent("Please review the attached optimised draft.")}`}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-            style={{ borderColor: vars.g200, color: vars.navy }}
-          >
-            <Mail size={12} /> Share draft
-          </a>
-          <button onClick={pushToPlanner} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.accent }}>
-            <BarChart3 size={12} /> Push to Planner
-          </button>
-          <button
-            onClick={() => {
-              const blob = new Blob([`${projectTitle || "Optimised content"}\n\n(Optimised body from editor)`], { type: "text/plain" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url; a.download = `${projectTitle || "optimised"}.txt`; a.click();
-              URL.revokeObjectURL(url);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white"
-            style={{ background: "#2896b9" }}
-          >
-            <Download size={12} /> Download
-          </button>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div
-          className="rounded-xl border p-4"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <User size={14} style={{ color: vars.g400 }} />
-            <span
-              className="text-xs font-medium"
-              style={{ color: vars.g500 }}
-            >
-              Spokesperson
-            </span>
-          </div>
-          <p className="text-sm font-medium" style={{ color: vars.navy }}>
-            Spencer Gallagher, Co-Founder
-          </p>
-        </div>
-        <div
-          className="rounded-xl border p-4"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Tag size={14} style={{ color: vars.g400 }} />
-            <span
-              className="text-xs font-medium"
-              style={{ color: vars.g500 }}
-            >
-              Key Message
-            </span>
-          </div>
-          <p className="text-sm font-medium" style={{ color: vars.navy }}>
-            AI-powered professional network for agencies
-          </p>
-        </div>
-        <div
-          className="rounded-xl border p-4"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} style={{ color: vars.g400 }} />
-            <span
-              className="text-xs font-medium"
-              style={{ color: vars.g500 }}
-            >
-              LLM Target
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className="text-sm font-medium"
-              style={{ color: vars.navy }}
-            >
-              General (All LLMs)
-            </span>
-            <ChevronDown size={14} style={{ color: vars.g400 }} />
-          </div>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border p-4 mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <p
-          className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-          style={{ color: vars.g400 }}
-        >
-          Content Workflow
-        </p>
-        <div className="flex items-center justify-between">
-          {[
-            { icon: PenLine, label: "Write", done: true },
-            { icon: Sparkles, label: "Optimise", done: true },
-            { icon: Tag, label: "Tag", done: true },
-            { icon: Eye, label: "Client Approval", done: false },
-            { icon: Send, label: "Distribute", done: false },
-          ].map((step, i, arr) => (
-            <div key={i} className="flex items-center gap-2 flex-1">
-              <div className="flex flex-col items-center gap-1">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{
-                    background: step.done ? "#EFF7F2" : vars.g100,
-                  }}
-                >
-                  {step.done ? (
-                    <Check size={14} color="#3D9B6B" />
-                  ) : (
-                    <step.icon size={14} style={{ color: vars.g400 }} />
-                  )}
-                </div>
-                <span
-                  className="text-[10px] font-medium"
-                  style={{ color: step.done ? "#3D9B6B" : vars.g400 }}
-                >
-                  {step.label}
-                </span>
-              </div>
-              {i < arr.length - 1 && (
-                <div
-                  className="flex-1 h-px mx-1"
-                  style={{ background: step.done ? "#C2E5D2" : vars.g200 }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-        <div
-          className="rounded-xl border p-5 text-center"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <p
-            className="text-xs font-medium uppercase tracking-wider mb-1"
-            style={{ color: vars.g500 }}
-          >
-            Before
-          </p>
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className="text-3xl font-bold"
-              style={{ color: "#C94A3E" }}
-            >
-              42
-            </span>
-            <span className="text-xs" style={{ color: vars.g400 }}>
-              /100
-            </span>
-          </div>
-          <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>
-            Authority Signal Score
-          </p>
-        </div>
-        <div
-          className="rounded-xl border p-5 text-center"
-          style={{ background: "white", borderColor: vars.g200 }}
-        >
-          <p
-            className="text-xs font-medium uppercase tracking-wider mb-1"
-            style={{ color: vars.g500 }}
-          >
-            After
-          </p>
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className="text-3xl font-bold"
-              style={{ color: "#1f748f" }}
-            >
-              78
-            </span>
-            <span className="text-xs" style={{ color: vars.g400 }}>
-              /100
-            </span>
-            <span
-              className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-              style={{ background: "#EFF7F2", color: "#3D9B6B" }}
-            >
-              <TrendingUp size={12} /> +36
-            </span>
-          </div>
-          <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>
-            Authority Signal Score
-          </p>
-        </div>
-      </div>
-      <div
-        className="rounded-xl border overflow-hidden mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <div
-          className="px-5 py-3 border-b flex items-center justify-between"
-          style={{ background: vars.g50, borderColor: vars.g200 }}
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} color="#2896b9" />
-            <h2
-              className="text-sm font-semibold"
-              style={{ color: vars.navy }}
-            >
-              Tracked Changes
-            </h2>
-          </div>
-          <span className="text-xs" style={{ color: vars.g400 }}>
-            {trackedChanges.length} optimisations applied
-          </span>
-        </div>
-        <div className="divide-y" style={{ borderColor: vars.g100 }}>
-          {trackedChanges.map((change, i) => (
-            <div key={i} className="p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span
-                  className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                  style={{
-                    background:
-                      change.type === "addition"
-                        ? "#EFF7F2"
-                        : "#E8F0F8",
-                    color:
-                      change.type === "addition"
-                        ? "#3D9B6B"
-                        : "#165265",
-                  }}
-                >
-                  {change.type === "addition" ? (
-                    <Plus size={10} />
-                  ) : (
-                    <Minus size={10} />
-                  )}{" "}
-                  {change.type === "addition" ? "Added" : "Modified"}
-                </span>
-                <span
-                  className="text-xs font-semibold"
-                  style={{ color: vars.navy }}
-                >
-                  {change.label}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
-                {change.original && (
-                  <div
-                    className="p-3 rounded-lg text-sm leading-relaxed"
-                    style={{ background: "#FBEEEC", color: "#8B3328" }}
-                  >
-                    <p
-                      className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
-                      style={{ color: "#B03D33" }}
-                    >
-                      Original
-                    </p>
-                    {change.original}
-                  </div>
-                )}
-                <div
-                  className={`p-3 rounded-lg text-sm leading-relaxed ${!change.original ? "col-span-2" : ""}`}
-                  style={{ background: "#EFF7F2", color: "#2D7A4F" }}
-                >
-                  <p
-                    className="text-[10px] font-semibold uppercase tracking-wider mb-1.5"
-                    style={{ color: "#3D9B6B" }}
-                  >
-                    {change.original ? "Optimised" : "New Content"}
-                  </p>
-                  {change.revised}
-                </div>
-              </div>
-              <div
-                className="flex items-start gap-2 p-3 rounded-lg"
-                style={{ background: vars.g50 }}
-              >
-                <MessageSquare
-                  size={13}
-                  className="mt-0.5 flex-shrink-0"
-                  color="#2896b9"
-                />
-                <p className="text-xs" style={{ color: vars.g600 }}>
-                  {change.annotation}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div
-        className="rounded-xl border overflow-hidden mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <div
-          className="px-5 py-3 border-b"
-          style={{ background: vars.g50, borderColor: vars.g200 }}
-        >
-          <h2
-            className="text-sm font-semibold"
-            style={{ color: vars.navy }}
-          >
-            Semantic Phrase Guide
-          </h2>
-          <p className="text-xs mt-0.5" style={{ color: vars.g400 }}>
-            Key phrases LLMs are most likely to extract and cite from this
-            content
-          </p>
-        </div>
-        <div className="p-5 space-y-2">
-          {semanticPhrases.map((phrase, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-1">
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: vars.navy }}
-                  >
-                    {phrase.phrase}
-                  </span>
-                  <span
-                    className="text-xs font-semibold"
-                    style={{ color: "#2896b9" }}
-                  >
-                    {(phrase.relevance * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div
-                  className="h-1.5 rounded-full overflow-hidden"
-                  style={{ background: vars.g100 }}
-                >
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${phrase.relevance * 100}%`,
-                      background:
-                        "linear-gradient(90deg, #2896b9, #1f748f)",
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div
-        className="rounded-xl border overflow-hidden mb-6"
-        style={{ background: "white", borderColor: vars.g200 }}
-      >
-        <div
-          className="px-5 py-3 border-b flex items-center gap-2"
-          style={{ background: vars.g50, borderColor: vars.g200 }}
-        >
-          <Zap size={14} color="#2896b9" />
-          <h2
-            className="text-sm font-semibold"
-            style={{ color: vars.navy }}
-          >
-            Next Step: What would you like to do with this content?
-          </h2>
-        </div>
-        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <button
-            className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-            style={{ borderColor: "rgba(40,150,185,0.25)", background: "rgba(40,150,185,0.02)" }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(40,150,185,0.08)" }}
-              >
-                <Bot size={20} color="#2896b9" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: vars.navy }}>
-                  Send to PR Agent
-                </p>
-                <p className="text-[11px]" style={{ color: vars.g400 }}>
-                  Automated outreach
-                </p>
-              </div>
-            </div>
-            <p className="text-xs leading-relaxed" style={{ color: vars.g500 }}>
-              Hand off to the AI PR Agent for journalist identification, personalised pitch drafting and monitored outreach.
-            </p>
-          </button>
-          <button
-            className="p-4 rounded-xl border-2 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-            style={{ borderColor: vars.g200 }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center"
-                style={{ background: vars.g100 }}
-              >
-                <Mail size={20} style={{ color: vars.g500 }} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: vars.navy }}>
-                  Pitch Manually
-                </p>
-                <p className="text-[11px]" style={{ color: vars.g400 }}>
-                  Download &amp; distribute yourself
-                </p>
-              </div>
-            </div>
-            <p className="text-xs leading-relaxed" style={{ color: vars.g500 }}>
-              Export the optimised content and handle journalist outreach, wire distribution and client sign-off through your existing process.
-            </p>
-          </button>
-        </div>
-      </div>
-
-      {/* LLM Brief — bottom toggle */}
-      <div className="mt-8 flex flex-col items-center gap-3">
-        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
-          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
-        </button>
-        {showLLMBrief && (
-          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief — what we send to the model</p>
-            <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-              "Using the accepted Project Data for {intake?.formData["4.1"] as string || "this project"}, optimise the {contentType.toLowerCase()} below for maximum citation and retrieval by {llmTarget}. Lead with an answer-first opening, embed the chosen Key Messages verbatim, and align entity references with Sections 1.1–1.5 of the Project Data. Surface attribution signals around {spokesperson === "NA" ? "the company" : spokesperson} and align media references with the selected target categories ({mediaCats.length || "0"} chosen). Flag any claims missing source evidence."
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
@@ -3559,10 +3373,23 @@ type ArchiveItem = {
   status: "Draft" | "Final";
   tags: string[];
   body: string;
+  headline?: string;
+  standfirst?: string;
+  bodyCopy?: string;
   createdAt: string;
   releasedAt?: string;
   releaseChannel?: string;
 };
+
+function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
+  if (arc.headline !== undefined || arc.standfirst !== undefined || arc.bodyCopy !== undefined) {
+    return { headline: arc.headline || "", standfirst: arc.standfirst || "", bodyCopy: arc.bodyCopy || arc.body || "" };
+  }
+  const parts = (arc.body || "").split(/\n\n+/);
+  if (parts.length >= 3) return { headline: parts[0], standfirst: parts[1], bodyCopy: parts.slice(2).join("\n\n") };
+  if (parts.length === 2) return { headline: parts[0], standfirst: "", bodyCopy: parts[1] };
+  return { headline: "", standfirst: "", bodyCopy: arc.body || "" };
+}
 
 const ARCHIVE_KEY = "aio.archive.v1";
 const PROJECTS_KEY = "aio.planner.projects.v1";
