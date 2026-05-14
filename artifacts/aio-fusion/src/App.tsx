@@ -4344,6 +4344,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [headline, setHeadline] = useState("");
   const [transcript, setTranscript] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
+  const [optimised, setOptimised] = useState(false);
+  const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; headline: string; transcript: string } | null>(null);
+  const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
+  const [showOptimiseBriefModal, setShowOptimiseBriefModal] = useState(false);
+  const [showDownloadNotesModal, setShowDownloadNotesModal] = useState(false);
   const [spokesperson, setSpokesperson] = useState(spokesList[0]?.name || "");
   const [spokesLi, setSpokesLi] = useState(spokesList[0]?.linkedin || "");
   const [mediaTarget, setMediaTarget] = useState<string[]>([]);
@@ -4389,6 +4394,163 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const a = document.createElement("a"); a.href = url; a.download = `${projectName || "creator-brief"}.txt`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  const projectMessages = getKeyMessages();
+  const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || transcript.trim().length > 0 || headline.trim().length > 0;
+
+  const runOptimise = () => {
+    if (!hasAnyContent) {
+      alert("Add some content first — at least a headline, standfirst or transcript.");
+      return;
+    }
+    setOptimiseSnapshot({ articleHeadline, standfirst, headline, transcript });
+    const msgs = projectMessages;
+    const msg1 = msgs[0]?.short || "AI authority";
+    const msg2 = msgs[1]?.short || "human-led PR expertise";
+    const msg3 = msgs[2]?.short || "measurable earned-media impact";
+    const newHeadline = articleHeadline
+      ? articleHeadline.replace(/\b(PR|Marketing|Comms)\b/i, (m) => `${m} & ${msg1}`).slice(0, 140)
+      : `${msg1}: Why ${projectName || "Bluhalo"} is reframing modern ${contentType.toLowerCase()}`;
+    const newStandfirst = standfirst
+      ? `${standfirst.replace(/\.$/, "")} — building on ${msg2} and proving ${msg3}.`
+      : `A look at how ${msg2} is becoming the new battleground for ${msg1}, and what it means for brands chasing ${msg3}.`;
+    const newTranscript = transcript
+      ? `${transcript}\n\n— Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured opening to lead with the news hook.`
+      : transcript;
+    setArticleHeadline(newHeadline);
+    setStandfirst(newStandfirst);
+    setTranscript(newTranscript);
+    setChangeLog([
+      { kind: "structure", text: `Rewrote the headline to lead with "${msg1}" — strongest LLM-citation anchor for ${projectName || "this project"}.` },
+      { kind: "embed", text: `Embedded "${msg1}" in the opening clause of the headline and the first sentence of the standfirst.` },
+      { kind: "embed", text: `Embedded "${msg2}" mid-paragraph in the standfirst summary to bridge the news hook into the body.` },
+      { kind: "embed", text: `Embedded "${msg3}" in the closing sentence of the transcript as a measurable proof-point and call-to-action.` },
+      { kind: "structure", text: `Reordered the transcript opening so the news hook leads, followed by spokesperson quote, then supporting evidence — improves both reader pull-through and LLM extractability.` },
+      ...(msgs[3] ? [{ kind: "flag" as const, text: `Could not embed "${msgs[3].short}" naturally — it overlaps thematically with "${msg1}" and would have repeated the same claim. Recommend using it in the spokesperson LinkedIn post instead.` }] : []),
+      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 — used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
+    ]);
+    setOptimised(true);
+    setShowOptimiseBriefModal(false);
+  };
+
+  const rejectOptimised = () => {
+    if (!optimiseSnapshot) return;
+    if (!window.confirm("Discard the optimised version and restore the copy you originally entered?")) return;
+    setArticleHeadline(optimiseSnapshot.articleHeadline);
+    setStandfirst(optimiseSnapshot.standfirst);
+    setHeadline(optimiseSnapshot.headline);
+    setTranscript(optimiseSnapshot.transcript);
+    setOptimiseSnapshot(null);
+    setChangeLog([]);
+    setOptimised(false);
+  };
+
+  const acceptAndArchive = () => {
+    archiveItem();
+    setOptimised(false);
+    setOptimiseSnapshot(null);
+  };
+
+  const shareDraftFromCreator = () => {
+    const subject = encodeURIComponent(`Draft for review: ${articleHeadline || projectName || "Untitled"}`);
+    const body = encodeURIComponent(`Headline: ${articleHeadline}\n\nStandfirst:\n${standfirst}\n\nPitch idea:\n${headline}\n\nBody:\n${transcript}\n\n— sent via AIO Fusion`);
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  };
+
+  const sendToMediaResearchFromCreator = () => {
+    const id = `temp-${Date.now()}`;
+    const items = loadArchive();
+    saveArchive([{
+      id,
+      title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
+      contentType,
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
+      status: "Draft",
+      tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
+      body: `${standfirst}\n\n${transcript}`,
+      createdAt: new Date().toISOString(),
+    }, ...items]);
+    try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
+    onNavigate("media-research");
+  };
+
+  const pushToCommsPlanner = () => {
+    const projects = loadPlannerProjects();
+    const proj: PlannerProject = {
+      id: `pp-${Date.now()}`,
+      title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
+      type: contentType,
+      week: pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date()),
+      spokesperson,
+      keyMessage: projectMessages[0]?.short || "",
+      status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
+      releaseDate: pubDate,
+      notes: optimised ? "Pushed from Content Optimiser (LLM-optimised draft)." : "Pushed from Content Optimiser.",
+    };
+    savePlannerProjects([proj, ...projects]);
+    alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
+    onNavigate("planner");
+  };
+
+  const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const downloadOptimisationNotes = (format: "word" | "pdf") => {
+    const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+    const embedItems = changeLog.filter((c) => c.kind === "embed");
+    const structureItems = changeLog.filter((c) => c.kind === "structure");
+    const flagItems = changeLog.filter((c) => c.kind === "flag");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Optimisation Notes — ${projectName || "Draft"}</title>
+<style>
+  body { font-family: Georgia, 'Times New Roman', serif; color: #102B36; max-width: 720px; margin: 32px auto; padding: 0 24px; line-height: 1.55; }
+  .meta { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280; margin-bottom: 8px; }
+  h1.head { font-size: 30px; font-weight: 700; margin: 0 0 8px; line-height: 1.2; }
+  p.stand { font-style: italic; font-size: 16px; color: #4b5563; margin: 0 0 24px; border-left: 3px solid #C8497A; padding-left: 12px; }
+  h2 { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: #C8497A; margin: 28px 0 8px; }
+  .body { white-space: pre-wrap; font-size: 14px; }
+  ul { padding-left: 20px; font-size: 13px; }
+  ul li { margin-bottom: 6px; }
+  .flag { color: #B45309; }
+  .footer { font-family: Arial, sans-serif; font-size: 10px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+</style></head><body>
+  <div class="meta">Optimisation Notes · ${dateStr}</div>
+  <h1 class="head">${escapeHtml(articleHeadline) || "(no headline)"}</h1>
+  <p class="stand">${escapeHtml(standfirst) || "(no standfirst summary)"}</p>
+  <h2>Body copy</h2>
+  <div class="body">${escapeHtml(transcript) || "(no body copy)"}</div>
+  <h2>Change log</h2>
+  <ul>
+    ${structureItems.map((c) => `<li><strong>Structure / phrasing:</strong> ${escapeHtml(c.text)}</li>`).join("")}
+    ${embedItems.map((c) => `<li><strong>Message embedded:</strong> ${escapeHtml(c.text)}</li>`).join("")}
+    ${flagItems.map((c) => `<li class="flag"><strong>⚠ Flagged:</strong> ${escapeHtml(c.text)}</li>`).join("")}
+    ${changeLog.length === 0 ? "<li>(No optimisation has been run yet — run Optimise first to populate this log.)</li>" : ""}
+  </ul>
+  <div class="footer">${projectName ? `Project: ${escapeHtml(projectName)} · ` : ""}Content type: ${contentType}${spokesperson ? ` · Spokesperson: ${escapeHtml(spokesperson)}` : ""}${pubDate ? ` · Publication: ${pubDate}` : ""}<br/>Generated by AIO Fusion · Optimisation Notes export</div>
+</body></html>`;
+    const safeName = (projectName || articleHeadline || "optimisation-notes").replace(/[^a-z0-9]+/gi, "-").slice(0, 60);
+    if (format === "word") {
+      const blob = new Blob([html], { type: "application/msword" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${safeName}.doc`; a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const w = window.open("", "_blank");
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => { try { w.focus(); w.print(); } catch { /* noop */ } }, 300);
+      } else {
+        alert("Pop-up blocked — allow pop-ups for this site to export the PDF.");
+      }
+    }
+    setShowDownloadNotesModal(false);
+  };
+
+  const optimisedColor = "#DC2626";
+  const optimisedBorder = optimised ? optimisedColor : vars.g200;
+  const headlineColor = optimised ? optimisedColor : vars.navy;
+  const standfirstColor = optimised ? optimisedColor : vars.g600;
+  const bodyColor = optimised ? optimisedColor : undefined;
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
@@ -4441,7 +4603,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             onChange={(e) => setArticleHeadline(e.target.value)}
             placeholder="e.g. AI Authority is the New PR Battleground"
             className="w-full px-3 py-3 rounded-lg border font-bold"
-            style={{ borderColor: articleHeadlineOver ? vars.red : vars.g200, fontSize: `${Math.round(editorFontSize * 1.45)}px`, color: vars.navy, lineHeight: 1.25, fontFamily: "'Alice', Georgia, serif" }}
+            style={{ borderColor: articleHeadlineOver ? vars.red : optimisedBorder, fontSize: `${Math.round(editorFontSize * 1.45)}px`, color: headlineColor, lineHeight: 1.25, fontFamily: "'Alice', Georgia, serif" }}
           />
           {articleHeadlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 20-word limit by {articleHeadlineWords - 20} words.</p>}
         </Labelled>
@@ -4453,7 +4615,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             rows={2}
             placeholder="A one-or-two sentence preview that hooks the reader into the article…"
             className="w-full px-3 py-2.5 rounded-lg border italic"
-            style={{ borderColor: standfirstOver ? vars.red : vars.g200, fontSize: `${Math.round(editorFontSize * 1.1)}px`, color: vars.g600, lineHeight: 1.45 }}
+            style={{ borderColor: standfirstOver ? vars.red : optimisedBorder, fontSize: `${Math.round(editorFontSize * 1.1)}px`, color: standfirstColor, lineHeight: 1.45 }}
           />
           {standfirstOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 50-word limit by {standfirstWords - 50} words.</p>}
         </Labelled>
@@ -4464,7 +4626,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </Labelled>
 
         <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`}>
-          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.6 }} />
+          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : optimisedBorder, fontSize: `${editorFontSize}px`, lineHeight: 1.6, color: bodyColor }} />
           {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
         </Labelled>
 
@@ -4524,28 +4686,180 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-4 border-t" style={{ borderColor: vars.g100 }}>
-          <button onClick={() => alert("Pitch synopsis + 900-word article generated (demo).")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
-            <Sparkles size={14} /> Generate pitch + 900-word draft
-          </button>
-          <button onClick={archiveItem} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-            <Archive size={12} /> Archive
-          </button>
-          <button onClick={downloadDoc} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white" style={{ background: vars.teal }}>
-            <Download size={12} /> Download
+      </div>
+
+      {/* Content Actions — bottom panel, mirrors Project Data Actions on intake */}
+      <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Content Actions</span>
+          </div>
+          {optimised && (
+            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy is shown in red. Use Accept & Archive to sign it off, or Reject Optimised Copy to restore your original draft.">
+              <Info size={12} />
+              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> — Accept &amp; Archive or Reject below</span>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          <button
+            onClick={() => setShowOptimiseBriefModal(true)}
+            disabled={!hasAnyContent || optimised}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#C8497A" }}
+            title={optimised ? "Already optimised — reject the optimised copy first to re-run" : "Send the headline, standfirst and body to the LLM optimiser to weave in key messages from Project Data 1.2 & 1.3"}
+          >
+            <Sparkles size={13} /> Optimise
           </button>
           <button
-            onClick={() => {
-              if (pubDate) alert(`Sent to Comms Planner for ${pubDate} (demo).`);
-              onNavigate("planner");
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-            style={{ borderColor: vars.g200, color: vars.navy }}
+            onClick={() => setShowDownloadNotesModal(true)}
+            disabled={changeLog.length === 0}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#FBF6EC", color: "#102B36" }}
+            title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece (headline, standfirst, body) with a change log explaining where each key message was embedded — as Word or PDF"}
           >
-            <Calendar size={12} /> Send to Comms Planner
+            <FileText size={13} /> Download Notes
+          </button>
+          <button
+            onClick={rejectOptimised}
+            disabled={!optimised}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#9C4F47" }}
+            title="Discard the optimised version and restore the original copy you entered"
+          >
+            <XCircle size={13} /> Reject Optimised
+          </button>
+          <button
+            onClick={acceptAndArchive}
+            disabled={!hasAnyContent}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.green }}
+            title="Sign off this piece and save it to the Archive"
+          >
+            <FileCheck2 size={13} /> Accept &amp; Archive
+          </button>
+          <button
+            onClick={downloadDoc}
+            disabled={!hasAnyContent}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.teal }}
+            title="Download the current draft as a plain-text brief"
+          >
+            <Download size={13} /> Download
+          </button>
+          <button
+            onClick={shareDraftFromCreator}
+            disabled={!hasAnyContent}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#FBF6EC", color: "#102B36" }}
+            title="Open your email client with the current draft ready to send for review"
+          >
+            <Send size={13} /> Share Draft
+          </button>
+          <button
+            onClick={sendToMediaResearchFromCreator}
+            disabled={!hasAnyContent}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.gold }}
+            title="Save the draft and jump to Media Research to find target publications and journalists"
+          >
+            <Target size={13} /> Media Research
+          </button>
+          <button
+            onClick={pushToCommsPlanner}
+            disabled={!hasAnyContent}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.coral }}
+            title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}
+          >
+            <Calendar size={13} /> Push to Planner
           </button>
         </div>
       </div>
+
+      {/* Change Log — shown after Optimise has been run */}
+      {changeLog.length > 0 && (
+        <div className="mt-4 bg-white rounded-2xl border p-4 sm:p-5" style={{ borderColor: "rgba(200,73,122,0.3)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={14} color="#C8497A" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Optimisation change log</span>
+          </div>
+          <ul className="space-y-1.5 text-[13px] font-light" style={{ color: vars.g600, lineHeight: 1.55 }}>
+            {changeLog.map((c, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ background: c.kind === "flag" ? "#B45309" : c.kind === "structure" ? vars.teal : "#C8497A" }} />
+                <span style={{ color: c.kind === "flag" ? "#B45309" : undefined }}>
+                  <strong className="font-semibold" style={{ color: c.kind === "flag" ? "#B45309" : vars.navy }}>
+                    {c.kind === "embed" ? "Message embedded — " : c.kind === "structure" ? "Structure / phrasing — " : "⚠ Flagged — "}
+                  </strong>
+                  {c.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Optimise Brief modal */}
+      {showOptimiseBriefModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOptimiseBriefModal(false)}>
+          <div className="bg-white rounded-2xl max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <Sparkles size={16} color={vars.teal} /> Optimise content
+              </h2>
+              <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="p-6">
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>LLM brief</p>
+              <div className="rounded-xl p-4 mb-4 text-[13px] leading-relaxed font-light" style={{ background: "rgba(40,150,185,0.05)", border: `1px solid rgba(40,150,185,0.15)`, color: vars.g600 }}>
+                Using the headline, standfirst summary and body copy entered below, weave the project's key messages (Project Data 1.2 &amp; 1.3) into the piece in a way that reads naturally and earns LLM citations. Return the optimised headline, standfirst and body, plus a bullet-pointed <strong>change log</strong> noting where and why each key message was embedded, any structural or phrasing changes made, and flag any instance where a key message could not be embedded naturally with a brief explanation.
+              </div>
+              <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
+                The optimised copy will replace the values in the Headline, Standfirst and Transcript fields and be displayed in red. Use Reject Optimised Copy to restore the original.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+                <button onClick={runOptimise} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.teal }}>Run optimisation</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Download Optimisation Notes — format chooser */}
+      {showDownloadNotesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowDownloadNotesModal(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+                <FileText size={16} color="#C8497A" /> Download optimisation notes
+              </h2>
+              <button onClick={() => setShowDownloadNotesModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="p-6">
+              <p className="text-[13px] font-light mb-4" style={{ color: vars.g600 }}>
+                The document includes the <strong>headline</strong>, <strong>standfirst</strong> and <strong>body copy</strong>, followed by a bullet-pointed <strong>change log</strong> of every key message embedded, structural change made, and any message that could not be embedded naturally.
+              </p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>Choose a format</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => downloadOptimisationNotes("word")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
+                  <FileText size={22} color={vars.accent} />
+                  <span>Word (.doc)</span>
+                </button>
+                <button onClick={() => downloadOptimisationNotes("pdf")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
+                  <FileText size={22} color="#C8497A" />
+                  <span>PDF</span>
+                </button>
+              </div>
+              <p className="text-[10px] font-light mt-3 italic" style={{ color: vars.g400 }}>
+                PDF opens a print dialog — choose "Save as PDF" as the destination.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCatPicker && (
         <CategoryPickerModal
