@@ -1926,7 +1926,7 @@ function OptimiserPage({
             {/* Row 1 — Title + type */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <Labelled label="Content Title" hint="Used as the planner card label and archive entry">
+                <Labelled label="Project name" hint="Pulls in messaging from Project Set-Up parts 4 and 6">
                   <div className="flex items-center gap-2">
                     <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
                       className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
@@ -2016,7 +2016,7 @@ function OptimiserPage({
             </Labelled>
 
             {/* Row 4 — Media categories (replaces Purpose) */}
-            <Labelled label="Select Media Categories" hint="Multi-select from Section 1.9">
+            <Labelled label="Select Media Categories" hint="Multi-select from Section in Project Data">
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowCatPicker(true)} className="flex-1 text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between" style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}>
                   <span>{mediaCats.length === 0 ? "Choose categories…" : `${mediaCats.length} categor${mediaCats.length === 1 ? "y" : "ies"} selected`}</span>
