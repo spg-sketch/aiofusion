@@ -1890,16 +1890,110 @@ function OptimiserPage({
   };
 
   const promptHeadline = promptVariant === "pitch"
-    ? `LLM Optimisation Prompt 3 — Article Media Pitch`
+    ? `LLM Optimisation Prompt 2.2 — Article Media Pitch`
     : promptVariant === "prompt1"
-    ? `LLM Optimisation Prompt 1 — Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
-    : `LLM Optimisation Prompt 2 — Article, Whitepaper, Blog post, Social post`;
+    ? `LLM Optimisation Prompt 1.1 — Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
+    : `LLM Optimisation Prompt 2.1 — Article, Whitepaper, Blog post, Social post`;
+
+  const PROMPT_1_LENGTHS: Record<string, string> = {
+    "Press release": "900 words. Create a headline, Standfirst, start first paragraph with City, Country, Date: Source Company and descriptor and key or priority news aspect. Structure newsworthy facts in order of significance through subsequent paragraphs with spokesperson quote towards the end of the press release. Use other best practices for press releases. End with Project Data boilerplate.",
+    "Case study": "800 words. Comply with specific guidance or reference links for exact format. Use Challenge, solution, results structure or use other best practices for business case studies in company's industry/sector referencing Project Data.",
+    "Speaker submission": "700 words. Comply with specific guidance or reference links for exact format and length of copy. Reference Project Data and spokesperson and LinkedIn entries.",
+    "Award submission": "700 words. Comply with specific guidance or reference links for exact format and length of copy. Or use other best practices for business case studies in company's industry/sector referencing Project Data.",
+    "Event copy": "600 words. Comply with specific guidance or reference links for exact format and length of copy. Or use other best practices for business case studies in company's industry/sector referencing Project Data.",
+    "Directory entry": "500 words. Comply with specific guidance or reference links for exact format and length of copy. Or use other best practices for business case studies in company's industry/sector referencing Project Data.",
+  };
+  const PROMPT_2_LENGTHS: Record<string, string> = {
+    "Article": "900 words",
+    "Whitepaper": "2000 words",
+    "Blog post": "700 words",
+    "Social post": "600 words",
+  };
 
   const promptBriefShort = promptVariant === "pitch"
-    ? `Using Project Data Sections 1–3, craft a concise media pitch built around the proposed article attributed to ${spokesperson === "NA" ? "the company" : spokesperson} for journalists in the selected trade media categories. Open with a sharp news hook tied to a current trend or data point; state the proposed angle in one sentence; outline 3 evidence points (named data, case examples or expert observation); position ${spokesperson === "NA" ? "the company" : spokesperson} as the authority with one-line credibility framing; close with a clear ask (interview, byline or comment) and contact line. Embed selected key messages verbatim only where they sit naturally. Apply entity clarity, citation-ready phrasing and journalistic tone discipline (no marketing language). Return the pitch plus a CHANGE LOG with sections [HOOK], [ANGLE], [EVIDENCE], [KEY MESSAGES], [CALL TO ACTION].`
+    ? `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft Media pitch synopsis for a thought leadership article.
+
+Use the Headline / subject entry as the guiding theme and argument. Optimise the article media pitch to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+
+ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+- Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
+- Do not change titles, author names, job titles, entity names, or organisational descriptions.
+- Preserve the essential premise, core arguments, and conclusions within the Transcript or notes source content.
+- Preserve readability for a human audience and natural language based on the regional origins of the company within the Project Data and selected spokesperson.
+
+BUSINESS SOURCE CONTEXT:
+This article pitch synopsis attributed to: ${spokesperson === "NA" ? "the company" : spokesperson}
+Using information and instructions in Project Data doc calibrate the editorial voice, select supporting evidence appropriate to the media categories selected and the business sectors they represent, and ensure the enhanced document reflects well on the business source's authority and expertise.
+
+KEY MESSAGE INTEGRATION:
+Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
+
+PERMITTED ENHANCEMENTS — apply all of the following:
+1. SUPPORTING FACTS & DATA ENRICHMENT — Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data as [ADDED DATA]; do not fabricate statistics.
+2. EDITORIAL STRUCTURE ENHANCEMENT — Opening hook → Premise (within first 150 words) → Evidence and elaboration → Implications and recommendations → Closing conviction statement.
+3. ENTITY CLARITY & ATTRIBUTION — Introduce all named entities with full title or name and context on first mention.
+4. INTELLECTUAL AUTHORITY SIGNALS — Where the author makes a prediction or recommendation, ensure the basis is explicit (evidence, experience, or reasoned argument).
+5. TONE CALIBRATION FOR BUSINESS SOURCE — Reflect the intended tone and competitive positioning supplied in Project Data; sound like a senior practitioner; remove hedging or self-promotional language.
+
+OUTPUT INSTRUCTIONS:
+- Provide the full written document suitable for email submission to a journalist.`
     : promptVariant === "prompt1"
-    ? `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} for maximum authority, discoverability and accurate representation by LLMs. Retain all facts, titles and structure. Embed the selected key messages verbatim only where they sit naturally. Apply entity clarity, semantic authority signals, citation-ready phrasing, natural-language query alignment, structured clarity and tone discipline. Return the rewritten document plus a bullet-pointed CHANGE LOG noting where each key message was embedded and flagging any that could not be embedded naturally.`
-    : `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} attributed to ${spokesperson === "NA" ? "the company" : spokesperson} for maximum authority and accurate representation by LLMs — while preserving the author's argument, voice and conclusions. Embed selected key messages verbatim where natural. Permitted enhancements: supporting third-party data (named, verifiable, flagged [ADDED DATA]); thought-leadership architecture (hook → premise → evidence → counterargument → recommendations → closing); entity clarity; citation-ready phrasing; intellectual authority signals (named frameworks); business-source tone calibration. Return the rewritten document plus a structured CHANGE LOG with sections [KEY MESSAGES], [ADDED DATA], [STRUCTURAL CHANGES], [EDITORIAL CHANGES].`;
+    ? `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft content piece with word lengths, content structure and specific guidance depending on Content Type chosen:
+
+${contentType} = ${PROMPT_1_LENGTHS[contentType] || "Apply best practices for this content type referencing Project Data."}
+
+Further general guidance: Use the Headline / subject entry as the guiding theme and argument. Optimise the content to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+
+ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+- Retain all factual content, statistics, data points, and claims exactly as written. Do not add, remove, or alter any facts.
+- Do not change titles, subheadings, entity names, job titles, or organisational descriptions.
+- Do not introduce new information, opinions, or fabricated supporting detail.
+
+KEY MESSAGE INTEGRATION:
+Embed the chosen key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph — never bolted on.
+
+LLMO OPTIMISATION OBJECTIVES — apply all of the following:
+1. ENTITY CLARITY — Introduce all named entities with full context on first mention; use consistent naming conventions throughout.
+2. SEMANTIC AUTHORITY SIGNALS — Strengthen credibility language using the Semantic Phrase Guide & Topics in Project Data; state cause-and-effect relationships explicitly.
+3. CITATION-READY PHRASING — Restructure key claims as self-contained, quotable sentences; lead with the most newsworthy information (inverted pyramid).
+4. NATURAL LANGUAGE QUERY ALIGNMENT — Anticipate user AI queries; provide clear direct answers to who, what, why, when, what outcome, what does this mean; avoid jargon.
+5. STRUCTURED CLARITY — Logically ordered, parallel structure; bookend key findings in opening and closing context.
+6. TONE AND REGISTER — Maintain professional, authoritative tone aligned with Project Data Sections 1-3; avoid unattributed superlatives (e.g. "world-class", "revolutionary").
+
+OUTPUT INSTRUCTIONS:
+- Provide the full rewritten document.
+- Recommend a list of additional supporting data from third-parties that may be contextually relevant for inclusion — include links.
+- Flag any instances where a key message could NOT be embedded naturally, with a brief explanation.`
+    : `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft content piece with word lengths depending on Content Type:
+
+${contentType} = ${PROMPT_2_LENGTHS[contentType] || "apply best practices for this content type"}
+
+Use the Headline / subject entry as the guiding theme and argument. Optimise the ${contentType.toLowerCase()} to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+
+ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+- Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
+- Do not change titles, author names, job titles, entity names, or organisational descriptions.
+- Preserve the essential premise, core arguments, and conclusions within the Transcript or notes source content.
+- Preserve readability for a human audience and natural language based on the regional origins of the company within the Project Data and selected spokesperson.
+
+BUSINESS SOURCE CONTEXT:
+This ${contentType.toLowerCase()} attributed to: ${spokesperson === "NA" ? "the company" : spokesperson}
+Using information and instructions in Project Data doc calibrate the editorial voice, select supporting evidence appropriate to the media categories selected and the business sectors they represent, and ensure the enhanced document reflects well on the business source's authority and expertise.
+
+KEY MESSAGE INTEGRATION:
+Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
+
+PERMITTED ENHANCEMENTS — apply all of the following:
+1. SUPPORTING FACTS & DATA ENRICHMENT — Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag inserted data as [ADDED DATA]; do not fabricate statistics.
+2. EDITORIAL STRUCTURE ENHANCEMENT — High-authority thought leadership architecture: Opening hook → Premise (within first 150 words) → Evidence & elaboration → Counterargument acknowledgment & rebuttal → Implications & recommendations → Closing conviction statement.
+3. ENTITY CLARITY & ATTRIBUTION — Introduce all named entities with full title/name and context on first mention; establish the business source's expertise early.
+4. CITATION-READY & RETRIEVAL-OPTIMISED PHRASING — Each core claim expressed as a single self-contained sentence; inverted pyramid at paragraph level; bookend the most important claim in opening and conclusion.
+5. NATURAL LANGUAGE QUERY ALIGNMENT — Anticipate professional audience AI queries; provide clear direct answers (what is the problem, why does it matter, what should be done, what does success look like, who is saying this and why should I trust them); define acronyms on first use.
+6. INTELLECTUAL AUTHORITY SIGNALS — Use proprietary frameworks, named methodologies, coined terms; make the basis for predictions/recommendations explicit; introduce a named framework if the argument supports one.
+7. TONE CALIBRATION FOR BUSINESS SOURCE — Reflect the intended tone and competitive positioning from Project Data; sound like a senior practitioner with sector-specific precision; remove hedging or self-promotional language.
+
+OUTPUT INSTRUCTIONS:
+- Provide the full rewritten and enhanced document.`;
 
   return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
@@ -2177,7 +2271,7 @@ function OptimiserPage({
               <div className="px-5 py-3 border-b flex items-center gap-2" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <MessageSquare size={14} color="#2896b9" />
                 <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Change log</h2>
-                <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "pitch" ? "Prompt 3" : promptVariant === "prompt1" ? "Prompt 1" : "Prompt 2"} · {contentType}</span>
+                <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "pitch" ? "Prompt 2.2" : promptVariant === "prompt1" ? "Prompt 1.1" : "Prompt 2.1"} · {contentType}</span>
               </div>
               <div className="p-5 space-y-2">
                 {changeLog.length === 0 ? (
@@ -2267,7 +2361,7 @@ function OptimiserPage({
           {showLLMBrief && (
             <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>{promptHeadline}</p>
-              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>"{promptBriefShort}"</p>
+              <pre className="text-[12.5px] font-light leading-relaxed whitespace-pre-wrap font-sans max-h-[420px] overflow-y-auto pr-2" style={{ color: "#102B36" }}>{promptBriefShort}</pre>
               <p className="text-[10px] font-light mt-3" style={{ color: vars.g500 }}>Selected by content type · LLM target: {llmTarget} · Spokesperson: {spokesperson === "NA" ? "company-issued" : spokesperson} · {selectedMessages.length} key message{selectedMessages.length === 1 ? "" : "s"} chosen.</p>
             </div>
           )}
@@ -2285,7 +2379,7 @@ function OptimiserPage({
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>{promptHeadline}</p>
-                <p className="text-[12.5px] leading-relaxed" style={{ color: vars.navy }}>"{promptBriefShort}"</p>
+                <pre className="text-[12px] leading-relaxed whitespace-pre-wrap font-sans" style={{ color: vars.navy }}>{promptBriefShort}</pre>
                 <div className="rounded-lg p-3 text-[11.5px]" style={{ background: vars.g50, color: vars.g600 }}>
                   <p><strong>Content type:</strong> {contentType}</p>
                   <p><strong>Spokesperson:</strong> {spokesperson === "NA" ? "Company-issued (no spokesperson)" : spokesperson}</p>
