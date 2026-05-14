@@ -1,4 +1,4 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories } from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages } from "./IntakeForm";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
@@ -1632,6 +1632,7 @@ function OptimiserPage({
 }) {
   const intake = loadIntakeData();
   const keyMessages = getKeyMessages();
+  const projectDataMessages = getProjectDataMessages();
   const spokesList = getSpokespeople();
   const projectCategories = getProjectMediaCategories();
 
@@ -1968,35 +1969,45 @@ function OptimiserPage({
               </Labelled>
             </div>
 
-            {/* Row 3 — Key messages multi (4.2/4.3) */}
-            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1.2 & 1.3">
-              {keyMessages.length === 0 ? (
+            {/* Row 3 — Select messages from Project Data (sections 1-3) */}
+            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1-3">
+              {projectDataMessages.length === 0 ? (
                 <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
-                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
+                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No messages found in sections 1-3. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
                 </div>
               ) : (
                 <div className="relative">
                   <button type="button" onClick={() => setShowMsgPicker((v) => !v)} className="w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                    <span>{selectedMessages.length === 0 ? "Choose key messages…" : `${selectedMessages.length} message${selectedMessages.length === 1 ? "" : "s"} selected`}</span>
+                    <span>{selectedMessages.length === 0 ? "Choose messages…" : `${selectedMessages.length} message${selectedMessages.length === 1 ? "" : "s"} selected`}</span>
                     <ChevronDown size={14} color={vars.g400} style={{ transform: showMsgPicker ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
                   </button>
                   {showMsgPicker && (
-                    <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border bg-white shadow-lg max-h-[280px] overflow-y-auto" style={{ borderColor: vars.g200 }}>
-                      {keyMessages.map((m) => {
-                        const label = m.short || m.long;
-                        const on = selectedMessages.includes(label);
+                    <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border bg-white shadow-lg max-h-[340px] overflow-y-auto" style={{ borderColor: vars.g200 }}>
+                      {(["1", "2", "3"] as const).map((sec) => {
+                        const items = projectDataMessages.filter((m) => m.section === sec);
+                        if (items.length === 0) return null;
                         return (
-                          <button key={`${m.tag}-${label}`} type="button" onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== label) : [...selectedMessages, label])}
-                            className="w-full text-left px-3 py-2 flex items-start gap-2.5 border-b last:border-b-0 hover:bg-[rgba(200,73,122,0.06)]"
-                            style={{ borderColor: vars.g100 }} title={m.long}>
-                            <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: on ? "#C8497A" : vars.g300, background: on ? "#C8497A" : "white" }}>
-                              {on && <Check size={11} color="white" />}
-                            </span>
-                            <span className="flex-1 min-w-0">
-                              <span className="text-[10px] font-bold uppercase tracking-[0.14em] mr-1.5" style={{ color: "#C8497A" }}>[{m.tag}]</span>
-                              <span className="text-[12px]" style={{ color: vars.navy }}>{label}</span>
-                            </span>
-                          </button>
+                          <div key={sec}>
+                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] border-b sticky top-0" style={{ background: vars.g50, borderColor: vars.g100, color: vars.g500 }}>
+                              Section {sec} · {sec === "1" ? "Earned Media Framework" : sec === "2" ? "FAQ & Customer Questions" : "Audience & Intent"}
+                            </div>
+                            {items.map((m, i) => {
+                              const on = selectedMessages.includes(m.value);
+                              return (
+                                <button key={`${m.fieldId}-${i}-${m.value}`} type="button" onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== m.value) : [...selectedMessages, m.value])}
+                                  className="w-full text-left px-3 py-2 flex items-start gap-2.5 border-b last:border-b-0 hover:bg-[rgba(200,73,122,0.06)]"
+                                  style={{ borderColor: vars.g100 }} title={m.value}>
+                                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: on ? "#C8497A" : vars.g300, background: on ? "#C8497A" : "white" }}>
+                                    {on && <Check size={11} color="white" />}
+                                  </span>
+                                  <span className="flex-1 min-w-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] mr-1.5" style={{ color: "#C8497A" }}>[{m.fieldId}]</span>
+                                    <span className="text-[12px]" style={{ color: vars.navy }}>{m.label}</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         );
                       })}
                     </div>

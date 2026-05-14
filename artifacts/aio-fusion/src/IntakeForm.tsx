@@ -1416,6 +1416,53 @@ export function getKeyMessages(): { short: string; long: string; tag: string }[]
   return out.length > 0 ? out : [{ short: "Primary message not yet set", long: "Add your primary message in Project Set-Up section 1.2.", tag: "Primary" }];
 }
 
+export type ProjectDataMessage = { label: string; value: string; section: "1" | "2" | "3"; fieldId: string; fieldLabel: string };
+
+export function getProjectDataMessages(): ProjectDataMessage[] {
+  const data = loadIntakeData();
+  const out: ProjectDataMessage[] = [];
+  if (!data) return out;
+
+  const pushLines = (raw: unknown, section: "1" | "2" | "3", fieldId: string, fieldLabel: string) => {
+    if (typeof raw !== "string" || !raw.trim()) return;
+    raw.split(/\n+/).map((s) => s.trim()).filter(Boolean).forEach((line) => {
+      out.push({ label: line.length > 90 ? `${line.slice(0, 90)}…` : line, value: line, section, fieldId, fieldLabel });
+    });
+  };
+
+  // Section 1
+  const primary = data.duals["1.2"];
+  if (primary && (primary.short || primary.long)) {
+    const label = primary.short || primary.long;
+    out.push({ label, value: primary.long || primary.short, section: "1", fieldId: "1.2", fieldLabel: "Primary Message" });
+  }
+  (data.dualLists["1.3"] || []).forEach((m, i) => {
+    if (m.short || m.long) {
+      const label = m.short || m.long;
+      out.push({ label, value: m.long || m.short, section: "1", fieldId: "1.3", fieldLabel: `Additional Message ${i + 1}` });
+    }
+  });
+  pushLines(data.formData["1.4"], "1", "1.4", "Online evidence");
+  pushLines(data.formData["1.6"], "1", "1.6", "Preferred terms");
+  pushLines(data.formData["1.7"], "1", "1.7", "Topics & themes");
+
+  // Section 2
+  pushLines(data.formData["2.1"], "2", "2.1", "Pre-purchase questions");
+  pushLines(data.formData["2.2"], "2", "2.2", "Post-purchase questions");
+  pushLines(data.formData["2.3"], "2", "2.3", "Misconceptions / objections");
+  pushLines(data.formData["2.4"], "2", "2.4", "Category questions");
+  pushLines(data.formData["2.5"], "2", "2.5", "Positioning copy");
+  pushLines(data.formData["2.6"], "2", "2.6", "Core products / services");
+
+  // Section 3
+  pushLines(data.formData["3.1"], "3", "3.1", "Primary audience");
+  pushLines(data.formData["3.2"], "3", "3.2", "Audience language");
+  pushLines(data.formData["3.3"], "3", "3.3", "Pain points");
+  pushLines(data.formData["3.4"], "3", "3.4", "Desired outcomes");
+
+  return out;
+}
+
 export function getSpokespeople(): Spokesperson[] {
   const data = loadIntakeData();
   return data?.spokespeople || [];
