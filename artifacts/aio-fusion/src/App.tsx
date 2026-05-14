@@ -1889,7 +1889,7 @@ function OptimiserPage({
             </div>
 
             {/* Row 3 — Key messages multi (4.2/4.3) */}
-            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1.2 + 1.3">
+            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1.2 & 1.3">
               {keyMessages.length === 0 ? (
                 <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
                   <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages set. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
@@ -2973,7 +2973,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <label className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block" style={{ color: vars.g500 }}>Key message</label>
                 {plannerKeyMessages.length === 0 ? (
                   <div className="rounded-lg border p-2.5 text-[12px] font-light italic" style={{ borderColor: vars.g200, color: vars.g400, background: "white" }}>
-                    No key messages set. Add them in <button type="button" onClick={() => onNavigate("intake")} className="underline" style={{ color: "#C8497A" }}>Project Set-Up</button> (sections 1.2 + 1.3).
+                    No key messages set. Add them in <button type="button" onClick={() => onNavigate("intake")} className="underline" style={{ color: "#C8497A" }}>Project Set-Up</button> (sections 1.2 & 1.3).
                   </div>
                 ) : (
                   <select
@@ -4064,7 +4064,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
           </div>
           <div className="lg:col-span-3">
             <label className="text-[11px] font-semibold mb-1 block" style={{ color: vars.g500 }}>
-              Project Message <span className="font-light">(multi-select from 1.2 + 1.3)</span>
+              Project Message <span className="font-light">(multi-select from 1.2 & 1.3)</span>
             </label>
             <div className="rounded-lg border p-2 min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: "white" }}>
               {keyMessages.length === 0 && (
@@ -4268,7 +4268,7 @@ function GeoContentPage() {
           <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>LLM brief used by this tool</p>
             <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-              "Using Project Data PR sections 2.5–2.7 (positioning copy, products / services, search phrases), score the alignment between each core page and the business's PR key messages (Project Data 1.2 + 1.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood."
+              "Using Project Data PR sections 2.5–2.7 (positioning copy, products / services, search phrases), score the alignment between each core page and the business's PR key messages (Project Data 1.2 & 1.3). Identify schema, Q&A snippet, and entity-clarity gaps. Output an itemised action report to lift LLM citation likelihood."
             </p>
           </div>
         )}
@@ -4341,6 +4341,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [contentType, setContentType] = useState("Article");
   const [headline, setHeadline] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [editorFontSize, setEditorFontSize] = useState<number>(13);
   const [spokesperson, setSpokesperson] = useState(spokesList[0]?.name || "");
   const [spokesLi, setSpokesLi] = useState(spokesList[0]?.linkedin || "");
   const [mediaTarget, setMediaTarget] = useState<string[]>([]);
@@ -4407,13 +4408,34 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
+        <div className="flex items-center justify-between gap-3 -mb-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
+          <div className="flex items-center gap-2">
+            <label htmlFor="editor-font-size" className="text-[11px] font-medium" style={{ color: vars.g500 }}>Font size</label>
+            <select
+              id="editor-font-size"
+              value={editorFontSize}
+              onChange={(e) => setEditorFontSize(Number(e.target.value))}
+              className="text-[12px] px-2 py-1 rounded-md border bg-white"
+              style={{ borderColor: vars.g200, color: vars.navy }}
+              title="Adjust the font size of the headline and transcript fields"
+            >
+              <option value={11}>Small (11px)</option>
+              <option value={13}>Default (13px)</option>
+              <option value={15}>Medium (15px)</option>
+              <option value={17}>Large (17px)</option>
+              <option value={19}>X-Large (19px)</option>
+            </select>
+          </div>
+        </div>
+
         <Labelled label="Headline / subject" hint={`Up to 150 words for the brief idea or angle. (${headlineWords} / 150)`}>
-          <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: headlineOver ? vars.red : vars.g200 }} />
+          <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border" style={{ borderColor: headlineOver ? vars.red : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.5 }} />
           {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
         </Labelled>
 
         <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`}>
-          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border text-[13px] leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : vars.g200 }} />
+          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.6 }} />
           {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
         </Labelled>
 
