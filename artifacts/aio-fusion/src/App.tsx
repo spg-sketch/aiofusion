@@ -234,7 +234,7 @@ function MiniDonut({ score, color, size = 56 }: { score: number; color: string; 
 
 // Shared content types (used by Optimiser, Creator and Planner).
 const CONTENT_TYPES = [
-  "Press release", "Article", "Case study", "Whitepaper", "Blog post",
+  "Press release", "Article", "Article Media Pitch", "Case study", "Whitepaper", "Blog post",
   "Social post", "Event copy", "Speaker submission", "Award submission", "Directory entry",
 ];
 
@@ -1659,7 +1659,11 @@ function OptimiserPage({
   const [retrieveQuery, setRetrieveQuery] = useState("");
 
   const PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
-  const promptVariant: "prompt1" | "prompt2" = PROMPT_1_TYPES.includes(contentType) ? "prompt1" : "prompt2";
+  const PITCH_TYPES = ["Article Media Pitch"];
+  const promptVariant: "prompt1" | "prompt2" | "pitch" =
+    PITCH_TYPES.includes(contentType) ? "pitch"
+    : PROMPT_1_TYPES.includes(contentType) ? "prompt1"
+    : "prompt2";
 
   const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
   const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
@@ -1885,11 +1889,15 @@ function OptimiserPage({
     setOptimised(false);
   };
 
-  const promptHeadline = promptVariant === "prompt1"
+  const promptHeadline = promptVariant === "pitch"
+    ? `LLM Optimisation Prompt 3 — Article Media Pitch`
+    : promptVariant === "prompt1"
     ? `LLM Optimisation Prompt 1 — Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
     : `LLM Optimisation Prompt 2 — Article, Whitepaper, Blog post, Social post`;
 
-  const promptBriefShort = promptVariant === "prompt1"
+  const promptBriefShort = promptVariant === "pitch"
+    ? `Using Project Data Sections 1–3, craft a concise media pitch built around the proposed article attributed to ${spokesperson === "NA" ? "the company" : spokesperson} for journalists in the selected trade media categories. Open with a sharp news hook tied to a current trend or data point; state the proposed angle in one sentence; outline 3 evidence points (named data, case examples or expert observation); position ${spokesperson === "NA" ? "the company" : spokesperson} as the authority with one-line credibility framing; close with a clear ask (interview, byline or comment) and contact line. Embed selected key messages verbatim only where they sit naturally. Apply entity clarity, citation-ready phrasing and journalistic tone discipline (no marketing language). Return the pitch plus a CHANGE LOG with sections [HOOK], [ANGLE], [EVIDENCE], [KEY MESSAGES], [CALL TO ACTION].`
+    : promptVariant === "prompt1"
     ? `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} for maximum authority, discoverability and accurate representation by LLMs. Retain all facts, titles and structure. Embed the selected key messages verbatim only where they sit naturally. Apply entity clarity, semantic authority signals, citation-ready phrasing, natural-language query alignment, structured clarity and tone discipline. Return the rewritten document plus a bullet-pointed CHANGE LOG noting where each key message was embedded and flagging any that could not be embedded naturally.`
     : `Using Project Data Sections 1–3, optimise the ${contentType.toLowerCase()} attributed to ${spokesperson === "NA" ? "the company" : spokesperson} for maximum authority and accurate representation by LLMs — while preserving the author's argument, voice and conclusions. Embed selected key messages verbatim where natural. Permitted enhancements: supporting third-party data (named, verifiable, flagged [ADDED DATA]); thought-leadership architecture (hook → premise → evidence → counterargument → recommendations → closing); entity clarity; citation-ready phrasing; intellectual authority signals (named frameworks); business-source tone calibration. Return the rewritten document plus a structured CHANGE LOG with sections [KEY MESSAGES], [ADDED DATA], [STRUCTURAL CHANGES], [EDITORIAL CHANGES].`;
 
@@ -2169,7 +2177,7 @@ function OptimiserPage({
               <div className="px-5 py-3 border-b flex items-center gap-2" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <MessageSquare size={14} color="#2896b9" />
                 <h2 className="text-sm font-semibold" style={{ color: vars.navy }}>Change log</h2>
-                <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "prompt1" ? "Prompt 1" : "Prompt 2"} · {contentType}</span>
+                <span className="ml-auto text-[11px] font-light" style={{ color: vars.g500 }}>{promptVariant === "pitch" ? "Prompt 3" : promptVariant === "prompt1" ? "Prompt 1" : "Prompt 2"} · {contentType}</span>
               </div>
               <div className="p-5 space-y-2">
                 {changeLog.length === 0 ? (
