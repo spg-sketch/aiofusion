@@ -583,23 +583,33 @@ function ClientSelectorPage({
   clientLogos,
   onLogoUpdate,
   onBackToPlatformHome,
+  onCreateProject,
+  onArchivedProjects,
+  onGuidance,
 }: {
   onSelectClient: (client: Client) => void;
   clientLogos: Record<string, string>;
   onLogoUpdate: (clientId: string, logoDataUrl: string) => void;
   onBackToPlatformHome: () => void;
+  onCreateProject: () => void;
+  onArchivedProjects: () => void;
+  onGuidance: () => void;
 }) {
   const [demoView, setDemoView] = useState<"full" | "single" | "empty">("full");
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const displayClients = demoView === "empty" ? [] : demoView === "single" ? clients.slice(0, 1) : clients;
   void clients.reduce((s, c) => s + c.contentCount, 0);
   void Math.round(clients.reduce((s, c) => s + c.avgScore, 0) / clients.length);
 
+  const paper = "#FBF6EC";
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const accentSoft = "#FBE3ED";
+
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <header
-        className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
-        style={{ background: "white", borderColor: vars.g200 }}
+        className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
+        style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}
       >
         <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
@@ -610,52 +620,52 @@ function ClientSelectorPage({
           </button>
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}
+            style={{ background: accent }}
           >
             SP
           </div>
           <div className="flex flex-col">
-            <span className="text-[13px] font-medium" style={{ color: vars.navy }}>
+            <span className="text-[13px] font-medium" style={{ color: ink }}>
               Admin
             </span>
-            <span className="text-[11px] font-light" style={{ color: vars.g400 }}>
+            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>
               Intelligence Tier
             </span>
           </div>
         </div>
       </header>
-      <div className="px-4 sm:px-10 py-6 sm:py-10 max-w-5xl mx-auto">
-        <div className="mb-8 sm:mb-10 flex items-start justify-between gap-4 flex-wrap">
+      <div className="px-4 sm:px-10 py-6 sm:py-10 max-w-6xl mx-auto">
+        <div className="mb-6 sm:mb-8 flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-3">
               <div
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
-                style={{ background: "rgba(31,116,143,0.06)", color: "#1f748f" }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em]"
+                style={{ background: accentSoft, border: `1px solid ${accent}40`, color: accent }}
               >
                 <Building2 size={12} /> Project Hub
               </div>
             </div>
             <h1
-              className="text-2xl sm:text-3xl tracking-tight"
-              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
+              className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
+              style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
             >
-              {displayClients.length === 0 ? "Welcome to your Project Hub" : "Your Projects"}
+              {displayClients.length === 0 ? <>Welcome to your <span style={{ color: accent }}>Project Hub</span></> : "Your Projects"}
             </h1>
-            <p className="text-[15px] font-light mt-2" style={{ color: vars.g500 }}>
+            <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
               {displayClients.length === 0
-                ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
-                : "Select a Project to manage AI optimisation, on-going PR and marketing output."}
+                ? "Set up your first project to start optimising your PR and marketing output for AI discoverability — or jump into archived work or platform guidance."
+                : "Select a project to manage AI optimisation, on-going PR and marketing output."}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g400 }}>Demo view</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Demo view</span>
             <div className="inline-flex rounded-full p-1" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
               {([["full", "All"], ["single", "1 project"], ["empty", "Empty"]] as const).map(([v, label]) => (
                 <button
                   key={v}
                   onClick={() => setDemoView(v)}
                   className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors"
-                  style={{ background: demoView === v ? vars.navy : "transparent", color: demoView === v ? "white" : vars.g500 }}
+                  style={{ background: demoView === v ? ink : "transparent", color: demoView === v ? paper : vars.g500 }}
                 >
                   {label}
                 </button>
@@ -664,18 +674,67 @@ function ClientSelectorPage({
           </div>
         </div>
 
+        {/* Three primary actions — visible in both empty and populated states */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8 sm:mb-10">
+          <button
+            onClick={onCreateProject}
+            className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            style={{ background: accent, color: "white" }}
+          >
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.2)" }}>
+              <Plus size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Start a new piece of work</p>
+              <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
+              <p className="text-[12px] font-light mt-0.5 opacity-85">Walk through Project Set-Up.</p>
+            </div>
+            <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+          </button>
+          <button
+            onClick={onArchivedProjects}
+            className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ background: "white", border: `1px solid ${vars.g200}`, color: ink }}
+          >
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
+              <Archive size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g500 }}>Past work</p>
+              <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
+              <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Searchable history of completed work.</p>
+            </div>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" style={{ color: vars.g400 }} />
+          </button>
+          <button
+            onClick={onGuidance}
+            className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+            style={{ background: "white", border: `1px solid ${vars.g200}`, color: ink }}
+          >
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
+              <BookOpen size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g500 }}>How-to library</p>
+              <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
+              <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Articles &amp; videos on using the platform.</p>
+            </div>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" style={{ color: vars.g400 }} />
+          </button>
+        </div>
+
         {displayClients.length === 0 ? (
           <div
             className="rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center"
-            style={{ background: "white", borderColor: vars.g200 }}
+            style={{ background: "white", borderColor: `${accent}55` }}
           >
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-              style={{ background: "rgba(31,116,143,0.08)", color: "#1f748f" }}
+              style={{ background: accentSoft, color: accent }}
             >
               <Building2 size={28} />
             </div>
-            <h2 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <h2 className="text-xl mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
               No projects yet
             </h2>
             <p className="text-[14px] font-light max-w-md mx-auto mb-6" style={{ color: vars.g500 }}>
@@ -683,9 +742,9 @@ function ClientSelectorPage({
               You'll set up its messaging, audience and content plan once — then everything you publish flows through it.
             </p>
             <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-colors"
-              style={{ background: "#1f748f" }}
+              onClick={onCreateProject}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all hover:brightness-110"
+              style={{ background: accent }}
             >
               <Plus size={14} /> Create your first project
             </button>
@@ -829,57 +888,24 @@ function ClientSelectorPage({
             );
           })}
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={onCreateProject}
             className="rounded-2xl border-2 border-dashed p-7 text-left transition-all hover:shadow-md min-h-[260px] flex flex-col items-center justify-center gap-3"
-            style={{ background: "rgba(31,116,143,0.03)", borderColor: vars.g300, color: vars.g500 }}
+            style={{ background: "rgba(200,73,122,0.04)", borderColor: `${accent}55`, color: ink }}
           >
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ background: "rgba(31,116,143,0.08)", color: "#1f748f" }}
+              style={{ background: accentSoft, color: accent }}
             >
               <Plus size={20} />
             </div>
             <div className="text-center">
-              <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>New project</p>
-              <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Set up a new brand, product or campaign</p>
+              <p className="text-[14px] font-semibold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>New project</p>
+              <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Set up a new brand, product or campaign</p>
             </div>
           </button>
         </div>
         )}
       </div>
-
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(16,43,54,0.5)" }} onClick={() => setShowCreateModal(false)}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-4">
-              <h2 className="text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Create new project</h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
-            </div>
-            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
-              You'll be walked through Project Set-Up — seven short sections capturing your brand, audience, messaging and content plan. The system uses this as the source of truth for every optimisation that follows.
-            </p>
-            <ol className="text-[12.5px] space-y-2 mb-5 pl-5 list-decimal" style={{ color: vars.g600 }}>
-              <li>Company &amp; brand basics</li>
-              <li>Spokespeople &amp; expertise</li>
-              <li>Key messages &amp; semantic phrases</li>
-              <li>Audiences &amp; media categories</li>
-              <li>Content plan &amp; cadence</li>
-            </ol>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowCreateModal(false)} className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-full" style={{ color: vars.g500, background: vars.g100 }}>
-                Cancel
-              </button>
-              <button
-                onClick={() => { setShowCreateModal(false); onSelectClient(clients[0]); }}
-                className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-full text-white"
-                style={{ background: "#1f748f" }}
-              >
-                Start set-up
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5794,20 +5820,50 @@ function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNav
   );
 }
 
-function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
+function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean; initialFilter?: string | null; onClearFilter?: () => void }) {
+  const { initialFilter, onClearFilter, ...marketingProps } = props;
   const articles = [
     { title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide", img: blogTile1, accent: vars.accent, external: true },
     { title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: "#", tag: "Article", img: blogTile2, accent: vars.coral, external: false },
     { title: "The 6 GEO signal categories every brand should track", excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.", url: "#", tag: "Article", img: blogTile3, accent: vars.gold, external: false },
     { title: "From SEO to AIO: a transition playbook for marketing teams", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: "#", tag: "Playbook", img: blogTile1, accent: vars.green, external: false },
+    { title: "How to set up your first project in AIO Fusion", excerpt: "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.", url: "#", tag: "Guidance", img: blogTile2, accent: vars.accent, external: false },
+    { title: "Running an Authority Report and reading the results", excerpt: "How the six GEO signal categories are scored, what each band means, and where to focus first.", url: "#", tag: "Guidance", img: blogTile3, accent: vars.accent, external: false },
+    { title: "Using the Optimiser with tracked changes", excerpt: "How to review every edit the platform suggests, accept or reject changes, and export the final draft.", url: "#", tag: "Guidance", img: blogTile1, accent: vars.accent, external: false },
+    { title: "Building a Media Research list that journalists will actually open", excerpt: "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.", url: "#", tag: "Guidance", img: blogTile2, accent: vars.accent, external: false },
   ];
+  const allTags = Array.from(new Set(articles.map((a) => a.tag)));
+  const [activeTag, setActiveTag] = useState<string | null>(initialFilter ?? null);
+  const visible = activeTag ? articles.filter((a) => a.tag === activeTag) : articles;
+  const isGuidance = activeTag === "Guidance";
   return (
-    <MarketingPage title="Insights" eyebrow={<><BookOpen size={12} /> Library</> as any} {...props}>
-      <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
-        Practical thinking on AI visibility, GEO, and the future of PR and marketing.
+    <MarketingPage title={isGuidance ? "Guidance" : "Insights"} eyebrow={<><BookOpen size={12} /> {isGuidance ? "How-to library" : "Library"}</> as any} {...marketingProps}>
+      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
+        {isGuidance
+          ? "How-to articles and videos for using the AIO Fusion platform — set-up, Authority Reports, Optimiser, Media Research and more."
+          : "Practical thinking on AI visibility, GEO, and the future of PR and marketing. Filter to Guidance for platform how-to content."}
       </p>
+      <div className="flex flex-wrap items-center gap-2 mb-8">
+        <button
+          onClick={() => { setActiveTag(null); onClearFilter?.(); }}
+          className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1.5 rounded-full transition-colors"
+          style={{ background: activeTag === null ? vars.navy : "transparent", color: activeTag === null ? "white" : vars.g500, border: `1px solid ${activeTag === null ? vars.navy : vars.g200}` }}
+        >
+          All
+        </button>
+        {allTags.map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTag(t)}
+            className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1.5 rounded-full transition-colors"
+            style={{ background: activeTag === t ? vars.navy : "transparent", color: activeTag === t ? "white" : vars.g500, border: `1px solid ${activeTag === t ? vars.navy : vars.g200}` }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
       <div className="grid sm:grid-cols-2 gap-6">
-        {articles.map((a) => (
+        {visible.map((a) => (
           <a
             key={a.title}
             href={a.url}
@@ -6478,6 +6534,7 @@ function App() {
   const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
@@ -6516,6 +6573,7 @@ function App() {
 
   const goToView = (v: string) => {
     if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies") {
+      if (v === "insights") setInsightsFilter(null);
       setView(v as any);
       window.scrollTo(0, 0);
     } else if (v === "landing" || v === "landing-b" || v === "landing-c") {
@@ -6540,7 +6598,7 @@ function App() {
     return <ForAgenciesPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "insights") {
-    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
+    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} initialFilter={insightsFilter} onClearFilter={() => setInsightsFilter(null)} />;
   }
   if (view === "about") {
     return <AboutPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
@@ -6670,6 +6728,18 @@ function App() {
         clientLogos={clientLogos}
         onLogoUpdate={handleLogoUpdate}
         onBackToPlatformHome={() => setView("platform-home")}
+        onCreateProject={() => {
+          setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
+          setCurrentPage("intake");
+        }}
+        onArchivedProjects={() => {
+          setActiveClient({ id: "archive-view", name: "Archive", initials: "AR", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
+          setCurrentPage("archive");
+        }}
+        onGuidance={() => {
+          setInsightsFilter("Guidance");
+          setView("insights");
+        }}
       />
     );
   }
