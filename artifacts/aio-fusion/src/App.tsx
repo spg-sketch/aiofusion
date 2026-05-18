@@ -2847,7 +2847,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         const SLOT_BG_A = "#F2F8F9";
         const SLOT_BG_B = "#E6F0F2";
         const HEADER_BG = "#9FD0D7";
-        const COLS = ["Week of", "Content Title", "Content message", "Audience", "Release Channel a.", "Release Channel b.", "Release Channel c.", "Release Channel d.", "Spokes", "Status", "Release Date", "Notes", "Score"];
+        const COLS = ["Week of", "Content Type", "Content Title", "Status", "Key Message", "Spokesperson", "Release Date", "Authority Score", "Action Notes"];
         return (
           <div>
             {/* Status key — horizontal strip ABOVE the calendar so it never obscures entries */}
@@ -2894,20 +2894,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             )}
                             {p ? (
                               <>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer hover:opacity-80" style={{ background: slotBg, borderColor: "white", color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 200 }}>{p.keyMessage || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.audience || ""}</td>
-                                {[0, 1, 2, 3].map((idx) => (
-                                  <td key={idx} onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{ch[idx] || ""}</td>
-                                ))}
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
                                 <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 220 }}>{p.keyMessage || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 180 }}>{p.notes || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.accent }}>{Math.round(s!.visibility + s!.authority)}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g400, fontWeight: 400 }}>/50</span></td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 240 }}>{p.notes || ""}</td>
                               </>
                             ) : (
-                              Array.from({ length: 12 }).map((__, c) => (
+                              Array.from({ length: 8 }).map((__, c) => (
                                 <td
                                   key={c}
                                   onClick={c === 0 ? () => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); } : undefined}
@@ -4167,6 +4164,29 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     onNavigate("optimiser");
   };
 
+  const pushArchiveToPlanner = (item: ArchiveItem) => {
+    const projects = loadPlannerProjects();
+    const releaseDate = (item.releasedAt || item.createdAt || "").slice(0, 10);
+    const wk = getISOWeek(new Date(releaseDate || Date.now()));
+    const km = keyMessages[0]?.short || keyMessages[0]?.long || "";
+    const proj: PlannerProject = {
+      id: `pp-${Date.now()}`,
+      title: item.title || "Untitled archive item",
+      contentType: item.contentType || "Article",
+      spokesperson: item.spokesperson || "",
+      keyMessage: km,
+      audience: "",
+      channels: item.releaseChannel ? [item.releaseChannel] : [],
+      week: wk,
+      status: item.status === "Final" ? "Approved" : "Review",
+      releaseDate,
+      notes: `Pushed from Archive · ${item.status} · ${new Date(item.createdAt).toLocaleDateString()}`,
+    };
+    savePlannerProjects([proj, ...projects]);
+    alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
+    onNavigate("planner");
+  };
+
   const clearFilters = () => {
     setQuery(""); setPeriodFilter(""); setTypeFilter(""); setMessageFilter([]); setSpokespersonFilter("");
   };
@@ -4282,6 +4302,9 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button onClick={(e) => { e.stopPropagation(); sendToOptimiser(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
                     Open in Optimiser
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); pushArchiveToPlanner(item); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this archive item">
+                    Push to Comms Planner
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>
                 </div>
