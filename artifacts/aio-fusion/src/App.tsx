@@ -1861,6 +1861,7 @@ function OptimiserPage({
   const [articleHeadline, setArticleHeadline] = useState("");
   const [standfirst, setStandfirst] = useState("");
   const [bodyCopy, setBodyCopy] = useState("");
+  const [actionNotes, setActionNotes] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
   const [optimised, setOptimised] = useState(false);
   const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; bodyCopy: string } | null>(null);
@@ -1956,7 +1957,7 @@ function OptimiserPage({
       week: dateWeek,
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
-      notes: "Sent from Content Optimiser.",
+      notes: actionNotes.trim() || "Sent from Content Optimiser.",
     };
     savePlannerProjects([proj, ...projects]);
     alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
@@ -2422,6 +2423,26 @@ OUTPUT INSTRUCTIONS:
                 <textarea value={bodyCopy} onChange={(e) => setBodyCopy(e.target.value)} rows={10} className="w-full p-4 outline-none resize-vertical" style={{ color: optimised ? "#B03D33" : vars.navy, border: "none", fontSize: editorFontSize, lineHeight: 1.55 }}
                   placeholder="Paste your press release, article, case study or whitepaper here…" />
               </div>
+            </Labelled>
+
+            {/* Action Notes — feeds the Comms Planner Notes column */}
+            <Labelled label="Action Notes" hint="Up to 150 words of internal notes — pushed through to the Notes column on the Comms Planner.">
+              <textarea
+                value={actionNotes}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const words = next.trim() === "" ? 0 : next.trim().split(/\s+/).length;
+                  if (words <= 150) setActionNotes(next);
+                  else setActionNotes(next.trim().split(/\s+/).slice(0, 150).join(" "));
+                }}
+                rows={4}
+                placeholder="e.g. Embargo until Tuesday 09:00; align with launch webinar; coordinate with Spencer on quote sign-off."
+                className="w-full p-3 rounded-lg border outline-none resize-vertical"
+                style={{ borderColor: vars.g200, color: vars.navy, fontSize: editorFontSize, lineHeight: 1.55 }}
+              />
+              <p className="text-[10px] font-light mt-1" style={{ color: countWords(actionNotes) > 140 ? "#C94A3E" : vars.g400 }}>
+                {countWords(actionNotes)} / 150 words · Also shown on the Comms Planner
+              </p>
             </Labelled>
 
             {/* Action bar */}
