@@ -1659,28 +1659,6 @@ Engines used:
         </div>
       </div>
 
-      <div className="mb-6 flex justify-end">
-        <button
-          onClick={() => setShowBrief((v) => !v)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em]"
-          style={{ background: showBrief ? "#C8497A" : "white", color: showBrief ? "white" : "#C8497A", border: "1px solid #C8497A" }}
-        >
-          <Sparkles size={12} /> {showBrief ? "Hide LLM brief" : "View LLM brief used to generate this report"}
-        </button>
-      </div>
-      {showBrief && (
-        <div className="rounded-2xl p-5 mb-6" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "#C8497A" }}>LLM brief — Authority &amp; Visibility Report</p>
-            <span className="text-[10px] font-light" style={{ color: vars.g500 }}>Source: artifacts/api-server/src/routes/diagnostic.ts</span>
-          </div>
-          <pre className="text-[12.5px] font-light leading-relaxed whitespace-pre-wrap font-sans max-h-[460px] overflow-y-auto pr-2" style={{ color: "#102B36" }}>{DIAGNOSTIC_LLM_BRIEF}</pre>
-          <p className="text-[11px] font-light mt-3 italic" style={{ color: vars.g500 }}>
-            This is the live system prompt sent to Claude &amp; GPT-4o for every diagnostic. Edit it in the source file above — we can expand inputs (Project Data Sections 1–3, spokespeople, key messages, target media categories) and tighten the scoring rubric for richer reviews.
-          </p>
-        </div>
-      )}
-
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
           <div className="flex flex-col items-center flex-shrink-0">
