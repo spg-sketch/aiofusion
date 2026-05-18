@@ -1379,6 +1379,27 @@ function DiagnosticPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
+  const [showBrief, setShowBrief] = useState(false);
+
+  const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
+
+Score each of the following 6 categories from 0 to the maximum shown. Be rigorous — most pages score poorly. Provide specific, actionable recommendations for each category.
+
+Categories (score / max):
+1. Schema & Structured Data (0-15): Does the content have Organization schema, FAQ schema, Article schema, author markup? Look for JSON-LD, microdata, or RDFa signals.
+2. Content Architecture (0-15): Is content written in answer-first format? Are there clear headings, key takeaway boxes, semantic phrases, entity-rich descriptions? Is it structured for extraction?
+3. Source Authority (0-15): Are there author credentials, expert profiles, trust signals, citations to primary sources, NAP consistency indicators?
+4. Earned Media Signals (0-20): Evidence of press coverage, backlinks, spokesperson mentions, third-party endorsements, industry reports?
+5. LLM Visibility (0-20): Is the content written in a way LLMs can easily cite? Are there clear, quotable statements of fact? Does it answer common questions directly?
+6. Technical Accessibility (0-15): Are there indicators of page speed, clean HTML structure, proper heading hierarchy, mobile-friendliness, AI crawler access?
+
+Return your analysis as valid JSON only (no markdown, no code fences) with: overallScore (0-100), categories (name, score, max, status, findings[], recommendations[]), strengths[], warnings[], criticalGaps[], priorityActions[] (priority, action, timeframe, impact, category), summary.
+
+Inputs supplied with this brief:
+- The URL submitted by the user, or pasted page content (up to ~50,000 characters).
+
+Engines used:
+- Anthropic Claude (claude-sonnet-4-5) and OpenAI (gpt-4o) run in parallel; results are merged into a single dual-engine score where both succeed.`;
 
   const handleRunDiagnostic = async () => {
     if (!isAuthenticated) {
@@ -1571,6 +1592,28 @@ function DiagnosticPage({
           )}
         </div>
       </div>
+
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => setShowBrief((v) => !v)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em]"
+          style={{ background: showBrief ? "#C8497A" : "white", color: showBrief ? "white" : "#C8497A", border: "1px solid #C8497A" }}
+        >
+          <Sparkles size={12} /> {showBrief ? "Hide LLM brief" : "View LLM brief used to generate this report"}
+        </button>
+      </div>
+      {showBrief && (
+        <div className="rounded-2xl p-5 mb-6" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "#C8497A" }}>LLM brief — Authority &amp; Visibility Report</p>
+            <span className="text-[10px] font-light" style={{ color: vars.g500 }}>Source: artifacts/api-server/src/routes/diagnostic.ts</span>
+          </div>
+          <pre className="text-[12.5px] font-light leading-relaxed whitespace-pre-wrap font-sans max-h-[460px] overflow-y-auto pr-2" style={{ color: "#102B36" }}>{DIAGNOSTIC_LLM_BRIEF}</pre>
+          <p className="text-[11px] font-light mt-3 italic" style={{ color: vars.g500 }}>
+            This is the live system prompt sent to Claude &amp; GPT-4o for every diagnostic. Edit it in the source file above — we can expand inputs (Project Data Sections 1–3, spokespeople, key messages, target media categories) and tighten the scoring rubric for richer reviews.
+          </p>
+        </div>
+      )}
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
