@@ -5083,7 +5083,7 @@ function MediaResearchPage() {
         </div>
         <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
         <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>
-          Take an approved piece of content and ask the LLM to recommend the publications and journalists most likely to run it.
+          Select draft and approved content from the Archive and ask the LLMs to recommend the publications and journalists most likely to run it. Media will be recommended from categories chosen in Project Set-Up.
         </p>
       </div>
 
