@@ -5039,15 +5039,161 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   );
 }
 
+type MediaListItem = {
+  rank: number;
+  publication: string;
+  url: string;
+  tier: "Tier 1" | "Tier 2" | "Tier 3";
+  tierRank: number;
+  description: string;
+  readership: string;
+  reach: string;
+  reachVerified: boolean;
+  journalists: { name: string; title: string; confidence: "confirmed" | "likely" | "unverified" }[];
+  newsdesk: string;
+  authority: number;
+  authorityNote?: string;
+  pitchAngle: string;
+};
+
+const DEMO_MEDIA_LIST: MediaListItem[] = [
+  {
+    rank: 1, publication: "PRWeek UK", url: "https://www.prweek.com/uk", tier: "Tier 1", tierRank: 1,
+    description: "Haymarket-owned weekly digital and monthly print covering UK PR and communications industry news.",
+    readership: "PR directors, agency leaders and in-house comms heads across UK agencies and brands.",
+    reach: "~180,000 monthly UU (publisher figure)", reachVerified: true,
+    journalists: [
+      { name: "John Harrington", title: "UK Editor", confidence: "confirmed" },
+      { name: "Daniel Farey-Jones", title: "Deputy Editor", confidence: "likely" },
+      { name: "Eleni Mitzali", title: "Reporter", confidence: "likely" },
+    ],
+    newsdesk: "uknews@prweek.com",
+    authority: 94, authorityNote: "Highest-relevance trade for UK PR audience; sets the agenda for sector peers.",
+    pitchAngle: "Offer as a Tuesday exclusive ahead of any wider distribution.",
+  },
+  {
+    rank: 2, publication: "Campaign", url: "https://www.campaignlive.co.uk", tier: "Tier 1", tierRank: 2,
+    description: "Haymarket-owned daily covering marketing, advertising and agency leadership across the UK.",
+    readership: "CMOs, marketing directors and agency C-suite at brand and creative agencies.",
+    reach: "~520,000 monthly UU (SimilarWeb, approximate)", reachVerified: true,
+    journalists: [
+      { name: "Maisie McCabe", title: "UK Editor", confidence: "confirmed" },
+      { name: "Gemma Charles", title: "Deputy Editor", confidence: "likely" },
+      { name: "Beau Jackson", title: "Senior Reporter", confidence: "likely" },
+    ],
+    newsdesk: "newsdesk@campaignlive.co.uk",
+    authority: 91, authorityNote: "Broader marketing readership than PRWeek; strong agency C-suite reach.",
+    pitchAngle: "Position as a CMO-perspective opinion piece tied to a sector data point.",
+  },
+  {
+    rank: 3, publication: "The Drum", url: "https://www.thedrum.com", tier: "Tier 1", tierRank: 3,
+    description: "Independent marketing and media title with daily news, awards programmes and a strong agency angle.",
+    readership: "Agency owners, brand marketers and martech leaders across UK, EU and North America.",
+    reach: "~1.2m monthly UU (publisher figure, approximate)", reachVerified: false,
+    journalists: [
+      { name: "Sam Anderson", title: "News Editor", confidence: "likely" },
+      { name: "Hannah Bowler", title: "Senior Reporter", confidence: "likely" },
+    ],
+    newsdesk: "news@thedrum.com",
+    authority: 87,
+    pitchAngle: "Frame as an agency case study with a named client outcome.",
+  },
+  {
+    rank: 4, publication: "Marketing Week", url: "https://www.marketingweek.com", tier: "Tier 2", tierRank: 1,
+    description: "Centaur Media weekly covering brand marketing strategy, careers and consumer trends.",
+    readership: "Brand marketing leaders and senior in-house marketers, mainly UK consumer brands.",
+    reach: "~340,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
+    journalists: [
+      { name: "Russell Parsons", title: "Editor-in-Chief", confidence: "confirmed" },
+      { name: "Charlotte Rogers", title: "Deputy Editor", confidence: "likely" },
+    ],
+    newsdesk: "news@marketingweek.com",
+    authority: 84,
+    pitchAngle: "Lead with a data point and a quote from a named brand-side marketer.",
+  },
+  {
+    rank: 5, publication: "B2B Marketing", url: "https://www.b2bmarketing.net", tier: "Tier 2", tierRank: 2,
+    description: "Specialist publication for B2B marketers, with a strong content marketing and demand-gen focus.",
+    readership: "Heads of marketing at B2B technology, services and professional firms.",
+    reach: "~95,000 monthly UU (publisher figure, unverified)", reachVerified: false,
+    journalists: [
+      { name: "Molly Raycraft", title: "Editor", confidence: "likely" },
+    ],
+    newsdesk: "editorial@b2bmarketing.net",
+    authority: 79,
+    pitchAngle: "Pitch as a how-to feature with a checklist or framework attached.",
+  },
+  {
+    rank: 6, publication: "Influence Magazine (CIPR)", url: "https://influenceonline.co.uk", tier: "Tier 2", tierRank: 3,
+    description: "CIPR member magazine and online, focused on PR practice standards and member opinion.",
+    readership: "Chartered PR practitioners and CIPR members across UK agencies and in-house teams.",
+    reach: "~40,000 CIPR members (member-only circulation)", reachVerified: true,
+    journalists: [
+      { name: "Koray Camgöz", title: "Editor", confidence: "likely" },
+    ],
+    newsdesk: "editor@influenceonline.co.uk",
+    authority: 76,
+    pitchAngle: "Offer as a CIPR-member opinion piece with a chartered practitioner byline.",
+  },
+  {
+    rank: 7, publication: "Communicate Magazine", url: "https://www.communicatemagazine.com", tier: "Tier 3", tierRank: 1,
+    description: "Cravenhill-owned title for corporate communications, brand and reputation professionals.",
+    readership: "Heads of corporate comms and reputation at FTSE 250 and large private firms.",
+    reach: "~25,000 print + digital readers (publisher figure, unverified)", reachVerified: false,
+    journalists: [
+      { name: "Brittany Golob", title: "Editor", confidence: "unverified" },
+    ],
+    newsdesk: "editorial@communicatemagazine.com",
+    authority: 68,
+    pitchAngle: "Position as a corporate reputation angle, not an agency story.",
+  },
+  {
+    rank: 8, publication: "Mumbrella", url: "https://mumbrella.com", tier: "Tier 3", tierRank: 2,
+    description: "Australian-headquartered marketing and media site with growing UK coverage; daily news cadence.",
+    readership: "Marketing and PR professionals across APAC with a UK readership share.",
+    reach: "~180,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
+    journalists: [
+      { name: "Tim Burrowes", title: "Founder / Contributor", confidence: "unverified" },
+    ],
+    newsdesk: "newsdesk@mumbrella.com",
+    authority: 58, authorityNote: "Audience is APAC-weighted; lower direct relevance to the UK primary audience.",
+    pitchAngle: "Only if the story has an APAC angle or a regional spokesperson.",
+  },
+];
+
+const MEDIA_LIST_LLM_PROMPT = `You are acting as a senior UK PR media-list builder.
+Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
+You are given permission to web-search and verify named contacts before answering.
+Cross reference and enhance your recommendations by reviewing the content of relevant categories listed on the AIO Fusion Media Data document where possible.
+
+For each publication, return:
+1. Publication name and homepage URL
+2. Tier (per the scope list above) and a 1–N relevancy rank within tier
+3. One-sentence description of the title (owner, format, frequency)
+4. One-sentence description of its readership (job titles, seniority, sector)
+5. Audience reach — give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
+6. Up to 5 named journalists with name + job title currently on the relevant beat (cross checking with information and instructions in Project Data doc). Mark each contact's confidence: ✅ confirmed in last 6 months / 🟡 likely still in role / ⚪ unverified
+7. Generic newsdesk / editorial inbox (one per outlet)
+8. Authority score (0–100) — relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) — not a generic DA score. Briefly justify scores above 90 and below 60.
+9. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
+
+Constraints:
+- Deliver as a structured list on a word document.
+- Also, deliver as a sortable Excel sheet, ordered overall by likelihood of pickup
+- Skip individual journalist email addresses; route through newsdesk inboxes
+- Don't fabricate contacts — if you can't verify a journalist still covers the beat, omit them
+- Include a final tab with: methodology, source caveats, and a recommended first-wave outreach sequence`;
+
 function MediaResearchPage() {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
-  const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study"].includes(a.contentType));
+  const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
   const messages = getKeyMessages();
   const projectCats = getProjectMediaCategories();
   const [selectedId, setSelectedId] = useState<string>(() => {
     try { return localStorage.getItem("aio.research.preload") || ""; } catch { return ""; }
   });
-  const [mode, setMode] = useState<"none" | "publications" | "journalists">("none");
+  const [mediaList, setMediaList] = useState<MediaListItem[] | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
@@ -5055,21 +5201,114 @@ function MediaResearchPage() {
 
   const selected = archive.find((a) => a.id === selectedId);
 
-  // Demo data
-  const demoPublications = [
-    { name: "PRWeek UK", authority: 92, audience: "Senior PR / comms directors", category: "Public Relations & Communications" },
-    { name: "Campaign", authority: 88, audience: "Marketing & advertising leaders", category: "Marketing" },
-    { name: "Marketing Week", authority: 85, audience: "Brand and marketing teams", category: "Marketing" },
-    { name: "The Drum", authority: 82, audience: "Agencies, brands, tech", category: "Marketing" },
-    { name: "B2B Marketing", authority: 78, audience: "B2B marketers", category: "Marketing" },
-    { name: "Influence Magazine (CIPR)", authority: 76, audience: "CIPR member PR practitioners", category: "Public Relations & Communications" },
-  ];
-  const demoJournalists = [
-    { name: "John Harrington", outlet: "PRWeek", beat: "Agency news, sector trends", recent: "AI agents reshape PR pitching workflows", email: "john.harrington@prweek.com" },
-    { name: "Frances Ball", outlet: "Marketing Week", beat: "Marketing technology, AI", recent: "How GEO is redefining brand authority", email: "frances.ball@marketingweek.com" },
-    { name: "Beau Jackson", outlet: "The Drum", beat: "Agency profiles, AI ethics", recent: "When AI writes the press release", email: "beau.jackson@thedrum.com" },
-    { name: "Amy Houston", outlet: "Campaign", beat: "Marketing leaders, transformation", recent: "Inside the AI-first marketing org", email: "amy.houston@campaignlive.co.uk" },
-  ];
+  const runRecommendMedia = () => {
+    setGenerating(true);
+    setMediaList(null);
+    setTimeout(() => {
+      setMediaList(DEMO_MEDIA_LIST);
+      setGenerating(false);
+    }, 1100);
+  };
+
+  const downloadWordDoc = () => {
+    if (!mediaList || !selected) return;
+    const confidenceLabel = (c: string) => c === "confirmed" ? "✅ confirmed in last 6 months" : c === "likely" ? "🟡 likely still in role" : "⚪ unverified";
+    const itemsHtml = mediaList.map((m) => `
+      <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${m.rank}. ${m.publication}</h2>
+      <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${m.url}">${m.url}</a> · ${m.tier} · Tier rank ${m.tierRank} · <b>Authority ${m.authority}/100</b></p>
+      <p><b>Description:</b> ${m.description}</p>
+      <p><b>Readership:</b> ${m.readership}</p>
+      <p><b>Audience reach:</b> ${m.reach}${m.reachVerified ? "" : " <i>(unverified — flag with client)</i>"}</p>
+      <p><b>Named journalists:</b></p>
+      <ul>${m.journalists.map((j) => `<li>${j.name} — ${j.title} — ${confidenceLabel(j.confidence)}</li>`).join("")}</ul>
+      <p><b>Newsdesk inbox:</b> ${m.newsdesk}</p>
+      ${m.authorityNote ? `<p><b>Authority note:</b> ${m.authorityNote}</p>` : ""}
+      <p><b>Suggested pitch angle:</b> ${m.pitchAngle}</p>
+      <hr/>
+    `).join("");
+    const methodology = `
+      <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology, caveats and first-wave outreach</h2>
+      <p><b>Methodology:</b> Generated against the selected content "${selected.title}" (${selected.contentType}) using the Project Data media categories. Publications ranked by relevance-weighted authority across the primary target audience, then within tier.</p>
+      <p><b>Source caveats:</b> Audience reach figures are publisher-stated or SimilarWeb-derived and labelled "approximate". Unverified figures are flagged. Journalist beats verified against public bylines within the last 6 months where the ✅ marker is used.</p>
+      <p><b>First-wave outreach sequence:</b></p>
+      <ol>
+        <li>Day 0 — Tier 1 exclusive offer to PRWeek UK (24-hour window).</li>
+        <li>Day 1 — Embargoed release to remaining Tier 1 (Campaign, The Drum).</li>
+        <li>Day 2 — Tier 2 wire distribution with bespoke pitch angles per outlet.</li>
+        <li>Day 5 — Tier 3 follow-up; offer follow-on commentary or data drop.</li>
+      </ol>
+    `;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List — ${selected.title}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
+      <h1 style="font-family:Georgia,serif;">Target Media List</h1>
+      <p><b>Content:</b> ${selected.title} (${selected.contentType})</p>
+      <p><b>Generated:</b> ${new Date().toLocaleDateString("en-GB")}</p>
+      <hr/>
+      ${itemsHtml}
+      ${methodology}
+    </body></html>`;
+    const blob = new Blob([html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Target-Media-List_${selected.title.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadExcelDoc = () => {
+    if (!mediaList || !selected) return;
+    const confidenceLabel = (c: string) => c === "confirmed" ? "Confirmed" : c === "likely" ? "Likely" : "Unverified";
+    const rows = mediaList.map((m) => `
+      <tr>
+        <td>${m.rank}</td>
+        <td>${m.publication}</td>
+        <td>${m.url}</td>
+        <td>${m.tier}</td>
+        <td>${m.tierRank}</td>
+        <td>${m.description}</td>
+        <td>${m.readership}</td>
+        <td>${m.reach}</td>
+        <td>${m.reachVerified ? "Yes" : "No"}</td>
+        <td>${m.journalists.map((j) => `${j.name} (${j.title}) — ${confidenceLabel(j.confidence)}`).join("; ")}</td>
+        <td>${m.newsdesk}</td>
+        <td>${m.authority}</td>
+        <td>${m.authorityNote || ""}</td>
+        <td>${m.pitchAngle}</td>
+      </tr>
+    `).join("");
+    const methodologyRows = `
+      <tr><td>Methodology</td><td>Generated against "${selected.title}" using Project Data media categories; ranked by relevance-weighted authority across the primary target audience.</td></tr>
+      <tr><td>Source caveats</td><td>Reach figures are publisher-stated or SimilarWeb-derived and labelled approximate. Unverified figures flagged.</td></tr>
+      <tr><td>First-wave outreach — Day 0</td><td>Tier 1 exclusive offer to PRWeek UK (24-hour window).</td></tr>
+      <tr><td>Day 1</td><td>Embargoed release to remaining Tier 1 (Campaign, The Drum).</td></tr>
+      <tr><td>Day 2</td><td>Tier 2 wire distribution with bespoke angles.</td></tr>
+      <tr><td>Day 5</td><td>Tier 3 follow-up; offer follow-on commentary or data drop.</td></tr>
+    `;
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body>
+<table border="1">
+  <thead><tr style="background:#102B36;color:white;font-weight:bold;">
+    <th>Rank</th><th>Publication</th><th>URL</th><th>Tier</th><th>Tier rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Verified</th><th>Journalists</th><th>Newsdesk</th><th>Authority</th><th>Authority note</th><th>Pitch angle</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<br/><br/>
+<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Item</th><th>Detail</th></tr></thead><tbody>${methodologyRows}</tbody></table>
+</body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Target-Media-List_${selected.title.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const confidenceIcon = (c: "confirmed" | "likely" | "unverified") =>
+    c === "confirmed" ? "✅" : c === "likely" ? "🟡" : "⚪";
+  const confidenceText = (c: "confirmed" | "likely" | "unverified") =>
+    c === "confirmed" ? "confirmed in last 6 months" : c === "likely" ? "likely still in role" : "unverified";
 
   const ink = "#102B36";
   const accentPink = "#C8497A";
@@ -5122,66 +5361,122 @@ function MediaResearchPage() {
             </div>
           </div>
 
-          {/* Action buttons */}
+          {/* Action button */}
           <div className="flex flex-wrap gap-2 mb-6">
-            <button onClick={() => setMode("publications")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.gold }}>
-              <Eye size={14} /> Recommend Publications
+            <button
+              onClick={runRecommendMedia}
+              disabled={generating}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-60"
+              style={{ background: vars.coral }}
+            >
+              {generating ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Building media list…
+                </>
+              ) : (
+                <>
+                  <Target size={14} /> Recommend Media
+                </>
+              )}
             </button>
-            <button onClick={() => setMode("journalists")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
-              <Users size={14} /> Recommend Journalists
-            </button>
-            <button onClick={() => alert("Recommendations exported as Word + PDF (demo).")} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-              <Download size={14} /> Download report
-            </button>
+            <span className="text-[11px] font-light self-center" style={{ color: vars.g500 }}>
+              Submits the LLM prompt below. Returns a structured list, downloadable as Word and Excel.
+            </span>
           </div>
 
           {/* Results */}
-          {mode === "publications" && (
-            <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g100 }}>
-                <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended publications</h3>
-              </div>
-              <table className="w-full text-[13px]">
-                <thead style={{ background: vars.g50 }}>
-                  <tr>
-                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Publication</th>
-                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Audience</th>
-                    <th className="px-4 py-2.5 text-left font-semibold" style={{ color: vars.g500 }}>Category</th>
-                    <th className="px-4 py-2.5 text-right font-semibold" style={{ color: vars.g500 }}>Authority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {demoPublications.map((p) => (
-                    <tr key={p.name} className="border-t" style={{ borderColor: vars.g100 }}>
-                      <td className="px-4 py-2.5 font-semibold" style={{ color: vars.navy }}>{p.name}</td>
-                      <td className="px-4 py-2.5 font-light" style={{ color: vars.g500 }}>{p.audience}</td>
-                      <td className="px-4 py-2.5 font-light" style={{ color: vars.g500 }}>{p.category}</td>
-                      <td className="px-4 py-2.5 text-right font-bold" style={{ color: vars.gold }}>{p.authority}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {mode === "journalists" && (
-            <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
-              <div className="px-5 py-3 border-b" style={{ borderColor: vars.g100 }}>
-                <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended journalists</h3>
+          {mediaList && (
+            <div className="bg-white rounded-2xl border overflow-hidden mb-6" style={{ borderColor: vars.g200 }}>
+              <div className="px-5 py-4 border-b flex items-center justify-between flex-wrap gap-2" style={{ borderColor: vars.g100, background: vars.g50 }}>
+                <div>
+                  <h3 className="text-[15px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Target Media List</h3>
+                  <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>Ordered overall by likelihood of pickup. {mediaList.length} publications.</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]" style={{ color: vars.g500 }}>
+                  <span>✅ confirmed</span><span>🟡 likely</span><span>⚪ unverified</span>
+                </div>
               </div>
               <div className="divide-y" style={{ borderColor: vars.g100 }}>
-                {demoJournalists.map((j) => (
-                  <div key={j.name} className="p-4 flex items-start justify-between gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>{j.name} <span className="font-light" style={{ color: vars.g500 }}>· {j.outlet}</span></p>
-                      <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>{j.beat}</p>
-                      <p className="text-[12px] font-light italic mt-1" style={{ color: vars.g400 }}>Recent: "{j.recent}"</p>
+                {mediaList.map((m) => (
+                  <div key={m.rank} className="p-5">
+                    <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.coral }}>
+                          {m.rank}. {m.tier} · Tier rank {m.tierRank}
+                        </p>
+                        <h4 className="text-[18px] font-semibold mt-0.5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{m.publication}</h4>
+                        <a href={m.url} target="_blank" rel="noreferrer" className="text-[12px] font-light underline" style={{ color: vars.accent }}>{m.url}</a>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>Authority</p>
+                        <p className="text-[24px] font-bold leading-none mt-1" style={{ color: vars.gold }}>{m.authority}<span className="text-[12px] font-light" style={{ color: vars.g400 }}>/100</span></p>
+                      </div>
                     </div>
-                    <a href={`mailto:${j.email}`} className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
-                      <Mail size={12} /> {j.email}
-                    </a>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 mt-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-0.5" style={{ color: vars.g500 }}>Title</p>
+                        <p className="text-[13px] font-light" style={{ color: vars.navy }}>{m.description}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-0.5" style={{ color: vars.g500 }}>Readership</p>
+                        <p className="text-[13px] font-light" style={{ color: vars.navy }}>{m.readership}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-0.5" style={{ color: vars.g500 }}>Audience reach</p>
+                        <p className="text-[13px] font-light" style={{ color: vars.navy }}>
+                          {m.reach}
+                          {!m.reachVerified && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(224,120,86,0.15)", color: vars.coral }}>unverified</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-0.5" style={{ color: vars.g500 }}>Newsdesk inbox</p>
+                        <p className="text-[13px] font-light" style={{ color: vars.navy }}>{m.newsdesk}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: vars.g500 }}>Named journalists ({m.journalists.length})</p>
+                      <ul className="space-y-1">
+                        {m.journalists.map((j) => (
+                          <li key={j.name} className="text-[13px] font-light" style={{ color: vars.navy }}>
+                            <span className="mr-1.5">{confidenceIcon(j.confidence)}</span>
+                            <span className="font-semibold">{j.name}</span> — {j.title}
+                            <span className="text-[11px] italic ml-1.5" style={{ color: vars.g400 }}>({confidenceText(j.confidence)})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {m.authorityNote && (
+                      <div className="mt-3 p-2.5 rounded-lg" style={{ background: "rgba(201,160,78,0.1)" }}>
+                        <p className="text-[12px] font-light italic" style={{ color: "#7A5E25" }}><span className="font-bold not-italic">Authority note:</span> {m.authorityNote}</p>
+                      </div>
+                    )}
+                    <div className="mt-3 p-2.5 rounded-lg" style={{ background: accentSoft }}>
+                      <p className="text-[12px] font-light" style={{ color: ink }}><span className="font-bold">Suggested pitch angle:</span> {m.pitchAngle}</p>
+                    </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Download buttons */}
+              <div className="px-5 py-4 border-t flex flex-wrap items-center gap-3" style={{ borderColor: vars.g100, background: vars.g50 }}>
+                <p className="text-[11px] font-light flex-1 min-w-[200px]" style={{ color: vars.g500 }}>
+                  Both formats include a methodology, source caveats and a first-wave outreach sequence.
+                </p>
+                <button
+                  onClick={downloadWordDoc}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white"
+                  style={{ borderColor: vars.g200, color: vars.navy }}
+                >
+                  <FileText size={13} color="#2B579A" /> Download as Word doc
+                </button>
+                <button
+                  onClick={downloadExcelDoc}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white"
+                  style={{ borderColor: vars.g200, color: vars.navy }}
+                >
+                  <FileText size={13} color="#1F7244" /> Download as Excel doc
+                </button>
               </div>
             </div>
           )}
@@ -5194,19 +5489,10 @@ function MediaResearchPage() {
           <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
         </button>
         {showLLMBrief && (
-          <div className="w-full rounded-2xl p-5 space-y-3" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: "#C8497A" }}>Recommend Publications</p>
-              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-                "Using the Project Data document and the selected piece of content, recommend the top trade publications most likely to run this story. Rank by authority score across the LLM agents (ChatGPT, Claude, Perplexity, Gemini, CoPilot), audience overlap with the selected media categories, and recent appetite for similar content. Provide a short rationale for each."
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1.5" style={{ color: "#C8497A" }}>Recommend Journalists</p>
-              <p className="text-[13px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>
-                "Using the Project Data document, the selected piece of content and the recommended publications above, recommend the journalists most likely to engage with this pitch. For each journalist provide outlet, beat, two recent related pieces and their best contact email. Note: structured contact list can be drawn from the agency's master journalist spreadsheet, organised to mirror the 1.9 trade media categories."
-              </p>
-            </div>
+          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>Recommend Media — LLM prompt</p>
+            <pre className="text-[12px] font-light leading-relaxed whitespace-pre-wrap font-sans" style={{ color: "#102B36" }}>{MEDIA_LIST_LLM_PROMPT}</pre>
+            <p className="text-[10px] font-light italic mt-3" style={{ color: "#7A2447" }}>The LLM returns the structured list rendered above plus matching Word and Excel documents.</p>
           </div>
         )}
       </div>
