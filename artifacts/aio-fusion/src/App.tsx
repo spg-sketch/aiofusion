@@ -5483,19 +5483,6 @@ function MediaResearchPage() {
         </>
       )}
 
-      {/* LLM Brief — bottom toggle */}
-      <div className="mt-8 flex flex-col items-center gap-3">
-        <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
-          <Bot size={13} /> {showLLMBrief ? "Hide LLM Brief" : "LLM Brief"}
-        </button>
-        {showLLMBrief && (
-          <div className="w-full rounded-2xl p-5" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>Recommend Media — LLM prompt</p>
-            <pre className="text-[12px] font-light leading-relaxed whitespace-pre-wrap font-sans" style={{ color: "#102B36" }}>{MEDIA_LIST_LLM_PROMPT}</pre>
-            <p className="text-[10px] font-light italic mt-3" style={{ color: "#7A2447" }}>The LLM returns the structured list rendered above plus matching Word and Excel documents.</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
