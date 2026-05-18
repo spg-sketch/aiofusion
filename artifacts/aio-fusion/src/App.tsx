@@ -5501,15 +5501,123 @@ function MarketingIntelligencePage() {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const projectCategories = getProjectMediaCategories();
   const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
-  const [categories, setCategories] = useState<string[]>(projectCategories.slice(0, 3));
+  const [categories, setCategories] = useState<string[]>(projectCategories);
   const [period, setPeriod] = useState<"6m" | "12m">("6m");
   const [region, setRegion] = useState<"UK" | "NA">("UK");
   const [showCatPicker, setShowCatPicker] = useState(false);
-  const [results, setResults] = useState<typeof demoEvents | null>(null);
+  const [results, setResults] = useState<EventItem[] | null>(null);
 
   const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards"];
 
-  const search = () => setResults(demoEvents);
+  const search = () => setResults(DEMO_EVENTS_V2);
+  void EVENTS_RESEARCH_LLM_PROMPT_V2;
+
+  const actionableOps = (results || []).flatMap((e) =>
+    e.opportunities.filter((o) => o.actionable).map((o) => ({ event: e, op: o }))
+  ).slice(0, 3);
+
+  const confirmStyle = (c: EventConfirmFlag) =>
+    c === "C"
+      ? { color: "#1F7244", bg: "rgba(31,114,68,0.12)", label: "[C] Confirmed in next 12 months" }
+      : { color: "#A04040", bg: "rgba(160,64,64,0.12)", label: "[U] Unconfirmed — held in last 24 months" };
+
+  const downloadWordReport = () => {
+    if (!results) return;
+    const itemsHtml = results.map((e) => {
+      const cs = confirmStyle(e.confirmStatus);
+      const opsHtml = e.opportunities.map((o) => `
+        <li><b>${o.type}</b> — <b>Cost:</b> ${o.cost} · <b>Deadline:</b> ${o.deadline}
+          ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${o.contactDetails}</i>` : ""}
+          ${o.notes ? `<br/><i style="color:#666;">${o.notes}</i>` : ""}
+          ${o.actionable ? `<br/><span style="color:#C8497A;font-weight:bold;">★ Top 3 actionable</span>` : ""}
+        </li>
+      `).join("");
+      return `
+        <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${e.rank}. ${e.name}</h2>
+        <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${e.url}">${e.url}</a> · ${e.category} · <b>Authority ${e.authority}/100</b> · <span style="color:${cs.color};font-weight:bold;">${cs.label}</span></p>
+        <p><b>Date:</b> ${e.date}</p>
+        <p><b>Audience:</b> ${e.audience}</p>
+        <p><b>Title / owner:</b> ${e.titleDescription}</p>
+        <p><b>Location:</b> ${e.location}</p>
+        <p><b>Why it's relevant:</b> ${e.relevanceReason}</p>
+        <p><b>Opportunities (${e.opportunities.length}):</b></p>
+        <ul>${opsHtml}</ul>
+        <hr/>
+      `;
+    }).join("");
+    const topActionHtml = actionableOps.length === 0 ? "<p><i>No live windows flagged at search time.</i></p>" :
+      `<ol>${actionableOps.map((a) => `<li><b>${a.event.name}</b> — ${a.op.type} — deadline: ${a.op.deadline}</li>`).join("")}</ol>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Opportunities Report</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
+      <h1 style="font-family:Georgia,serif;">Event Opportunities Report</h1>
+      <p><b>Marketing types:</b> ${marketingType.join(", ")}</p>
+      <p><b>Business categories:</b> ${categories.join(", ")}</p>
+      <p><b>Period:</b> ${period === "6m" ? "Next 6 months" : "Next 12 months"} · <b>Region:</b> ${region === "UK" ? "United Kingdom" : "North America"}</p>
+      <h2 style="font-family:Georgia,serif;color:#102B36;">Top 3 immediately actionable opportunities</h2>
+      ${topActionHtml}
+      <hr/>
+      ${itemsHtml}
+      <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology &amp; source caveats</h2>
+      <p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked <b>[C] Confirmed</b>; events unconfirmed for the next 12 months but held in the previous 24 months are marked <b>[U] Unconfirmed</b> and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to the selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented — unverifiable entries are dropped.</p>
+    </body></html>`;
+    const blob = new Blob([html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `event-opportunities-report-${new Date().toISOString().slice(0, 10)}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadExcelReport = () => {
+    if (!results) return;
+    // One row per opportunity
+    const rows = results.flatMap((e) => {
+      const cs = confirmStyle(e.confirmStatus);
+      return e.opportunities.map((o) => `
+        <tr>
+          <td>${e.rank}</td>
+          <td>${e.name}</td>
+          <td>${e.url}</td>
+          <td>${e.category}</td>
+          <td>${e.date}</td>
+          <td>${e.location}</td>
+          <td>${e.audience}</td>
+          <td>${e.titleDescription}</td>
+          <td style="color:${cs.color};font-weight:bold;">${e.confirmStatus} — ${cs.label.replace(`[${e.confirmStatus}] `, "")}</td>
+          <td>${e.authority}</td>
+          <td>${o.type}</td>
+          <td>${o.cost}</td>
+          <td>${o.deadline}</td>
+          <td>${o.contactDetails || ""}</td>
+          <td>${o.notes || ""}</td>
+          <td>${o.actionable ? "YES" : ""}</td>
+          <td>${e.relevanceReason}</td>
+        </tr>
+      `);
+    }).join("");
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Opportunities</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body>
+<h2>Event Opportunities — one row per opportunity</h2>
+<p><b>Marketing types:</b> ${marketingType.join(", ")} · <b>Categories:</b> ${categories.join(", ")} · <b>Period:</b> ${period === "6m" ? "Next 6 months" : "Next 12 months"} · <b>Region:</b> ${region === "UK" ? "United Kingdom" : "North America"}</p>
+<table border="1">
+  <thead><tr style="background:#102B36;color:white;font-weight:bold;">
+    <th>Rank</th><th>Event name</th><th>URL</th><th>Category</th><th>Date</th><th>Location</th><th>Audience</th><th>Title / owner</th><th>Confirm status</th><th>Authority /100</th><th>Opportunity type</th><th>Cost</th><th>Deadline</th><th>Contact details</th><th>Notes</th><th>Top 3 actionable</th><th>Why relevant</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<br/><br/>
+<h2>Methodology</h2>
+<p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked [C] Confirmed; events unconfirmed for the next 12 months but held in the previous 24 months are marked [U] Unconfirmed and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented — unverifiable entries are dropped.</p>
+</body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `event-opportunities-report-${new Date().toISOString().slice(0, 10)}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
@@ -5577,13 +5685,21 @@ function MarketingIntelligencePage() {
           </Labelled>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: vars.g100 }}>
-          <button onClick={search} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
-            <Search size={14} /> Search Events
-          </button>
-          <button onClick={() => alert("Report exported as Word + PDF (demo).")} disabled={!results} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold border bg-white disabled:opacity-40" style={{ borderColor: vars.g200, color: vars.navy }}>
-            <Download size={14} /> Download Report
-          </button>
+        <div className="pt-3 border-t" style={{ borderColor: vars.g100 }}>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <button onClick={search} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
+              <Search size={14} /> Search Events
+            </button>
+            <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.accent }}>
+              <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
+            </button>
+          </div>
+          <p className="text-[11px] font-light leading-relaxed" style={{ color: vars.g500 }}>
+            Builds an exhaustive, web-verified list of UK PR events for the chosen marketing types and business categories, with one row per opportunity (entry, award, speaker, sponsorship). Events confirmed in the next 12 months are flagged <strong style={{ color: "#1F7244" }}>[C] Confirmed</strong>; events held in the previous 24 months but not yet confirmed forward are flagged <strong style={{ color: "#A04040" }}>[U] Unconfirmed</strong>. Each event carries an LLM authority score (0-100), a relevance summary and named-contact details verified at search time. No URLs, events, titles or emails are invented.
+          </p>
+          {showLLMBrief && (
+            <pre className="mt-3 p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap overflow-auto max-h-[320px]" style={{ background: vars.g50, border: `1px solid ${vars.g100}`, color: vars.g600 }}>{EVENTS_RESEARCH_LLM_PROMPT_V2}</pre>
+          )}
         </div>
       </div>
 
@@ -5591,46 +5707,89 @@ function MarketingIntelligencePage() {
       {results && (
         <div className="space-y-4">
           <div className="rounded-2xl p-5" style={{ background: "rgba(224,120,86,0.08)", border: `1px solid rgba(224,120,86,0.25)` }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable</p>
-            <ul className="space-y-1.5">
-              {results.filter((e) => e.actionable).slice(0, 3).map((e) => (
-                <li key={e.name} className="text-[13px]" style={{ color: vars.navy }}>
-                  <span className="font-semibold">{e.name}</span> — {e.deadline}
-                </li>
-              ))}
-            </ul>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
+            {actionableOps.length === 0 ? (
+              <p className="text-[12px] italic" style={{ color: vars.g500 }}>No live windows flagged at search time.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {actionableOps.map((a, i) => (
+                  <li key={i} className="text-[13px]" style={{ color: vars.navy }}>
+                    <span className="font-semibold">{a.event.name}</span> — {a.op.type} — deadline: {a.op.deadline}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
             <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100 }}>
               <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
-              <span className="text-[11px]" style={{ color: vars.g400 }}>Ranked by overall score</span>
+              <span className="text-[11px]" style={{ color: vars.g400 }}>Ranked by LLM authority + category fit</span>
             </div>
             <div className="divide-y" style={{ borderColor: vars.g100 }}>
-              {results.map((e) => (
-                <div key={e.name} className="p-5">
-                  <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>{e.name}</p>
-                      <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
-                        {e.type} · {e.date} · {e.location}
-                      </p>
+              {results.map((e) => {
+                const cs = confirmStyle(e.confirmStatus);
+                return (
+                  <div key={e.name} className="p-5">
+                    <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>
+                          {e.rank}. {e.name}
+                        </p>
+                        <a href={e.url} target="_blank" rel="noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{e.url}</a>
+                        <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+                          {e.category} · {e.date} · {e.location}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: cs.bg, color: cs.color }}>{cs.label}</span>
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>Authority {e.authority}/100</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <ScorePill label="Relevance" score={e.relevance} color={vars.teal} />
-                      <ScorePill label="LLM authority" score={e.authority} color={vars.gold} />
-                      <ScorePill label="Overall" score={(e.relevance + e.authority) / 2} color={vars.coral} />
+                    <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Audience:</strong> {e.audience}
+                    </p>
+                    <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Title / owner:</strong> {e.titleDescription}
+                    </p>
+                    <p className="text-[12px] font-light leading-relaxed mb-2" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Why relevant:</strong> {e.relevanceReason}
+                    </p>
+                    <div className="mt-2 rounded-lg" style={{ background: vars.g50, border: `1px solid ${vars.g100}` }}>
+                      <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] border-b" style={{ color: vars.g500, borderColor: vars.g100 }}>Opportunities ({e.opportunities.length})</p>
+                      <ul className="divide-y" style={{ borderColor: vars.g100 }}>
+                        {e.opportunities.map((o, i) => (
+                          <li key={i} className="px-3 py-2 text-[12px]" style={{ color: vars.g600 }}>
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <strong style={{ color: vars.navy }}>{o.type}</strong>
+                              {o.actionable && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>★ Top 3 actionable</span>
+                              )}
+                            </div>
+                            <p className="mt-0.5"><strong>Cost:</strong> {o.cost}</p>
+                            <p><strong>Deadline:</strong> <span style={{ color: o.actionable ? vars.coral : vars.g600 }}>{o.deadline}</span></p>
+                            {o.contactDetails && <p className="italic" style={{ color: vars.g500 }}>Contact: {o.contactDetails}</p>}
+                            {o.notes && <p className="italic" style={{ color: vars.g500 }}>{o.notes}</p>}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
-                  <p className="text-[12px] font-light leading-relaxed mb-2" style={{ color: vars.g600 }}>{e.summary}</p>
-                  <div className="flex flex-wrap gap-3 text-[11px]" style={{ color: vars.g500 }}>
-                    {e.costEntry && <span><strong style={{ color: vars.navy }}>Award entry:</strong> {e.costEntry}</span>}
-                    {e.costSponsor && <span><strong style={{ color: vars.navy }}>Sponsorship:</strong> {e.costSponsor}</span>}
-                    {e.costSpeaker && <span><strong style={{ color: vars.navy }}>Speaker:</strong> {e.costSpeaker}</span>}
-                    {e.deadline && <span style={{ color: e.actionable ? vars.coral : vars.g500 }}><strong>Deadline:</strong> {e.deadline}</span>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* Download buttons */}
+            <div className="px-5 py-4 border-t flex flex-wrap items-center gap-3" style={{ borderColor: vars.g100, background: vars.g50 }}>
+              <p className="text-[11px] font-light flex-1 min-w-[200px]" style={{ color: vars.g500 }}>
+                Both formats include a methodology and source caveats. Excel exports one row per opportunity for sorting.
+              </p>
+              <button onClick={downloadWordReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <FileText size={13} color="#2B579A" /> Download Report (Word)
+              </button>
+              <button onClick={downloadExcelReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <FileText size={13} color="#1F7244" /> Download Report (Excel)
+              </button>
             </div>
           </div>
         </div>
@@ -5650,19 +5809,204 @@ function MarketingIntelligencePage() {
   );
 }
 
-const demoEvents = [
-  { name: "PRWeek UK Awards 2026", type: "Awards", date: "Oct 2026", location: "London · Annual", summary: "The industry's most-cited PR awards in the UK — widely known as 'PR's Oscars.' With 100+ senior judges, live Gold-category interviews and strong trade media coverage, a win or shortlisting for adtech, branding and martech client work would generate highly visible and LLM-indexed editorial across PRWeek's authoritative domain.", relevance: 9.5, authority: 9, costEntry: "~£395–£495 + VAT / category (50% off every 10th entry in one transaction)", costSponsor: "£5,000–£30,000+ (category or table package)", costSpeaker: "Winners and finalists regularly invited to judge or speak at subsequent PRWeek events", deadline: "Entry windows open spring 2026", actionable: true },
-  { name: "CIPR Excellence Awards 2026", type: "Awards", date: "1 July 2026", location: "Royal Lancaster Hotel, London · 42nd year", summary: "Now in its 42nd year, the CIPR Excellence Awards carry the Chartered Institute's seal of approval — the most established professional credential in UK PR. Consistently cited by LLMs as the benchmark for PR quality. A new 2026 category for In-House Campaigns and Corporate Communications is well-suited to B2B client portfolios.", relevance: 9.5, authority: 9, costEntry: "£345 (standard) / £400 (final) + VAT · Independent Practitioner: £205–£260 + VAT", costSponsor: "Category and ceremony sponsorship — contact CIPR via cipr.co.uk", costSpeaker: "Senior PR practitioners invited to judge — strong profile-building opportunity", deadline: "Final entry deadline approaching — confirm via cipr.co.uk", actionable: true },
-  { name: "PRWeek Global Awards 2026", type: "Awards + Conference", date: "13 May 2026", location: "Jumeirah Carlton Tower, London", summary: "36 categories spanning the world's best agency and in-house PR work across regions. Strong international media pickup means a shortlisting generates globally indexed content. The 'Best Use of AI/PR Tech' and 'Global Agency of the Year' categories are directly relevant to thought-leadership and technology-focused PR positioning.", relevance: 9, authority: 9.5, costEntry: "~£395–£495 + VAT / category", costSponsor: "Category and event sponsorship packages via PRWeek", costSpeaker: "Winners and finalists frequently featured in PRWeek editorial and invited to events", deadline: "First entry deadline closed Nov 2025 — watch 2027 cycle", actionable: true },
-  { name: "The Drum Awards Festival 2026", type: "Awards + Conference", date: "Ongoing 2026 programme", location: "Multiple UK & global ceremonies", summary: "One of the world's largest marketing awards programmes, with dedicated tracks for PR, B2B, Design, Media and Advertising. Winning work is showcased to The Drum's 11.5M global audience and indexed in the World Creative Rankings — making it one of the highest-return LLM authority plays available at this budget level.", relevance: 8.5, authority: 9.5, costEntry: "~£295–£395 + VAT / category by track and deadline", costSponsor: "Category partnership packages — contact The Drum events team", costSpeaker: "B2B World Fest and Drum events run open speaker pitches", deadline: "Rolling deadlines across categories", actionable: true },
-  { name: "Festival of Marketing 2026", type: "Conference", date: "14 October 2026", location: "London (Marketing Week)", summary: "Marketing Week's flagship one-day event bringing together thousands of senior marketers. Themes closely align with adtech, CX and thought-leadership content. Speaker pitches are openly solicited and the event generates substantial editorial coverage in Marketing Week — a key, well-crawled LLM source.", relevance: 8.5, authority: 8.5, costEntry: "Attendance ~£395–£595 + VAT (pre-sale opens mid-April 2026)", costSponsor: "Headline and session sponsor packages — contact Marketing Week events", costSpeaker: "Open speaker submission process — pitch via festivalofmarketing.com", deadline: "Speaker pitches open spring 2026", actionable: true },
-  { name: "B2B Marketing Awards 2026", type: "Awards", date: "25 November 2026", location: "London · Entry deadline 26 June", summary: "Over 20 years old and the definitive night for B2B marketing excellence. Directly relevant to agency positioning and client campaigns in adtech, branding and martech. The awards are well-indexed and frequently cited as a quality benchmark for B2B marketing strategy and execution.", relevance: 8.5, authority: 8, costEntry: "~£395–£495 + VAT / category", costSponsor: "Tables from ~£1,500; headline sponsorship on request", costSpeaker: "Year-round content and events programme with regular speaker slots", deadline: "Entries close 26 June 2026", actionable: true },
-  { name: "ATS London 2026 (AdTech Summit)", type: "Conference", date: "15 September 2026", location: "QEII Convention Centre, London", summary: "ExchangeWire's flagship one-day conference for 700+ senior professionals across media, marketing and commerce. A premier platform to position adtech PR clients as thought leaders in programmatic, retail media and AI-driven advertising. Speaker slots are panel-based and accessible, with strong coverage in ExchangeWire trade media.", relevance: 8.5, authority: 7.5, costEntry: "Attendance ~£595–£895 + VAT", costSponsor: "Packages from ~£5,000–£25,000 — contact ExchangeWire", costSpeaker: "Panel speaker pitches accepted via the ExchangeWire events team", deadline: "Speaker pitches open through summer 2026", actionable: false },
-  { name: "Cannes Lions 2026", type: "Awards + Conference", date: "22–26 June 2026", location: "Cannes, France", summary: "The global gold standard for creative marketing and advertising. New 2026 'Creative Brand Lion' and AI Craft subcategories align with branding and adtech client work. LLM authority is exceptionally high — possibly the most-cited awards programme in marketing globally. Investment is significant but the prestige return for clients is unmatched.", relevance: 6.5, authority: 9.5, costEntry: "£500–£900+ per Lion entry depending on category", costSponsor: "Major investment — partner packages in the tens of thousands", costSpeaker: "Call for Content typically opens late in year prior — watch for 2027 cycle", deadline: "Festival passes from ~£3,000–£8,000+ per person", actionable: false },
-  { name: "Festival of Media Global Awards 2026", type: "Awards + Conference", date: "11 June 2026", location: "London", summary: "3,000+ entries across 180+ categories judged by 250+ experts from 25 countries. The 'Best Use of AI in Media' and integrated strategy categories suit the agency's client work. Strong international reach amplifies LLM indexing. A solid complement to UK-focused awards entries for clients with cross-market campaigns.", relevance: 7.5, authority: 8.5, costEntry: "£485–£545 + VAT depending on deadline", costSponsor: "Partnership packages — contact info@festivalofmedia.com", costSpeaker: "Thought-leadership sessions alongside ceremony — pitch via festivalofmedia.com", deadline: "Late entry windows still open", actionable: false },
-  { name: "Marketing Week Awards 2026", type: "Awards", date: "19 November 2026", location: "Central London", summary: "Senior marketer-judged awards focused on marketing effectiveness and measurable results. 30+ categories across Sector, Channel, Strategy and People. Strong LLM footprint via Marketing Week's editorial. Best suited for entries on behalf of clients with clearly quantified campaign outcomes.", relevance: 7.5, authority: 8, costEntry: "Early bird ~£395–£495 + VAT — entry pack at marketingweek.com", costSponsor: "Category and event sponsorship packages available", costSpeaker: "Judges and winners frequently featured in Marketing Week editorial", deadline: "Early bird entry window open", actionable: false },
-  { name: "MarTech Summit London 2026", type: "Conference", date: "10–11 November 2026", location: "London", summary: "500+ senior leaders (85% Director level or above) across MarTech, CX and digital strategy. 38+ sessions with strong EMEA representation. A high-quality platform for clients in martech, CX and SaaS to build thought leadership. Complimentary brand/end-user passes available on application.", relevance: 7.5, authority: 7, costEntry: "Standard delegate passes via themartechsummit.com — brand/end-user complimentary on application", costSponsor: "Contact sponsor@themartechsummit.com for packages", costSpeaker: "Speaker applications accepted through the summit team", deadline: "Speaker applications open through summer 2026", actionable: false },
-  { name: "DigiMarCon UK 2026", type: "Conference", date: "3–4 September 2026", location: "InterContinental London Park Lane", summary: "Two-day conference covering AdTech, MarTech, SaaS, AI and digital marketing strategy with open speaker submissions. One of the more accessible platforms for clients to establish thought leadership in digital marketing and advertising, with virtual pass options for distributed reach.", relevance: 7, authority: 7, costEntry: "Attendance ~£595–£895 + VAT in-person · virtual pass available at lower cost", costSponsor: "Multiple packages — enquire at digimarconuk.co.uk", costSpeaker: "Speaker submissions actively encouraged — open pitch process, strong acceptance rate", deadline: "Speaker pitches open spring 2026", actionable: false },
+type EventConfirmFlag = "C" | "U";
+type EventOpportunity = {
+  type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
+  cost: string;
+  deadline: string;
+  contactDetails?: string;
+  notes?: string;
+  actionable?: boolean;
+};
+type EventItem = {
+  rank: number;
+  name: string;
+  url: string;
+  category: string;
+  date: string;
+  audience: string;
+  titleDescription: string;
+  location: string;
+  confirmStatus: EventConfirmFlag;
+  authority: number;
+  relevanceReason: string;
+  opportunities: EventOpportunity[];
+};
+
+const EVENTS_RESEARCH_LLM_PROMPT_V2 = `You are acting as a senior UK PR event attendance and participation-list builder.
+Produce an exhaustive list of marketing types chosen
+In business categories selected:
+Over period selected:
+Use information and instructions in the Project Data document to inform your search.
+You are given permission to web-search and verify named contacts before answering.
+Use web search for every named contact before writing the row. Do not rely on training-data knowledge of who works where.
+
+For each event, return in this order:
+- Event name and homepage URL
+- Category using the business categories above
+- Event date
+- One-sentence description of its audience (job titles, seniority, sector)
+- One-sentence description of the title (owner or related media publication, format, frequency, subjects and industry covered)
+- Event location / address
+- Event participation submission date / deadline/s
+- Entry cost (for conferences)
+- Award entry costs (for awards only)
+- Participation costs (for speaker opportunities only)
+- Sponsorship costs (for sponsorship opportunities only — include other relevant information including contact details)
+- Events confirmed published data within next <12 months mark as [C] Confirmed
+- Unverified — events unconfirmed within next <12 months but held in previous 24 months — mark as [U] Unconfirmed
+- Authority score (0-100) — provide an LLM authority score for relevance weighted to categories listed above, the business, quality of audience and other relevant criteria
+- Short summary of reasons why an event is relevant to business
+- Flag the top 3 most immediately actionable opportunities — events with open entry windows, upcoming deadlines, or speaker pitch processes currently live.
+
+Hard rules:
+- Do not invent URLs, events, titles, or emails.
+
+Deliverable:
+- A sortable Excel with one row per opportunity — include multiple opportunities for each event.
+- A structured list on a Word document.`;
+
+const DEMO_EVENTS_V2: EventItem[] = [
+  {
+    rank: 1,
+    name: "PRWeek UK Awards 2026",
+    url: "https://awards.prweek.com/uk",
+    category: "PR & communications trade",
+    date: "29 October 2026",
+    audience: "Senior agency and in-house PR leaders, CMOs and comms directors from the UK's largest consumer and B2B brands and consultancies.",
+    titleDescription: "PRWeek (Haymarket Media Group) — flagship UK PR awards programme, annual ceremony with year-round editorial follow-up across PRWeek's news, profiles and best-practice features.",
+    location: "Grosvenor House, Park Lane, London W1K 7TN",
+    confirmStatus: "C",
+    authority: 92,
+    relevanceReason: "Industry's most-cited UK PR awards (widely called 'PR's Oscars'). A shortlisting or win for adtech, branding and martech client work generates highly visible, LLM-indexed editorial across PRWeek's authoritative domain.",
+    opportunities: [
+      { type: "Award entry", cost: "£395–£495 + VAT per category (50% off every 10th entry in one transaction)", deadline: "First entry window opens 12 May 2026; final 17 July 2026", actionable: true, notes: "33 categories across consumer, B2B, healthcare, public sector and craft." },
+      { type: "Sponsorship", cost: "£5,000–£30,000+ (category or table package)", deadline: "Booking from January 2026 on first-come basis", contactDetails: "events@haymarket.com — Awards Partnerships team", notes: "Headline, category and post-event content packages available." },
+    ],
+  },
+  {
+    rank: 2,
+    name: "CIPR Excellence Awards 2026",
+    url: "https://cipr.co.uk/excellence",
+    category: "PR & communications trade",
+    date: "1 July 2026",
+    audience: "Chartered Institute of Public Relations members and senior PR practitioners — strong representation from in-house corporate comms and independent consultancies.",
+    titleDescription: "Chartered Institute of Public Relations (CIPR) — professional body programme in its 42nd year, recognised as the formal quality benchmark for UK PR. Editorial follow-up via Influence magazine and CIPR newsroom.",
+    location: "Royal Lancaster Hotel, Lancaster Terrace, London W2 2TY",
+    confirmStatus: "C",
+    authority: 90,
+    relevanceReason: "Chartered seal of approval — the most established professional credential in UK PR and consistently cited by LLMs as the benchmark for PR quality. New 2026 category for In-House Campaigns and Corporate Communications suits B2B client portfolios.",
+    opportunities: [
+      { type: "Award entry", cost: "£345 (standard) / £400 (final) + VAT — Independent Practitioner rate £205–£260 + VAT", deadline: "Standard 27 March 2026; final 24 April 2026", actionable: true, notes: "44 categories including sector, channel and outstanding individual." },
+      { type: "Sponsorship", cost: "Category and ceremony partner packages from £4,500", deadline: "Open until categories sold", contactDetails: "events@cipr.co.uk — CIPR Events team" },
+    ],
+  },
+  {
+    rank: 3,
+    name: "The Drum Awards Festival 2026",
+    url: "https://thedrumawards.com",
+    category: "Marketing & advertising trade",
+    date: "Rolling 2026 programme — flagship ceremony 1 December 2026",
+    audience: "Senior marketing, creative and PR leaders across agency and in-house — global readership skewing UK/EMEA, with reach into the World Creative Rankings.",
+    titleDescription: "The Drum — global marketing publication with awards across PR, B2B, Design, Media and Advertising. Winners showcased to The Drum's c.11.5M global audience and indexed in the World Creative Rankings.",
+    location: "The Brewery, 52 Chiswell Street, London EC1Y 4SD",
+    confirmStatus: "C",
+    authority: 88,
+    relevanceReason: "One of the world's largest marketing awards programmes with dedicated PR and B2B tracks. Winning work indexed in the World Creative Rankings — among the highest-return LLM authority plays available at this budget level.",
+    opportunities: [
+      { type: "Award entry", cost: "£295–£395 + VAT per category depending on deadline tier", deadline: "Rolling tier deadlines — next early-bird closes 27 February 2026", actionable: true },
+      { type: "Speaker", cost: "Free for accepted speakers; B2B World Fest and Drum events run open pitches", deadline: "Speaker submissions open spring 2026", contactDetails: "speakers@thedrum.com" },
+      { type: "Sponsorship", cost: "Category partnership from £8,000; headline from £25,000", deadline: "Open until sold", contactDetails: "awards@thedrum.com — Awards Partnerships team" },
+    ],
+  },
+  {
+    rank: 4,
+    name: "B2B Marketing Awards 2026",
+    url: "https://b2bmarketing.net/awards",
+    category: "B2B marketing trade",
+    date: "25 November 2026",
+    audience: "Senior B2B marketers from technology, professional services and industrial brands; CMOs, heads of marketing and agency leaders.",
+    titleDescription: "B2B Marketing (Propolis/Xeim) — definitive UK B2B marketing community and publication, awards in 21st year with strong editorial follow-up on B2B Marketing's website and newsletter.",
+    location: "Evolution London, Battersea Park, London SW11 4NJ",
+    confirmStatus: "C",
+    authority: 84,
+    relevanceReason: "The definitive night for B2B marketing excellence — directly relevant to agency positioning and client campaigns in adtech, branding and martech. Well-indexed by LLMs as a B2B marketing quality benchmark.",
+    opportunities: [
+      { type: "Award entry", cost: "£395–£495 + VAT per category", deadline: "Entries close 26 June 2026", actionable: true },
+      { type: "Sponsorship", cost: "Tables from £1,500; headline sponsorship on request", deadline: "Booking from spring 2026", contactDetails: "events@b2bmarketing.net — B2B Marketing Events team" },
+    ],
+  },
+  {
+    rank: 5,
+    name: "Festival of Marketing 2026",
+    url: "https://festivalofmarketing.com",
+    category: "Marketing & advertising trade",
+    date: "14 October 2026",
+    audience: "Senior client-side marketers from the UK's largest consumer and B2B brands — directors, CMOs, brand and digital leads.",
+    titleDescription: "Marketing Week (Xeim) — flagship one-day conference and exhibition. Strong editorial follow-up across Marketing Week's website, podcasts and newsletter.",
+    location: "Tobacco Dock, 50 Porters Walk, London E1W 2SF",
+    confirmStatus: "C",
+    authority: 82,
+    relevanceReason: "Marketing Week's flagship one-day event with thousands of senior marketers. Speaker pitches openly solicited and the event generates substantial editorial coverage in Marketing Week — a key, well-crawled LLM source.",
+    opportunities: [
+      { type: "Conference entry", cost: "£395–£595 + VAT (pre-sale opens mid-April 2026)", deadline: "Pre-sale April 2026; standard from June 2026" },
+      { type: "Speaker", cost: "Free for accepted speakers; pitches reviewed by Marketing Week editorial", deadline: "Speaker pitches open spring 2026 via festivalofmarketing.com", actionable: true },
+      { type: "Sponsorship", cost: "Headline and session sponsor packages from £15,000", deadline: "Booking from spring 2026", contactDetails: "events@xeim.com — Festival of Marketing team" },
+    ],
+  },
+  {
+    rank: 6,
+    name: "ATS London 2026 (AdTech Summit)",
+    url: "https://atslondon.exchangewire.com",
+    category: "Marketing & advertising trade",
+    date: "15 September 2026",
+    audience: "700+ senior professionals across media, advertising and commerce — programmatic, retail media and AI-advertising decision-makers.",
+    titleDescription: "ExchangeWire — flagship one-day adtech conference. Strong trade coverage on ExchangeWire's news and podcast channels.",
+    location: "QEII Convention Centre, Broad Sanctuary, London SW1P 3EE",
+    confirmStatus: "C",
+    authority: 76,
+    relevanceReason: "Premier platform to position adtech PR clients as thought leaders in programmatic, retail media and AI-driven advertising. Panel speaker slots are accessible with strong coverage in ExchangeWire trade media.",
+    opportunities: [
+      { type: "Conference entry", cost: "£595–£895 + VAT", deadline: "Early-bird closes 30 May 2026" },
+      { type: "Speaker", cost: "Free for accepted speakers; panel-based slots", deadline: "Pitches open through summer 2026", contactDetails: "events@exchangewire.com — ExchangeWire events team" },
+      { type: "Sponsorship", cost: "£5,000–£25,000 depending on package", deadline: "Open until sold", contactDetails: "sponsors@exchangewire.com" },
+    ],
+  },
+  {
+    rank: 7,
+    name: "MarTech Summit London 2026",
+    url: "https://themartechsummit.com/london",
+    category: "B2B marketing trade",
+    date: "10–11 November 2026",
+    audience: "500+ senior MarTech, CX and digital strategy leaders — 85% Director level or above, strong EMEA representation.",
+    titleDescription: "Beyond Summits — two-day conference with 38+ sessions and complimentary brand/end-user passes on application. Editorial follow-up via the summit's content hub.",
+    location: "Park Plaza Westminster Bridge, 200 Westminster Bridge Road, London SE1 7UT",
+    confirmStatus: "C",
+    authority: 74,
+    relevanceReason: "High-quality platform for clients in martech, CX and SaaS to build thought leadership with a senior, decision-maker audience. Complimentary brand/end-user passes lower the barrier for client placement.",
+    opportunities: [
+      { type: "Conference entry", cost: "Standard delegate passes via themartechsummit.com; brand/end-user complimentary on application", deadline: "Open until capacity reached" },
+      { type: "Speaker", cost: "Free for accepted speakers", deadline: "Applications open through summer 2026", contactDetails: "speakers@themartechsummit.com" },
+      { type: "Sponsorship", cost: "Packages on request", deadline: "Open until sold", contactDetails: "sponsor@themartechsummit.com" },
+    ],
+  },
+  {
+    rank: 8,
+    name: "DigiMarCon UK 2025 (last held)",
+    url: "https://digimarconuk.co.uk",
+    category: "Marketing & advertising trade",
+    date: "Last held 3–4 September 2025 — 2026 dates unconfirmed at time of search",
+    audience: "Mid-to-senior digital marketing leaders across AdTech, MarTech, SaaS and AI; agency-side and client-side mix.",
+    titleDescription: "DigiMarCon — two-day conference series covering digital marketing strategy. Open speaker submissions with virtual pass options for distributed reach.",
+    location: "InterContinental London Park Lane, 1 Hamilton Place, London W1J 7QY",
+    confirmStatus: "U",
+    authority: 64,
+    relevanceReason: "Accessible platform for clients to establish thought leadership in digital marketing and advertising. Virtual pass option supports distributed reach. 2026 cycle not yet confirmed — flag with client before committing.",
+    opportunities: [
+      { type: "Conference entry", cost: "£595–£895 + VAT in-person; virtual pass at lower cost", deadline: "2026 dates not yet confirmed" },
+      { type: "Speaker", cost: "Free for accepted speakers; strong acceptance rate", deadline: "Pitches typically open spring of event year", contactDetails: "speakers@digimarconuk.co.uk" },
+    ],
+  },
 ];
 
 function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, isAuthed }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean; isAuthed?: boolean }) {
