@@ -4975,127 +4975,168 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   );
 }
 
+type ConfidenceFlag = "V" | "P" | "U";
+
+type MediaJournalist = {
+  name: string;
+  title: string;
+  email: string;
+  confidence: ConfidenceFlag;
+  roleCurrency: string;
+};
+
 type MediaListItem = {
   rank: number;
   publication: string;
   url: string;
-  tier: "Tier 1" | "Tier 2" | "Tier 3";
-  tierRank: number;
+  category: string;
+  categoryRank: number;
   description: string;
   readership: string;
   reach: string;
   reachVerified: boolean;
-  journalists: { name: string; title: string; confidence: "confirmed" | "likely" | "unverified" }[];
-  newsdesk: string;
+  journalists: MediaJournalist[];
+  noBeatContactNote?: string;
   authority: number;
   authorityNote?: string;
   pitchAngle: string;
 };
 
+const DEMO_HOUSE_EMAIL_PATTERNS: { publisher: string; pattern: string; evidence: string }[] = [
+  { publisher: "Haymarket Media (PRWeek UK, Campaign)", pattern: "first.last@haymarket.com", evidence: "Confirmed against john.harrington@haymarket.com (PRWeek UK Editor, signed byline footer) and maisie.mccabe@haymarket.com (Campaign UK Editor, masthead)." },
+  { publisher: "The Drum (independent)", pattern: "first.last@thedrum.com", evidence: "Confirmed against sam.anderson@thedrum.com (News Editor, byline footer) and hannah.bowler@thedrum.com (Senior Reporter, staff bio page)." },
+  { publisher: "Xeim / Centaur (Marketing Week)", pattern: "first.last@xeim.com", evidence: "Confirmed against russell.parsons@xeim.com (Editor-in-Chief, masthead) and charlotte.rogers@xeim.com (Deputy Editor, Muck Rack listing)." },
+  { publisher: "B2B Marketing", pattern: "first.last@b2bmarketing.net", evidence: "Single verified address: molly.raycraft@b2bmarketing.net (Editor, signed editorial). Pattern inferred — flag with one further verified contact before sending at scale." },
+];
+
+const DEMO_RESHUFFLES: { publication: string; note: string }[] = [
+  { publication: "Mumbrella", note: "Founder Tim Burrowes departed full-time editorial role in 2021 (now at Unmade newsletter). UK desk now run by a smaller editorial team — verify any UK-focused contact before pitching." },
+  { publication: "Communicate Magazine", note: "Editorial team has rotated more than once in the last 24 months. Do not assume historic Editor still in role without confirming via current masthead." },
+];
+
 const DEMO_MEDIA_LIST: MediaListItem[] = [
   {
-    rank: 1, publication: "PRWeek UK", url: "https://www.prweek.com/uk", tier: "Tier 1", tierRank: 1,
-    description: "Haymarket-owned weekly digital and monthly print covering UK PR and communications industry news.",
-    readership: "PR directors, agency leaders and in-house comms heads across UK agencies and brands.",
+    rank: 1, publication: "PRWeek UK", url: "https://www.prweek.com/uk", category: "PR & communications trade", categoryRank: 1,
+    description: "Haymarket-owned weekly digital and monthly print covering UK PR industry news, agency moves, campaign analysis and comms-leadership profiles across consumer, B2B and corporate PR.",
+    readership: "PR directors, agency leaders and in-house comms heads across UK agencies and brand-side teams.",
     reach: "~180,000 monthly UU (publisher figure)", reachVerified: true,
     journalists: [
-      { name: "John Harrington", title: "UK Editor", confidence: "confirmed" },
-      { name: "Daniel Farey-Jones", title: "Deputy Editor", confidence: "likely" },
-      { name: "Eleni Mitzali", title: "Reporter", confidence: "likely" },
+      { name: "John Harrington", title: "UK Editor", email: "john.harrington@haymarket.com", confidence: "V", roleCurrency: "Signed byline within last 14 days; current on staff page." },
+      { name: "Daniel Farey-Jones", title: "Deputy Editor", email: "daniel.farey-jones@haymarket.com", confidence: "P", roleCurrency: "LinkedIn role current (≤30d); pattern email." },
+      { name: "Eleni Mitzali", title: "Reporter", email: "eleni.mitzali@haymarket.com", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email." },
     ],
-    newsdesk: "uknews@prweek.com",
     authority: 94, authorityNote: "Highest-relevance trade for UK PR audience; sets the agenda for sector peers.",
     pitchAngle: "Offer as a Tuesday exclusive ahead of any wider distribution.",
   },
   {
-    rank: 2, publication: "Campaign", url: "https://www.campaignlive.co.uk", tier: "Tier 1", tierRank: 2,
-    description: "Haymarket-owned daily covering marketing, advertising and agency leadership across the UK.",
-    readership: "CMOs, marketing directors and agency C-suite at brand and creative agencies.",
-    reach: "~520,000 monthly UU (SimilarWeb, approximate)", reachVerified: true,
-    journalists: [
-      { name: "Maisie McCabe", title: "UK Editor", confidence: "confirmed" },
-      { name: "Gemma Charles", title: "Deputy Editor", confidence: "likely" },
-      { name: "Beau Jackson", title: "Senior Reporter", confidence: "likely" },
-    ],
-    newsdesk: "newsdesk@campaignlive.co.uk",
-    authority: 91, authorityNote: "Broader marketing readership than PRWeek; strong agency C-suite reach.",
-    pitchAngle: "Position as a CMO-perspective opinion piece tied to a sector data point.",
-  },
-  {
-    rank: 3, publication: "The Drum", url: "https://www.thedrum.com", tier: "Tier 1", tierRank: 3,
-    description: "Independent marketing and media title with daily news, awards programmes and a strong agency angle.",
-    readership: "Agency owners, brand marketers and martech leaders across UK, EU and North America.",
-    reach: "~1.2m monthly UU (publisher figure, approximate)", reachVerified: false,
-    journalists: [
-      { name: "Sam Anderson", title: "News Editor", confidence: "likely" },
-      { name: "Hannah Bowler", title: "Senior Reporter", confidence: "likely" },
-    ],
-    newsdesk: "news@thedrum.com",
-    authority: 87,
-    pitchAngle: "Frame as an agency case study with a named client outcome.",
-  },
-  {
-    rank: 4, publication: "Marketing Week", url: "https://www.marketingweek.com", tier: "Tier 2", tierRank: 1,
-    description: "Centaur Media weekly covering brand marketing strategy, careers and consumer trends.",
-    readership: "Brand marketing leaders and senior in-house marketers, mainly UK consumer brands.",
-    reach: "~340,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
-    journalists: [
-      { name: "Russell Parsons", title: "Editor-in-Chief", confidence: "confirmed" },
-      { name: "Charlotte Rogers", title: "Deputy Editor", confidence: "likely" },
-    ],
-    newsdesk: "news@marketingweek.com",
-    authority: 84,
-    pitchAngle: "Lead with a data point and a quote from a named brand-side marketer.",
-  },
-  {
-    rank: 5, publication: "B2B Marketing", url: "https://www.b2bmarketing.net", tier: "Tier 2", tierRank: 2,
-    description: "Specialist publication for B2B marketers, with a strong content marketing and demand-gen focus.",
-    readership: "Heads of marketing at B2B technology, services and professional firms.",
-    reach: "~95,000 monthly UU (publisher figure, unverified)", reachVerified: false,
-    journalists: [
-      { name: "Molly Raycraft", title: "Editor", confidence: "likely" },
-    ],
-    newsdesk: "editorial@b2bmarketing.net",
-    authority: 79,
-    pitchAngle: "Pitch as a how-to feature with a checklist or framework attached.",
-  },
-  {
-    rank: 6, publication: "Influence Magazine (CIPR)", url: "https://influenceonline.co.uk", tier: "Tier 2", tierRank: 3,
-    description: "CIPR member magazine and online, focused on PR practice standards and member opinion.",
+    rank: 2, publication: "Influence Magazine (CIPR)", url: "https://influenceonline.co.uk", category: "PR & communications trade", categoryRank: 2,
+    description: "CIPR member magazine, quarterly print plus rolling online, focused on professional PR practice, ethics and member opinion across UK chartered practitioners.",
     readership: "Chartered PR practitioners and CIPR members across UK agencies and in-house teams.",
     reach: "~40,000 CIPR members (member-only circulation)", reachVerified: true,
     journalists: [
-      { name: "Koray Camgöz", title: "Editor", confidence: "likely" },
+      { name: "Koray Camgöz", title: "Editor", email: "editor@influenceonline.co.uk", confidence: "V", roleCurrency: "Editor inbox listed on current masthead; bylined editor's letter in latest issue." },
     ],
-    newsdesk: "editor@influenceonline.co.uk",
     authority: 76,
     pitchAngle: "Offer as a CIPR-member opinion piece with a chartered practitioner byline.",
   },
   {
-    rank: 7, publication: "Communicate Magazine", url: "https://www.communicatemagazine.com", tier: "Tier 3", tierRank: 1,
-    description: "Cravenhill-owned title for corporate communications, brand and reputation professionals.",
+    rank: 3, publication: "Communicate Magazine", url: "https://www.communicatemagazine.com", category: "PR & communications trade", categoryRank: 3,
+    description: "Cravenhill Publishing print quarterly and rolling online for corporate communications, brand and reputation practice across FTSE 250 and large private firms.",
     readership: "Heads of corporate comms and reputation at FTSE 250 and large private firms.",
     reach: "~25,000 print + digital readers (publisher figure, unverified)", reachVerified: false,
-    journalists: [
-      { name: "Brittany Golob", title: "Editor", confidence: "unverified" },
-    ],
-    newsdesk: "editorial@communicatemagazine.com",
+    journalists: [],
+    noBeatContactNote: "No current beat contact identified — recent masthead unclear; recommend confirming via Cravenhill Publishing directly before approach.",
     authority: 68,
     pitchAngle: "Position as a corporate reputation angle, not an agency story.",
   },
   {
-    rank: 8, publication: "Mumbrella", url: "https://mumbrella.com", tier: "Tier 3", tierRank: 2,
-    description: "Australian-headquartered marketing and media site with growing UK coverage; daily news cadence.",
+    rank: 4, publication: "Campaign", url: "https://www.campaignlive.co.uk", category: "Marketing & advertising trade", categoryRank: 1,
+    description: "Haymarket-owned daily digital plus monthly print covering UK marketing, advertising, agency leadership and creative work across brand, media and creative agencies.",
+    readership: "CMOs, marketing directors and agency C-suite at brand and creative agencies.",
+    reach: "~520,000 monthly UU (SimilarWeb, approximate)", reachVerified: true,
+    journalists: [
+      { name: "Maisie McCabe", title: "UK Editor", email: "maisie.mccabe@haymarket.com", confidence: "V", roleCurrency: "Editor's letter signed within last 7 days." },
+      { name: "Gemma Charles", title: "Deputy Editor", email: "gemma.charles@haymarket.com", confidence: "P", roleCurrency: "LinkedIn role current (≤30d); pattern email." },
+    ],
+    authority: 91, authorityNote: "Broader marketing readership than PRWeek; strong agency C-suite reach.",
+    pitchAngle: "Position as a CMO-perspective opinion piece tied to a sector data point.",
+  },
+  {
+    rank: 5, publication: "The Drum", url: "https://www.thedrum.com", category: "Marketing & advertising trade", categoryRank: 2,
+    description: "Independent daily covering marketing, media and creative industries with strong agency angle, awards programmes and rolling news cadence across UK, EU and North America.",
+    readership: "Agency owners, brand marketers and martech leaders across UK, EU and North America.",
+    reach: "~1.2m monthly UU (publisher figure, approximate)", reachVerified: false,
+    journalists: [
+      { name: "Sam Anderson", title: "News Editor", email: "sam.anderson@thedrum.com", confidence: "P", roleCurrency: "Recent byline ≤30 days; pattern email." },
+      { name: "Hannah Bowler", title: "Senior Reporter", email: "hannah.bowler@thedrum.com", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email." },
+    ],
+    authority: 87,
+    pitchAngle: "Frame as an agency case study with a named client outcome.",
+  },
+  {
+    rank: 6, publication: "Mumbrella", url: "https://mumbrella.com", category: "Marketing & advertising trade", categoryRank: 3,
+    description: "Daily online news for marketing, media and advertising, APAC-headquartered with growing UK and global coverage.",
     readership: "Marketing and PR professionals across APAC with a UK readership share.",
     reach: "~180,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
-    journalists: [
-      { name: "Tim Burrowes", title: "Founder / Contributor", confidence: "unverified" },
-    ],
-    newsdesk: "newsdesk@mumbrella.com",
+    journalists: [],
+    noBeatContactNote: "No current UK-beat contact identified — outlet's UK desk has rotated; route through public newsdesk only if pitching an APAC-relevant angle.",
     authority: 58, authorityNote: "Audience is APAC-weighted; lower direct relevance to the UK primary audience.",
     pitchAngle: "Only if the story has an APAC angle or a regional spokesperson.",
   },
+  {
+    rank: 7, publication: "Marketing Week", url: "https://www.marketingweek.com", category: "B2B marketing trade", categoryRank: 1,
+    description: "Xeim-owned weekly digital and monthly print covering brand marketing strategy, careers and consumer trends with strong measurement and effectiveness focus.",
+    readership: "Brand marketing leaders and senior in-house marketers, mainly UK consumer and B2B brands.",
+    reach: "~340,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
+    journalists: [
+      { name: "Russell Parsons", title: "Editor-in-Chief", email: "russell.parsons@xeim.com", confidence: "V", roleCurrency: "Verified via masthead and bylined editor's letter this week." },
+      { name: "Charlotte Rogers", title: "Deputy Editor", email: "charlotte.rogers@xeim.com", confidence: "P", roleCurrency: "Recent byline ≤30 days; pattern email." },
+    ],
+    authority: 84,
+    pitchAngle: "Lead with a data point and a quote from a named brand-side marketer.",
+  },
+  {
+    rank: 8, publication: "B2B Marketing", url: "https://www.b2bmarketing.net", category: "B2B marketing trade", categoryRank: 2,
+    description: "Specialist online and print publication for B2B marketers with strong content marketing, ABM and demand-gen focus across UK B2B tech and professional services.",
+    readership: "Heads of marketing at B2B technology, services and professional firms.",
+    reach: "~95,000 monthly UU (publisher figure, unverified)", reachVerified: false,
+    journalists: [
+      { name: "Molly Raycraft", title: "Editor", email: "molly.raycraft@b2bmarketing.net", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email (single-source — confirm before scale)." },
+    ],
+    authority: 79,
+    pitchAngle: "Pitch as a how-to feature with a checklist or framework attached.",
+  },
 ];
+
+const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
+Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
+You are given permission to web-search and verify named contacts before answering.
+Use web search for every named contact before writing the row. Do not rely on training-data knowledge of who works where.
+
+For each publication, return:
+1. Publication name and homepage URL
+2. Category using the media categories selected in section 1.9. of the Project Data document and 1–N relevancy rank within category
+3. One-sentence description of the title (format, frequency, subjects and industry covered)
+4. One-sentence description of its readership (job titles, seniority, sector)
+5. Audience reach — give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
+6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat — typically 4–8 per major outlet), each as: name | job title | email | confidence flag | role-currency check
+   Confidence flag rules:
+   [V] Verified — email is found in a public source (publication website, masthead, signed byline footer, Muck Rack/RocketReach/Cision/Prowly listing, or government register).
+   [P] Pattern-inferred — journalist is confirmed in role within the last month and their email matches the publisher's house pattern, which must itself be confirmed against at least two other verified addresses at the same publication. State the pattern in the methodology tab.
+   [U] Unverified — anything else. List with a warning, or omit if the contact would mislead.
+   Role-currency check: for each named contact, confirm via a recent byline (≤ 60 days), LinkedIn current title, or staff bio page that they are still in the stated role. Drop anyone you can't confirm.
+7. Authority score (0–100) — relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) — not a generic DA score. Briefly justify scores above 90 and below 60.
+8. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
+
+Hard rules:
+- Do not invent journalists, titles, or emails. If you can't verify, write "no current beat contact identified" — that's an acceptable answer.
+- Prefer dropping a stale contact over including it. Stale contacts cost trust; missing ones don't.
+- In a methodology tab, list every confirmed house email pattern with the evidence used to confirm it (which staff email proves the pattern).
+- Flag known reshuffles in the last 24 months for major outlets (e.g. who moved on/up).
+
+Deliverable:
+- A sortable Excel with one row per publication and a multi-line journalists cell; methodology tab; first-wave outreach sequence.
+- A structured list in a Word document.`;
 
 function MediaResearchPage() {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
@@ -5125,30 +5166,38 @@ function MediaResearchPage() {
 
   const downloadWordDoc = () => {
     if (!mediaList || !selected) return;
-    const confidenceLabel = (c: string) => c === "confirmed" ? "✅ confirmed in last 6 months" : c === "likely" ? "🟡 likely still in role" : "⚪ unverified";
+    const confidenceLabel = (c: ConfidenceFlag) => c === "V" ? "[V] Verified" : c === "P" ? "[P] Pattern-inferred" : "[U] Unverified";
     const itemsHtml = mediaList.map((m) => `
       <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${m.rank}. ${m.publication}</h2>
-      <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${m.url}">${m.url}</a> · ${m.tier} · Tier rank ${m.tierRank} · <b>Authority ${m.authority}/100</b></p>
+      <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${m.url}">${m.url}</a> · ${m.category} · Rank ${m.categoryRank} in category · <b>Authority ${m.authority}/100</b></p>
       <p><b>Description:</b> ${m.description}</p>
       <p><b>Readership:</b> ${m.readership}</p>
       <p><b>Audience reach:</b> ${m.reach}${m.reachVerified ? "" : " <i>(unverified — flag with client)</i>"}</p>
-      <p><b>Named journalists:</b></p>
-      <ul>${m.journalists.map((j) => `<li>${j.name} — ${j.title} — ${confidenceLabel(j.confidence)}</li>`).join("")}</ul>
-      <p><b>Newsdesk inbox:</b> ${m.newsdesk}</p>
+      <p><b>Beat journalists (${m.journalists.length}):</b></p>
+      ${m.journalists.length === 0
+        ? `<p style="color:#a04040;"><i>${m.noBeatContactNote || "No current beat contact identified."}</i></p>`
+        : `<ul>${m.journalists.map((j) => `<li><b>${j.name}</b> — ${j.title} — <a href="mailto:${j.email}">${j.email}</a> — ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${j.roleCurrency}</i></li>`).join("")}</ul>`
+      }
       ${m.authorityNote ? `<p><b>Authority note:</b> ${m.authorityNote}</p>` : ""}
       <p><b>Suggested pitch angle:</b> ${m.pitchAngle}</p>
       <hr/>
     `).join("");
+    const patternsHtml = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<li><b>${p.publisher}</b> — <code>${p.pattern}</code><br/><i style="color:#666;">${p.evidence}</i></li>`).join("");
+    const reshufflesHtml = DEMO_RESHUFFLES.map((r) => `<li><b>${r.publication}:</b> ${r.note}</li>`).join("");
     const methodology = `
-      <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology, caveats and first-wave outreach</h2>
-      <p><b>Methodology:</b> Generated against the selected content "${selected.title}" (${selected.contentType}) using the Project Data media categories. Publications ranked by relevance-weighted authority across the primary target audience, then within tier.</p>
-      <p><b>Source caveats:</b> Audience reach figures are publisher-stated or SimilarWeb-derived and labelled "approximate". Unverified figures are flagged. Journalist beats verified against public bylines within the last 6 months where the ✅ marker is used.</p>
+      <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology, source caveats and first-wave outreach</h2>
+      <p><b>Methodology:</b> Generated against the selected content "${selected.title}" (${selected.contentType}) using the Project Data media categories (section 1.9). Publications ranked within each category by relevance-weighted authority across the primary target audience. Every named contact verified via byline (≤60 days), LinkedIn current title, or staff bio before inclusion; unverifiable contacts dropped.</p>
+      <h3 style="font-family:Georgia,serif;color:#102B36;">Confirmed house email patterns</h3>
+      <ul>${patternsHtml}</ul>
+      <h3 style="font-family:Georgia,serif;color:#102B36;">Known reshuffles (last 24 months)</h3>
+      <ul>${reshufflesHtml}</ul>
+      <p><b>Source caveats:</b> Audience reach figures are publisher-stated or SimilarWeb-derived and labelled "approximate". Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends.</p>
       <p><b>First-wave outreach sequence:</b></p>
       <ol>
-        <li>Day 0 — Tier 1 exclusive offer to PRWeek UK (24-hour window).</li>
-        <li>Day 1 — Embargoed release to remaining Tier 1 (Campaign, The Drum).</li>
-        <li>Day 2 — Tier 2 wire distribution with bespoke pitch angles per outlet.</li>
-        <li>Day 5 — Tier 3 follow-up; offer follow-on commentary or data drop.</li>
+        <li>Day 0 — Exclusive offer to category leader PRWeek UK (24-hour window).</li>
+        <li>Day 1 — Embargoed release to remaining PR/comms category and to Campaign + The Drum.</li>
+        <li>Day 2 — Wire distribution to B2B marketing category with bespoke angles per outlet.</li>
+        <li>Day 5 — Follow-up commentary or data drop to outlets without first-wave coverage.</li>
       </ol>
     `;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List — ${selected.title}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
@@ -5170,44 +5219,56 @@ function MediaResearchPage() {
 
   const downloadExcelDoc = () => {
     if (!mediaList || !selected) return;
-    const confidenceLabel = (c: string) => c === "confirmed" ? "Confirmed" : c === "likely" ? "Likely" : "Unverified";
+    const confidenceLabel = (c: ConfidenceFlag) => c === "V" ? "[V] Verified" : c === "P" ? "[P] Pattern-inferred" : "[U] Unverified";
+    const journalistCell = (m: MediaListItem) =>
+      m.journalists.length === 0
+        ? (m.noBeatContactNote || "No current beat contact identified.")
+        : m.journalists.map((j) => `${j.name} | ${j.title} | ${j.email} | ${confidenceLabel(j.confidence)} | ${j.roleCurrency}`).join("&#10;");
     const rows = mediaList.map((m) => `
       <tr>
         <td>${m.rank}</td>
         <td>${m.publication}</td>
         <td>${m.url}</td>
-        <td>${m.tier}</td>
-        <td>${m.tierRank}</td>
+        <td>${m.category}</td>
+        <td>${m.categoryRank}</td>
         <td>${m.description}</td>
         <td>${m.readership}</td>
         <td>${m.reach}</td>
         <td>${m.reachVerified ? "Yes" : "No"}</td>
-        <td>${m.journalists.map((j) => `${j.name} (${j.title}) — ${confidenceLabel(j.confidence)}`).join("; ")}</td>
-        <td>${m.newsdesk}</td>
+        <td style="white-space:pre-line;vertical-align:top;">${journalistCell(m)}</td>
         <td>${m.authority}</td>
         <td>${m.authorityNote || ""}</td>
         <td>${m.pitchAngle}</td>
       </tr>
     `).join("");
-    const methodologyRows = `
-      <tr><td>Methodology</td><td>Generated against "${selected.title}" using Project Data media categories; ranked by relevance-weighted authority across the primary target audience.</td></tr>
-      <tr><td>Source caveats</td><td>Reach figures are publisher-stated or SimilarWeb-derived and labelled approximate. Unverified figures flagged.</td></tr>
-      <tr><td>First-wave outreach — Day 0</td><td>Tier 1 exclusive offer to PRWeek UK (24-hour window).</td></tr>
-      <tr><td>Day 1</td><td>Embargoed release to remaining Tier 1 (Campaign, The Drum).</td></tr>
-      <tr><td>Day 2</td><td>Tier 2 wire distribution with bespoke angles.</td></tr>
-      <tr><td>Day 5</td><td>Tier 3 follow-up; offer follow-on commentary or data drop.</td></tr>
-    `;
+    const patternRows = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<tr><td>${p.publisher}</td><td>${p.pattern}</td><td>${p.evidence}</td></tr>`).join("");
+    const reshuffleRows = DEMO_RESHUFFLES.map((r) => `<tr><td>${r.publication}</td><td>${r.note}</td></tr>`).join("");
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
+<h2>Target Media List — ${selected.title}</h2>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
-    <th>Rank</th><th>Publication</th><th>URL</th><th>Tier</th><th>Tier rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Verified</th><th>Journalists</th><th>Newsdesk</th><th>Authority</th><th>Authority note</th><th>Pitch angle</th>
+    <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence | role-currency)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <br/><br/>
-<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Item</th><th>Detail</th></tr></thead><tbody>${methodologyRows}</tbody></table>
+<h2>Methodology</h2>
+<p>Generated against "${selected.title}" (${selected.contentType}) using Project Data media categories (section 1.9). Every named contact verified via byline (≤60 days), LinkedIn current title, or staff bio before inclusion; unverifiable contacts dropped. Reach figures are publisher-stated or SimilarWeb-derived and labelled approximate.</p>
+<h3>Confirmed house email patterns</h3>
+<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Publisher</th><th>Pattern</th><th>Evidence</th></tr></thead><tbody>${patternRows}</tbody></table>
+<br/>
+<h3>Known reshuffles (last 24 months)</h3>
+<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Publication</th><th>Note</th></tr></thead><tbody>${reshuffleRows}</tbody></table>
+<br/>
+<h3>First-wave outreach sequence</h3>
+<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>When</th><th>Action</th></tr></thead><tbody>
+  <tr><td>Day 0</td><td>Exclusive offer to category leader PRWeek UK (24-hour window).</td></tr>
+  <tr><td>Day 1</td><td>Embargoed release to remaining PR/comms category and to Campaign + The Drum.</td></tr>
+  <tr><td>Day 2</td><td>Wire distribution to B2B marketing category with bespoke angles.</td></tr>
+  <tr><td>Day 5</td><td>Follow-up commentary or data drop to outlets without first-wave coverage.</td></tr>
+</tbody></table>
 </body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
@@ -5218,10 +5279,10 @@ function MediaResearchPage() {
     URL.revokeObjectURL(url);
   };
 
-  const confidenceIcon = (c: "confirmed" | "likely" | "unverified") =>
-    c === "confirmed" ? "✅" : c === "likely" ? "🟡" : "⚪";
-  const confidenceText = (c: "confirmed" | "likely" | "unverified") =>
-    c === "confirmed" ? "confirmed in last 6 months" : c === "likely" ? "likely still in role" : "unverified";
+  const confidenceLabel = (c: ConfidenceFlag) =>
+    c === "V" ? "Verified" : c === "P" ? "Pattern-inferred" : "Unverified";
+  const confidenceColor = (c: ConfidenceFlag) =>
+    c === "V" ? "#3D9B6B" : c === "P" ? "#C9A04E" : "#A04040";
 
   const ink = "#102B36";
   const accentPink = "#C8497A";
@@ -5307,7 +5368,9 @@ function MediaResearchPage() {
                   <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>Ordered overall by likelihood of pickup. {mediaList.length} publications.</p>
                 </div>
                 <div className="flex items-center gap-3 text-[11px]" style={{ color: vars.g500 }}>
-                  <span>✅ confirmed</span><span>🟡 likely</span><span>⚪ unverified</span>
+                  <span><b style={{ color: "#3D9B6B" }}>[V]</b> Verified</span>
+                  <span><b style={{ color: "#C9A04E" }}>[P]</b> Pattern-inferred</span>
+                  <span><b style={{ color: "#A04040" }}>[U]</b> Unverified</span>
                 </div>
               </div>
               <div className="divide-y" style={{ borderColor: vars.g100 }}>
@@ -5316,7 +5379,7 @@ function MediaResearchPage() {
                     <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.coral }}>
-                          {m.rank}. {m.tier} · Tier rank {m.tierRank}
+                          {m.rank}. {m.category} · Rank {m.categoryRank} in category
                         </p>
                         <h4 className="text-[18px] font-semibold mt-0.5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{m.publication}</h4>
                         <a href={m.url} target="_blank" rel="noreferrer" className="text-[12px] font-light underline" style={{ color: vars.accent }}>{m.url}</a>
@@ -5342,22 +5405,30 @@ function MediaResearchPage() {
                           {!m.reachVerified && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "rgba(224,120,86,0.15)", color: vars.coral }}>unverified</span>}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-0.5" style={{ color: vars.g500 }}>Newsdesk inbox</p>
-                        <p className="text-[13px] font-light" style={{ color: vars.navy }}>{m.newsdesk}</p>
-                      </div>
                     </div>
                     <div className="mt-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: vars.g500 }}>Named journalists ({m.journalists.length})</p>
-                      <ul className="space-y-1">
-                        {m.journalists.map((j) => (
-                          <li key={j.name} className="text-[13px] font-light" style={{ color: vars.navy }}>
-                            <span className="mr-1.5">{confidenceIcon(j.confidence)}</span>
-                            <span className="font-semibold">{j.name}</span> — {j.title}
-                            <span className="text-[11px] italic ml-1.5" style={{ color: vars.g400 }}>({confidenceText(j.confidence)})</span>
-                          </li>
-                        ))}
-                      </ul>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: vars.g500 }}>
+                        Beat journalists ({m.journalists.length})
+                      </p>
+                      {m.journalists.length === 0 ? (
+                        <div className="rounded-lg p-3 text-[12.5px] font-light italic" style={{ background: "rgba(160,64,64,0.08)", border: "1px solid rgba(160,64,64,0.2)", color: "#7A2E2E" }}>
+                          {m.noBeatContactNote || "No current beat contact identified."}
+                        </div>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {m.journalists.map((j) => (
+                            <li key={j.name} className="text-[13px] font-light" style={{ color: vars.navy }}>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${confidenceColor(j.confidence)}1a`, color: confidenceColor(j.confidence) }}>[{j.confidence}] {confidenceLabel(j.confidence)}</span>
+                                <span className="font-semibold">{j.name}</span>
+                                <span style={{ color: vars.g500 }}>— {j.title}</span>
+                                <a href={`mailto:${j.email}`} className="text-[12px] underline" style={{ color: vars.accent }}>{j.email}</a>
+                              </div>
+                              <p className="text-[11px] italic mt-0.5 ml-1" style={{ color: vars.g400 }}>Role-currency: {j.roleCurrency}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     {m.authorityNote && (
                       <div className="mt-3 p-2.5 rounded-lg" style={{ background: "rgba(201,160,78,0.1)" }}>
