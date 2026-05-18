@@ -30,7 +30,7 @@ Production assumptions for future scans:
 - **Production entry points**: `artifacts/api-server/src/index.ts`, `artifacts/api-server/src/app.ts`, `artifacts/aio-fusion/src/main.tsx`.
 - **Highest-risk code areas**: `artifacts/api-server/src/routes/seo-audit.ts`, `artifacts/api-server/src/routes/diagnostic.ts`, `artifacts/api-server/src/routes/llm-check.ts`.
 - **Public/authenticated/admin surfaces**: current production API appears public; no server-side auth or admin boundary is implemented in the shipped Express routes.
-- **Usually dev-only / ignore unless proven reachable**: mockup sandbox and other experimental artifacts; local-only UI state in the SPA unless it influences server behavior.
+- **Usually dev-only / ignore unless proven reachable**: mockup sandbox and other experimental artifacts; local-only UI state and same-user editor flows in the SPA unless they gain server persistence or a cross-user sharing path.
 
 ## Threat Categories
 
@@ -40,11 +40,11 @@ There is no evidence of a production authentication layer protecting the current
 
 ### Tampering
 
-All request bodies, query parameters, URLs, and locally stored frontend state are attacker-controlled. The API must validate input types and lengths, and any outbound fetch behavior must continue enforcing its safety guarantees across redirects and other protocol transitions. The frontend must not assume `localStorage` data is trustworthy for any server-side privilege or billing decision.
+All request bodies, query parameters, URLs, and locally stored frontend state are attacker-controlled. The API must validate input types and lengths, and any outbound fetch behavior must continue enforcing its safety guarantees across redirects, DNS resolution changes, and other protocol transitions. The frontend must not assume `localStorage` data is trustworthy for any server-side privilege or billing decision.
 
 ### Information Disclosure
 
-The main disclosure risk is server-side fetching of attacker-chosen targets or accidental leakage through logs and upstream provider interactions. The application must prevent requests to internal/private destinations, avoid returning verbose internal errors, and keep secrets, cookies, and authorization headers out of logs. User content sent to AI providers should be treated as intentionally disclosed to those processors.
+The main disclosure risk is server-side fetching of attacker-chosen targets or accidental leakage through logs and upstream provider interactions. The application must prevent requests to internal/private destinations on every hop and at connection time, avoid returning verbose internal errors, and keep secrets, cookies, and authorization headers out of logs. User content sent to AI providers should be treated as intentionally disclosed to those processors.
 
 ### Denial of Service
 
@@ -52,4 +52,4 @@ This project is especially exposed to resource-exhaustion risk because public ro
 
 ### Elevation of Privilege
 
-The highest-impact privilege escalation path in this codebase is turning a public analysis endpoint into a server-side request primitive against more trusted network locations. The API must ensure that user-controlled URLs cannot reach internal services, metadata endpoints, or other privileged network targets, including through redirects or equivalent bypasses. If user/admin features are added later, authorization must be enforced server-side on every privileged route.
+The highest-impact privilege escalation path in this codebase is turning a public analysis endpoint into a server-side request primitive against more trusted network locations. The API must ensure that user-controlled URLs cannot reach internal services, metadata endpoints, or other privileged network targets, including through redirects, DNS rebinding / TOCTOU gaps, or equivalent bypasses. If user/admin features are added later, authorization must be enforced server-side on every privileged route.
