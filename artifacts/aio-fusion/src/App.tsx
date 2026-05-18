@@ -589,10 +589,11 @@ function ClientSelectorPage({
   onLogoUpdate: (clientId: string, logoDataUrl: string) => void;
   onBackToPlatformHome: () => void;
 }) {
-  const totalContent = clients.reduce((s, c) => s + c.contentCount, 0);
-  const avgScore = Math.round(
-    clients.reduce((s, c) => s + c.avgScore, 0) / clients.length,
-  );
+  const [demoView, setDemoView] = useState<"full" | "single" | "empty">("full");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const displayClients = demoView === "empty" ? [] : demoView === "single" ? clients.slice(0, 1) : clients;
+  void clients.reduce((s, c) => s + c.contentCount, 0);
+  void Math.round(clients.reduce((s, c) => s + c.avgScore, 0) / clients.length);
 
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
@@ -624,27 +625,77 @@ function ClientSelectorPage({
         </div>
       </header>
       <div className="px-4 sm:px-10 py-6 sm:py-10 max-w-5xl mx-auto">
-        <div className="mb-8 sm:mb-10">
-          <div className="flex items-center gap-2 mb-3">
-            <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
-              style={{ background: "rgba(31,116,143,0.06)", color: "#1f748f" }}
+        <div className="mb-8 sm:mb-10 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.2em]"
+                style={{ background: "rgba(31,116,143,0.06)", color: "#1f748f" }}
+              >
+                <Building2 size={12} /> Project Hub
+              </div>
+            </div>
+            <h1
+              className="text-2xl sm:text-3xl tracking-tight"
+              style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
             >
-              <Building2 size={12} /> Project Hub
+              {displayClients.length === 0 ? "Welcome to your Project Hub" : "Your Projects"}
+            </h1>
+            <p className="text-[15px] font-light mt-2" style={{ color: vars.g500 }}>
+              {displayClients.length === 0
+                ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
+                : "Select a Project to manage AI optimisation, on-going PR and marketing output."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g400 }}>Demo view</span>
+            <div className="inline-flex rounded-full p-1" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
+              {([["full", "All"], ["single", "1 project"], ["empty", "Empty"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setDemoView(v)}
+                  className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors"
+                  style={{ background: demoView === v ? vars.navy : "transparent", color: demoView === v ? "white" : vars.g500 }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-          <h1
-            className="text-2xl sm:text-3xl tracking-tight"
-            style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}
-          >
-            Your Projects
-          </h1>
-          <p className="text-[15px] font-light mt-2" style={{ color: vars.g500 }}>
-            Select a Project to manage AI optimisation, on-going PR and marketing output.
-          </p>
         </div>
+
+        {displayClients.length === 0 ? (
+          <div
+            className="rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center"
+            style={{ background: "white", borderColor: vars.g200 }}
+          >
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+              style={{ background: "rgba(31,116,143,0.08)", color: "#1f748f" }}
+            >
+              <Building2 size={28} />
+            </div>
+            <h2 className="text-xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              No projects yet
+            </h2>
+            <p className="text-[14px] font-light max-w-md mx-auto mb-6" style={{ color: vars.g500 }}>
+              A project is a single brand, product or campaign you want to optimise.
+              You'll set up its messaging, audience and content plan once — then everything you publish flows through it.
+            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-colors"
+              style={{ background: "#1f748f" }}
+            >
+              <Plus size={14} /> Create your first project
+            </button>
+            <p className="text-[11px] font-light mt-5" style={{ color: vars.g400 }}>
+              Typical setup takes 10–15 minutes. You can save and return at any time.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
-          {clients.map((client) => {
+          {displayClients.map((client) => {
             const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
             const logoUrl = clientLogos[client.id];
             const handleLogoUpload = (e: React.MouseEvent) => {
@@ -777,8 +828,58 @@ function ClientSelectorPage({
               </div>
             );
           })}
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="rounded-2xl border-2 border-dashed p-7 text-left transition-all hover:shadow-md min-h-[260px] flex flex-col items-center justify-center gap-3"
+            style={{ background: "rgba(31,116,143,0.03)", borderColor: vars.g300, color: vars.g500 }}
+          >
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ background: "rgba(31,116,143,0.08)", color: "#1f748f" }}
+            >
+              <Plus size={20} />
+            </div>
+            <div className="text-center">
+              <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>New project</p>
+              <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Set up a new brand, product or campaign</p>
+            </div>
+          </button>
         </div>
+        )}
       </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(16,43,54,0.5)" }} onClick={() => setShowCreateModal(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-lg" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Create new project</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
+              You'll be walked through Project Set-Up — seven short sections capturing your brand, audience, messaging and content plan. The system uses this as the source of truth for every optimisation that follows.
+            </p>
+            <ol className="text-[12.5px] space-y-2 mb-5 pl-5 list-decimal" style={{ color: vars.g600 }}>
+              <li>Company &amp; brand basics</li>
+              <li>Spokespeople &amp; expertise</li>
+              <li>Key messages &amp; semantic phrases</li>
+              <li>Audiences &amp; media categories</li>
+              <li>Content plan &amp; cadence</li>
+            </ol>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowCreateModal(false)} className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-full" style={{ color: vars.g500, background: vars.g100 }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowCreateModal(false); onSelectClient(clients[0]); }}
+                className="text-[11px] font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-full text-white"
+                style={{ background: "#1f748f" }}
+              >
+                Start set-up
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
