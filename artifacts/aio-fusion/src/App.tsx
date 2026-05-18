@@ -1376,12 +1376,17 @@ function DiagnosticPage({
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
+  const [keyPages, setKeyPages] = useState<Array<{ label: string; url: string }>>([
+    { label: "About / Company", url: "" },
+    { label: "Services / Products", url: "" },
+    { label: "Leadership / Team", url: "" },
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [showBrief, setShowBrief] = useState(false);
 
-  const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
+  const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence across the supplied homepage plus key pages (About, Services/Products, Leadership and any other pages the user supplies) for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
 
 Score each of the following 6 categories from 0 to the maximum shown. Be rigorous — most pages score poorly. Provide specific, actionable recommendations for each category.
 
@@ -1396,7 +1401,8 @@ Categories (score / max):
 Return your analysis as valid JSON only (no markdown, no code fences) with: overallScore (0-100), categories (name, score, max, status, findings[], recommendations[]), strengths[], warnings[], criticalGaps[], priorityActions[] (priority, action, timeframe, impact, category), summary.
 
 Inputs supplied with this brief:
-- The URL submitted by the user, or pasted page content (up to ~50,000 characters).
+- The homepage URL submitted by the user, or pasted page content (up to ~50,000 characters).
+- A list of key pages the user has flagged for inclusion (label + URL), e.g. About, Services, Leadership. Treat these as part of the scope when judging consistency, entity clarity and authority signals across the site.
 
 Engines used:
 - Anthropic Claude (claude-sonnet-4-5) and OpenAI (gpt-4o) run in parallel; results are merged into a single dual-engine score where both succeed.`;
@@ -1406,21 +1412,28 @@ Engines used:
       login();
       return;
     }
-    if (!contentInput.trim() && !urlInput.trim()) {
-      setError("Please enter a URL or paste content to analyse.");
+    const filledKeyPages = keyPages.filter((p) => p.url.trim());
+    if (!contentInput.trim() && !urlInput.trim() && filledKeyPages.length === 0) {
+      setError("Please enter a homepage URL, paste content, or add at least one key page.");
       return;
     }
     setLoading(true);
     setError(null);
     try {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const pagesSection = filledKeyPages.length
+        ? `\n\nAdditional key pages to consider in scope:\n${filledKeyPages.map((p) => `- ${p.label}: ${p.url.trim()}`).join("\n")}`
+        : "";
+      const combinedContent = contentInput.trim()
+        ? contentInput.trim() + pagesSection
+        : undefined;
       const resp = await fetch(`${apiBase}/api/diagnostic`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          content: contentInput.trim() || undefined,
-          url: urlInput.trim() || undefined,
+          content: combinedContent,
+          url: urlInput.trim() || filledKeyPages[0]?.url.trim() || undefined,
         }),
       });
       if (!resp.ok) {
@@ -1460,22 +1473,75 @@ Engines used:
               </span>
             </div>
             <div className="mb-4">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5 block" style={{ color: vars.g500 }}>Homepage URL</label>
               <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
                 <Globe size={16} style={{ color: vars.g400 }} />
                 <input
                   type="text"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://example.com/services"
+                  placeholder="https://example.com"
                   className="flex-1 text-sm bg-transparent outline-none"
                   style={{ color: vars.navy }}
                 />
               </div>
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
-                <Info size={11} /> For best results, paste your page content below
+                <Info size={11} /> For best results, paste your homepage content below
               </p>
             </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Key pages <span className="font-light normal-case tracking-normal" style={{ color: vars.g400 }}>· widen the scope of the audit</span></label>
+                <button
+                  type="button"
+                  onClick={() => setKeyPages([...keyPages, { label: "", url: "" }])}
+                  disabled={keyPages.length >= 8}
+                  className="text-[11px] font-bold uppercase tracking-[0.12em] flex items-center gap-1 disabled:opacity-40"
+                  style={{ color: "#1f748f" }}
+                >
+                  <Plus size={11} /> Add page
+                </button>
+              </div>
+              <div className="space-y-2">
+                {keyPages.map((p, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={p.label}
+                      onChange={(e) => { const next = [...keyPages]; next[idx] = { ...next[idx], label: e.target.value }; setKeyPages(next); }}
+                      placeholder="Page label (e.g. About)"
+                      className="w-40 px-3 py-2 rounded-lg border text-[12px] outline-none"
+                      style={{ borderColor: vars.g200, background: "white", color: vars.navy }}
+                    />
+                    <input
+                      type="text"
+                      value={p.url}
+                      onChange={(e) => { const next = [...keyPages]; next[idx] = { ...next[idx], url: e.target.value }; setKeyPages(next); }}
+                      placeholder="https://example.com/about"
+                      className="flex-1 px-3 py-2 rounded-lg border text-[12px] outline-none"
+                      style={{ borderColor: vars.g200, background: "white", color: vars.navy }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setKeyPages(keyPages.filter((_, i) => i !== idx))}
+                      className="p-1.5 rounded-md hover:bg-gray-100"
+                      style={{ color: vars.g400 }}
+                      title="Remove page"
+                    >
+                      <XCircle size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: vars.g400 }}>
+                <Info size={11} className="flex-shrink-0 mt-0.5" />
+                <span>Adding About, Services and Leadership pages lets the AI score entity clarity, source authority and messaging consistency across your site, not just the homepage in isolation.</span>
+              </p>
+            </div>
+
             <div className="mb-6">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5 block" style={{ color: vars.g500 }}>Homepage content <span className="font-light normal-case tracking-normal" style={{ color: vars.g400 }}>· optional but recommended</span></label>
               <textarea
                 value={contentInput}
                 onChange={(e) => setContentInput(e.target.value)}
