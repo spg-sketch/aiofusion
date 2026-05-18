@@ -1,0 +1,47 @@
+Hi Patrick,
+
+You're absolutely right that the current Insights Review prompt is too thin. What I'd suggest we change.
+
+Right now we send a single instruction to two AI engines (Claude and ChatGPT) simultaneously and then merge their scores. 
+The instruction asks them to act as a GEO and AEO expert, and score the page on six categories:
+
+Schema and structured data (out of 15)
+Content architecture (out of 15)
+Source authority (out of 15)
+Earned media signals (out of 20)
+LLM visibility (out of 20)
+Technical accessibility (out of 15)
+
+For each one it has to find issues, suggest improvements, then return strengths, warnings, critical gaps, priority actions, and a short executive summary.
+
+The problem
+
+The only thing we hand the AI alongside that instruction is the page itself (either the URL, or pasted content). Nothing about the client. So the review is judging the page on universal best practice, not on whether the page actually represents this specific brand well. That's why the recommendations feel a little textbook.
+
+What I'd suggest we add
+
+To get a proper, brand-specific review, we should feed the AI more context before it starts scoring. Specifically:
+
+The full Project Data from Sections 1 to 3 (company description, sector, audience, competitive positioning, key messages and the semantic phrase guide). So the AI can ask whether the page surfaces Bluhalo's messaging, not just whether it has schema markup.
+The spokesperson roster, so it can check the right experts are named and quoted.
+The target media categories, so the earned media score reflects the trade press the client actually wants to win.
+The client's own authority focus areas, so the priority actions match what they're trying to achieve.
+A clearer scoring guide for each category, so two runs of the same page give consistent numbers (right now scores can drift between runs).
+
+With those five additions, the Insights Review stops being a generic scan and becomes a more tailored authority audit...
+
+Two things to make life easier for you
+
+First, I've added a button at the top of every Authority Report called "View LLM brief used to generate this report." Clicking it shows the live prompt in full, so you and the client can always see exactly what the AI was told. 
+
+You'll find it on any completed report here: https://aio-fusion.simpaticopr.com/authority-report
+
+Second, the prompt lives in one place, so any changes we agree on get applied to every report from that point on. No version drift.
+
+If you're happy with the direction, I'll go ahead and draft the expanded version, pulling Project Data Sections 1 to 3, spokespeople and media categories into the brief the same way the Optimiser does. That way the next time we walk through it with Bluhalo, the report reads like it was written about them, not about a generic website.
+
+Let me know and I'll get it ready.
+
+Best,
+
+Spencer
