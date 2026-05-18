@@ -4490,6 +4490,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [standfirst, setStandfirst] = useState("");
   const [headline, setHeadline] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [actionNotes, setActionNotes] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
   const [optimised, setOptimised] = useState(false);
   const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; headline: string; transcript: string } | null>(null);
@@ -4623,16 +4624,19 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const pushToCommsPlanner = () => {
     const projects = loadPlannerProjects();
+    const fallbackNote = optimised ? "Pushed from Content Creator (LLM-optimised draft)." : "Pushed from Content Creator.";
     const proj: PlannerProject = {
       id: `pp-${Date.now()}`,
       title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
-      type: contentType,
-      week: pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date()),
-      spokesperson,
+      contentType,
+      spokesperson: spokesperson === "NA" ? "" : spokesperson,
       keyMessage: projectMessages[0]?.short || "",
+      audience: mediaTarget[0] || "",
+      channels: mediaTarget.slice(0, 4),
+      week: pubDate ? getISOWeek(new Date(pubDate)) : getISOWeek(new Date()),
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
-      notes: optimised ? "Pushed from Content Optimiser (LLM-optimised draft)." : "Pushed from Content Optimiser.",
+      notes: actionNotes.trim() || fallbackNote,
     };
     savePlannerProjects([proj, ...projects]);
     alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);
@@ -4775,6 +4779,25 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`}>
           <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : optimisedBorder, fontSize: `${editorFontSize}px`, lineHeight: 1.6, color: bodyColor }} />
           {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
+        </Labelled>
+
+        <Labelled label="Action Notes" hint="Up to 150 words of internal notes — pushed through to the Notes column on the Comms Planner.">
+          <textarea
+            value={actionNotes}
+            onChange={(e) => {
+              const next = e.target.value;
+              const words = next.trim() === "" ? 0 : next.trim().split(/\s+/).length;
+              if (words <= 150) setActionNotes(next);
+              else setActionNotes(next.trim().split(/\s+/).slice(0, 150).join(" "));
+            }}
+            rows={4}
+            placeholder="e.g. Pair with launch event the week of; spokesperson availability tight; coordinate with Spencer on quote sign-off."
+            className="w-full px-3 py-2.5 rounded-lg border"
+            style={{ borderColor: vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
+          />
+          <p className="text-[10px] font-light mt-1" style={{ color: countWords(actionNotes) > 140 ? vars.red : vars.g400 }}>
+            {countWords(actionNotes)} / 150 words · Also shown on the Comms Planner
+          </p>
         </Labelled>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
