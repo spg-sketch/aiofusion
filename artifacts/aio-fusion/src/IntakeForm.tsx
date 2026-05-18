@@ -177,8 +177,8 @@ const sections: SectionDef[] = [
       },
       {
         id: "1.9",
-        label: "Trade media categories",
-        hint: "Multi-select from the alphabetical Trade Media Categories list. These feed the Optimiser, Planner and Media Research dropdowns.",
+        label: "Media categories",
+        hint: "Multi-select from the alphabetical Media Categories list. These feed the Optimiser, Planner and Media Research dropdowns.",
         type: "textarea",
       },
     ],
@@ -957,7 +957,7 @@ export default function IntakePage() {
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {mediaCategories.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
-                              No categories selected yet. Click the button below to choose from the alphabetical list of {TRADE_MEDIA_CATEGORIES.length} trade media categories.
+                              No categories selected yet. Click the button below to choose from the alphabetical list of {TRADE_MEDIA_CATEGORIES.length} media categories.
                             </p>
                           ) : (
                             <div className="flex flex-wrap gap-1.5">
@@ -978,7 +978,7 @@ export default function IntakePage() {
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >
-                            + Choose from {TRADE_MEDIA_CATEGORIES.length} trade categories
+                            + Choose from {TRADE_MEDIA_CATEGORIES.length} categories
                           </button>
                           {mediaCategories.length > 0 && (
                             <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>
