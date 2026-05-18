@@ -2995,6 +2995,29 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       </div>
       )}
 
+      {/* View switcher footer — duplicated below the table for ease of use on long calendars */}
+      <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl p-3 sm:p-4 mt-6" style={{ background: ink, boxShadow: "0 4px 16px -10px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
+          <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view (footer)">
+            <button onClick={() => setView("spreadsheet")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <Calendar size={12} /> Calendar View
+            </button>
+            <button onClick={() => setView("cards")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "cards" ? accentPink : "transparent", color: view === "cards" ? "white" : "rgba(251,246,236,0.7)" }}>
+              <ListIcon size={12} /> List View
+            </button>
+          </div>
+        </div>
+        <button
+          onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors"
+          style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }}
+          title="Back to top"
+        >
+          <ArrowUpRight size={12} /> Back to top
+        </button>
+      </div>
+
       {/* Methodology modal */}
       {showMethodology && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowMethodology(false)}>
