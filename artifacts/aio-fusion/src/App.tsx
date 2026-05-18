@@ -1875,7 +1875,7 @@ function OptimiserPage({
     : PROMPT_1_TYPES.includes(contentType) ? "prompt1"
     : "prompt2";
 
-  const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
+  const RESEARCH_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
   const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
   const filteredArchive = archiveAll.filter((a) => !retrieveQuery || (a.title + " " + (a.body || "")).toLowerCase().includes(retrieveQuery.toLowerCase()));
 
@@ -2674,7 +2674,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
     try { localStorage.setItem("aio.research.preload", archiveId); } catch { /* noop */ }
     onNavigate("media-research");
   };
-  const RESEARCH_TYPES = ["Press release", "Article", "Case study"];
+  const RESEARCH_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
   const [cfg, setCfg] = useState<ScoringConfig>(loadScoringConfig());
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<"cards" | "spreadsheet">("spreadsheet");
@@ -5090,17 +5090,21 @@ function MediaResearchPage() {
       {/* Select Content */}
       <div className="bg-white rounded-2xl border p-5 sm:p-6 mb-6" style={{ borderColor: vars.g200 }}>
         <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.gold }}>1. Select Content</p>
-        {archive.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-center" style={{ borderColor: vars.g300 }}>
-            <p className="text-[13px] font-light" style={{ color: vars.g500 }}>No press releases, articles or case studies in the Archive yet.</p>
-            <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Send a piece from the Optimiser or Creator to start.</p>
-          </div>
-        ) : (
-          <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMode("none"); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-            <option value="">— Choose a piece from Archive —</option>
-            {archive.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType})</option>)}
-          </select>
-        )}
+        {(() => {
+          const ELIGIBLE_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
+          const eligible = archive.filter((a) => ELIGIBLE_TYPES.includes(a.contentType));
+          return eligible.length === 0 ? (
+            <div className="rounded-xl border border-dashed p-6 text-center" style={{ borderColor: vars.g300 }}>
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>No Press Releases, Articles, Case Studies, Whitepapers or Blog Posts in the Archive yet.</p>
+              <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Send a piece from the Optimiser or Creator to start. Both approved and draft items will appear here.</p>
+            </div>
+          ) : (
+            <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMode("none"); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+              <option value="">— Choose a piece from Archive —</option>
+              {eligible.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType}{a.status ? ` · ${a.status}` : ""})</option>)}
+            </select>
+          );
+        })()}
       </div>
 
       {selected && (
