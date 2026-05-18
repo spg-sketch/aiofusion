@@ -5097,29 +5097,6 @@ const DEMO_MEDIA_LIST: MediaListItem[] = [
   },
 ];
 
-const MEDIA_LIST_LLM_PROMPT = `You are acting as a senior UK PR media-list builder.
-Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
-You are given permission to web-search and verify named contacts before answering.
-Cross reference and enhance your recommendations by reviewing the content of relevant categories listed on the AIO Fusion Media Data document where possible.
-
-For each publication, return:
-1. Publication name and homepage URL
-2. Tier (per the scope list above) and a 1–N relevancy rank within tier
-3. One-sentence description of the title (owner, format, frequency)
-4. One-sentence description of its readership (job titles, seniority, sector)
-5. Audience reach — give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
-6. Up to 5 named journalists with name + job title currently on the relevant beat (cross checking with information and instructions in Project Data doc). Mark each contact's confidence: ✅ confirmed in last 6 months / 🟡 likely still in role / ⚪ unverified
-7. Generic newsdesk / editorial inbox (one per outlet)
-8. Authority score (0–100) — relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) — not a generic DA score. Briefly justify scores above 90 and below 60.
-9. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
-
-Constraints:
-- Deliver as a structured list on a word document.
-- Also, deliver as a sortable Excel sheet, ordered overall by likelihood of pickup
-- Skip individual journalist email addresses; route through newsdesk inboxes
-- Don't fabricate contacts — if you can't verify a journalist still covers the beat, omit them
-- Include a final tab with: methodology, source caveats, and a recommended first-wave outreach sequence`;
-
 function MediaResearchPage() {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
