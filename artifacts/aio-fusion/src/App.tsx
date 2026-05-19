@@ -43,6 +43,7 @@ import {
   Sparkles,
   TrendingUp,
   FileText,
+  FileCheck2,
   Target,
   Code2,
   HelpCircle,
@@ -4190,7 +4191,12 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const pushArchiveToPlanner = (item: ArchiveItem) => {
     const projects = loadPlannerProjects();
     const releaseDate = (item.releasedAt || item.createdAt || "").slice(0, 10);
-    const wk = getISOWeek(new Date(releaseDate || Date.now()));
+    const currentWeek = getISOWeek(new Date());
+    const rawWeek = getISOWeek(new Date(releaseDate || Date.now()));
+    // Planner only renders a 12-week window starting from the current ISO week.
+    // Archive items are usually dated in the past, so clamp older dates to the current week
+    // (otherwise the row would save to localStorage but never appear in the visible calendar).
+    const wk = rawWeek < currentWeek ? currentWeek : rawWeek;
     const km = keyMessages[0]?.short || keyMessages[0]?.long || "";
     const proj: PlannerProject = {
       id: `pp-${Date.now()}`,
