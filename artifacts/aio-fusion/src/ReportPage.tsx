@@ -444,7 +444,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   function addAiResultToTracker(r: typeof aiResults[number]) {
     const avgScore = Math.round(Object.values(r.scores).reduce((a, b) => a + b, 0) / Object.values(r.scores).length);
     const newRow: TrackerRow = {
-      id: `t${Date.now()}`,
+      id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: new Date().toISOString().slice(0, 10),
       title: r.title,
       type: r.type === "Article" ? "Article (Trade Publication)" : r.type,
@@ -463,7 +463,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       alert("Please add a Content Title before saving.");
       return;
     }
-    const row: TrackerRow = { ...manualForm, id: `t${Date.now()}` };
+    const row: TrackerRow = { ...manualForm, id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     setTracker(prev => [row, ...prev]);
     setManualForm(f => ({ ...f, title: "", publication: "", link: "", reach: 0 }));
   }
@@ -926,35 +926,98 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             )}
           </div>
 
-          {/* Detailed Search */}
+          {/* Detailed AI Coverage Search */}
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Search size={16} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Detailed Search</h3>
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Detailed AI Coverage Search</h3>
             </div>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Drill into a single spokesperson and approved Content Title.</p>
             <CalloutBrief title="LLM brief">
-              Augment the AI Coverage Search above with: spokesperson [name] AND content title [exact match]. Return only direct mentions; weight authority score upward where the title appears verbatim in the body.
+              <p>You are acting as a senior UK PR media-coverage and earned media reference list builder.</p>
+              <p>Using the business information on the Project Data document, you are given permission to web-search and verify coverage before answering.</p>
+              <p>
+                Search the web between <strong>[dates selected]</strong> in <strong>[region selected]</strong>, and for
+                <strong> [spokesperson entered]</strong> and <strong>[Content Title selected]</strong>, for media coverage and references in other earned media including conferences, awards, directories and lists of the company identified and described in the Project Data.
+              </p>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Return:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Content title or headline of coverage or reference, including link to article or reference</li>
+                  <li>Type (Press Release / Article / Case Study / Whitepaper / Blog / Social / Conference / Award / Directory)</li>
+                  <li>Publication or source name</li>
+                  <li>Business category</li>
+                  <li>Spokesperson (if no byline is noted or quoted in the article, return "None")</li>
+                  <li>Audience reach — give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
+                  <li>Average LLM authority score out of 10 across Claude, Gemini, ChatGPT, Perplexity and CoPilot for this specific media coverage or reference</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Search for:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Press releases and news stories</li>
+                  <li>Authored articles, media features and reports</li>
+                  <li>Case studies and similar references</li>
+                  <li>Published whitepapers and reports</li>
+                  <li>Blog posts</li>
+                  <li>Social posts on LinkedIn, Substack, Medium and similar channels</li>
+                  <li>References within conference and event websites</li>
+                  <li>References within award schemes, shortlisted entries and awards won</li>
+                  <li>References within directories and lists in media editorial and by other organisations</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Hard rules:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Do not invent references, media coverage, titles or editorial details.</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Deliverable:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>A sortable Excel with one row per media coverage item or reference.</li>
+                  <li>A structured list in a Word document.</li>
+                </ul>
+              </div>
             </CalloutBrief>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
-                <select value={detailedSearch.spokesperson} onChange={e => setDetailedSearch({ ...detailedSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                <label htmlFor="detailed-spokesperson" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
+                <select id="detailed-spokesperson" value={detailedSearch.spokesperson} onChange={e => setDetailedSearch({ ...detailedSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
                   <option>All</option>
                   {Array.from(new Set(tracker.map(t => t.spokesperson))).map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title</label>
-                <select value={detailedSearch.title} onChange={e => setDetailedSearch({ ...detailedSearch, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                <label htmlFor="detailed-title" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title</label>
+                <select id="detailed-title" value={detailedSearch.title} onChange={e => setDetailedSearch({ ...detailedSearch, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
                   <option>All</option>
                   {inRange.map(r => <option key={r.id}>{r.title}</option>)}
                 </select>
               </div>
             </div>
-            <button onClick={runDetailedSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
-              <Search size={14} /> Detailed Search
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={runDetailedSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
+                <Search size={14} /> Run Detailed AI Coverage Search
+              </button>
+              {detailedSearched && detailedResults.length > 0 && (
+                <>
+                  <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                    <Download size={14} /> Download Report
+                  </button>
+                  <button
+                    onClick={() => {
+                      detailedResults.forEach(r => addAiResultToTracker(r));
+                      alert(`Added ${detailedResults.length} item${detailedResults.length === 1 ? "" : "s"} to the Earned Media Tracker.`);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                    style={{ background: vars.navy }}
+                  >
+                    <Plus size={14} /> Add to Earned Media Tracker
+                  </button>
+                </>
+              )}
+            </div>
             {detailedSearched && detailedResults.length === 0 && (
               <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No matches in the selected date range. Adjust the spokesperson or content title and try again.</p>
             )}
