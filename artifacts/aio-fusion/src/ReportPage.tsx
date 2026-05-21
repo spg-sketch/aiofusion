@@ -765,9 +765,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       {activeTab === "tracker" && (
         <div className="space-y-6">
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <p className="text-sm font-light" style={{ color: vars.g500 }}>
-              Search and record your project coverage and content activity to fuel your authority and visibility scores.
+            <p className="text-sm font-light mb-3" style={{ color: vars.g500 }}>
+              Search and record your project coverage and content activity to fuel your authority and visibility scores. This page allows you to do the following:
             </p>
+            <ul className="space-y-1.5 pl-5 list-disc text-sm font-light" style={{ color: vars.g500 }}>
+              <li>Carry out AI searches for recent Project coverage and earned media citations and add them to your Earned Media Tracker.</li>
+              <li>Carry out more detailed searches for different aspects of the Project.</li>
+              <li>Manually enter coverage into your Earned Media Tracker.</li>
+              <li>Search your Earned Media Tracker for content by Type, Message, Spokesperson, Media Category and Media Title.</li>
+            </ul>
           </div>
 
           {/* AI Coverage Search */}
