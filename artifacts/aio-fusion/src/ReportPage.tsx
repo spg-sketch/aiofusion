@@ -340,13 +340,9 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   ];
 
   // ---- Earned Media Tracker form state ----
-  const [aiSearch, setAiSearch] = useState({ from: rangeFrom, to: rangeTo, region: "UK", project: activeClient.name });
+  const [aiSearch, setAiSearch] = useState({ from: rangeFrom, to: rangeTo, region: "UK", project: activeClient.name, spokesperson: "", contentTitle: "" });
   const [aiResults, setAiResults] = useState<Array<{ title: string; type: string; publication: string; reach: number; scores: Record<string, number>; link: string }>>([]);
   const [aiSearched, setAiSearched] = useState(false);
-
-  const [detailedSearch, setDetailedSearch] = useState({ spokesperson: "All", title: "All" });
-  const [detailedResults, setDetailedResults] = useState<typeof aiResults>([]);
-  const [detailedSearched, setDetailedSearched] = useState(false);
 
   // ---- Tracker spreadsheet search/filter state ----
   const trackerFilterDefaults = { from: "", to: "", type: "All", message: "", spokesperson: "All", category: "All", mediaTitle: "All" };
@@ -393,7 +389,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     // SMG-style coverage spread across all 7 bucket types Patrick illustrated:
     // Press Release / News, Authored Article + Media Feature, Case Study,
     // Whitepaper, Blog Post, Social Post and Conference / Event reference.
-    setAiResults([
+    const baseResults: typeof aiResults = [
       // Press release pickup
       { title: "GEO 'firmly in the growth phase', finds Simpatico's Authority Index",                                  type: "Press Release",              publication: "PRWeek",            reach: 480000,   scores: { Claude: 8, Gemini: 8, ChatGPT: 9, Perplexity: 8, CoPilot: 7 }, link: "https://prweek.com/article/geo-growth" },
       { title: "Simpatico launches industry-first GEO Authority Index for B2B PR",                                      type: "Press Release",              publication: "PRovoke Media",     reach: 220000,   scores: { Claude: 7, Gemini: 7, ChatGPT: 8, Perplexity: 8, CoPilot: 6 }, link: "https://provokemedia.com/2026/03/04" },
@@ -417,28 +413,14 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
       // Conference / event reference
       { title: "2026 IAB Connected Comms Summit — Spencer Gallagher listed as speaker",                                  type: "Speaker Submission",          publication: "iab.com",           reach: 400000,   scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://iab.com/events/connected-comms-2026" },
-    ]);
-  }
-
-  function runDetailedSearch() {
-    setDetailedSearched(true);
-    const matches = inRange.filter(r => {
-      const okPerson = detailedSearch.spokesperson === "All" || r.spokesperson === detailedSearch.spokesperson;
-      const okTitle = detailedSearch.title === "All" || r.title === detailedSearch.title;
-      return okPerson && okTitle;
-    });
-    if (matches.length === 0) {
-      setDetailedResults([]);
-      return;
-    }
-    setDetailedResults(matches.map(r => ({
-      title: r.title,
-      type: r.type,
-      publication: r.publication,
-      reach: r.reach,
-      scores: { Claude: r.score, Gemini: Math.max(0, r.score - 1), ChatGPT: Math.min(10, r.score + 1), Perplexity: r.score, CoPilot: Math.max(0, r.score - 2) },
-      link: r.link,
-    })));
+    ];
+    const personFilter = aiSearch.spokesperson.trim().toLowerCase();
+    const titleFilter = aiSearch.contentTitle.trim().toLowerCase();
+    setAiResults(baseResults.filter(r => {
+      if (personFilter && !r.title.toLowerCase().includes(personFilter)) return false;
+      if (titleFilter && !r.title.toLowerCase().includes(titleFilter)) return false;
+      return true;
+    }));
   }
 
   function addAiResultToTracker(r: typeof aiResults[number]) {
@@ -798,7 +780,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </p>
             <ul className="space-y-1.5 pl-5 list-disc text-sm font-light" style={{ color: vars.g500 }}>
               <li>Carry out AI searches for recent Project coverage and earned media citations and add them to your Earned Media Tracker.</li>
-              <li>Carry out more detailed searches for different aspects of the Project.</li>
+              <li>Narrow those searches by Spokesperson or Content Title to drill into a specific aspect of the Project.</li>
               <li>Manually enter coverage into your Earned Media Tracker.</li>
               <li>Search your Earned Media Tracker for content by Type, Message, Spokesperson, Media Category and Media Title.</li>
             </ul>
@@ -816,7 +798,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             <CalloutBrief title="LLM brief">
               <p>You are acting as a senior UK PR media-coverage and earned media reference list builder.</p>
               <p>Using the business information on the Project Data document, you are given permission to web-search and verify coverage before answering.</p>
-              <p>Search the web between <strong>[dates selected]</strong> in <strong>[region selected]</strong> for media coverage and references in other earned media including conferences, awards, directories and lists of the company identified and described in the Project Data.</p>
+              <p>Search the web between <strong>[dates selected]</strong> in <strong>[region selected]</strong>, optionally narrowed by <strong>[spokesperson entered]</strong> and <strong>[Content Title entered]</strong>, for media coverage and references in other earned media including conferences, awards, directories and lists of the company identified and described in the Project Data.</p>
               <div>
                 <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Return:</p>
                 <ul className="list-disc pl-5 space-y-1">
@@ -858,36 +840,59 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </CalloutBrief>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>From</label>
-                <input type="date" value={aiSearch.from} onChange={e => setAiSearch({ ...aiSearch, from: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label htmlFor="ai-from" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>From</label>
+                <input id="ai-from" type="date" value={aiSearch.from} onChange={e => setAiSearch({ ...aiSearch, from: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>To</label>
-                <input type="date" value={aiSearch.to} onChange={e => setAiSearch({ ...aiSearch, to: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label htmlFor="ai-to" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>To</label>
+                <input id="ai-to" type="date" value={aiSearch.to} onChange={e => setAiSearch({ ...aiSearch, to: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Region</label>
-                <select value={aiSearch.region} onChange={e => setAiSearch({ ...aiSearch, region: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                <label htmlFor="ai-region" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Region</label>
+                <select id="ai-region" value={aiSearch.region} onChange={e => setAiSearch({ ...aiSearch, region: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
                   {REGIONS.map(r => <option key={r}>{r}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Project search</label>
-                <input value={aiSearch.project} onChange={e => setAiSearch({ ...aiSearch, project: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label htmlFor="ai-project" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Project search</label>
+                <input id="ai-project" value={aiSearch.project} onChange={e => setAiSearch({ ...aiSearch, project: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="ai-spokesperson" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson <span className="font-normal normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+                <input id="ai-spokesperson" placeholder="e.g. Spencer Gallagher" value={aiSearch.spokesperson} onChange={e => setAiSearch({ ...aiSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="ai-content-title" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title <span className="font-normal normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+                <input id="ai-content-title" placeholder="e.g. Authority Index" value={aiSearch.contentTitle} onChange={e => setAiSearch({ ...aiSearch, contentTitle: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={runAiSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
                 <Search size={14} /> Run AI Coverage Search
               </button>
-              {aiSearched && (
-                <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-                  <Download size={14} /> Download Report
-                </button>
+              {aiSearched && aiResults.length > 0 && (
+                <>
+                  <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                    <Download size={14} /> Download Report
+                  </button>
+                  <button
+                    onClick={() => {
+                      aiResults.forEach(r => addAiResultToTracker(r));
+                      alert(`Added ${aiResults.length} item${aiResults.length === 1 ? "" : "s"} to the Earned Media Tracker.`);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                    style={{ background: vars.navy }}
+                  >
+                    <Plus size={14} /> Add to Earned Media Tracker
+                  </button>
+                </>
               )}
             </div>
+            {aiSearched && aiResults.length === 0 && (
+              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No matches for the spokesperson or content title entered. Clear those fields for a broader sweep, or adjust the wording and try again.</p>
+            )}
 
             {aiSearched && (
               <div className="mt-5 overflow-x-auto">
@@ -920,131 +925,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Detailed AI Coverage Search */}
-          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center gap-2 mb-1">
-              <Search size={16} color={vars.accent} />
-              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Detailed AI Coverage Search</h3>
-            </div>
-            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Drill into a single spokesperson and approved Content Title.</p>
-            <CalloutBrief title="LLM brief">
-              <p>You are acting as a senior UK PR media-coverage and earned media reference list builder.</p>
-              <p>Using the business information on the Project Data document, you are given permission to web-search and verify coverage before answering.</p>
-              <p>
-                Search the web between <strong>[dates selected]</strong> in <strong>[region selected]</strong>, and for
-                <strong> [spokesperson entered]</strong> and <strong>[Content Title selected]</strong>, for media coverage and references in other earned media including conferences, awards, directories and lists of the company identified and described in the Project Data.
-              </p>
-              <div>
-                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Return:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Content title or headline of coverage or reference, including link to article or reference</li>
-                  <li>Type (Press Release / Article / Case Study / Whitepaper / Blog / Social / Conference / Award / Directory)</li>
-                  <li>Publication or source name</li>
-                  <li>Business category</li>
-                  <li>Spokesperson (if no byline is noted or quoted in the article, return "None")</li>
-                  <li>Audience reach — give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
-                  <li>Average LLM authority score out of 10 across Claude, Gemini, ChatGPT, Perplexity and CoPilot for this specific media coverage or reference</li>
-                </ul>
-              </div>
-              <div>
-                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Search for:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Press releases and news stories</li>
-                  <li>Authored articles, media features and reports</li>
-                  <li>Case studies and similar references</li>
-                  <li>Published whitepapers and reports</li>
-                  <li>Blog posts</li>
-                  <li>Social posts on LinkedIn, Substack, Medium and similar channels</li>
-                  <li>References within conference and event websites</li>
-                  <li>References within award schemes, shortlisted entries and awards won</li>
-                  <li>References within directories and lists in media editorial and by other organisations</li>
-                </ul>
-              </div>
-              <div>
-                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Hard rules:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Do not invent references, media coverage, titles or editorial details.</li>
-                </ul>
-              </div>
-              <div>
-                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Deliverable:</p>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>A sortable Excel with one row per media coverage item or reference.</li>
-                  <li>A structured list in a Word document.</li>
-                </ul>
-              </div>
-            </CalloutBrief>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label htmlFor="detailed-spokesperson" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
-                <select id="detailed-spokesperson" value={detailedSearch.spokesperson} onChange={e => setDetailedSearch({ ...detailedSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
-                  <option>All</option>
-                  {Array.from(new Set(tracker.map(t => t.spokesperson))).map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="detailed-title" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title</label>
-                <select id="detailed-title" value={detailedSearch.title} onChange={e => setDetailedSearch({ ...detailedSearch, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
-                  <option>All</option>
-                  {inRange.map(r => <option key={r.id}>{r.title}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={runDetailedSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
-                <Search size={14} /> Run Detailed AI Coverage Search
-              </button>
-              {detailedSearched && detailedResults.length > 0 && (
-                <>
-                  <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-                    <Download size={14} /> Download Report
-                  </button>
-                  <button
-                    onClick={() => {
-                      detailedResults.forEach(r => addAiResultToTracker(r));
-                      alert(`Added ${detailedResults.length} item${detailedResults.length === 1 ? "" : "s"} to the Earned Media Tracker.`);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                    style={{ background: vars.navy }}
-                  >
-                    <Plus size={14} /> Add to Earned Media Tracker
-                  </button>
-                </>
-              )}
-            </div>
-            {detailedSearched && detailedResults.length === 0 && (
-              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No matches in the selected date range. Adjust the spokesperson or content title and try again.</p>
-            )}
-            {detailedSearched && detailedResults.length > 0 && (
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[600px] text-sm">
-                  <thead>
-                    <tr style={{ background: vars.g50 }}>
-                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Title</th>
-                      <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Publication</th>
-                      <th className="text-right px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>Reach</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailedResults.map((r, i) => (
-                      <tr key={i} className="border-t" style={{ borderColor: vars.g200 }}>
-                        <td className="px-3 py-3" style={{ color: vars.navy }}>{r.title}</td>
-                        <td className="px-3 py-3" style={{ color: vars.g600 }}>{r.publication}</td>
-                        <td className="px-3 py-3 text-right" style={{ color: vars.g600 }}>{r.reach.toLocaleString()}</td>
-                        <td className="px-3 py-3 text-right">
-                          <button onClick={() => addAiResultToTracker(r)} className="text-xs font-semibold flex items-center gap-1 ml-auto" style={{ color: vars.accent }}>
-                            <Plus size={12} /> Add to Tracker
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
                   </tbody>
                 </table>
               </div>
