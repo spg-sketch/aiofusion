@@ -348,6 +348,34 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const [detailedResults, setDetailedResults] = useState<typeof aiResults>([]);
   const [detailedSearched, setDetailedSearched] = useState(false);
 
+  // ---- Tracker spreadsheet search/filter state ----
+  const trackerFilterDefaults = { from: "", to: "", type: "All", message: "", spokesperson: "All", category: "All", mediaTitle: "All" };
+  const [trackerFilter, setTrackerFilter] = useState(trackerFilterDefaults);
+  const uniqueSpokespersons = useMemo(() => Array.from(new Set(tracker.map(r => r.spokesperson).filter(Boolean))).sort(), [tracker]);
+  const uniqueCategories = useMemo(() => Array.from(new Set(tracker.map(r => r.category).filter(Boolean))).sort(), [tracker]);
+  const uniqueMediaTitles = useMemo(() => Array.from(new Set(tracker.map(r => r.publication).filter(Boolean))).sort(), [tracker]);
+  const filteredTracker = useMemo(() => {
+    const msg = trackerFilter.message.trim().toLowerCase();
+    return tracker.filter(r => {
+      if (trackerFilter.from && r.date < trackerFilter.from) return false;
+      if (trackerFilter.to && r.date > trackerFilter.to) return false;
+      if (trackerFilter.type !== "All" && r.type !== trackerFilter.type) return false;
+      if (trackerFilter.spokesperson !== "All" && r.spokesperson !== trackerFilter.spokesperson) return false;
+      if (trackerFilter.category !== "All" && r.category !== trackerFilter.category) return false;
+      if (trackerFilter.mediaTitle !== "All" && r.publication !== trackerFilter.mediaTitle) return false;
+      if (msg && !r.title.toLowerCase().includes(msg)) return false;
+      return true;
+    });
+  }, [tracker, trackerFilter]);
+  const hasActiveTrackerFilters =
+    trackerFilter.from !== "" ||
+    trackerFilter.to !== "" ||
+    trackerFilter.type !== "All" ||
+    trackerFilter.message.trim() !== "" ||
+    trackerFilter.spokesperson !== "All" ||
+    trackerFilter.category !== "All" ||
+    trackerFilter.mediaTitle !== "All";
+
   const [manualForm, setManualForm] = useState<Omit<TrackerRow, "id">>({
     date: "2026-04-15",
     title: "",
@@ -971,11 +999,74 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </button>
           </div>
 
+          {/* Search Earned Media Tracker */}
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Search size={16} color={vars.accent} />
+              <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Search Earned Media Tracker</h3>
+            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
+              Filter the spreadsheet below by any combination of Date, Content Type, Message, Spokesperson, Media Category or Media Title.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <div>
+                <label htmlFor="tracker-filter-from" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>From</label>
+                <input id="tracker-filter-from" type="date" value={trackerFilter.from} onChange={e => setTrackerFilter({ ...trackerFilter, from: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label htmlFor="tracker-filter-to" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>To</label>
+                <input id="tracker-filter-to" type="date" value={trackerFilter.to} onChange={e => setTrackerFilter({ ...trackerFilter, to: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label htmlFor="tracker-filter-type" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Type</label>
+                <select id="tracker-filter-type" value={trackerFilter.type} onChange={e => setTrackerFilter({ ...trackerFilter, type: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option value="All">All types</option>
+                  {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="tracker-filter-message" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Message / keyword</label>
+                <input id="tracker-filter-message" type="text" placeholder="e.g. authority, GEO, Boots" value={trackerFilter.message} onChange={e => setTrackerFilter({ ...trackerFilter, message: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+              </div>
+              <div>
+                <label htmlFor="tracker-filter-spokesperson" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson</label>
+                <select id="tracker-filter-spokesperson" value={trackerFilter.spokesperson} onChange={e => setTrackerFilter({ ...trackerFilter, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option value="All">All spokespersons</option>
+                  {uniqueSpokespersons.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="tracker-filter-category" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Media Category</label>
+                <select id="tracker-filter-category" value={trackerFilter.category} onChange={e => setTrackerFilter({ ...trackerFilter, category: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option value="All">All categories</option>
+                  {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="tracker-filter-media-title" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Media Title</label>
+                <select id="tracker-filter-media-title" value={trackerFilter.mediaTitle} onChange={e => setTrackerFilter({ ...trackerFilter, mediaTitle: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }}>
+                  <option value="All">All media titles</option>
+                  {uniqueMediaTitles.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={() => setTrackerFilter(trackerFilterDefaults)} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+                Clear filters
+              </button>
+              <span className="text-[12px]" style={{ color: vars.g500 }}>
+                Showing <strong style={{ color: vars.navy }}>{filteredTracker.length}</strong> of {tracker.length} rows
+              </span>
+            </div>
+          </div>
+
           {/* Tracker Spreadsheet */}
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Tracker spreadsheet</h3>
-              <span className="text-[11px]" style={{ color: vars.g400 }}>{tracker.length} rows</span>
+              <span className="text-[11px]" style={{ color: vars.g400 }}>
+                {hasActiveTrackerFilters ? `${filteredTracker.length} of ${tracker.length} rows` : `${tracker.length} rows`}
+              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-sm">
@@ -987,7 +1078,12 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   </tr>
                 </thead>
                 <tbody>
-                  {tracker.map(r => (
+                  {filteredTracker.length === 0 && (
+                    <tr><td colSpan={9} className="px-3 py-6 text-center text-[13px] font-light" style={{ color: vars.g500 }}>
+                      No rows match the current filters. Try clearing one or more fields above.
+                    </td></tr>
+                  )}
+                  {filteredTracker.map(r => (
                     <tr key={r.id} className="border-t" style={{ borderColor: vars.g200 }}>
                       <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.date}</td>
                       <td className="px-3 py-2" style={{ color: vars.navy }}>
