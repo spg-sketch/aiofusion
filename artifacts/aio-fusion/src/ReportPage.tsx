@@ -207,7 +207,7 @@ function CalloutBrief({ title, children }: { title: string; children: React.Reac
       </button>
       {open && (
         <div className="mt-2 rounded-xl p-3 sm:p-4" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.3)" }}>
-          <p className="text-[12px] font-light italic leading-relaxed" style={{ color: "#102B36" }}>{children}</p>
+          <div className="text-[12px] font-light italic leading-relaxed space-y-2" style={{ color: "#102B36" }}>{children}</div>
         </div>
       )}
     </div>
@@ -814,7 +814,48 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               Search the web for earned coverage about your project across Press Releases, Articles, Case Studies, Whitepapers, Blogs, Social, Conferences, Awards and Directories. Each item is scored across Claude, Gemini, ChatGPT, Perplexity and CoPilot.
             </p>
             <CalloutBrief title="LLM brief">
-              Search the web (last [date range]) for coverage of [project] in [region]. Return: link, publication, reach, and a score out of 10 from each of Claude, Gemini, ChatGPT, Perplexity and CoPilot. Bucket results by Press Release / Article / Case Study / Whitepaper / Blog / Social / Conference / Award / Directory.
+              <p>You are acting as a senior UK PR media-coverage and earned media reference list builder.</p>
+              <p>Using the business information on the Project Data document, you are given permission to web-search and verify coverage before answering.</p>
+              <p>Search the web between <strong>[dates selected]</strong> in <strong>[region selected]</strong> for media coverage and references in other earned media including conferences, awards, directories and lists of the company identified and described in the Project Data.</p>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Return:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Content title or headline of coverage or reference, including link to article or reference</li>
+                  <li>Type (Press Release / Article / Case Study / Whitepaper / Blog / Social / Conference / Award / Directory)</li>
+                  <li>Publication or source name</li>
+                  <li>Business category</li>
+                  <li>Spokesperson (if no byline is noted or quoted in the article, return "None")</li>
+                  <li>Audience reach — give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
+                  <li>Average LLM authority score out of 10 across Claude, Gemini, ChatGPT, Perplexity and CoPilot for this specific media coverage or reference</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Search for:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Press releases and news stories</li>
+                  <li>Authored articles, media features and reports</li>
+                  <li>Case studies and similar references</li>
+                  <li>Published whitepapers and reports</li>
+                  <li>Blog posts</li>
+                  <li>Social posts on LinkedIn, Substack, Medium and similar channels</li>
+                  <li>References within conference and event websites</li>
+                  <li>References within award schemes, shortlisted entries and awards won</li>
+                  <li>References within directories and lists in media editorial and by other organisations</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Hard rules:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Do not invent references, media coverage, titles or editorial details.</li>
+                </ul>
+              </div>
+              <div>
+                <p className="not-italic font-semibold mb-1" style={{ color: "#102B36" }}>Deliverable:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>A sortable Excel with one row per media coverage item or reference.</li>
+                  <li>A structured list in a Word document.</li>
+                </ul>
+              </div>
             </CalloutBrief>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
