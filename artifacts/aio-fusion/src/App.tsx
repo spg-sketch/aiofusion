@@ -280,12 +280,26 @@ function createStoredProject(name: string): Client {
   return project;
 }
 
-function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string) => void }) {
+function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");
+  const [logo, setLogo] = useState<string | null>(null);
   const ink = "#102B36";
   const accent = "#C8497A";
   const canSubmit = name.trim().length > 0;
-  const submit = () => { if (canSubmit) onCreate(name.trim()); };
+  const submit = () => { if (canSubmit) onCreate(name.trim(), logo ?? undefined); };
+  const pickLogo = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/svg+xml,image/webp";
+    input.onchange = (ev) => {
+      const file = (ev.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { if (typeof reader.result === "string") setLogo(reader.result); };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-['Inter',sans-serif]"
@@ -321,6 +335,39 @@ function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCr
           className="w-full rounded-xl px-4 py-3 text-[15px] outline-none"
           style={{ border: `1px solid ${vars.g200}`, color: ink }}
         />
+        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mt-5 mb-2" style={{ color: vars.g500 }}>
+          Logo <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span>
+        </label>
+        <div className="flex items-center gap-4">
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0"
+            style={{ background: logo ? "white" : "#FBE3ED", border: `1px solid ${vars.g200}` }}
+          >
+            {logo ? (
+              <img src={logo} alt="Project logo" className="w-full h-full object-contain p-1" />
+            ) : (
+              <ImageIcon size={20} style={{ color: accent }} />
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={pickLogo}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-semibold transition-colors"
+              style={{ background: "white", border: `1px solid ${vars.g200}`, color: ink }}
+            >
+              <Upload size={13} /> {logo ? "Change logo" : "Upload logo"}
+            </button>
+            {logo && (
+              <button
+                onClick={() => setLogo(null)}
+                className="text-[12px] font-medium hover:underline"
+                style={{ color: vars.g500 }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
         <div className="flex items-center justify-end gap-3 mt-7">
           <button
             onClick={onCancel}
@@ -7065,12 +7112,13 @@ function App() {
 
   const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
 
-  const confirmCreateProject = (name: string) => {
+  const confirmCreateProject = (name: string, logo?: string) => {
     const project = createStoredProject(name);
     setStoredProjects(loadStoredProjects());
     setActiveProjectId(project.id);
     setNamingProject(false);
-    setActiveClient(project);
+    if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
+    setActiveClient(logo ? { ...project, logo } : project);
     setCurrentPage("intake");
     setView("platform");
   };
