@@ -61,6 +61,18 @@ type FieldDef = {
   shortPlaceholder?: string;
   longPlaceholder?: string;
   wordLimit?: number;
+  // Conditional field: only applies (counts toward completion + is shown) when
+  // the parent field's selected value includes one of these options.
+  dependsOn?: { field: string; includes: string[] };
+};
+
+// A conditional follow-up field only "applies" when its parent answer matches.
+// Non-applicable fields are hidden and excluded from the completion count.
+const fieldApplies = (f: FieldDef, formData: Record<string, string | string[]>): boolean => {
+  if (!f.dependsOn) return true;
+  const parent = formData[f.dependsOn.field];
+  const arr = Array.isArray(parent) ? parent : [];
+  return f.dependsOn.includes.some((opt) => arr.includes(opt));
 };
 
 type SectionDef = {
@@ -365,7 +377,7 @@ const sections: SectionDef[] = [
           "A mix: describe below",
         ],
       },
-      { id: "5.1b", label: "If a mix, describe:", type: "textarea" },
+      { id: "5.1b", label: "If a mix, describe:", type: "textarea", dependsOn: { field: "5.1", includes: ["A mix: describe below"] } },
       {
         id: "5.2",
         label: "How best customers typically find you for the first time",
@@ -393,7 +405,7 @@ const sections: SectionDef[] = [
           "No",
         ],
       },
-      { id: "5.4b", label: "If yes, roughly how many per year?", type: "text" },
+      { id: "5.4b", label: "If yes, roughly how many per year?", type: "text", dependsOn: { field: "5.4", includes: ["Yes, regularly", "Infrequently"] } },
       {
         id: "5.5",
         label: "Has your brand been mentioned in AI-generated answers?",
@@ -443,7 +455,7 @@ const sections: SectionDef[] = [
         type: "checkbox",
         options: ["Yes (provide URLs below)", "No", "Not sure"],
       },
-      { id: "6.4b", label: "If yes, provide URLs:", type: "textarea" },
+      { id: "6.4b", label: "If yes, provide URLs:", type: "textarea", dependsOn: { field: "6.4", includes: ["Yes (provide URLs below)"] } },
       { id: "h-ac", label: "AI Crawler Access", type: "heading" },
       {
         id: "6.5",
@@ -457,7 +469,7 @@ const sections: SectionDef[] = [
           "We want to selectively control access",
         ],
       },
-      { id: "6.5b", label: "If some are blocked, specify:", type: "textarea" },
+      { id: "6.5b", label: "If some are blocked, specify:", type: "textarea", dependsOn: { field: "6.5", includes: ["Yes, some are blocked (specify below)"] } },
       {
         id: "6.6",
         label: "Areas of the website you would not want AI crawlers to access",
@@ -647,6 +659,7 @@ export default function IntakePage() {
   const sectionHasData = (idx: number): boolean => {
     return visibleSections[idx].fields.some((f) => {
       if (f.type === "heading") return false;
+      if (!fieldApplies(f, formData)) return false;
       if (f.id === "1.8") return spokespeople.length > 0;
       if (f.id === "1.9") return businessCategories.length > 0;
       if (f.id === "1.10") return audienceCategories.length > 0;
@@ -662,11 +675,11 @@ export default function IntakePage() {
   };
 
   const totalFields = visibleSections.reduce(
-    (s, sec) => s + sec.fields.filter((f) => f.type !== "heading").length,
+    (s, sec) => s + sec.fields.filter((f) => f.type !== "heading" && fieldApplies(f, formData)).length,
     0,
   );
   const filledFields = visibleSections.reduce((sum, sec) => {
-    return sum + sec.fields.filter((f) => f.type !== "heading").reduce((s, f) => {
+    return sum + sec.fields.filter((f) => f.type !== "heading" && fieldApplies(f, formData)).reduce((s, f) => {
       if (f.id === "1.8") return s + (spokespeople.length > 0 ? 1 : 0);
       if (f.id === "1.9") return s + (businessCategories.length > 0 ? 1 : 0);
       if (f.id === "1.10") return s + (audienceCategories.length > 0 ? 1 : 0);
@@ -689,6 +702,7 @@ export default function IntakePage() {
     sections.forEach((sec) => {
       sec.fields.forEach((f) => {
         if (f.type === "heading") return;
+        if (!fieldApplies(f, formData)) return;
         total += 1;
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
         if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
@@ -834,6 +848,7 @@ export default function IntakePage() {
   // every answer is shown in full, no matter how long.
   const emptyPrintValue = <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>Not provided</span>;
   const renderPrintField = (field: FieldDef) => {
+    if (!fieldApplies(field, formData)) return null;
     if (field.type === "heading") {
       return (
         <h3 key={field.id} style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#C8497A", marginTop: 14, marginBottom: 6 }}>
@@ -1041,6 +1056,7 @@ export default function IntakePage() {
 
               <div className="space-y-6">
                 {section.fields.map((field) => {
+                  if (!fieldApplies(field, formData)) return null;
                   const displayId = /^\d+\.\d+$/.test(field.id)
                     ? `${section.number}.${field.id.split(".")[1]}`
                     : field.id;
