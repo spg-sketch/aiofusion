@@ -76,7 +76,11 @@ aiAssistRouter.post(
       return;
     }
 
-    if (!site.text || site.text.length < 80) {
+    // Many marketing sites are JavaScript-rendered, so the visible body text can
+    // be nearly empty while the title and meta description carry the real summary.
+    // Gate on everything we extracted, not just the body text.
+    const combinedContent = `${site.title} ${site.description} ${site.text}`.replace(/\s+/g, " ").trim();
+    if (combinedContent.length < 80) {
       res.json({ fieldId, notFound: true, source: site.url });
       return;
     }
