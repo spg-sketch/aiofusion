@@ -1,4 +1,4 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages } from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId } from "./IntakeForm";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
@@ -202,6 +202,146 @@ const clients: Client[] = [
     recentActivity: "Onboarded, no content yet",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Created (real) projects. These are saved by the user when they set up a new
+// project and persist in localStorage so they show in the Project Hub. They
+// live alongside the demo clients above.
+// ---------------------------------------------------------------------------
+const CREATED_PROJECTS_KEY = "aio.projects.v1";
+const PROJECT_COLORS = ["#C8497A", "#1f748f", "#2896b9", "#165265", "#D4922A", "#3D9B6B"];
+
+function deriveInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "P";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function loadStoredProjects(): Client[] {
+  try {
+    const raw = localStorage.getItem(CREATED_PROJECTS_KEY);
+    if (raw) return JSON.parse(raw) as Client[];
+  } catch { /* noop */ }
+  return [];
+}
+
+function saveStoredProjects(list: Client[]): void {
+  try { localStorage.setItem(CREATED_PROJECTS_KEY, JSON.stringify(list)); } catch { /* noop */ }
+}
+
+// One-time migration: if the user already completed an intake before projects
+// were saveable, that data lives under the bare "aio.intake.v2" key. Surface it
+// in the hub as a real "default" project so it is not orphaned.
+function migrateLegacyIntakeToProject(): void {
+  const projects = loadStoredProjects();
+  if (projects.some((p) => p.id === "default")) return;
+  let raw: string | null = null;
+  try { raw = localStorage.getItem("aio.intake.v2"); } catch { /* noop */ }
+  if (!raw) return;
+  let name = "New Project";
+  try {
+    const fd = JSON.parse(raw).formData || {};
+    if (typeof fd["4.1"] === "string" && fd["4.1"].trim()) name = fd["4.1"].trim();
+  } catch { /* noop */ }
+  projects.unshift({
+    id: "default",
+    name,
+    sector: "Project Set-Up",
+    initials: deriveInitials(name),
+    color: PROJECT_COLORS[0],
+    contentCount: 0,
+    avgScore: 0,
+    scoreTrend: 0,
+    activePlans: 0,
+    lastActive: "Today",
+    recentActivity: "Set-up saved",
+  });
+  saveStoredProjects(projects);
+}
+
+function createStoredProject(name: string): Client {
+  const projects = loadStoredProjects();
+  const clean = name.trim() || "New Project";
+  const project: Client = {
+    id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: clean,
+    sector: "Project Set-Up",
+    initials: deriveInitials(clean),
+    color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
+    contentCount: 0,
+    avgScore: 0,
+    scoreTrend: 0,
+    activePlans: 0,
+    lastActive: "Just now",
+    recentActivity: "Project created",
+  };
+  saveStoredProjects([project, ...projects]);
+  return project;
+}
+
+function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const canSubmit = name.trim().length > 0;
+  const submit = () => { if (canSubmit) onCreate(name.trim()); };
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-['Inter',sans-serif]"
+      style={{ background: "rgba(16,43,54,0.45)" }}
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-7 sm:p-8"
+        style={{ background: "white", border: `1px solid ${vars.g200}` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em] mb-4"
+          style={{ background: "#FBE3ED", border: `1px solid ${accent}40`, color: accent }}
+        >
+          <Plus size={12} /> New Project
+        </div>
+        <h2 className="text-2xl mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          Name your project
+        </h2>
+        <p className="text-[14px] font-light mb-5 leading-relaxed" style={{ color: vars.g500 }}>
+          This is the brand, product or campaign you want to optimise. You can refine the rest of the details during set-up.
+        </p>
+        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>
+          Project name
+        </label>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="e.g. Acme Robotics"
+          className="w-full rounded-xl px-4 py-3 text-[15px] outline-none"
+          style={{ border: `1px solid ${vars.g200}`, color: ink }}
+        />
+        <div className="flex items-center justify-end gap-3 mt-7">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] transition-colors"
+            style={{ color: vars.g500 }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={!canSubmit}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all"
+            style={{ background: accent, opacity: canSubmit ? 1 : 0.45, cursor: canSubmit ? "pointer" : "not-allowed" }}
+          >
+            <ArrowRight size={14} /> Create &amp; set up
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MiniDonut({ score, color, size = 56 }: { score: number; color: string; size?: number }) {
   const r = (size - 8) / 2;
@@ -580,6 +720,7 @@ function Sidebar({
 }
 
 function ClientSelectorPage({
+  projects,
   onSelectClient,
   clientLogos,
   onLogoUpdate,
@@ -588,6 +729,7 @@ function ClientSelectorPage({
   onArchivedProjects,
   onGuidance,
 }: {
+  projects: Client[];
   onSelectClient: (client: Client) => void;
   clientLogos: Record<string, string>;
   onLogoUpdate: (clientId: string, logoDataUrl: string) => void;
@@ -597,7 +739,10 @@ function ClientSelectorPage({
   onGuidance: () => void;
 }) {
   const [demoView, setDemoView] = useState<"full" | "single" | "empty">("full");
-  const displayClients = demoView === "empty" ? [] : demoView === "single" ? clients.slice(0, 1) : clients;
+  // The demo toggle controls only the sample clients. Real, user-created
+  // projects always appear (newest first), except in the "empty" demo state.
+  const demoClients = demoView === "empty" ? [] : demoView === "single" ? clients.slice(0, 1) : clients;
+  const displayClients = demoView === "empty" ? [] : [...projects, ...demoClients];
   void clients.reduce((s, c) => s + c.contentCount, 0);
   void Math.round(clients.reduce((s, c) => s + c.avgScore, 0) / clients.length);
 
@@ -6910,6 +7055,25 @@ function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
   const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
+  const [namingProject, setNamingProject] = useState(false);
+  const [storedProjects, setStoredProjects] = useState<Client[]>([]);
+
+  useEffect(() => {
+    migrateLegacyIntakeToProject();
+    setStoredProjects(loadStoredProjects());
+  }, []);
+
+  const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
+
+  const confirmCreateProject = (name: string) => {
+    const project = createStoredProject(name);
+    setStoredProjects(loadStoredProjects());
+    setActiveProjectId(project.id);
+    setNamingProject(false);
+    setActiveClient(project);
+    setCurrentPage("intake");
+    setView("platform");
+  };
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
     seedAdminIfEmpty();
@@ -6982,21 +7146,20 @@ function App() {
   }
   if (view === "platform-home") {
     return (
-      <PlatformHomePage
-        session={session}
-        onLoginSuccess={(s) => setSessionState(s)}
-        onSignOut={handleSignOut}
-        onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
-        onCreateProject={() => requireSessionThen(() => {
-          setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
-          setCurrentPage("intake");
-          setView("platform");
-        })}
-        onContinueToProjects={() => requireSessionThen(() => setView("platform"))}
-        onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
-        onGuidance={() => setView("guidance")}
-        onBackToLanding={() => goHome()}
-      />
+      <>
+        <PlatformHomePage
+          session={session}
+          onLoginSuccess={(s) => setSessionState(s)}
+          onSignOut={handleSignOut}
+          onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
+          onCreateProject={beginCreateProject}
+          onContinueToProjects={() => requireSessionThen(() => setView("platform"))}
+          onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
+          onGuidance={() => setView("guidance")}
+          onBackToLanding={() => goHome()}
+        />
+        {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
+      </>
     );
   }
   if (view === "users-admin") {
@@ -7094,18 +7257,18 @@ function App() {
 
   if (!activeClient) {
     return (
+      <>
       <ClientSelectorPage
+        projects={storedProjects}
         onSelectClient={(client) => {
+          setActiveProjectId(client.id);
           setActiveClient({ ...client, logo: clientLogos[client.id] });
           setCurrentPage("dashboard");
         }}
         clientLogos={clientLogos}
         onLogoUpdate={handleLogoUpdate}
         onBackToPlatformHome={() => setView("platform-home")}
-        onCreateProject={() => {
-          setActiveClient({ id: "new-project", name: "New Project", initials: "NP", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
-          setCurrentPage("intake");
-        }}
+        onCreateProject={beginCreateProject}
         onArchivedProjects={() => {
           setActiveClient({ id: "archive-view", name: "Archive", initials: "AR", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
           setCurrentPage("archive");
@@ -7115,6 +7278,8 @@ function App() {
           setView("insights");
         }}
       />
+      {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
+      </>
     );
   }
 

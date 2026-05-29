@@ -89,7 +89,25 @@ type SectionDef = {
 type DualValue = { short: string; long: string };
 type DualListValue = DualValue[];
 
-const INTAKE_KEY = "aio.intake.v2";
+const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
+
+// Resolve the localStorage key for the currently active project's intake data.
+// The legacy/default project keeps the bare key for backward compatibility, so
+// existing saved work is never lost.
+function currentIntakeKey(): string {
+  try {
+    const id = localStorage.getItem(ACTIVE_PROJECT_KEY);
+    if (id && id !== "default") return `aio.intake.v2::${id}`;
+  } catch { /* noop */ }
+  return "aio.intake.v2";
+}
+
+// Set which project's intake data is active. Call this before navigating into
+// the intake form or dashboard so reads and writes target the right project.
+export function setActiveProjectId(id: string): void {
+  try { localStorage.setItem(ACTIVE_PROJECT_KEY, id); } catch { /* noop */ }
+}
+
 const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Fields that get rewritten by "Optimise Project Messages" - must be kept in
@@ -541,7 +559,7 @@ export default function IntakePage() {
   const [activeSection, setActiveSection] = useState(0);
   const [formData, setFormData] = useState<Record<string, string | string[]>>(() => {
     try {
-      const raw = localStorage.getItem(INTAKE_KEY);
+      const raw = localStorage.getItem(currentIntakeKey());
       if (raw) {
         const fd = JSON.parse(raw).formData || {};
         // One-time migration: field 4.6 was split into 4.6 (Founding year) +
@@ -558,16 +576,16 @@ export default function IntakePage() {
     return {};
   });
   const [duals, setDuals] = useState<Record<string, DualValue>>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).duals || {}; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).duals || {}; } catch { /* noop */ }
     return {};
   });
   const [dualLists, setDualLists] = useState<Record<string, DualListValue>>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).dualLists || {}; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).dualLists || {}; } catch { /* noop */ }
     return {};
   });
   const [spokespeople, setSpokespeople] = useState<Spokesperson[]>(() => {
     try {
-      const raw = localStorage.getItem(INTAKE_KEY);
+      const raw = localStorage.getItem(currentIntakeKey());
       if (raw) {
         const arr = JSON.parse(raw).spokespeople || [];
         // Backwards-compatible: ensure linkedin field exists
@@ -582,15 +600,15 @@ export default function IntakePage() {
     return [];
   });
   const [businessCategories, setBusinessCategories] = useState<string[]>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
     return [];
   });
   const [audienceCategories, setAudienceCategories] = useState<string[]>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).audienceCategories || []; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).audienceCategories || []; } catch { /* noop */ }
     return [];
   });
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return (JSON.parse(raw).intakeStatus as IntakeStatus) || "Draft"; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return (JSON.parse(raw).intakeStatus as IntakeStatus) || "Draft"; } catch { /* noop */ }
     return "Draft";
   });
   const [completed, setCompleted] = useState<Set<number>>(new Set());
@@ -598,7 +616,7 @@ export default function IntakePage() {
   const [categorySearch, setCategorySearch] = useState("");
   const [showOptimiseModal, setShowOptimiseModal] = useState(false);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).acceptedAt || null; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).acceptedAt || null; } catch { /* noop */ }
     return null;
   });
 
@@ -608,14 +626,14 @@ export default function IntakePage() {
     duals: Record<string, DualValue>;
     dualLists: Record<string, DualListValue>;
   } | null>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
     return null;
   });
 
   useEffect(() => {
     try {
       localStorage.setItem(
-        INTAKE_KEY,
+        currentIntakeKey(),
         JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
       );
     } catch { /* noop */ }
@@ -836,7 +854,7 @@ export default function IntakePage() {
   const saveDraft = () => {
     try {
       localStorage.setItem(
-        INTAKE_KEY,
+        currentIntakeKey(),
         JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
       );
     } catch { /* noop */ }
@@ -1634,7 +1652,7 @@ export type IntakeData = {
 
 export function loadIntakeData(): IntakeData | null {
   try {
-    const raw = localStorage.getItem(INTAKE_KEY);
+    const raw = localStorage.getItem(currentIntakeKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return {
