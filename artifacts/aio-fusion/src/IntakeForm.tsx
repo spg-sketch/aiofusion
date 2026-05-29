@@ -549,6 +549,16 @@ export default function IntakePage() {
     return null;
   });
 
+  // ── Optimise / Reject / Accept / Edit / Download flow ──────────────
+  const [preOptimiseSnapshot, setPreOptimiseSnapshot] = useState<{
+    formData: Record<string, string | string[]>;
+    duals: Record<string, DualValue>;
+    dualLists: Record<string, DualListValue>;
+  } | null>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
+    return null;
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -662,16 +672,6 @@ export default function IntakePage() {
     if (intakeStatus === "Optimised") return { bg: "rgba(40,150,185,0.12)", color: vars.teal, label: "Optimised" };
     return { bg: "rgba(212,146,42,0.14)", color: vars.amber, label: "Draft" };
   })();
-
-  // ── Optimise / Reject / Accept / Edit / Download flow ──────────────
-  const [preOptimiseSnapshot, setPreOptimiseSnapshot] = useState<{
-    formData: Record<string, string | string[]>;
-    duals: Record<string, DualValue>;
-    dualLists: Record<string, DualListValue>;
-  } | null>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
-    return null;
-  });
 
   const isFullyComplete = allTrackProgress.pct === 100;
   const isOptimisedField = (id: string) =>
