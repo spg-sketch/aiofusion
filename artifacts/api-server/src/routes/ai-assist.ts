@@ -2,7 +2,6 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { aiAssistLimiter } from "../middleware/rate-limit";
-import { requireAuth } from "../middleware/require-auth";
 import { fetchSiteContent } from "../lib/safe-fetch";
 
 const aiAssistRouter = Router();
@@ -50,7 +49,6 @@ function extractJson(text: string): any | null {
 aiAssistRouter.post(
   "/ai-assist/draft-field",
   aiAssistLimiter,
-  requireAuth,
   async (req: Request, res: Response): Promise<void> => {
     const { url, fieldId } = (req.body ?? {}) as { url?: string; fieldId?: string };
 

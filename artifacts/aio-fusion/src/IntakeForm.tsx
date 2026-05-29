@@ -27,7 +27,6 @@ import {
   Info,
   Save,
 } from "lucide-react";
-import { useAuth } from "@workspace/replit-auth-web";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
 const vars = {
@@ -556,7 +555,6 @@ const sections: SectionDef[] = [
 type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 
 export default function IntakePage() {
-  const { isAuthenticated, login } = useAuth();
   const [track, setTrack] = useState<Track>("pr");
   const visibleSections = useMemo(() => sections.filter((s) => s.track === track), [track]);
   const [activeSection, setActiveSection] = useState(0);
@@ -688,11 +686,6 @@ export default function IntakePage() {
     const url = aiWebsite.trim();
     if (!url) {
       setAiError("Add your company website above first, then I can draft this for you.");
-      return;
-    }
-    if (!isAuthenticated) {
-      setAiNotice("Please sign in to use AI drafting. Opening sign in now.");
-      login();
       return;
     }
     setAiLoadingField(fieldId);
