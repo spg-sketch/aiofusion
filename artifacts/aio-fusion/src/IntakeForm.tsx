@@ -57,6 +57,7 @@ type FieldDef = {
   options?: string[];
   shortPlaceholder?: string;
   longPlaceholder?: string;
+  wordLimit?: number;
 };
 
 type SectionDef = {
@@ -231,8 +232,9 @@ const sections: SectionDef[] = [
       {
         id: "2.5",
         label: "Homepage descriptor or proposed positioning copy",
-        hint: "Enter your current homepage descriptor or your proposed positioning copy – no more than 50 words. (Was Website 5.1.)",
+        hint: "Enter your current homepage descriptor or your proposed positioning copy - no more than 50 words. (Was Website 5.1.)",
         type: "textarea",
+        wordLimit: 50,
       },
       {
         id: "2.6",
@@ -1160,14 +1162,25 @@ export default function IntakePage() {
                     <div key={field.id}>
                       <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                       {field.type === "textarea" ? (
-                        <textarea
-                          value={(formData[field.id] as string) || ""}
-                          onChange={(e) => updateField(field.id, e.target.value)}
-                          rows={4}
-                          className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
-                          style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
-                          placeholder="Type your answer here..."
-                        />
+                        <>
+                          <textarea
+                            value={(formData[field.id] as string) || ""}
+                            onChange={(e) => updateField(field.id, e.target.value)}
+                            rows={4}
+                            className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
+                            style={{ borderColor: field.wordLimit && wordCount((formData[field.id] as string) || "") > field.wordLimit ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
+                            placeholder="Type your answer here..."
+                          />
+                          {field.wordLimit && (() => {
+                            const wc = wordCount((formData[field.id] as string) || "");
+                            const over = wc > field.wordLimit;
+                            return (
+                              <p className="mt-1 text-right text-[10px] font-semibold tracking-[0.04em]" style={{ color: over ? "#DC2626" : "rgba(16,43,54,0.4)" }}>
+                                {over ? `${wc - field.wordLimit} over limit` : `${field.wordLimit - wc} of ${field.wordLimit} words left`}
+                              </p>
+                            );
+                          })()}
+                        </>
                       ) : (
                         <input
                           type="text"
