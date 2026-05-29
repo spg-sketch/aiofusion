@@ -385,11 +385,12 @@ const sections: SectionDef[] = [
         label: "Do you produce thought leadership, guides, reports or commentary that others cite?",
         type: "checkbox",
         options: [
-          "Yes, regularly and it performs well",
-          "Yes, but inconsistently",
-          "No: this is new territory for us",
+          "Yes, regularly",
+          "Infrequently",
+          "No",
         ],
       },
+      { id: "5.4b", label: "If yes, roughly how many per year?", type: "text" },
       {
         id: "5.5",
         label: "Has your brand been mentioned in AI-generated answers?",
