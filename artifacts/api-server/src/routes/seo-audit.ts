@@ -6,7 +6,6 @@ import * as dns from "dns/promises";
 import * as net from "net";
 import { Agent, buildConnector } from "undici";
 import { seoAuditLimiter } from "../middleware/rate-limit";
-import { requireAuth } from "../middleware/require-auth";
 import { seoAuditConcurrencyGuard } from "../middleware/concurrency-guard";
 
 const seoAuditRouter = Router();
@@ -577,7 +576,7 @@ function generateRecommendations(result: Omit<SeoAuditResult, "recommendations">
   });
 }
 
-seoAuditRouter.post("/seo-audit", seoAuditLimiter, requireAuth, seoAuditConcurrencyGuard, async (req: Request, res: Response) => {
+seoAuditRouter.post("/seo-audit", seoAuditLimiter, seoAuditConcurrencyGuard, async (req: Request, res: Response) => {
   const { url } = req.body;
 
   if (!url || typeof url !== "string") {

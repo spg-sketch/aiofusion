@@ -3,7 +3,6 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { llmCheckLimiter } from "../middleware/rate-limit";
-import { requireAuth } from "../middleware/require-auth";
 import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 
 const llmCheckRouter = Router();
@@ -147,7 +146,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
   }
 }
 
-llmCheckRouter.post("/llm-check", llmCheckLimiter, requireAuth, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
+llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
   const { companyName, sector, keywords } = req.body;
 
   if (!companyName || typeof companyName !== "string") {
