@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
+  Copy,
   Building2,
   Target,
   Users,
@@ -1427,6 +1428,20 @@ export default function IntakePage() {
 }
 
 function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copyQuestion = () => {
+    const text = hint ? `${label}\n${hint}` : label;
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => done());
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); document.body.removeChild(ta); done();
+      }
+    } catch { done(); }
+  };
   return (
     <div className="mb-2.5">
       <label className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
@@ -1434,6 +1449,15 @@ function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: str
           <span className="inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "#FBE3ED", color: "#C8497A", fontFamily: "Inter, sans-serif" }}>{id}</span>
         )}
         <span>{label}</span>
+        <button
+          type="button"
+          onClick={copyQuestion}
+          title="Copy this question to paste into your own AI assistant for help with your answer"
+          className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
+          style={{ color: copied ? "#3D9B6B" : "#C8497A", fontFamily: "Inter, sans-serif", background: copied ? "rgba(61,155,107,0.1)" : "transparent" }}
+        >
+          {copied ? <><Check size={12} /> Copied</> : <Copy size={12} />}
+        </button>
       </label>
       {hint && <p className="text-[12px] font-light leading-relaxed mt-1.5 pl-0.5" style={{ color: "#374151" }}>{hint}</p>}
     </div>
