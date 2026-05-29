@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronRight,
   ChevronDown,
@@ -319,12 +320,18 @@ const sections: SectionDef[] = [
       },
       {
         id: "4.6",
-        label: "Years of operation and key trust signals",
-        hint: "e.g. founding year, accreditations, awards, notable clients, media coverage, certifications",
-        type: "textarea",
+        label: "Founding year",
+        hint: "The year the business was founded, e.g. 2014.",
+        type: "text",
       },
       {
         id: "4.7",
+        label: "Key trust signals",
+        hint: "e.g. accreditations, awards, notable clients, media coverage, certifications.",
+        type: "textarea",
+      },
+      {
+        id: "4.8",
         label: "Primary competitors",
         hint: "Helps calibrate entity differentiation in AI model training contexts.",
         type: "textarea",
@@ -517,7 +524,21 @@ export default function IntakePage() {
   const visibleSections = useMemo(() => sections.filter((s) => s.track === track), [track]);
   const [activeSection, setActiveSection] = useState(0);
   const [formData, setFormData] = useState<Record<string, string | string[]>>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).formData || {}; } catch { /* noop */ }
+    try {
+      const raw = localStorage.getItem(INTAKE_KEY);
+      if (raw) {
+        const fd = JSON.parse(raw).formData || {};
+        // One-time migration: field 4.6 was split into 4.6 (Founding year) +
+        // 4.7 (Key trust signals), and the old 4.7 (Primary competitors) moved
+        // to 4.8. Move legacy competitor data to its new id so it is not shown
+        // under the wrong label.
+        if (fd["4.7"] !== undefined && (fd["4.8"] === undefined || fd["4.8"] === "")) {
+          fd["4.8"] = fd["4.7"];
+          delete fd["4.7"];
+        }
+        return fd;
+      }
+    } catch { /* noop */ }
     return {};
   });
   const [duals, setDuals] = useState<Record<string, DualValue>>(() => {
@@ -799,6 +820,75 @@ export default function IntakePage() {
     } catch { /* noop */ }
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2500);
+  };
+
+  // Printable value for a single field - used by the PDF / print view so that
+  // every answer is shown in full, no matter how long.
+  const emptyPrintValue = <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>Not provided</span>;
+  const renderPrintField = (field: FieldDef) => {
+    if (field.type === "heading") {
+      return (
+        <h3 key={field.id} style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#C8497A", marginTop: 14, marginBottom: 6 }}>
+          {field.label}
+        </h3>
+      );
+    }
+    let valueNode: ReactNode = emptyPrintValue;
+    if (field.id === "1.8") {
+      valueNode = spokespeople.length
+        ? (
+          <ul style={{ paddingLeft: 16, margin: 0 }}>
+            {spokespeople.map((s, i) => (
+              <li key={i} style={{ marginBottom: 3 }}>
+                {[s.name, s.title, s.expertise].filter(Boolean).join(", ")}
+                {s.linkedin ? ` (${s.linkedin})` : ""}
+              </li>
+            ))}
+          </ul>
+        )
+        : emptyPrintValue;
+    } else if (field.id === "1.9") {
+      valueNode = businessCategories.length ? businessCategories.join(", ") : emptyPrintValue;
+    } else if (field.id === "1.10") {
+      valueNode = audienceCategories.length ? audienceCategories.join(", ") : emptyPrintValue;
+    } else if (field.type === "dual") {
+      const v = duals[field.id];
+      valueNode = v && (v.short || v.long)
+        ? (
+          <>
+            <div><strong>Short:</strong> {v.short || "-"}</div>
+            <div><strong>Long:</strong> {v.long || "-"}</div>
+          </>
+        )
+        : emptyPrintValue;
+    } else if (field.type === "dual-list") {
+      const items = (dualLists[field.id] || []).filter((it) => it.short || it.long);
+      valueNode = items.length
+        ? (
+          <ul style={{ paddingLeft: 16, margin: 0 }}>
+            {items.map((it, i) => (
+              <li key={i} style={{ marginBottom: 3 }}>
+                <strong>{it.short || "-"}</strong>{it.long ? ` - ${it.long}` : ""}
+              </li>
+            ))}
+          </ul>
+        )
+        : emptyPrintValue;
+    } else if (field.type === "checkbox") {
+      const v = formData[field.id];
+      valueNode = Array.isArray(v) && v.length ? v.join("; ") : emptyPrintValue;
+    } else {
+      const v = formData[field.id] as string | undefined;
+      valueNode = v && v.trim() ? v : emptyPrintValue;
+    }
+    return (
+      <div key={field.id} style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#102B36", marginBottom: 2 }}>
+          {/^\d/.test(field.id) ? `${field.id}  ` : ""}{field.label}
+        </div>
+        <div className="print-value" style={{ fontSize: 12, lineHeight: 1.5, color: "#1C1C1C" }}>{valueNode}</div>
+      </div>
+    );
   };
 
   return (
@@ -1248,82 +1338,120 @@ export default function IntakePage() {
       </div>
 
       {/* Project Data Actions - bottom panel, sits after data entry per Patrick's spec */}
-      <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+      <div className="mt-8 rounded-2xl p-4 sm:p-5 no-print" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
           </div>
           {intakeStatus === "Optimised" && (
-            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
+            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
               <Info size={12} />
               <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          <button
-            onClick={() => {
-              if (window.confirm("Create a fresh Project Data report? This will reset the current draft to a blank state.")) {
-                setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
-                setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
-                setCompleted(new Set()); setActiveSection(0); setTrack("pr");
-              }
-            }}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
-            style={{ background: "#FBF6EC", color: "#102B36" }}
-            title="Reset and draft a fresh Project Data report"
-          >
-            <Plus size={13} /> Create
-          </button>
-          <button
-            onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
-            disabled={!isFullyComplete}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#C8497A" }}
-            title={isFullyComplete ? "Send Parts 1.1, 1.2, 1.3, 1.6 and 2.4 to the LLM optimiser" : `Complete every field across all 7 sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
-          >
-            <Sparkles size={13} /> Optimise Project Messages
-          </button>
-          <button
-            onClick={acceptProjectData}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
-            style={{ background: vars.green }}
-            title="Sign off the Project Data and save it to the Project Data archive"
-          >
-            <FileCheck2 size={13} /> Accept
-          </button>
-          <button
-            onClick={() => {
-              if (window.confirm("Discard the LLM-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
-                rejectOptimised();
-              }
-            }}
-            disabled={intakeStatus !== "Optimised"}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#9C4F47" }}
-            title="Discard the LLM-optimised copy and go back to your original draft"
-          >
-            <XCircle size={13} /> Reject Optimised
-          </button>
-          <button
-            onClick={editProjectData}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
-            style={{ background: "#C94A3E" }}
-            title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
-          >
-            <Pencil size={13} /> Edit
-          </button>
-          <button
-            onClick={downloadProjectData}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
-            style={{ background: "#FBF6EC", color: "#102B36" }}
-            title="Open the browser print dialog so you can save the full Project Data as a PDF"
-          >
-            <Download size={13} /> Download
-          </button>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
+          {/* Group 1 - Optimise and sign off the data */}
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Optimise &amp; sign off</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
+                disabled={!isFullyComplete}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#C8497A" }}
+                title={isFullyComplete ? "Use AI to optimise the messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4" : `Complete every field across all sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
+              >
+                <Sparkles size={13} /> Optimise with AI
+              </button>
+              <button
+                onClick={acceptProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                style={{ background: vars.green }}
+                title="Sign off the Project Data and save it to the Project Data archive"
+              >
+                <FileCheck2 size={13} /> Accept
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Discard the AI-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
+                    rejectOptimised();
+                  }
+                }}
+                disabled={intakeStatus !== "Optimised"}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#9C4F47" }}
+                title="Discard the AI-optimised copy and go back to your original draft"
+              >
+                <XCircle size={13} /> Reject Optimised
+              </button>
+            </div>
+          </div>
+
+          {/* Group 2 - Manage and export the data */}
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Manage &amp; export</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                onClick={editProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                style={{ background: "#C94A3E" }}
+                title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
+              >
+                <Pencil size={13} /> Edit
+              </button>
+              <button
+                onClick={downloadProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
+                style={{ background: "#FBF6EC", color: "#102B36" }}
+                title="Open the print dialog so you can save the full Project Data as a PDF - every answer is shown in full"
+              >
+                <Download size={13} /> Download as PDF
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Start a brand-new project? This will permanently delete everything you have entered in this Project Set-Up. This cannot be undone.")) {
+                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
+                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
+                    setCompleted(new Set()); setActiveSection(0); setTrack("pr");
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                style={{ background: "transparent", color: "#FBE3ED", borderColor: "rgba(200,73,122,0.6)" }}
+                title="Clear everything and start a brand-new project (deletes all current data)"
+              >
+                <Plus size={13} /> Create New
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Printable Project Data view - rendered into document.body via a portal so
+          that, when saving as PDF, the rest of the app can be hidden cleanly and
+          every answer prints in full (no clipping). Hidden on screen. */}
+      {createPortal(
+        <div className="print-only">
+          <h1 style={{ fontFamily: "'Alice', Georgia, serif", fontSize: 22, color: "#102B36", marginBottom: 4 }}>
+            {(formData["4.1"] as string)?.trim() || "Project Data"}
+          </h1>
+          <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 16, borderBottom: "1px solid #E5E7EB", paddingBottom: 10 }}>
+            AIO Fusion Project Data &middot; Status: {intakeStatus}
+            {acceptedAt && intakeStatus === "Accepted" ? ` (accepted ${new Date(acceptedAt).toLocaleDateString()})` : ""}
+          </div>
+          {sections.map((sec) => (
+            <div key={sec.id} className="print-section" style={{ marginBottom: 22 }}>
+              <h2 style={{ fontFamily: "'Alice', Georgia, serif", fontSize: 15, color: "#102B36", marginBottom: 8, borderBottom: "2px solid #C8497A", paddingBottom: 4 }}>
+                Section {sec.number}: {sec.title}
+              </h2>
+              {sec.fields.map(renderPrintField)}
+            </div>
+          ))}
+        </div>,
+        document.body,
+      )}
 
       {/* Trade Media Categories picker */}
       {pickerTarget !== null && (() => {
@@ -1392,9 +1520,9 @@ export default function IntakePage() {
               <button onClick={() => setShowOptimiseModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="p-6">
-              <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>LLM brief</p>
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>AI brief</p>
               <div className="rounded-xl p-4 mb-4 text-[13px] leading-relaxed font-light" style={{ background: "rgba(40,150,185,0.05)", border: `1px solid rgba(40,150,185,0.15)`, color: vars.g600 }}>
-                Using all the information about this company contained in the Project Data, optimise the PR messaging content in Parts <strong>1.1, 1.2, 1.3, 1.6 and 2.4</strong> of PR Set-Up for authority in earned media and AI-generated answers. Cross-reference AIO Set-Up Sections 4–7 (business fundamentals, GEO/AEO priority, schema and consistency) and PR Set-Up Sections 2.5–2.7 (positioning copy, products / services, search phrases) to maximise visibility with LLM agents. Return optimised copy in the same field structure so it can be reviewed in red and accepted, edited or rejected.
+                Using all the information about this company contained in the Project Data, optimise the PR messaging content in Parts <strong>1.1, 1.2, 1.3, 1.6 and 2.4</strong> of PR Set-Up for authority in earned media and AI-generated answers. Cross-reference AIO Set-Up Sections 4–7 (business fundamentals, GEO/AEO priority, schema and consistency) and PR Set-Up Sections 2.5–2.7 (positioning copy, products / services, search phrases) to maximise visibility with AI models. Return optimised copy in the same field structure so it can be reviewed in red and accepted, edited or rejected.
               </div>
               <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
                 Optimised copy will replace the values in Parts 1.1, 1.2, 1.3, 1.6 and 2.4 and be displayed in red. You can Accept, Edit or Reject the optimised copy from the Project Data Actions panel.

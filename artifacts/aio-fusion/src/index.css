@@ -72,6 +72,31 @@
   color: #6B7280;
 }
 
+/* Printable Project Data view - hidden on screen, shown only when printing.
+   The view is portalled to <body> so we can hide the whole app (#root) during
+   print and render the printable content in normal flow for reliable paging. */
+.print-only {
+  display: none;
+}
+@media print {
+  #root {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+    padding: 0 14px;
+    color: #1c1c1c;
+  }
+  .print-only .print-value {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .print-section {
+    break-inside: avoid;
+  }
+}
+
 /* Marketing top-nav hover - clear visual feedback */
 .marketing-nav-link {
   position: relative;
