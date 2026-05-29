@@ -79,6 +79,8 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 // sync with the LLM prompt below and with the snapshot/restore logic.
 export const OPTIMISED_FIELD_IDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
 
+const wordCount = (s: string) => (s.trim() === "" ? 0 : s.trim().split(/\s+/).length);
+
 // Demo-only mock outputs from the LLM optimiser. Used so users can see the
 // "optimised copy in red" experience without a live model call. Replaced by
 // the real LLM response when wired to a backend.
@@ -1004,8 +1006,11 @@ export default function IntakePage() {
                               onChange={(e) => setDual(field.id, "short", e.target.value)}
                               placeholder={field.shortPlaceholder}
                               className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
+                              style={{ borderColor: wordCount(v.short) > 6 ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
                             />
+                            <p className="mt-1 text-right text-[10px] font-semibold tracking-[0.04em]" style={{ color: wordCount(v.short) > 6 ? "#DC2626" : "rgba(16,43,54,0.4)" }}>
+                              {wordCount(v.short) > 6 ? `${wordCount(v.short) - 6} over limit` : `${6 - wordCount(v.short)} of 6 words left`}
+                            </p>
                           </div>
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(b) ≤25-word longer version</p>
@@ -1015,8 +1020,11 @@ export default function IntakePage() {
                               placeholder={field.longPlaceholder}
                               rows={2}
                               className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                              style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
+                              style={{ borderColor: wordCount(v.long) > 25 ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: dualColor }}
                             />
+                            <p className="mt-1 text-right text-[10px] font-semibold tracking-[0.04em]" style={{ color: wordCount(v.long) > 25 ? "#DC2626" : "rgba(16,43,54,0.4)" }}>
+                              {wordCount(v.long) > 25 ? `${wordCount(v.long) - 25} over limit` : `${25 - wordCount(v.long)} of 25 words left`}
+                            </p>
                           </div>
                         </div>
                       </div>
