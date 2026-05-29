@@ -39,3 +39,11 @@ export const seoAuditLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many audit requests. Please wait before running another audit." },
 });
+
+export const aiAssistLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many AI draft requests. Please wait a moment before trying again." },
+});

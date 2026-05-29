@@ -27,6 +27,7 @@ import {
   Info,
   Save,
 } from "lucide-react";
+import { useAuth } from "@workspace/replit-auth-web";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
 const vars = {
@@ -554,6 +555,7 @@ const sections: SectionDef[] = [
 type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 
 export default function IntakePage() {
+  const { isAuthenticated, login } = useAuth();
   const [track, setTrack] = useState<Track>("pr");
   const visibleSections = useMemo(() => sections.filter((s) => s.track === track), [track]);
   const [activeSection, setActiveSection] = useState(0);
@@ -612,6 +614,13 @@ export default function IntakePage() {
     return "Draft";
   });
   const [completed, setCompleted] = useState<Set<number>>(new Set());
+  const [aiWebsite, setAiWebsite] = useState<string>(() => {
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).aiWebsite || ""; } catch { /* noop */ }
+    return "";
+  });
+  const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string>("");
+  const [aiNotice, setAiNotice] = useState<string>("");
   const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
   const [showOptimiseModal, setShowOptimiseModal] = useState(false);
@@ -634,10 +643,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, aiWebsite }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot]);
+  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, aiWebsite]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -671,6 +680,71 @@ export default function IntakePage() {
   const removeDualListItem = (fieldId: string, idx: number) => {
     setDualLists((prev) => ({ ...prev, [fieldId]: (prev[fieldId] || []).filter((_, i) => i !== idx) }));
   };
+
+  const askAiForField = async (fieldId: string) => {
+    setAiError("");
+    setAiNotice("");
+    const url = aiWebsite.trim();
+    if (!url) {
+      setAiError("Add your company website above first, then I can draft this for you.");
+      return;
+    }
+    if (!isAuthenticated) {
+      setAiNotice("Please sign in to use AI drafting. Opening sign in now.");
+      login();
+      return;
+    }
+    setAiLoadingField(fieldId);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const resp = await fetch(`${apiBase}/api/ai-assist/draft-field`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ url, fieldId }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ error: "Could not draft this answer." }));
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.notFound) {
+        setAiNotice("I could not find enough on your website to answer this one confidently. Worth filling it in yourself.");
+        return;
+      }
+      if (fieldId === "1.1" && typeof data.draft === "string") {
+        updateField("1.1", data.draft);
+        setAiNotice("Drafted from your website. Please review and edit before saving.");
+      } else if (fieldId === "1.2" && data.draft) {
+        setDual("1.2", "short", data.draft.short || "");
+        setDual("1.2", "long", data.draft.long || "");
+        setAiNotice("Drafted from your website. Please review and edit before saving.");
+      }
+    } catch (err: any) {
+      setAiError(err.message || "Could not draft this answer. Please try again.");
+    } finally {
+      setAiLoadingField(null);
+    }
+  };
+
+  const AiAssistButton = ({ fieldId }: { fieldId: string }) => (
+    <button
+      type="button"
+      onClick={() => askAiForField(fieldId)}
+      disabled={aiLoadingField !== null}
+      className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+      style={{
+        borderColor: "rgba(200,73,122,0.4)",
+        color: "#C8497A",
+        background: "#FBE3ED",
+        opacity: aiLoadingField !== null && aiLoadingField !== fieldId ? 0.5 : 1,
+        cursor: aiLoadingField !== null ? "default" : "pointer",
+      }}
+    >
+      <Sparkles size={13} className={aiLoadingField === fieldId ? "animate-pulse" : ""} />
+      {aiLoadingField === fieldId ? "Drafting from your website..." : "Ask AI to complete this"}
+    </button>
+  );
 
   const markComplete = (idx: number) => setCompleted((prev) => new Set(prev).add(idx));
 
@@ -965,6 +1039,30 @@ export default function IntakePage() {
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
 
+        {/* AI assist (test) - website-powered drafting for the first two questions */}
+        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBE3ED", borderColor: "rgba(200,73,122,0.45)" }}>
+          <div className="flex items-start gap-2.5">
+            <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
+            <div className="flex-1">
+              <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                Let AI draft from your website
+              </p>
+              <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#102B36" }}>
+                Add your company website and use the "Ask AI to complete this" button under a question to draft an answer. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Always review what it writes.
+              </p>
+              <input
+                value={aiWebsite}
+                onChange={(e) => setAiWebsite(e.target.value)}
+                placeholder="yourcompany.com"
+                className="w-full sm:max-w-md px-4 py-2.5 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
+                style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+              />
+              {aiError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
+              {aiNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
+            </div>
+          </div>
+        </div>
+
         {/* Track switch + progress - Variant C panel */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1209,6 +1307,7 @@ export default function IntakePage() {
                             </p>
                           </div>
                         </div>
+                        {field.id === "1.2" && <AiAssistButton fieldId="1.2" />}
                       </div>
                     );
                   }
@@ -1327,6 +1426,7 @@ export default function IntakePage() {
                           placeholder="Type your answer here..."
                         />
                       )}
+                      {field.id === "1.1" && <AiAssistButton fieldId="1.1" />}
                     </div>
                   );
                 })}
