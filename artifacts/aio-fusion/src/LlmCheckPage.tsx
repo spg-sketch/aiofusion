@@ -272,7 +272,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             <div className="flex items-center gap-2 mb-6">
               <Search size={18} style={{ color: vars.g400 }} />
               <span className="text-sm font-medium" style={{ color: vars.g500 }}>
-                Confirm the brand and add any extra keywords to probe
+                Confirm the brand and add any extra key phrases to probe
               </span>
             </div>
             <div className="mb-4">
@@ -310,7 +310,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             )}
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                Additional keywords <span className="font-normal" style={{ color: vars.g400 }}>(optional, comma-separated)</span>
+                Additional key phrases <span className="font-normal" style={{ color: vars.g400 }}>(optional, comma-separated)</span>
               </label>
               <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
                 <Zap size={16} style={{ color: vars.g400 }} />
@@ -517,7 +517,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             { t: "Scores are directional, not precise.", b: "AI model responses aren't deterministic - the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful." },
             { t: "Competitors reveal what's working.", b: "The companies AI does mention are winning the visibility race in your sector - analyse what they're doing differently with content structure, schema markup and authority signals." },
             { t: "Use this as a baseline.", b: "Run it now, do your GEO work (diagnostic, content optimisation, schema, authority planning), then run it again. A score moving from 20% to 50% is a measurable result you can report to the client." },
-            { t: "Add keywords for better targeting.", b: "The optional keywords field lets you test more specific queries relevant to what the client wants to be known for, making the check more representative of their actual market." },
+            { t: "Add key phrases for better targeting.", b: "The optional key phrases field lets you test more specific queries relevant to what the client wants to be known for, making the check more representative of their actual market." },
           ].map((item, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>
