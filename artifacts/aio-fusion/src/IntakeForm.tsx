@@ -180,8 +180,14 @@ const sections: SectionDef[] = [
       },
       {
         id: "1.9",
-        label: "Media categories",
-        hint: "Multi-select from the alphabetical Media Categories list. These feed the Optimiser, Planner and Media Research dropdowns.",
+        label: "Media categories your business operates in",
+        hint: "Multi-select the categories that describe your own sector and the trade press you appear in. These feed the Optimiser, Planner and Media Research dropdowns.",
+        type: "textarea",
+      },
+      {
+        id: "1.10",
+        label: "Media categories where your customers are found",
+        hint: "Multi-select the categories your target customers read and trust. This helps target coverage where your audience actually is.",
         type: "textarea",
       },
     ],
@@ -535,8 +541,12 @@ export default function IntakePage() {
     } catch { /* noop */ }
     return [];
   });
-  const [mediaCategories, setMediaCategories] = useState<string[]>(() => {
-    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).mediaCategories || []; } catch { /* noop */ }
+  const [businessCategories, setBusinessCategories] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
+    return [];
+  });
+  const [audienceCategories, setAudienceCategories] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem(INTAKE_KEY); if (raw) return JSON.parse(raw).audienceCategories || []; } catch { /* noop */ }
     return [];
   });
   const [intakeStatus, setIntakeStatus] = useState<IntakeStatus>(() => {
@@ -544,7 +554,7 @@ export default function IntakePage() {
     return "Draft";
   });
   const [completed, setCompleted] = useState<Set<number>>(new Set());
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
   const [showOptimiseModal, setShowOptimiseModal] = useState(false);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
@@ -566,10 +576,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         INTAKE_KEY,
-        JSON.stringify({ formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot]);
+  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -606,7 +616,8 @@ export default function IntakePage() {
     return visibleSections[idx].fields.some((f) => {
       if (f.type === "heading") return false;
       if (f.id === "1.8") return spokespeople.length > 0;
-      if (f.id === "1.9") return mediaCategories.length > 0;
+      if (f.id === "1.9") return businessCategories.length > 0;
+      if (f.id === "1.10") return audienceCategories.length > 0;
       if (f.type === "dual") {
         const v = duals[f.id]; return !!(v && (v.short || v.long));
       }
@@ -625,7 +636,8 @@ export default function IntakePage() {
   const filledFields = visibleSections.reduce((sum, sec) => {
     return sum + sec.fields.filter((f) => f.type !== "heading").reduce((s, f) => {
       if (f.id === "1.8") return s + (spokespeople.length > 0 ? 1 : 0);
-      if (f.id === "1.9") return s + (mediaCategories.length > 0 ? 1 : 0);
+      if (f.id === "1.9") return s + (businessCategories.length > 0 ? 1 : 0);
+      if (f.id === "1.10") return s + (audienceCategories.length > 0 ? 1 : 0);
       if (f.type === "dual") {
         const v = duals[f.id]; return s + (v && (v.short || v.long) ? 1 : 0);
       }
@@ -647,7 +659,8 @@ export default function IntakePage() {
         if (f.type === "heading") return;
         total += 1;
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
-        if (f.id === "1.9") { if (mediaCategories.length > 0) filled += 1; return; }
+        if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
+        if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
         if (f.type === "dual") {
           const v = duals[f.id]; if (v && (v.short || v.long)) filled += 1; return;
         }
@@ -662,7 +675,7 @@ export default function IntakePage() {
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
-  }, [formData, duals, dualLists, spokespeople, mediaCategories]);
+  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -750,7 +763,9 @@ export default function IntakePage() {
         duals,
         dualLists,
         spokespeople,
-        mediaCategories,
+        businessCategories,
+        audienceCategories,
+        mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])),
       });
       localStorage.setItem(PROJECT_DATA_ARCHIVE_KEY, JSON.stringify(arr.slice(0, 50)));
     } catch { /* noop */ }
@@ -776,7 +791,7 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         INTAKE_KEY,
-        JSON.stringify({ formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
       );
     } catch { /* noop */ }
     setJustSaved(true);
@@ -979,21 +994,26 @@ export default function IntakePage() {
                     );
                   }
 
-                  if (field.id === "1.9") {
+                  if (field.id === "1.9" || field.id === "1.10") {
+                    const isAudience = field.id === "1.10";
+                    const selected = isAudience ? audienceCategories : businessCategories;
+                    const setSelected = isAudience ? setAudienceCategories : setBusinessCategories;
+                    const target: "business" | "audience" = isAudience ? "audience" : "business";
+                    const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
-                          {mediaCategories.length === 0 ? (
+                          {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
                               No categories selected yet. Click the button below to choose from the alphabetical list of {TRADE_MEDIA_CATEGORIES.length} media categories.
                             </p>
                           ) : (
                             <div className="flex flex-wrap gap-1.5">
-                              {mediaCategories.map((cat) => (
+                              {selected.map((cat) => (
                                 <span key={cat} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
                                   {cat}
-                                  <button onClick={() => setMediaCategories(mediaCategories.filter((c) => c !== cat))} className="hover:text-red-500" title="Remove">
+                                  <button onClick={() => setSelected(selected.filter((c) => c !== cat))} className="hover:text-red-500" title="Remove">
                                     <X size={11} />
                                   </button>
                                 </span>
@@ -1003,15 +1023,15 @@ export default function IntakePage() {
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <button
-                            onClick={() => setShowCategoryPicker(true)}
+                            onClick={openPicker}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >
                             + Choose from {TRADE_MEDIA_CATEGORIES.length} categories
                           </button>
-                          {mediaCategories.length > 0 && (
+                          {selected.length > 0 && (
                             <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>
-                              {mediaCategories.length} selected
+                              {selected.length} selected
                             </span>
                           )}
                         </div>
@@ -1231,7 +1251,7 @@ export default function IntakePage() {
           <button
             onClick={() => {
               if (window.confirm("Create a fresh Project Data report? This will reset the current draft to a blank state.")) {
-                setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setMediaCategories([]);
+                setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
                 setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
                 setCompleted(new Set()); setActiveSection(0); setTrack("pr");
               }
@@ -1292,12 +1312,16 @@ export default function IntakePage() {
       </div>
 
       {/* Trade Media Categories picker */}
-      {showCategoryPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowCategoryPicker(false)}>
+      {pickerTarget !== null && (() => {
+        const pickerSelected = pickerTarget === "audience" ? audienceCategories : businessCategories;
+        const pickerSet = pickerTarget === "audience" ? setAudienceCategories : setBusinessCategories;
+        const pickerTitle = pickerTarget === "audience" ? "Where your customers are found" : "Your business categories";
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setPickerTarget(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Trade media categories (alpha)</h2>
-              <button onClick={() => setShowCategoryPicker(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+              <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{pickerTitle} - trade media (alpha)</h2>
+              <button onClick={() => setPickerTarget(null)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
             <div className="px-6 py-3 border-b" style={{ borderColor: vars.g100 }}>
               <input
@@ -1308,17 +1332,17 @@ export default function IntakePage() {
                 style={{ borderColor: vars.g200 }}
               />
               <p className="text-[11px] font-medium mt-2" style={{ color: vars.g500 }}>
-                {mediaCategories.length} of {TRADE_MEDIA_CATEGORIES.length} selected
+                {pickerSelected.length} of {TRADE_MEDIA_CATEGORIES.length} selected
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                 {filteredCategories.map((cat) => {
-                  const on = mediaCategories.includes(cat);
+                  const on = pickerSelected.includes(cat);
                   return (
                     <button
                       key={cat}
-                      onClick={() => setMediaCategories(on ? mediaCategories.filter((c) => c !== cat) : [...mediaCategories, cat])}
+                      onClick={() => pickerSet(on ? pickerSelected.filter((c) => c !== cat) : [...pickerSelected, cat])}
                       className="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors"
                       style={{ background: on ? "rgba(31,116,143,0.08)" : "transparent" }}
                     >
@@ -1335,12 +1359,13 @@ export default function IntakePage() {
               </div>
             </div>
             <div className="px-6 py-3 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
-              <button onClick={() => setMediaCategories([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
-              <button onClick={() => setShowCategoryPicker(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done</button>
+              <button onClick={() => pickerSet([])} className="text-[12px] font-semibold px-3 py-2 rounded-lg" style={{ color: vars.g500 }}>Clear all</button>
+              <button onClick={() => setPickerTarget(null)} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.accent }}>Done</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Optimise modal */}
       {showOptimiseModal && (
@@ -1408,6 +1433,8 @@ export type IntakeData = {
   duals: Record<string, DualValue>;
   dualLists: Record<string, DualListValue>;
   spokespeople: Spokesperson[];
+  businessCategories: string[];
+  audienceCategories: string[];
   mediaCategories: string[];
   intakeStatus: IntakeStatus;
   acceptedAt: string | null;
@@ -1428,7 +1455,9 @@ export function loadIntakeData(): IntakeData | null {
         expertise: s.expertise || "",
         linkedin: s.linkedin || "",
       })),
-      mediaCategories: parsed.mediaCategories || [],
+      businessCategories: parsed.businessCategories || parsed.mediaCategories || [],
+      audienceCategories: parsed.audienceCategories || [],
+      mediaCategories: Array.from(new Set([...(parsed.businessCategories || parsed.mediaCategories || []), ...(parsed.audienceCategories || [])])),
       intakeStatus: parsed.intakeStatus || "Draft",
       acceptedAt: parsed.acceptedAt || null,
     };
