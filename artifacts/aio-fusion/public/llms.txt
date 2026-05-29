@@ -1,0 +1,36 @@
+# AIO Fusion
+
+> AIO Fusion is a GEO (Generative Engine Optimisation) platform that tracks, scores and grows a brand's authority and visibility across AI search and answer engines such as ChatGPT, Gemini, Claude, Perplexity and Copilot. It is built for PR and marketing professionals, both in-house teams and agencies.
+
+AIO Fusion helps brands understand how they are seen by AI answer engines and gives them the tools to improve that visibility. It measures how often and how favourably a brand is cited by large language models, audits a website's readiness for AI citation, and guides the planning, creation and optimisation of PR and marketing content so it is more likely to be surfaced and quoted by AI.
+
+## What the platform does
+
+- Earned Media Visibility Audit: scores how a brand is mentioned and represented across AI answer engines.
+- Website Visibility Audit: scores a website for AI citation readiness, including schema, crawlability and entity clarity.
+- Comms Planner: plans and scores the PR and marketing schedule for AI discoverability.
+- Content Optimiser and Editor: optimises and edits drafts so they are easier for AI to extract and cite.
+- Content Creator: generates pitches and articles tuned for AI visibility.
+- Media Research: recommends relevant journalists and publications.
+- Marketing Intelligence: recommends relevant events and awards.
+- Measure and Report: tracks AI authority and PR impact over time.
+
+## Who it is for
+
+- In-house PR and marketing teams who want to protect and grow their brand's presence in AI answers.
+- PR and marketing agencies managing AI visibility across multiple clients.
+
+## Key concepts
+
+- GEO (Generative Engine Optimisation): optimising content and brand presence so it is discovered, trusted and cited by AI answer engines, the natural successor to traditional SEO for an AI-first search landscape.
+- Answer Engines: AI systems such as ChatGPT, Gemini, Claude, Perplexity and Copilot that answer user questions directly rather than returning a list of links.
+- AI Authority: a measure of how often and how favourably a brand is referenced by AI answer engines.
+
+## Links
+
+- [Home](https://aiofusion.ai/): overview of the platform and how it helps PR and marketing professionals.
+- [Contact](mailto:info@aiofusion.ai): get in touch or book a demo.
+
+## Contact
+
+For enquiries and demos, email info@aiofusion.ai.
