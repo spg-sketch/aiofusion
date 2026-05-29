@@ -992,21 +992,10 @@ function DashboardPage({
     { icon: BarChart3, label: "Measure & Report", sub: "Track AI authority and PR impact", action: "measure" },
   ];
 
-  const cycle = loadCycle(activeClient.id);
-  const loopSteps: { label: string; sub: string; icon: any; action: string }[] = [
-    { label: "Set-Up", sub: "Project Data", icon: ClipboardPaste, action: "intake" },
-    { label: "Audit", sub: "Earned + Site", icon: Search, action: "diagnostic" },
-    { label: "Optimise", sub: "Content", icon: FileEdit, action: "optimiser" },
-    { label: "Plan", sub: "Schedule", icon: Calendar, action: "planner" },
-    { label: "Target", sub: "Media + Events", icon: Target, action: "media-research" },
-    { label: "Release", sub: "V2", icon: Send, action: "gateway-locked" },
-    { label: "Measure", sub: "Outcomes", icon: BarChart3, action: "measure" },
-  ];
-
   const ink = "#102B36";
-  const paper = "#FBF6EC";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
+
   return (
     <div className="px-4 sm:px-8 py-8 sm:py-10 max-w-6xl mx-auto">
       <div className="mb-7 sm:mb-9">
@@ -1020,60 +1009,6 @@ function DashboardPage({
         <p className="text-[15px] font-light mt-2" style={{ color: vars.g600 }}>
           Your AI authority performance at a glance.
         </p>
-      </div>
-
-      <div className="rounded-2xl p-5 sm:p-7 mb-6 sm:mb-8" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-        <div className="flex items-center justify-between mb-5 sm:mb-6 flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
-              <Repeat size={17} color={paper} />
-            </div>
-            <div>
-              <h3 className="text-[16px] font-bold" style={{ color: paper, fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h3>
-              <p className="text-[12px] font-light" style={{ color: "rgba(251,246,236,0.7)" }}>Each pass moves the needle on AI citations.</p>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-3 py-1.5 rounded-full" style={{ background: accentPink, color: "white" }}>
-            <Repeat size={11} className="inline mr-1" /> Cycle {cycle.cycle || 1}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-2 items-stretch">
-          {loopSteps.map((s, i) => {
-            const Icon = s.icon;
-            const isLockedStep = s.action === "gateway-locked";
-            return (
-              <button
-                key={s.label}
-                onClick={() => { if (!isLockedStep) onNavigate(s.action); }}
-                disabled={isLockedStep}
-                aria-disabled={isLockedStep}
-                title={isLockedStep ? "Release Gateway is coming in V2" : undefined}
-                className="relative flex flex-col items-center text-center gap-2 px-2 py-3 rounded-xl transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  cursor: isLockedStep ? "not-allowed" : "pointer",
-                  opacity: isLockedStep ? 0.5 : 1,
-                }}
-                onMouseEnter={(e) => { if (!isLockedStep) e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-              >
-                <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accentPink }}>
-                  <Icon size={17} />
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: paper }}>{s.label}</span>
-                <span className="text-[10px] font-light" style={{ color: "rgba(251,246,236,0.6)" }}>{s.sub}</span>
-                {i < loopSteps.length - 1 && (
-                  <ChevronRight size={14} className="hidden lg:block absolute top-1/2 -right-2.5 -translate-y-1/2" style={{ color: "rgba(251,246,236,0.3)" }} />
-                )}
-              </button>
-            );
-          })}
-          <div className="flex flex-col items-center justify-center gap-2 px-2 py-3 rounded-xl" style={{ background: accentPink, color: "white" }}>
-            <Repeat size={20} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em]">Repeat</span>
-          </div>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
