@@ -397,7 +397,7 @@ const sections: SectionDef[] = [
       {
         id: "5.5",
         label: "Has your brand been mentioned in AI-generated answers?",
-        hint: "If yes: what context? Which tools? What is said?",
+        hint: "If yes: what context? Which tools? What is said? Please note you will be able to run a full test for your business after this form is completed.",
         type: "textarea",
       },
       {
