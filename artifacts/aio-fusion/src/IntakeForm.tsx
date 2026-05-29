@@ -57,6 +57,7 @@ type FieldDef = {
   hint?: string;
   type: "text" | "textarea" | "checkbox" | "heading" | "dual" | "dual-list";
   options?: string[];
+  single?: boolean;
   shortPlaceholder?: string;
   longPlaceholder?: string;
   wordLimit?: number;
@@ -352,14 +353,16 @@ const sections: SectionDef[] = [
       { id: "h-biz", label: "Business Model Signals", type: "heading" },
       {
         id: "5.1",
-        label: "Primary sales or conversion path",
+        label: "How do most customers first find and decide on you?",
+        hint: "Pick the path that fits most of your customers. If it is genuinely split, choose \"A mix\" and explain below.",
         type: "checkbox",
+        single: true,
         options: [
-          "People find us via search, read our website, and contact us or buy directly",
-          "People discover us through press, podcasts, social or word of mouth, then research us",
-          "We rely heavily on being recommended by AI tools or voice assistants",
-          "We are a local / regional business where map and local search is critical",
-          "A mix (describe below)",
+          "Search-led: they search, read our website, then contact us or buy",
+          "Referral-led: they hear of us via press, podcasts, social or word of mouth, then look us up",
+          "AI-led: they increasingly find or vet us through AI tools or voice assistants",
+          "Local-led: maps and local search in our area are how they find us",
+          "A mix: describe below",
         ],
       },
       { id: "5.1b", label: "If a mix, describe:", type: "textarea" },
@@ -617,6 +620,10 @@ export default function IntakePage() {
       const next = current.includes(option) ? current.filter((o) => o !== option) : [...current, option];
       return { ...prev, [fieldId]: next };
     });
+  };
+  const selectSingle = (fieldId: string, option: string) => {
+    // Radio-style single choice: selecting an option replaces any previous one.
+    setFormData((prev) => ({ ...prev, [fieldId]: [option] }));
   };
   const setDual = (fieldId: string, key: keyof DualValue, value: string) => {
     setDuals((prev) => ({ ...prev, [fieldId]: { short: prev[fieldId]?.short || "", long: prev[fieldId]?.long || "", [key]: value } }));
@@ -1226,19 +1233,22 @@ export default function IntakePage() {
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
+                            const onPick = () => (field.single ? selectSingle(field.id, opt) : toggleCheckbox(field.id, opt));
                             return (
                               <label key={opt} className="flex items-start gap-3 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#FBF6EC]">
                                 <div
-                                  className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors"
+                                  className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${field.single ? "rounded-full" : "rounded"}`}
                                   style={{
                                     borderColor: isOn ? "#C8497A" : "rgba(16,43,54,0.25)",
-                                    background: isOn ? "#C8497A" : "transparent",
+                                    background: isOn && !field.single ? "#C8497A" : "transparent",
                                   }}
-                                  onClick={() => toggleCheckbox(field.id, opt)}
+                                  onClick={onPick}
                                 >
-                                  {isOn && <Check size={12} color="white" />}
+                                  {isOn && (field.single
+                                    ? <span className="w-2.5 h-2.5 rounded-full" style={{ background: "#C8497A" }} />
+                                    : <Check size={12} color="white" />)}
                                 </div>
-                                <span className="text-[13px] leading-relaxed" style={{ color: isOn ? "#102B36" : "#374151", fontWeight: isOn ? 600 : 400 }} onClick={() => toggleCheckbox(field.id, opt)}>
+                                <span className="text-[13px] leading-relaxed" style={{ color: isOn ? "#102B36" : "#374151", fontWeight: isOn ? 600 : 400 }} onClick={onPick}>
                                   {opt}
                                 </span>
                               </label>
