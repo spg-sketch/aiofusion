@@ -113,3 +113,9 @@ id = "RM427gbuRRBzQzMoU4E3H"
 uri = "file://.local/patrick_feedback/pricing_discussion.md"
 type = "text"
 title = "AIO Fusion — Pricing Discussion (for Patrick)"
+
+[[outputs]]
+id = "8ERP0rwrhqzuUxYlXlHoR"
+uri = "file://AIO_Fusion_Investor_Spec.md"
+type = "text"
+title = "AIO Fusion - Product Specification & Investor Brief"
