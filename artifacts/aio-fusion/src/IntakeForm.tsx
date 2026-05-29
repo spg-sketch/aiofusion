@@ -1868,3 +1868,17 @@ export function getProjectMediaCategories(): string[] {
   const data = loadIntakeData();
   return data?.mediaCategories || [];
 }
+
+export function getPreferredKeywords(): string[] {
+  const data = loadIntakeData();
+  const raw = data?.formData?.["1.6"];
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  );
+}

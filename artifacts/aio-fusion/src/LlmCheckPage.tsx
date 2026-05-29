@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@workspace/replit-auth-web";
 import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
+import { getPreferredKeywords } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -189,7 +190,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
-  const [customKeywords, setCustomKeywords] = useState("");
+  const prefilledKeywords = getPreferredKeywords();
+  const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
 
@@ -293,7 +295,10 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                 />
               </div>
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
-                <Info size={11} /> Adds extra prompts so we can probe niche queries you want to be cited for.
+                <Info size={11} />
+                {prefilledKeywords.length > 0
+                  ? "Pulled in from your Project Set-Up (section 1.6). Edit or add to these before running."
+                  : "Adds extra prompts so we can probe niche queries you want to be cited for."}
               </p>
             </div>
             {error && (
