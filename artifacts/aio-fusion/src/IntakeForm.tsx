@@ -1869,6 +1869,16 @@ export function getProjectMediaCategories(): string[] {
   return data?.mediaCategories || [];
 }
 
+export function getBusinessSectors(): string[] {
+  const data = loadIntakeData();
+  return data?.businessCategories || [];
+}
+
+export function getTargetSectors(): string[] {
+  const data = loadIntakeData();
+  return data?.audienceCategories || [];
+}
+
 export function getPreferredKeywords(): string[] {
   const data = loadIntakeData();
   const raw = data?.formData?.["1.6"];

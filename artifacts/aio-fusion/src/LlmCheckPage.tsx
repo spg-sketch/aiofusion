@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@workspace/replit-auth-web";
 import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -192,6 +192,15 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const [result, setResult] = useState<LlmCheckResult | null>(null);
   const prefilledKeywords = getPreferredKeywords();
   const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
+  const businessSectors = getBusinessSectors();
+  const targetSectors = getTargetSectors();
+  const auditSectors = Array.from(
+    new Set(
+      [...businessSectors, ...targetSectors, activeClient.sector]
+        .map((s) => (s || "").trim())
+        .filter(Boolean),
+    ),
+  );
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
 
@@ -221,7 +230,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
         credentials: "include",
         body: JSON.stringify({
           companyName: activeClient.name,
-          sector: activeClient.sector,
+          sector: auditSectors[0] || activeClient.sector,
+          sectors: auditSectors,
           keywords,
         }),
       });
@@ -265,20 +275,39 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                 Confirm the brand and add any extra keywords to probe
               </span>
             </div>
-            <div className="grid sm:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Company</label>
-                <div className="px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}>
-                  {activeClient.name}
+            <div className="mb-4">
+              <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Company</label>
+              <div className="px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}>
+                {activeClient.name}
+              </div>
+            </div>
+            {(businessSectors.length > 0 || targetSectors.length > 0) ? (
+              <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you operate in</label>
+                  <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                    {businessSectors.length > 0 ? businessSectors.map((s) => (
+                      <span key={s} className="text-[12px] px-2 py-0.5 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>{s}</span>
+                    )) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.9)</span>}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you're targeting</label>
+                  <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                    {targetSectors.length > 0 ? targetSectors.map((s) => (
+                      <span key={s} className="text-[12px] px-2 py-0.5 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>{s}</span>
+                    )) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.10)</span>}
+                  </div>
                 </div>
               </div>
-              <div>
+            ) : (
+              <div className="mb-4">
                 <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sector</label>
                 <div className="px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}>
                   {activeClient.sector}
                 </div>
               </div>
-            </div>
+            )}
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
                 Additional keywords <span className="font-normal" style={{ color: vars.g400 }}>(optional, comma-separated)</span>

@@ -30,14 +30,23 @@ interface ProbeResult {
   competitors: string[];
 }
 
-function generateProbeQuestions(companyName: string, sector: string, keywords: string[]): string[] {
+function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[]): string[] {
   const questions: string[] = [];
 
-  questions.push(`What are the leading companies in the ${sector} space?`);
-  questions.push(`If a business needed ${sector} services, which companies would you recommend and why?`);
-  questions.push(`Who are the top ${sector} companies in the UK?`);
+  const uniqueSectors = [...new Set(sectors.map((s) => s.trim()).filter(Boolean))].slice(0, 3);
+  const list = uniqueSectors.length > 0 ? uniqueSectors : ["the industry"];
+
   questions.push(`What do you know about ${companyName}?`);
-  questions.push(`Compare the best ${sector} agencies or providers available today.`);
+
+  const single = list.length === 1;
+  for (const sector of list) {
+    questions.push(`What are the leading companies in the ${sector} space?`);
+    questions.push(`If a business needed ${sector} services, which companies would you recommend and why?`);
+    if (single) {
+      questions.push(`Who are the top ${sector} companies in the UK?`);
+      questions.push(`Compare the best ${sector} agencies or providers available today.`);
+    }
+  }
 
   if (keywords.length > 0) {
     questions.push(`Which companies are known for ${keywords.slice(0, 3).join(", ")}?`);
@@ -147,24 +156,37 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 }
 
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, keywords } = req.body;
+  const { companyName, sector, sectors, keywords } = req.body;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
     return;
   }
 
-  if (!sector || typeof sector !== "string") {
+  const rawSectors = [
+    ...(Array.isArray(sectors) ? sectors : []),
+    ...(typeof sector === "string" ? [sector] : []),
+  ];
+  const sectorList = [
+    ...new Set(
+      rawSectors
+        .filter((s: any) => typeof s === "string")
+        .map((s: string) => s.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 3);
+
+  if (sectorList.length === 0) {
     res.status(400).json({ error: "sector is required" });
     return;
   }
 
   const kw = Array.isArray(keywords) ? keywords.filter((k: any) => typeof k === "string") : [];
 
-  logger.info({ companyName, sector }, "Starting LLM visibility check");
+  logger.info({ companyName, sectors: sectorList }, "Starting LLM visibility check");
 
   try {
-    const questions = generateProbeQuestions(companyName, sector, kw);
+    const questions = generateProbeQuestions(companyName, sectorList, kw);
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
@@ -198,7 +220,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
     const summary = {
       companyName,
-      sector,
+      sector: sectorList[0],
+      sectors: sectorList,
       checkedAt: new Date().toISOString(),
       visibilityScore,
       totalProbes,
