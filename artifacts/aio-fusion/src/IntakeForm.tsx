@@ -156,7 +156,7 @@ const sections: SectionDef[] = [
       {
         id: "1.5",
         label: "What to avoid",
-        hint: "Messages, terminology, clients, industry issues, links to media articles, research, data or other information you do not wish to be associated with or wish to avoid.",
+        hint: "Messages, terminology, clients, key competitors, industry issues, links to media articles, research, data or other information you do not wish to be associated with or wish to avoid.",
         type: "textarea",
       },
       { id: "h-sp", label: "Semantic Phrase Guide & Topics", type: "heading" },
