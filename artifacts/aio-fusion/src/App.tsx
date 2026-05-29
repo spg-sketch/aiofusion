@@ -6195,10 +6195,6 @@ function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavi
           </div>
         ))}
       </div>
-      <div className="p-6 rounded-2xl mb-10" style={{ background: "#FBE3ED", border: "1px solid rgba(200,73,122,0.25)" }}>
-        <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-2" style={{ color: "#C8497A" }}>Add expert PR consultancy</p>
-        <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>Add human consultancy to your AIO Fusion platform. We will define your comms strategy and enhance your thought leadership ideas with expert, senior consultancy. Get in touch to find out more.</p>
-      </div>
       <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
         <Mail size={16} /> Book a Demo
       </a>
