@@ -86,7 +86,7 @@ type TrackerRow = {
 };
 
 const TRACKER_KEY = "aio.earnedTracker.v2";
-// Seeded to mirror an SMG-style Earned Media & Third-Party Coverage Report —
+// Seeded to mirror an SMG-style Earned Media & Third-Party Coverage Report -
 // Jan–Apr 2026 spanning Press releases / News stories, Authored articles &
 // Media features, Case studies, Whitepapers & Reports, Blog posts, Social
 // posts and Conference / Event references. Reach figures are estimated
@@ -108,26 +108,26 @@ const seedTracker: TrackerRow[] = [
   // 3. Case Studies & Similar References
   { id: "t10", date: "2026-03-12", title: "Research: Winning audiences and creating moments with B2B GEO (Lighthouse x Simpatico)",            type: "Case Study",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/research/lighthouse", reach: 15000, score: 7 },
   { id: "t11", date: "2026-04-14", title: "Unlocking the trade media opportunity with WHSmith Travel and Simpatico",                            type: "Case Study",                  publication: "RETHINK Retail",      category: "Retail",             spokesperson: "Helen Croydon",     link: "https://rethink.industry/case-studies/whsmith", reach: 17000, score: 7 },
-  { id: "t12", date: "2026-04-21", title: "Boots Earned Authority powered by Simpatico: Highly Commended — The Drum Awards",                   type: "Case Study",                  publication: "The Drum",            category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://thedrum.com/awards/boots",        reach: 11500000, score: 8 },
+  { id: "t12", date: "2026-04-21", title: "Boots Earned Authority powered by Simpatico: Highly Commended - The Drum Awards",                   type: "Case Study",                  publication: "The Drum",            category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://thedrum.com/awards/boots",        reach: 11500000, score: 8 },
 
   // 4. Published Whitepapers & Reports
   { id: "t13", date: "2026-01-14", title: "6 GEO Trends You Can't Miss In 2026",                                                                type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/reports/2026-trends", reach: 15000, score: 8 },
-  { id: "t14", date: "2026-03-04", title: "GEO Authority Index — Earned Authority Maturity Report 2026",                                        type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/reports/authority-index", reach: 15000, score: 9 },
+  { id: "t14", date: "2026-03-04", title: "GEO Authority Index - Earned Authority Maturity Report 2026",                                        type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/reports/authority-index", reach: 15000, score: 9 },
   { id: "t15", date: "2026-03-26", title: "It's time for B2B brands to rethink how they grow earned authority",                                 type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://simpaticopr.co.uk/reports/grow-authority", reach: 15000, score: 7 },
 
   // 5. Blog Posts
   { id: "t16", date: "2026-01-10", title: "AI, attribution & accountability for earned media at CES 2026",                                      type: "Blog Post",                   publication: "simpaticopr.co.uk",   category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/blog/ces-2026", reach: 15000,    score: 7 },
   { id: "t17", date: "2026-04-09", title: "Earned media's next test: breaking out of its silos (IAB Connected Comms Summit)",                   type: "Blog Post",                   publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://simpaticopr.co.uk/blog/iab-2026", reach: 15000,    score: 6 },
 
-  // 6. Social Posts — LinkedIn, Substack, Medium
+  // 6. Social Posts - LinkedIn, Substack, Medium
   { id: "t18", date: "2026-04-15", title: "Adweek and Simpatico partner for GEO Leadership Summit (LinkedIn post)",                              type: "Social Post",                 publication: "Adweek (LinkedIn)",   category: "Marketing & Advertising", spokesperson: "NA",                link: "https://linkedin.com/company/adweek/posts", reach: 163000,   score: 7 },
-  { id: "t19", date: "2026-02-20", title: "6 GEO Trends report shared across LinkedIn by Simpatico team",                                       type: "Social Post",                 publication: "LinkedIn — Simpatico team", category: "Marketing & PR", spokesperson: "NA",                link: "https://linkedin.com/company/simpaticopr", reach: 100000,   score: 6 },
+  { id: "t19", date: "2026-02-20", title: "6 GEO Trends report shared across LinkedIn by Simpatico team",                                       type: "Social Post",                 publication: "LinkedIn - Simpatico team", category: "Marketing & PR", spokesperson: "NA",                link: "https://linkedin.com/company/simpaticopr", reach: 100000,   score: 6 },
 
   // 7. Conference & Event Website References
-  { id: "t20", date: "2026-01-29", title: "2026 IAB Annual Leadership Meeting — Spencer Gallagher listed as speaker",                            type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/alm-2026/speakers", reach: 400000,   score: 8 },
-  { id: "t21", date: "2026-03-08", title: "Shoptalk Spring 2026 — Simpatico & WHSmith panel on travel earned media",                             type: "Speaker Submission",          publication: "shoptalk.com",        category: "Retail",             spokesperson: "Helen Croydon",     link: "https://shoptalk.com/spring-2026/agenda",  reach: 150000,   score: 7 },
-  { id: "t22", date: "2026-04-02", title: "2026 IAB Connected Comms Summit — Spencer Gallagher listed as speaker",                               type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/connected-comms-2026", reach: 400000, score: 9 },
-  { id: "t23", date: "2026-04-18", title: "Spencer Gallagher named 2026 PRovoke Top 250 — recognition listing",                                   type: "Directory Entry",             publication: "PRovoke Media",       category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://provokemedia.com/top250-2026",     reach: 220000,   score: 7 },
+  { id: "t20", date: "2026-01-29", title: "2026 IAB Annual Leadership Meeting - Spencer Gallagher listed as speaker",                            type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/alm-2026/speakers", reach: 400000,   score: 8 },
+  { id: "t21", date: "2026-03-08", title: "Shoptalk Spring 2026 - Simpatico & WHSmith panel on travel earned media",                             type: "Speaker Submission",          publication: "shoptalk.com",        category: "Retail",             spokesperson: "Helen Croydon",     link: "https://shoptalk.com/spring-2026/agenda",  reach: 150000,   score: 7 },
+  { id: "t22", date: "2026-04-02", title: "2026 IAB Connected Comms Summit - Spencer Gallagher listed as speaker",                               type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/connected-comms-2026", reach: 400000, score: 9 },
+  { id: "t23", date: "2026-04-18", title: "Spencer Gallagher named 2026 PRovoke Top 250 - recognition listing",                                   type: "Directory Entry",             publication: "PRovoke Media",       category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://provokemedia.com/top250-2026",     reach: 220000,   score: 7 },
 ];
 
 function loadTracker(): TrackerRow[] {
@@ -319,13 +319,13 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
   const volByCategory = useMemo(() => {
     const tally = new Map<string, number>();
-    inRange.forEach(r => tally.set(r.category || "—", (tally.get(r.category || "—") || 0) + 1));
+    inRange.forEach(r => tally.set(r.category || "-", (tally.get(r.category || "-") || 0) + 1));
     return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
   }, [inRange]);
 
   const volBySpokesperson = useMemo(() => {
     const tally = new Map<string, number>();
-    inRange.forEach(r => tally.set(r.spokesperson || "—", (tally.get(r.spokesperson || "—") || 0) + 1));
+    inRange.forEach(r => tally.set(r.spokesperson || "-", (tally.get(r.spokesperson || "-") || 0) + 1));
     return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
   }, [inRange]);
 
@@ -400,10 +400,10 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       { title: "All media is earned media: if fragmentation is the challenge, infrastructure is the answer",             type: "Article (Trade Publication)", publication: "B2B Marketing",     reach: 95000,    scores: { Claude: 8, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 7 }, link: "https://b2bmarketing.net/2026/04/18" },
 
       // Case study
-      { title: "Boots Earned Authority powered by Simpatico — Highly Commended, The Drum Awards",                        type: "Case Study",                  publication: "The Drum",          reach: 11500000, scores: { Claude: 8, Gemini: 8, ChatGPT: 8, Perplexity: 9, CoPilot: 7 }, link: "https://thedrum.com/awards/boots" },
+      { title: "Boots Earned Authority powered by Simpatico - Highly Commended, The Drum Awards",                        type: "Case Study",                  publication: "The Drum",          reach: 11500000, scores: { Claude: 8, Gemini: 8, ChatGPT: 8, Perplexity: 9, CoPilot: 7 }, link: "https://thedrum.com/awards/boots" },
 
       // Whitepaper / report
-      { title: "GEO Authority Index — Earned Authority Maturity Report 2026",                                            type: "Whitepaper",                  publication: "simpaticopr.co.uk", reach: 15000,    scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://simpaticopr.co.uk/reports/authority-index" },
+      { title: "GEO Authority Index - Earned Authority Maturity Report 2026",                                            type: "Whitepaper",                  publication: "simpaticopr.co.uk", reach: 15000,    scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://simpaticopr.co.uk/reports/authority-index" },
 
       // Blog post
       { title: "AI, attribution & accountability for earned media at CES 2026",                                          type: "Blog Post",                   publication: "simpaticopr.co.uk", reach: 15000,    scores: { Claude: 7, Gemini: 6, ChatGPT: 7, Perplexity: 7, CoPilot: 6 }, link: "https://simpaticopr.co.uk/blog/ces-2026" },
@@ -412,7 +412,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       { title: "Adweek and Simpatico partner for GEO Leadership Summit (LinkedIn announcement)",                          type: "Social Post",                 publication: "Adweek (LinkedIn)", reach: 163000,   scores: { Claude: 7, Gemini: 7, ChatGPT: 8, Perplexity: 7, CoPilot: 6 }, link: "https://linkedin.com/company/adweek/posts" },
 
       // Conference / event reference
-      { title: "2026 IAB Connected Comms Summit — Spencer Gallagher listed as speaker",                                  type: "Speaker Submission",          publication: "iab.com",           reach: 400000,   scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://iab.com/events/connected-comms-2026" },
+      { title: "2026 IAB Connected Comms Summit - Spencer Gallagher listed as speaker",                                  type: "Speaker Submission",          publication: "iab.com",           reach: 400000,   scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://iab.com/events/connected-comms-2026" },
     ];
     const personFilter = aiSearch.spokesperson.trim().toLowerCase();
     const titleFilter = aiSearch.contentTitle.trim().toLowerCase();
@@ -523,7 +523,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-lg sm:text-xl font-semibold text-white mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>
-                    {authorityScore >= 70 ? "Strong authority position" : authorityScore >= 40 ? "Moderate authority — room to grow" : "Early stage — significant opportunities"}
+                    {authorityScore >= 70 ? "Strong authority position" : authorityScore >= 40 ? "Moderate authority - room to grow" : "Early stage - significant opportunities"}
                   </h2>
                   <p className="text-sm text-white/75 leading-relaxed mb-4">
                     {activeClient.name} currently scores {authorityScore}/100. This combines earned media authority and your website&rsquo;s technical &amp; content readiness for AI citation.
@@ -551,11 +551,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
             <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-5 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — From</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - From</label>
                 <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — To</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - To</label>
                 <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo("2026-04-30"); }} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
@@ -618,11 +618,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Pulled from your Earned Media Tracker for the date range below.</p>
             <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — From</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - From</label>
                 <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range — To</label>
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - To</label>
                 <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
             </div>
@@ -685,7 +685,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               <StatTile label="Press Releases in period" value={String(prRows.length)} color={vars.navy} icon={FileText} />
               <StatTile label="Average score / PR" value={String(prAvgScore)} sub="out of 10" color={vars.accent} icon={BarChart3} />
-              <StatTile label="Top scorer" value={prRows.length ? String(Math.max(...prRows.map(r => r.score))) : "—"} sub="single PR best" color={vars.green} icon={TrendingUp} />
+              <StatTile label="Top scorer" value={prRows.length ? String(Math.max(...prRows.map(r => r.score))) : "-"} sub="single PR best" color={vars.green} icon={TrendingUp} />
             </div>
             <div className="space-y-2">
               {prRows.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No press releases in the selected period.</p>}
@@ -807,7 +807,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   <li>Publication or source name</li>
                   <li>Business category</li>
                   <li>Spokesperson (if no byline is noted or quoted in the article, return "None")</li>
-                  <li>Audience reach — give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
+                  <li>Audience reach - give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
                   <li>Average LLM authority score out of 10 across Claude, Gemini, ChatGPT, Perplexity and CoPilot for this specific media coverage or reference</li>
                 </ul>
               </div>

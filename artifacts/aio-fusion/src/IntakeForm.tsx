@@ -75,7 +75,7 @@ type DualListValue = DualValue[];
 const INTAKE_KEY = "aio.intake.v2";
 const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
-// Fields that get rewritten by "Optimise Project Messages" — must be kept in
+// Fields that get rewritten by "Optimise Project Messages" - must be kept in
 // sync with the LLM prompt below and with the snapshot/restore logic.
 export const OPTIMISED_FIELD_IDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
 
@@ -117,7 +117,7 @@ const sections: SectionDef[] = [
     subtitle: "Boilerplate, message hierarchy, spokespeople and trade media categories",
     icon: Mic2,
     intro:
-      "Earned media is one of the highest-authority signals for GEO. AI models are trained on the open web: a well-placed article in a credible outlet is more powerful than any on-site SEO tactic. The fields below feed every other module — Optimiser, Comms Planner, Content Creator, Media Research and Marketing Intelligence.",
+      "Earned media is one of the highest-authority signals for GEO. AI models are trained on the open web: a well-placed article in a credible outlet is more powerful than any on-site SEO tactic. The fields below feed every other module - Optimiser, Comms Planner, Content Creator, Media Research and Marketing Intelligence.",
     fields: [
       { id: "h-bp", label: "Core Boilerplate", type: "heading" },
       {
@@ -132,8 +132,8 @@ const sections: SectionDef[] = [
         label: "Primary Message",
         hint: "Enter a Primary Message providing a short summary (no more than six words). And a longer version of no more than 25 words.",
         type: "dual",
-        shortPlaceholder: "≤6 words — e.g. AI authority for PR",
-        longPlaceholder: "≤25 words — the longer version that adds proof and context",
+        shortPlaceholder: "≤6 words - e.g. AI authority for PR",
+        longPlaceholder: "≤25 words - the longer version that adds proof and context",
       },
       {
         id: "1.3",
@@ -259,7 +259,7 @@ const sections: SectionDef[] = [
       {
         id: "3.2",
         label: "What phrases / language does each audience use when searching for your solutions?",
-        hint: "Include informal, colloquial, and category-level terms — not just your preferred terminology entered above. These populate your semantic phrase guide.",
+        hint: "Include informal, colloquial, and category-level terms - not just your preferred terminology entered above. These populate your semantic phrase guide.",
         type: "textarea",
       },
       {
@@ -399,7 +399,7 @@ const sections: SectionDef[] = [
     subtitle: "Organization schema, robots.txt, AI crawlers and structured data",
     icon: ShieldCheck,
     intro:
-      "Schema markup translates your content into machine-readable data that AI systems process directly. Without it, AI models infer — which means inconsistency, omission and sometimes error.",
+      "Schema markup translates your content into machine-readable data that AI systems process directly. Without it, AI models infer - which means inconsistency, omission and sometimes error.",
     fields: [
       { id: "h-os", label: "Organization Schema", type: "heading" },
       {
@@ -780,14 +780,14 @@ export default function IntakePage() {
             className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
             style={{ background: statusBadge.bg, color: statusBadge.color }}
           >
-            {statusBadge.label} — Project Data
+            {statusBadge.label} - Project Data
           </span>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
 
-        {/* Track switch + progress — Variant C panel */}
+        {/* Track switch + progress - Variant C panel */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex flex-col sm:flex-row gap-2">
@@ -931,7 +931,7 @@ export default function IntakePage() {
                                 <input
                                   value={sp.linkedin}
                                   onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, linkedin: e.target.value } : s))}
-                                  placeholder="LinkedIn URL — e.g. https://www.linkedin.com/in/yourname"
+                                  placeholder="LinkedIn URL - e.g. https://www.linkedin.com/in/yourname"
                                   className="flex-1 px-3 py-2 rounded-lg border text-[12px] font-light bg-white"
                                   style={{ borderColor: vars.g200 }}
                                 />
@@ -1173,7 +1173,7 @@ export default function IntakePage() {
         </div>
       </div>
 
-      {/* Project Data Actions — bottom panel, sits after data entry per Patrick's spec */}
+      {/* Project Data Actions - bottom panel, sits after data entry per Patrick's spec */}
       <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -1183,7 +1183,7 @@ export default function IntakePage() {
           {intakeStatus === "Optimised" && (
             <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
               <Info size={12} />
-              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> — Accept, Edit or Reject below</span>
+              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
             </div>
           )}
         </div>
@@ -1207,7 +1207,7 @@ export default function IntakePage() {
             disabled={!isFullyComplete}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: "#C8497A" }}
-            title={isFullyComplete ? "Send Parts 1.1, 1.2, 1.3, 1.6 and 2.4 to the LLM optimiser" : `Complete every field across all 7 sections (PR + AIO) to enable — currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
+            title={isFullyComplete ? "Send Parts 1.1, 1.2, 1.3, 1.6 and 2.4 to the LLM optimiser" : `Complete every field across all 7 sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
           >
             <Sparkles size={13} /> Optimise Project Messages
           </button>
@@ -1236,7 +1236,7 @@ export default function IntakePage() {
             onClick={editProjectData}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
             style={{ background: "#C94A3E" }}
-            title="Re-open the Project Data for editing — jumps to PR Set-Up Section 1"
+            title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
           >
             <Pencil size={13} /> Edit
           </button>
@@ -1362,7 +1362,7 @@ function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: str
   );
 }
 
-// Cross-module helpers — consumed by Optimiser, Creator, Media Research, Comms Planner, Marketing Intelligence.
+// Cross-module helpers - consumed by Optimiser, Creator, Media Research, Comms Planner, Marketing Intelligence.
 export type IntakeData = {
   formData: Record<string, string | string[]>;
   duals: Record<string, DualValue>;

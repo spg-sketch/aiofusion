@@ -372,10 +372,10 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
               <p className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>
                 {result.companyName} was mentioned in <strong style={{ color: vars.navy }}>{result.totalMentions}</strong> of <strong style={{ color: vars.navy }}>{result.totalProbes}</strong> AI probes across ChatGPT and Claude.{" "}
                 {result.visibilityScore >= 60
-                  ? "Strong AI visibility — this brand is being referenced reliably in your sector."
+                  ? "Strong AI visibility - this brand is being referenced reliably in your sector."
                   : result.visibilityScore >= 30
-                  ? "Moderate AI visibility — the brand appears in some contexts but is not consistently cited."
-                  : "Low AI visibility — AI models are not reliably mentioning this brand when asked about the sector."}
+                  ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
+                  : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector."}
               </p>
             </div>
             <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
@@ -480,8 +480,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
         <div className="space-y-3">
           {[
             { t: "This is the real test.", b: "We're asking AI models the same questions a prospect, journalist or researcher would ask. If your brand doesn't appear, that's the gap GEO work needs to close." },
-            { t: "Scores are directional, not precise.", b: "AI model responses aren't deterministic — the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful." },
-            { t: "Competitors reveal what's working.", b: "The companies AI does mention are winning the visibility race in your sector — analyse what they're doing differently with content structure, schema markup and authority signals." },
+            { t: "Scores are directional, not precise.", b: "AI model responses aren't deterministic - the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful." },
+            { t: "Competitors reveal what's working.", b: "The companies AI does mention are winning the visibility race in your sector - analyse what they're doing differently with content structure, schema markup and authority signals." },
             { t: "Use this as a baseline.", b: "Run it now, do your GEO work (diagnostic, content optimisation, schema, authority planning), then run it again. A score moving from 20% to 50% is a measurable result you can report to the client." },
             { t: "Add keywords for better targeting.", b: "The optional keywords field lets you test more specific queries relevant to what the client wants to be known for, making the check more representative of their actual market." },
           ].map((item, i) => (

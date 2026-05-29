@@ -654,7 +654,7 @@ function ClientSelectorPage({
             </h1>
             <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
               {displayClients.length === 0
-                ? "Set up your first project to start optimising your PR and marketing output for AI discoverability — or jump into archived work or platform guidance."
+                ? "Set up your first project to start optimising your PR and marketing output for AI discoverability - or jump into archived work or platform guidance."
                 : "Select a project to manage AI optimisation, on-going PR and marketing output."}
             </p>
           </div>
@@ -675,7 +675,7 @@ function ClientSelectorPage({
           </div>
         </div>
 
-        {/* Three primary actions — visible in both empty and populated states */}
+        {/* Three primary actions - visible in both empty and populated states */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8 sm:mb-10">
           <button
             onClick={onCreateProject}
@@ -740,7 +740,7 @@ function ClientSelectorPage({
             </h2>
             <p className="text-[14px] font-light max-w-md mx-auto mb-6" style={{ color: vars.g500 }}>
               A project is a single brand, product or campaign you want to optimise.
-              You'll set up its messaging, audience and content plan once — then everything you publish flows through it.
+              You'll set up its messaging, audience and content plan once - then everything you publish flows through it.
             </p>
             <button
               onClick={onCreateProject}
@@ -1066,7 +1066,7 @@ function DashboardPage({
         <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Website Visibility Audit
-            <InfoTip text="Score for how well your website is structured for AI citation — schema, crawlability, entity clarity, internal authority graph." />
+            <InfoTip text="Score for how well your website is structured for AI citation - schema, crawlability, entity clarity, internal authority graph." />
           </h3>
           <div className="flex items-center gap-4 mb-4">
             <div className="relative w-16 h-16">
@@ -1350,7 +1350,7 @@ function DiagnosticPage({
 
   const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence across the supplied homepage plus key pages (About, Services/Products, Leadership and any other pages the user supplies) for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
 
-Score each of the following 6 categories from 0 to the maximum shown. Be rigorous — most pages score poorly. Provide specific, actionable recommendations for each category.
+Score each of the following 6 categories from 0 to the maximum shown. Be rigorous - most pages score poorly. Provide specific, actionable recommendations for each category.
 
 Categories (score / max):
 1. Schema & Structured Data (0-15): Does the content have Organization schema, FAQ schema, Article schema, author markup? Look for JSON-LD, microdata, or RDFa signals.
@@ -1901,12 +1901,12 @@ function OptimiserPage({
   };
   const shareDraft = () => {
     const subject = encodeURIComponent(`Draft for review: ${projectTitle || "Untitled"}`);
-    const body = encodeURIComponent(`Draft of "${projectTitle}" (${contentType}) for review.\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\n— sent via AIO Fusion`);
+    const body = encodeURIComponent(`Draft of "${projectTitle}" (${contentType}) for review.\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "-"}\n\n- sent via AIO Fusion`);
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
   const downloadDraft = () => {
     const blob = new Blob([
-      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "—"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "—"}\n\n---\n\nHEADLINE\n${articleHeadline || "(no headline)"}\n\nSTANDFIRST\n${standfirst || "(no standfirst)"}\n\nBODY COPY\n${bodyCopy || "(no body content)"}`,
+      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "-"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "-"}\n\n---\n\nHEADLINE\n${articleHeadline || "(no headline)"}\n\nSTANDFIRST\n${standfirst || "(no standfirst)"}\n\nBODY COPY\n${bodyCopy || "(no body content)"}`,
     ], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1992,7 +1992,7 @@ function OptimiserPage({
 
   const runOptimise = () => {
     if (!hasAnyContent) {
-      alert("Add some content first — at least a headline, standfirst or body copy.");
+      alert("Add some content first - at least a headline, standfirst or body copy.");
       return;
     }
     setOptimiseSnapshot({ articleHeadline, standfirst, bodyCopy });
@@ -2003,27 +2003,27 @@ function OptimiserPage({
     const m3 = selected[2] || "measurable earned-media impact";
 
     const newHeadline = articleHeadline
-      ? articleHeadline.replace(/\.$/, "") + ` — ${m1}`
+      ? articleHeadline.replace(/\.$/, "") + ` - ${m1}`
       : `${projectTitle || "Bluhalo"}: ${m1}`;
     const newStandfirst = standfirst
-      ? `${standfirst.replace(/\.$/, "")} — building on ${m2} and proving ${m3}.`
+      ? `${standfirst.replace(/\.$/, "")} - building on ${m2} and proving ${m3}.`
       : `A look at how ${m2} is reshaping the conversation around ${m1}, and what it means for ${m3}.`;
     const newBody = bodyCopy
-      ? `${bodyCopy}\n\n— Optimisation pass: opening restructured for answer-first retrieval, "${m1}" woven into the intro, "${m2}" anchored mid-section, and "${m3}" surfaced in the closing proof-point.`
+      ? `${bodyCopy}\n\n- Optimisation pass: opening restructured for answer-first retrieval, "${m1}" woven into the intro, "${m2}" anchored mid-section, and "${m3}" surfaced in the closing proof-point.`
       : bodyCopy;
 
     setArticleHeadline(newHeadline);
     setStandfirst(newStandfirst);
     setBodyCopy(newBody);
     setChangeLog([
-      { kind: "structure", text: `Rewrote the headline to lead with "${m1}" — strongest LLM-citation anchor for ${projectTitle || "this project"}.` },
+      { kind: "structure", text: `Rewrote the headline to lead with "${m1}" - strongest LLM-citation anchor for ${projectTitle || "this project"}.` },
       { kind: "embed", text: `Embedded "${m1}" verbatim in the headline and opening sentence of the standfirst.` },
       { kind: "embed", text: `Embedded "${m2}" mid-paragraph in the standfirst as the bridge between hook and body.` },
       { kind: "embed", text: `Embedded "${m3}" in the closing sentence of the body copy as a measurable proof-point.` },
-      { kind: "structure", text: `Reordered the body opening so the news hook leads, followed by spokesperson attribution, then supporting evidence — improves both reader pull-through and LLM extractability.` },
-      ...(promptVariant === "prompt2" ? [{ kind: "structure" as const, text: `Added a counter-argument paragraph rebutting the strongest opposing view — signals intellectual rigour to both readers and LLMs (Prompt 2 enhancement).` }] : []),
-      ...(selected[3] ? [{ kind: "flag" as const, text: `Could not embed "${selected[3]}" naturally — it overlaps thematically with "${m1}". Recommend using it on the spokesperson LinkedIn post instead.` }] : []),
-      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 — used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
+      { kind: "structure", text: `Reordered the body opening so the news hook leads, followed by spokesperson attribution, then supporting evidence - improves both reader pull-through and LLM extractability.` },
+      ...(promptVariant === "prompt2" ? [{ kind: "structure" as const, text: `Added a counter-argument paragraph rebutting the strongest opposing view - signals intellectual rigour to both readers and LLMs (Prompt 2 enhancement).` }] : []),
+      ...(selected[3] ? [{ kind: "flag" as const, text: `Could not embed "${selected[3]}" naturally - it overlaps thematically with "${m1}". Recommend using it on the spokesperson LinkedIn post instead.` }] : []),
+      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 - used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
     ]);
     setOptimised(true);
     setShowOptimiseBriefModal(false);
@@ -2041,10 +2041,10 @@ function OptimiserPage({
   };
 
   const promptHeadline = promptVariant === "pitch"
-    ? `LLM Optimisation Prompt 2.2 — Article Media Pitch`
+    ? `LLM Optimisation Prompt 2.2 - Article Media Pitch`
     : promptVariant === "prompt1"
-    ? `LLM Optimisation Prompt 1.1 — Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
-    : `LLM Optimisation Prompt 2.1 — Article, Whitepaper, Blog post, Social post`;
+    ? `LLM Optimisation Prompt 1.1 - Press release, Case study, Speaker submission, Award submission, Event copy, Directory entry`
+    : `LLM Optimisation Prompt 2.1 - Article, Whitepaper, Blog post, Social post`;
 
   const PROMPT_1_LENGTHS: Record<string, string> = {
     "Press release": "900 words. Create a headline, Standfirst, start first paragraph with City, Country, Date: Source Company and descriptor and key or priority news aspect. Structure newsworthy facts in order of significance through subsequent paragraphs with spokesperson quote towards the end of the press release. Use other best practices for press releases. End with Project Data boilerplate.",
@@ -2064,9 +2064,9 @@ function OptimiserPage({
   const promptBriefShort = promptVariant === "pitch"
     ? `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft Media pitch synopsis for a thought leadership article.
 
-Use the Headline / subject entry as the guiding theme and argument. Optimise the article media pitch to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+Use the Headline / subject entry as the guiding theme and argument. Optimise the article media pitch to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
 
-ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
 - Do not change titles, author names, job titles, entity names, or organisational descriptions.
 - Preserve the essential premise, core arguments, and conclusions within the Transcript or notes source content.
@@ -2079,12 +2079,12 @@ Using information and instructions in Project Data doc calibrate the editorial v
 KEY MESSAGE INTEGRATION:
 Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
 
-PERMITTED ENHANCEMENTS — apply all of the following:
-1. SUPPORTING FACTS & DATA ENRICHMENT — Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data as [ADDED DATA]; do not fabricate statistics.
-2. EDITORIAL STRUCTURE ENHANCEMENT — Opening hook → Premise (within first 150 words) → Evidence and elaboration → Implications and recommendations → Closing conviction statement.
-3. ENTITY CLARITY & ATTRIBUTION — Introduce all named entities with full title or name and context on first mention.
-4. INTELLECTUAL AUTHORITY SIGNALS — Where the author makes a prediction or recommendation, ensure the basis is explicit (evidence, experience, or reasoned argument).
-5. TONE CALIBRATION FOR BUSINESS SOURCE — Reflect the intended tone and competitive positioning supplied in Project Data; sound like a senior practitioner; remove hedging or self-promotional language.
+PERMITTED ENHANCEMENTS - apply all of the following:
+1. SUPPORTING FACTS & DATA ENRICHMENT - Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data as [ADDED DATA]; do not fabricate statistics.
+2. EDITORIAL STRUCTURE ENHANCEMENT - Opening hook → Premise (within first 150 words) → Evidence and elaboration → Implications and recommendations → Closing conviction statement.
+3. ENTITY CLARITY & ATTRIBUTION - Introduce all named entities with full title or name and context on first mention.
+4. INTELLECTUAL AUTHORITY SIGNALS - Where the author makes a prediction or recommendation, ensure the basis is explicit (evidence, experience, or reasoned argument).
+5. TONE CALIBRATION FOR BUSINESS SOURCE - Reflect the intended tone and competitive positioning supplied in Project Data; sound like a senior practitioner; remove hedging or self-promotional language.
 
 OUTPUT INSTRUCTIONS:
 - Provide the full written document suitable for email submission to a journalist.`
@@ -2093,35 +2093,35 @@ OUTPUT INSTRUCTIONS:
 
 ${contentType} = ${PROMPT_1_LENGTHS[contentType] || "Apply best practices for this content type referencing Project Data."}
 
-Further general guidance: Use the Headline / subject entry as the guiding theme and argument. Optimise the content to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+Further general guidance: Use the Headline / subject entry as the guiding theme and argument. Optimise the content to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
 
-ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all factual content, statistics, data points, and claims exactly as written. Do not add, remove, or alter any facts.
 - Do not change titles, subheadings, entity names, job titles, or organisational descriptions.
 - Do not introduce new information, opinions, or fabricated supporting detail.
 
 KEY MESSAGE INTEGRATION:
-Embed the chosen key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph — never bolted on.
+Embed the chosen key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph - never bolted on.
 
-LLMO OPTIMISATION OBJECTIVES — apply all of the following:
-1. ENTITY CLARITY — Introduce all named entities with full context on first mention; use consistent naming conventions throughout.
-2. SEMANTIC AUTHORITY SIGNALS — Strengthen credibility language using the Semantic Phrase Guide & Topics in Project Data; state cause-and-effect relationships explicitly.
-3. CITATION-READY PHRASING — Restructure key claims as self-contained, quotable sentences; lead with the most newsworthy information (inverted pyramid).
-4. NATURAL LANGUAGE QUERY ALIGNMENT — Anticipate user AI queries; provide clear direct answers to who, what, why, when, what outcome, what does this mean; avoid jargon.
-5. STRUCTURED CLARITY — Logically ordered, parallel structure; bookend key findings in opening and closing context.
-6. TONE AND REGISTER — Maintain professional, authoritative tone aligned with Project Data Sections 1-3; avoid unattributed superlatives (e.g. "world-class", "revolutionary").
+LLMO OPTIMISATION OBJECTIVES - apply all of the following:
+1. ENTITY CLARITY - Introduce all named entities with full context on first mention; use consistent naming conventions throughout.
+2. SEMANTIC AUTHORITY SIGNALS - Strengthen credibility language using the Semantic Phrase Guide & Topics in Project Data; state cause-and-effect relationships explicitly.
+3. CITATION-READY PHRASING - Restructure key claims as self-contained, quotable sentences; lead with the most newsworthy information (inverted pyramid).
+4. NATURAL LANGUAGE QUERY ALIGNMENT - Anticipate user AI queries; provide clear direct answers to who, what, why, when, what outcome, what does this mean; avoid jargon.
+5. STRUCTURED CLARITY - Logically ordered, parallel structure; bookend key findings in opening and closing context.
+6. TONE AND REGISTER - Maintain professional, authoritative tone aligned with Project Data Sections 1-3; avoid unattributed superlatives (e.g. "world-class", "revolutionary").
 
 OUTPUT INSTRUCTIONS:
 - Provide the full rewritten document.
-- Recommend a list of additional supporting data from third-parties that may be contextually relevant for inclusion — include links.
+- Recommend a list of additional supporting data from third-parties that may be contextually relevant for inclusion - include links.
 - Flag any instances where a key message could NOT be embedded naturally, with a brief explanation.`
     : `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft content piece with word lengths depending on Content Type:
 
 ${contentType} = ${PROMPT_2_LENGTHS[contentType] || "apply best practices for this content type"}
 
-Use the Headline / subject entry as the guiding theme and argument. Optimise the ${contentType.toLowerCase()} to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini — while preserving and strengthening the author's original argument and voice.
+Use the Headline / subject entry as the guiding theme and argument. Optimise the ${contentType.toLowerCase()} to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
 
-ABSOLUTE CONSTRAINTS — DO NOT VIOLATE:
+ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
 - Do not change titles, author names, job titles, entity names, or organisational descriptions.
 - Preserve the essential premise, core arguments, and conclusions within the Transcript or notes source content.
@@ -2134,14 +2134,14 @@ Using information and instructions in Project Data doc calibrate the editorial v
 KEY MESSAGE INTEGRATION:
 Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
 
-PERMITTED ENHANCEMENTS — apply all of the following:
-1. SUPPORTING FACTS & DATA ENRICHMENT — Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag inserted data as [ADDED DATA]; do not fabricate statistics.
-2. EDITORIAL STRUCTURE ENHANCEMENT — High-authority thought leadership architecture: Opening hook → Premise (within first 150 words) → Evidence & elaboration → Counterargument acknowledgment & rebuttal → Implications & recommendations → Closing conviction statement.
-3. ENTITY CLARITY & ATTRIBUTION — Introduce all named entities with full title/name and context on first mention; establish the business source's expertise early.
-4. CITATION-READY & RETRIEVAL-OPTIMISED PHRASING — Each core claim expressed as a single self-contained sentence; inverted pyramid at paragraph level; bookend the most important claim in opening and conclusion.
-5. NATURAL LANGUAGE QUERY ALIGNMENT — Anticipate professional audience AI queries; provide clear direct answers (what is the problem, why does it matter, what should be done, what does success look like, who is saying this and why should I trust them); define acronyms on first use.
-6. INTELLECTUAL AUTHORITY SIGNALS — Use proprietary frameworks, named methodologies, coined terms; make the basis for predictions/recommendations explicit; introduce a named framework if the argument supports one.
-7. TONE CALIBRATION FOR BUSINESS SOURCE — Reflect the intended tone and competitive positioning from Project Data; sound like a senior practitioner with sector-specific precision; remove hedging or self-promotional language.
+PERMITTED ENHANCEMENTS - apply all of the following:
+1. SUPPORTING FACTS & DATA ENRICHMENT - Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag inserted data as [ADDED DATA]; do not fabricate statistics.
+2. EDITORIAL STRUCTURE ENHANCEMENT - High-authority thought leadership architecture: Opening hook → Premise (within first 150 words) → Evidence & elaboration → Counterargument acknowledgment & rebuttal → Implications & recommendations → Closing conviction statement.
+3. ENTITY CLARITY & ATTRIBUTION - Introduce all named entities with full title/name and context on first mention; establish the business source's expertise early.
+4. CITATION-READY & RETRIEVAL-OPTIMISED PHRASING - Each core claim expressed as a single self-contained sentence; inverted pyramid at paragraph level; bookend the most important claim in opening and conclusion.
+5. NATURAL LANGUAGE QUERY ALIGNMENT - Anticipate professional audience AI queries; provide clear direct answers (what is the problem, why does it matter, what should be done, what does success look like, who is saying this and why should I trust them); define acronyms on first use.
+6. INTELLECTUAL AUTHORITY SIGNALS - Use proprietary frameworks, named methodologies, coined terms; make the basis for predictions/recommendations explicit; introduce a named framework if the argument supports one.
+7. TONE CALIBRATION FOR BUSINESS SOURCE - Reflect the intended tone and competitive positioning from Project Data; sound like a senior practitioner with sector-specific precision; remove hedging or self-promotional language.
 
 OUTPUT INSTRUCTIONS:
 - Provide the full rewritten and enhanced document.`;
@@ -2154,7 +2154,7 @@ OUTPUT INSTRUCTIONS:
               <FileEdit size={20} color={vars.teal} />
               <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                 Content Optimiser & Editor
-                <InfoTip text="Rewrites your content to be more citation-worthy for AI models — clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+                <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
               </h1>
             </div>
             <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
@@ -2177,7 +2177,7 @@ OUTPUT INSTRUCTIONS:
 
         <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="space-y-5">
-            {/* Row 1 — Title + type */}
+            {/* Row 1 - Title + type */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <Labelled label="Project name" hint="Pulls in messaging from Project Set-Up parts 4 and 6">
@@ -2198,16 +2198,16 @@ OUTPUT INSTRUCTIONS:
               </Labelled>
             </div>
 
-            {/* Row 2 — Spokesperson + LLM target */}
+            {/* Row 2 - Spokesperson + LLM target */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Labelled label="Spokesperson">
                 <div className="flex items-center gap-2">
                   <select value={spokesperson} onChange={(e) => setSpokesperson(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
                     {spokesList.length > 0
-                      ? spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` — ${s.title}` : ""}</option>)
+                      ? spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` - ${s.title}` : ""}</option>)
                       : <option value="">No spokespeople in Project Data</option>
                     }
-                    <option value="NA">NA — no spokesperson</option>
+                    <option value="NA">NA - no spokesperson</option>
                   </select>
                   <InfoTip text="Pulled from Section 1.8 of the Project Set-Up. NA is allowed for company-issued content." />
                 </div>
@@ -2222,7 +2222,7 @@ OUTPUT INSTRUCTIONS:
               </Labelled>
             </div>
 
-            {/* Row 3 — Select messages from Project Data (sections 1-3) */}
+            {/* Row 3 - Select messages from Project Data (sections 1-3) */}
             <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1-3">
               {projectDataMessages.length === 0 ? (
                 <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
@@ -2279,7 +2279,7 @@ OUTPUT INSTRUCTIONS:
               )}
             </Labelled>
 
-            {/* Row 4 — Media categories (replaces Purpose) */}
+            {/* Row 4 - Media categories (replaces Purpose) */}
             <Labelled label="Select Media Categories" hint="Multi-select from Section in Project Data">
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowCatPicker(true)} className="flex-1 text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between" style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}>
@@ -2298,7 +2298,7 @@ OUTPUT INSTRUCTIONS:
               )}
             </Labelled>
 
-            {/* Row 5 — Status + publication date */}
+            {/* Row 5 - Status + publication date */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Labelled label="Content Status">
                 <div className="flex items-center gap-2">
@@ -2316,7 +2316,7 @@ OUTPUT INSTRUCTIONS:
               </Labelled>
             </div>
 
-            {/* Row 6 — Editor toolbar (font size) */}
+            {/* Row 6 - Editor toolbar (font size) */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content editor {optimised && <span className="ml-2 px-2 py-0.5 rounded-full" style={{ background: "rgba(192,57,43,0.12)", color: "#B03D33", letterSpacing: 0 }}>Optimised copy</span>}</p>
               <div className="flex items-center gap-2">
@@ -2328,7 +2328,7 @@ OUTPUT INSTRUCTIONS:
             </div>
 
             {/* Headline */}
-            <Labelled label="Headline" hint="Bold serif headline — up to ~20 words">
+            <Labelled label="Headline" hint="Bold serif headline - up to ~20 words">
               <textarea value={articleHeadline} onChange={(e) => setArticleHeadline(e.target.value)} rows={2}
                 className="w-full p-3 rounded-lg border outline-none resize-vertical font-bold"
                 style={{ borderColor: vars.g200, color: optimised ? "#B03D33" : vars.navy, fontSize: editorFontSize + 4, fontFamily: "'Alice', Georgia, serif", lineHeight: 1.25 }}
@@ -2337,7 +2337,7 @@ OUTPUT INSTRUCTIONS:
             </Labelled>
 
             {/* Standfirst */}
-            <Labelled label="Standfirst" hint="Italic summary that sits between headline and body — up to ~50 words">
+            <Labelled label="Standfirst" hint="Italic summary that sits between headline and body - up to ~50 words">
               <textarea value={standfirst} onChange={(e) => setStandfirst(e.target.value)} rows={3}
                 className="w-full p-3 rounded-lg border outline-none resize-vertical italic"
                 style={{ borderColor: vars.g200, color: optimised ? "#B03D33" : vars.navy, fontSize: editorFontSize + 1, lineHeight: 1.5 }}
@@ -2346,7 +2346,7 @@ OUTPUT INSTRUCTIONS:
             </Labelled>
 
             {/* Body copy */}
-            <Labelled label="Body copy" hint="Press releases, articles, whitepapers, case studies — up to ~3,000 words">
+            <Labelled label="Body copy" hint="Press releases, articles, whitepapers, case studies - up to ~3,000 words">
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
                 <div className="flex items-center gap-1 px-2 py-1.5 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('bold'); }} className="px-2 py-1 rounded text-xs font-bold hover:bg-white" style={{ color: vars.navy }} title="Bold">B</button>
@@ -2361,8 +2361,8 @@ OUTPUT INSTRUCTIONS:
               </div>
             </Labelled>
 
-            {/* Action Notes — feeds the Comms Planner Notes column */}
-            <Labelled label="Action Notes" hint="Up to 150 words of internal notes — pushed through to the Notes column on the Comms Planner.">
+            {/* Action Notes - feeds the Comms Planner Notes column */}
+            <Labelled label="Action Notes" hint="Up to 150 words of internal notes - pushed through to the Notes column on the Comms Planner.">
               <textarea
                 value={actionNotes}
                 onChange={(e) => {
@@ -2412,7 +2412,7 @@ OUTPUT INSTRUCTIONS:
           </div>
         </div>
 
-        {/* Inline Optimisation Results — only when optimised */}
+        {/* Inline Optimisation Results - only when optimised */}
         {optimised && (
           <div className="mt-6 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2530,7 +2530,7 @@ OUTPUT INSTRUCTIONS:
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
                 <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                  <Sparkles size={16} color={vars.coral} /> Optimise — LLM brief preview
+                  <Sparkles size={16} color={vars.coral} /> Optimise - LLM brief preview
                 </h2>
                 <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
               </div>
@@ -2541,7 +2541,7 @@ OUTPUT INSTRUCTIONS:
                   <p><strong>Content type:</strong> {contentType}</p>
                   <p><strong>Spokesperson:</strong> {spokesperson === "NA" ? "Company-issued (no spokesperson)" : spokesperson}</p>
                   <p><strong>LLM target:</strong> {llmTarget}</p>
-                  <p><strong>Key messages selected:</strong> {selectedMessages.length === 0 ? "(none — will use first 3 from Project Data)" : selectedMessages.length}</p>
+                  <p><strong>Key messages selected:</strong> {selectedMessages.length === 0 ? "(none - will use first 3 from Project Data)" : selectedMessages.length}</p>
                   <p><strong>Media categories:</strong> {mediaCats.length === 0 ? "(none)" : mediaCats.length}</p>
                 </div>
               </div>
@@ -2699,7 +2699,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>Plan and score your PR and marketing schedule for AI authority impact. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
-      {/* Action toolbar — Variant C ink panel */}
+      {/* Action toolbar - Variant C ink panel */}
       <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: ink, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
@@ -2786,7 +2786,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         const COLS = ["Week of", "Content Type", "Content Title", "Status", "Key Message", "Spokesperson", "Release Date", "Authority Score", "Action Notes"];
         return (
           <div>
-            {/* Status key — horizontal strip ABOVE the calendar so it never obscures entries */}
+            {/* Status key - horizontal strip ABOVE the calendar so it never obscures entries */}
             <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
               <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Status key:</span>
               {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((st) => {
@@ -2931,7 +2931,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       </div>
       )}
 
-      {/* View switcher footer — duplicated below the table for ease of use on long calendars */}
+      {/* View switcher footer - duplicated below the table for ease of use on long calendars */}
       <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl p-3 sm:p-4 mt-6" style={{ background: ink, boxShadow: "0 4px 16px -10px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
@@ -2967,10 +2967,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             <div className="p-6 text-[13px] font-light leading-relaxed space-y-4" style={{ color: vars.g600 }}>
               <p>The Comms Planner ranks and combines a 12-week schedule of communications activity across <strong style={{ color: vars.navy }}>three categories of GEO content</strong>. Each item is scored on two dimensions, each out of 10:</p>
               <ul className="space-y-2 pl-4 list-disc">
-                <li><strong style={{ color: vars.navy }}>Authority</strong> — how strongly the content type contributes to LLM citation. Trade publication articles score highest (9/10).</li>
-                <li><strong style={{ color: vars.navy }}>Visibility</strong> — how many channels and audiences see it. Press releases and social posts score high here.</li>
+                <li><strong style={{ color: vars.navy }}>Authority</strong> - how strongly the content type contributes to LLM citation. Trade publication articles score highest (9/10).</li>
+                <li><strong style={{ color: vars.navy }}>Visibility</strong> - how many channels and audiences see it. Press releases and social posts score high here.</li>
               </ul>
-              <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below — change any value in <em>Score settings</em>.</p>
+              <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below - change any value in <em>Score settings</em>.</p>
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
                 <table className="w-full text-[12px]">
                   <thead style={{ background: vars.g50 }}>
@@ -3086,7 +3086,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
                     style={{ borderColor: vars.g200, color: vars.navy }}
                   >
-                    <option value="">— Choose a key message from Project Data —</option>
+                    <option value="">- Choose a key message from Project Data -</option>
                     {plannerKeyMessages.map((m) => {
                       const label = m.short || m.long;
                       const display = label.length > 90 ? `${label.slice(0, 90)}…` : label;
@@ -3424,7 +3424,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
           <div className="max-w-3xl">
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>The Platform</span>
             <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
-            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery — the full GEO, PR and marketing content workflow in one platform.</p>
+            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery - the full GEO, PR and marketing content workflow in one platform.</p>
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
@@ -3481,7 +3481,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
               { n: "03", img: step3Img, title: "Plan and predict impact", body: "Optimise and predict the impact of your forward marketing and PR plan for AI authority and search.", accent: vars.gold },
               { n: "04", img: step4Img, title: "Optimise content output", body: "Optimise your on-going PR and marketing content output using a tailored AI authority editor.", accent: vars.green },
               { n: "05", img: step5Img, title: "Measure, report and predict", body: "Measure, report and predict marketing performance and AI visibility, tracking business messages, spokespeople and earned media.", accent: vars.accent },
-              { n: "06", img: step6Img, title: "Always-on agentic media relations", body: "Coming soon — AIO Fusion will enable always-on agentic PR management and media relations.", accent: vars.amber, soon: true },
+              { n: "06", img: step6Img, title: "Always-on agentic media relations", body: "Coming soon - AIO Fusion will enable always-on agentic PR management and media relations.", accent: vars.amber, soon: true },
             ].map((s) => (
               <div key={s.n} className="rounded-2xl overflow-hidden bg-white flex flex-col transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
                 <div className="aspect-[16/10] overflow-hidden relative" style={{ background: s.accent }}>
@@ -3601,7 +3601,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
               </p>
               <div className="space-y-3 text-[14.5px] font-light leading-[1.75]" style={{ color: vars.g600 }}>
                 <p>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
-                <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day — designed to help you maximise the potential of your expertise and deliver measurable results.</p>
+                <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day - designed to help you maximise the potential of your expertise and deliver measurable results.</p>
               </div>
             </div>
           </div>
@@ -3739,7 +3739,7 @@ function seedDemoDataIfEmpty() {
     const plannerSeed: PlannerProject[] = [
       {
         id: id(1),
-        title: "The Agency Agentic Collective — launch press release",
+        title: "The Agency Agentic Collective - launch press release",
         contentType: "Press release",
         spokesperson: "Spencer Gallagher",
         keyMessage: "Independent agencies represented by dedicated AI agents",
@@ -3761,7 +3761,7 @@ function seedDemoDataIfEmpty() {
         week: baseWeek,
         status: "Drafting",
         releaseDate: dateForWeek(0).slice(0, 10),
-        notes: "Trade publication article — Campaign / PRWeek / The Drum target.",
+        notes: "Trade publication article - Campaign / PRWeek / The Drum target.",
       },
       {
         id: id(3),
@@ -3778,7 +3778,7 @@ function seedDemoDataIfEmpty() {
       },
       {
         id: id(4),
-        title: "Spencer Gallagher on agency authority — Festival of Marketing",
+        title: "Spencer Gallagher on agency authority - Festival of Marketing",
         contentType: "Speaker submission",
         spokesperson: "Spencer Gallagher",
         keyMessage: "Agency Authority and the AI representation gap",
@@ -3791,7 +3791,7 @@ function seedDemoDataIfEmpty() {
       },
       {
         id: id(5),
-        title: "PRWeek Agency of the Year — Bluhalo entry",
+        title: "PRWeek Agency of the Year - Bluhalo entry",
         contentType: "Award submission",
         spokesperson: "Mark Sainthill",
         keyMessage: "Independent agency advisory and intelligence practice",
@@ -3807,7 +3807,7 @@ function seedDemoDataIfEmpty() {
     const archiveSeed: ArchiveItem[] = [
       {
         id: id(10),
-        title: "The Agency Agentic Collective — launch press release",
+        title: "The Agency Agentic Collective - launch press release",
         contentType: "Press release",
         spokesperson: "Spencer Gallagher",
         status: "Final",
@@ -3843,7 +3843,7 @@ function seedDemoDataIfEmpty() {
       },
       {
         id: id(13),
-        title: "From SEO to AIO — a transition playbook (draft)",
+        title: "From SEO to AIO - a transition playbook (draft)",
         contentType: "Article",
         spokesperson: "Spencer Gallagher",
         status: "Draft",
@@ -3858,7 +3858,7 @@ function seedDemoDataIfEmpty() {
     savePlannerProjects(plannerSeed);
     localStorage.setItem(SEED_KEY, "v1");
   } catch {
-    /* noop — never block app boot */
+    /* noop - never block app boot */
   }
 }
 
@@ -3889,7 +3889,7 @@ type ScoringConfig = {
   statusMultipliers: Record<PlannerStatus, number>;
 };
 
-// Default scoring table per Patrick's d2 brief — Authority and Visibility scored
+// Default scoring table per Patrick's d2 brief - Authority and Visibility scored
 // independently, with Combined as the shown average. Article (Trade Publication)
 // is the gold standard at 9/9 → 9.0 combined.
 const DEFAULT_SCORING: ScoringConfig = {
@@ -4159,10 +4159,10 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          <Archive size={22} color={vars.accent} /> Archive — {projectName}
+          <Archive size={22} color={vars.accent} /> Archive - {projectName}
         </h1>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          The full library of accepted, drafted and reviewed PR and marketing content for this project — searchable by message, spokesperson, content type and time period. Click any card to send it back to the Content Optimiser.
+          The full library of accepted, drafted and reviewed PR and marketing content for this project - searchable by message, spokesperson, content type and time period. Click any card to send it back to the Content Optimiser.
         </p>
       </div>
 
@@ -4213,7 +4213,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </label>
             <div className="rounded-lg border p-2 min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: "white" }}>
               {keyMessages.length === 0 && (
-                <span className="text-[11px] font-light italic self-center" style={{ color: vars.g400 }}>No messages — set in Project Set-Up</span>
+                <span className="text-[11px] font-light italic self-center" style={{ color: vars.g400 }}>No messages - set in Project Set-Up</span>
               )}
               {keyMessages.map((m) => {
                 const label = m.short || m.long;
@@ -4301,7 +4301,7 @@ function GeoContentPage() {
     { page: "/leadership", priority: "High", action: "Add Person schema with credentials, link spokesperson LinkedIn URLs from Project Set-Up 1.8.", impact: "+22 expert authority signal" },
     { page: "/about", priority: "Medium", action: "Embed core key messages from Project Set-Up 1.2 verbatim in opening paragraph.", impact: "+12 message consistency" },
     { page: "/services", priority: "Medium", action: "Add FAQ block answering top 8 buyer questions with conversational phrasing.", impact: "+15 answer-engine match" },
-    { page: "/insights", priority: "Low", action: "Strengthen internal linking — add author-byline links pointing to leadership pages.", impact: "+8 internal authority graph" },
+    { page: "/insights", priority: "Low", action: "Strengthen internal linking - add author-byline links pointing to leadership pages.", impact: "+8 internal authority graph" },
   ];
   const overall = Math.round(corePages.reduce((s, p) => s + (p.contentScore + p.alignmentScore) / 2, 0) / corePages.length);
   return (
@@ -4515,7 +4515,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       spokesperson,
       status: contentStatus === "Final" ? "Final" : "Draft",
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
-      body: transcript || "(No transcript supplied — generated from headline only)",
+      body: transcript || "(No transcript supplied - generated from headline only)",
       createdAt: new Date().toISOString(),
     };
     saveArchive([item, ...items]);
@@ -4535,7 +4535,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const runOptimise = () => {
     if (!hasAnyContent) {
-      alert("Add some content first — at least a headline, standfirst or transcript.");
+      alert("Add some content first - at least a headline, standfirst or transcript.");
       return;
     }
     setOptimiseSnapshot({ articleHeadline, standfirst, headline, transcript });
@@ -4547,22 +4547,22 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       ? articleHeadline.replace(/\b(PR|Marketing|Comms)\b/i, (m) => `${m} & ${msg1}`).slice(0, 140)
       : `${msg1}: Why ${projectName || "Bluhalo"} is reframing modern ${contentType.toLowerCase()}`;
     const newStandfirst = standfirst
-      ? `${standfirst.replace(/\.$/, "")} — building on ${msg2} and proving ${msg3}.`
+      ? `${standfirst.replace(/\.$/, "")} - building on ${msg2} and proving ${msg3}.`
       : `A look at how ${msg2} is becoming the new battleground for ${msg1}, and what it means for brands chasing ${msg3}.`;
     const newTranscript = transcript
-      ? `${transcript}\n\n— Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured opening to lead with the news hook.`
+      ? `${transcript}\n\n- Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured opening to lead with the news hook.`
       : transcript;
     setArticleHeadline(newHeadline);
     setStandfirst(newStandfirst);
     setTranscript(newTranscript);
     setChangeLog([
-      { kind: "structure", text: `Rewrote the headline to lead with "${msg1}" — strongest LLM-citation anchor for ${projectName || "this project"}.` },
+      { kind: "structure", text: `Rewrote the headline to lead with "${msg1}" - strongest LLM-citation anchor for ${projectName || "this project"}.` },
       { kind: "embed", text: `Embedded "${msg1}" in the opening clause of the headline and the first sentence of the standfirst.` },
       { kind: "embed", text: `Embedded "${msg2}" mid-paragraph in the standfirst summary to bridge the news hook into the body.` },
       { kind: "embed", text: `Embedded "${msg3}" in the closing sentence of the transcript as a measurable proof-point and call-to-action.` },
-      { kind: "structure", text: `Reordered the transcript opening so the news hook leads, followed by spokesperson quote, then supporting evidence — improves both reader pull-through and LLM extractability.` },
-      ...(msgs[3] ? [{ kind: "flag" as const, text: `Could not embed "${msgs[3].short}" naturally — it overlaps thematically with "${msg1}" and would have repeated the same claim. Recommend using it in the spokesperson LinkedIn post instead.` }] : []),
-      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 — used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
+      { kind: "structure", text: `Reordered the transcript opening so the news hook leads, followed by spokesperson quote, then supporting evidence - improves both reader pull-through and LLM extractability.` },
+      ...(msgs[3] ? [{ kind: "flag" as const, text: `Could not embed "${msgs[3].short}" naturally - it overlaps thematically with "${msg1}" and would have repeated the same claim. Recommend using it in the spokesperson LinkedIn post instead.` }] : []),
+      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 - used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
     ]);
     setOptimised(true);
     setShowOptimiseBriefModal(false);
@@ -4588,7 +4588,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const shareDraftFromCreator = () => {
     const subject = encodeURIComponent(`Draft for review: ${articleHeadline || projectName || "Untitled"}`);
-    const body = encodeURIComponent(`Headline: ${articleHeadline}\n\nStandfirst:\n${standfirst}\n\nPitch idea:\n${headline}\n\nBody:\n${transcript}\n\n— sent via AIO Fusion`);
+    const body = encodeURIComponent(`Headline: ${articleHeadline}\n\nStandfirst:\n${standfirst}\n\nPitch idea:\n${headline}\n\nBody:\n${transcript}\n\n- sent via AIO Fusion`);
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
@@ -4637,7 +4637,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const embedItems = changeLog.filter((c) => c.kind === "embed");
     const structureItems = changeLog.filter((c) => c.kind === "structure");
     const flagItems = changeLog.filter((c) => c.kind === "flag");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Optimisation Notes — ${projectName || "Draft"}</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Optimisation Notes - ${projectName || "Draft"}</title>
 <style>
   body { font-family: Georgia, 'Times New Roman', serif; color: #102B36; max-width: 720px; margin: 32px auto; padding: 0 24px; line-height: 1.55; }
   .meta { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280; margin-bottom: 8px; }
@@ -4660,7 +4660,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     ${structureItems.map((c) => `<li><strong>Structure / phrasing:</strong> ${escapeHtml(c.text)}</li>`).join("")}
     ${embedItems.map((c) => `<li><strong>Message embedded:</strong> ${escapeHtml(c.text)}</li>`).join("")}
     ${flagItems.map((c) => `<li class="flag"><strong>⚠ Flagged:</strong> ${escapeHtml(c.text)}</li>`).join("")}
-    ${changeLog.length === 0 ? "<li>(No optimisation has been run yet — run Optimise first to populate this log.)</li>" : ""}
+    ${changeLog.length === 0 ? "<li>(No optimisation has been run yet - run Optimise first to populate this log.)</li>" : ""}
   </ul>
   <div class="footer">${projectName ? `Project: ${escapeHtml(projectName)} · ` : ""}Content type: ${contentType}${spokesperson ? ` · Spokesperson: ${escapeHtml(spokesperson)}` : ""}${pubDate ? ` · Publication: ${pubDate}` : ""}<br/>Generated by AIO Fusion · Optimisation Notes export</div>
 </body></html>`;
@@ -4678,7 +4678,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         w.document.close();
         setTimeout(() => { try { w.focus(); w.print(); } catch { /* noop */ } }, 300);
       } else {
-        alert("Pop-up blocked — allow pop-ups for this site to export the PDF.");
+        alert("Pop-up blocked - allow pop-ups for this site to export the PDF.");
       }
     }
     setShowDownloadNotesModal(false);
@@ -4735,7 +4735,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </div>
         </div>
 
-        <Labelled label="Headline" hint={`The article headline as it will appear in print — short, bold and punchy. (${articleHeadlineWords} / 20 words)`}>
+        <Labelled label="Headline" hint={`The article headline as it will appear in print - short, bold and punchy. (${articleHeadlineWords} / 20 words)`}>
           <input
             value={articleHeadline}
             onChange={(e) => setArticleHeadline(e.target.value)}
@@ -4768,7 +4768,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
         </Labelled>
 
-        <Labelled label="Action Notes" hint="Up to 150 words of internal notes — pushed through to the Notes column on the Comms Planner.">
+        <Labelled label="Action Notes" hint="Up to 150 words of internal notes - pushed through to the Notes column on the Comms Planner.">
           <textarea
             value={actionNotes}
             onChange={(e) => {
@@ -4790,7 +4790,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Labelled label="Spokesperson" hint="Pulled from the Project Data spokesperson list (1.8).">
             <select value={spokesperson} onChange={(e) => onPickSpokesperson(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-              <option value="">— Select spokesperson —</option>
+              <option value="">- Select spokesperson -</option>
               <option value="NA">NA</option>
               {spokesList.map((s) => <option key={s.name} value={s.name}>{s.name}{s.title ? ` · ${s.title}` : ""}</option>)}
             </select>
@@ -4803,7 +4803,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <Labelled label="Media target" hint="Multi-select drawn from the Trade Media Categories list (1.9).">
           <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
             {mediaTarget.length === 0 ? (
-              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected — pick from the project categories or the full alphabetical list.</p>
+              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No targets selected - pick from the project categories or the full alphabetical list.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {mediaTarget.map((cat) => (
@@ -4845,7 +4845,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
       </div>
 
-      {/* Content Actions — bottom panel, mirrors Project Data Actions on intake */}
+      {/* Content Actions - bottom panel, mirrors Project Data Actions on intake */}
       <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -4855,7 +4855,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           {optimised && (
             <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy is shown in red. Use Accept & Archive to sign it off, or Reject Optimised Copy to restore your original draft.">
               <Info size={12} />
-              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> — Accept &amp; Archive or Reject below</span>
+              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept &amp; Archive or Reject below</span>
             </div>
           )}
         </div>
@@ -4865,7 +4865,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             disabled={!hasAnyContent || optimised}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: "#C8497A" }}
-            title={optimised ? "Already optimised — reject the optimised copy first to re-run" : "Send the headline, standfirst and body to the LLM optimiser to weave in key messages from Project Data 1.2 & 1.3"}
+            title={optimised ? "Already optimised - reject the optimised copy first to re-run" : "Send the headline, standfirst and body to the LLM optimiser to weave in key messages from Project Data 1.2 & 1.3"}
           >
             <Sparkles size={13} /> Optimise
           </button>
@@ -4874,7 +4874,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             disabled={changeLog.length === 0}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: "#FBF6EC", color: "#102B36" }}
-            title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece (headline, standfirst, body) with a change log explaining where each key message was embedded — as Word or PDF"}
+            title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece (headline, standfirst, body) with a change log explaining where each key message was embedded - as Word or PDF"}
           >
             <FileText size={13} /> Download Notes
           </button>
@@ -4935,7 +4935,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
       </div>
 
-      {/* Change Log — shown after Optimise has been run */}
+      {/* Change Log - shown after Optimise has been run */}
       {changeLog.length > 0 && (
         <div className="mt-4 bg-white rounded-2xl border p-4 sm:p-5" style={{ borderColor: "rgba(200,73,122,0.3)" }}>
           <div className="flex items-center gap-2 mb-3">
@@ -4948,7 +4948,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
                 <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ background: c.kind === "flag" ? "#B45309" : c.kind === "structure" ? vars.teal : "#C8497A" }} />
                 <span style={{ color: c.kind === "flag" ? "#B45309" : undefined }}>
                   <strong className="font-semibold" style={{ color: c.kind === "flag" ? "#B45309" : vars.navy }}>
-                    {c.kind === "embed" ? "Message embedded — " : c.kind === "structure" ? "Structure / phrasing — " : "⚠ Flagged — "}
+                    {c.kind === "embed" ? "Message embedded - " : c.kind === "structure" ? "Structure / phrasing - " : "⚠ Flagged - "}
                   </strong>
                   {c.text}
                 </span>
@@ -4985,7 +4985,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
       )}
 
-      {/* Download Optimisation Notes — format chooser */}
+      {/* Download Optimisation Notes - format chooser */}
       {showDownloadNotesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowDownloadNotesModal(false)}>
           <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
@@ -5011,7 +5011,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
                 </button>
               </div>
               <p className="text-[10px] font-light mt-3 italic" style={{ color: vars.g400 }}>
-                PDF opens a print dialog — choose "Save as PDF" as the destination.
+                PDF opens a print dialog - choose "Save as PDF" as the destination.
               </p>
             </div>
           </div>
@@ -5063,11 +5063,11 @@ const DEMO_HOUSE_EMAIL_PATTERNS: { publisher: string; pattern: string; evidence:
   { publisher: "Haymarket Media (PRWeek UK, Campaign)", pattern: "first.last@haymarket.com", evidence: "Confirmed against john.harrington@haymarket.com (PRWeek UK Editor, signed byline footer) and maisie.mccabe@haymarket.com (Campaign UK Editor, masthead)." },
   { publisher: "The Drum (independent)", pattern: "first.last@thedrum.com", evidence: "Confirmed against sam.anderson@thedrum.com (News Editor, byline footer) and hannah.bowler@thedrum.com (Senior Reporter, staff bio page)." },
   { publisher: "Xeim / Centaur (Marketing Week)", pattern: "first.last@xeim.com", evidence: "Confirmed against russell.parsons@xeim.com (Editor-in-Chief, masthead) and charlotte.rogers@xeim.com (Deputy Editor, Muck Rack listing)." },
-  { publisher: "B2B Marketing", pattern: "first.last@b2bmarketing.net", evidence: "Single verified address: molly.raycraft@b2bmarketing.net (Editor, signed editorial). Pattern inferred — flag with one further verified contact before sending at scale." },
+  { publisher: "B2B Marketing", pattern: "first.last@b2bmarketing.net", evidence: "Single verified address: molly.raycraft@b2bmarketing.net (Editor, signed editorial). Pattern inferred - flag with one further verified contact before sending at scale." },
 ];
 
 const DEMO_RESHUFFLES: { publication: string; note: string }[] = [
-  { publication: "Mumbrella", note: "Founder Tim Burrowes departed full-time editorial role in 2021 (now at Unmade newsletter). UK desk now run by a smaller editorial team — verify any UK-focused contact before pitching." },
+  { publication: "Mumbrella", note: "Founder Tim Burrowes departed full-time editorial role in 2021 (now at Unmade newsletter). UK desk now run by a smaller editorial team - verify any UK-focused contact before pitching." },
   { publication: "Communicate Magazine", note: "Editorial team has rotated more than once in the last 24 months. Do not assume historic Editor still in role without confirming via current masthead." },
 ];
 
@@ -5102,7 +5102,7 @@ const DEMO_MEDIA_LIST: MediaListItem[] = [
     readership: "Heads of corporate comms and reputation at FTSE 250 and large private firms.",
     reach: "~25,000 print + digital readers (publisher figure, unverified)", reachVerified: false,
     journalists: [],
-    noBeatContactNote: "No current beat contact identified — recent masthead unclear; recommend confirming via Cravenhill Publishing directly before approach.",
+    noBeatContactNote: "No current beat contact identified - recent masthead unclear; recommend confirming via Cravenhill Publishing directly before approach.",
     authority: 68,
     pitchAngle: "Position as a corporate reputation angle, not an agency story.",
   },
@@ -5136,7 +5136,7 @@ const DEMO_MEDIA_LIST: MediaListItem[] = [
     readership: "Marketing and PR professionals across APAC with a UK readership share.",
     reach: "~180,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
     journalists: [],
-    noBeatContactNote: "No current UK-beat contact identified — outlet's UK desk has rotated; route through public newsdesk only if pitching an APAC-relevant angle.",
+    noBeatContactNote: "No current UK-beat contact identified - outlet's UK desk has rotated; route through public newsdesk only if pitching an APAC-relevant angle.",
     authority: 58, authorityNote: "Audience is APAC-weighted; lower direct relevance to the UK primary audience.",
     pitchAngle: "Only if the story has an APAC angle or a regional spokesperson.",
   },
@@ -5158,7 +5158,7 @@ const DEMO_MEDIA_LIST: MediaListItem[] = [
     readership: "Heads of marketing at B2B technology, services and professional firms.",
     reach: "~95,000 monthly UU (publisher figure, unverified)", reachVerified: false,
     journalists: [
-      { name: "Molly Raycraft", title: "Editor", email: "molly.raycraft@b2bmarketing.net", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email (single-source — confirm before scale)." },
+      { name: "Molly Raycraft", title: "Editor", email: "molly.raycraft@b2bmarketing.net", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email (single-source - confirm before scale)." },
     ],
     authority: 79,
     pitchAngle: "Pitch as a how-to feature with a checklist or framework attached.",
@@ -5175,18 +5175,18 @@ For each publication, return:
 2. Category using the media categories selected in section 1.9. of the Project Data document and 1–N relevancy rank within category
 3. One-sentence description of the title (format, frequency, subjects and industry covered)
 4. One-sentence description of its readership (job titles, seniority, sector)
-5. Audience reach — give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
-6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat — typically 4–8 per major outlet), each as: name | job title | email | confidence flag | role-currency check
+5. Audience reach - give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
+6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat - typically 4–8 per major outlet), each as: name | job title | email | confidence flag | role-currency check
    Confidence flag rules:
-   [V] Verified — email is found in a public source (publication website, masthead, signed byline footer, Muck Rack/RocketReach/Cision/Prowly listing, or government register).
-   [P] Pattern-inferred — journalist is confirmed in role within the last month and their email matches the publisher's house pattern, which must itself be confirmed against at least two other verified addresses at the same publication. State the pattern in the methodology tab.
-   [U] Unverified — anything else. List with a warning, or omit if the contact would mislead.
+   [V] Verified - email is found in a public source (publication website, masthead, signed byline footer, Muck Rack/RocketReach/Cision/Prowly listing, or government register).
+   [P] Pattern-inferred - journalist is confirmed in role within the last month and their email matches the publisher's house pattern, which must itself be confirmed against at least two other verified addresses at the same publication. State the pattern in the methodology tab.
+   [U] Unverified - anything else. List with a warning, or omit if the contact would mislead.
    Role-currency check: for each named contact, confirm via a recent byline (≤ 60 days), LinkedIn current title, or staff bio page that they are still in the stated role. Drop anyone you can't confirm.
-7. Authority score (0–100) — relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) — not a generic DA score. Briefly justify scores above 90 and below 60.
+7. Authority score (0–100) - relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) - not a generic DA score. Briefly justify scores above 90 and below 60.
 8. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
 
 Hard rules:
-- Do not invent journalists, titles, or emails. If you can't verify, write "no current beat contact identified" — that's an acceptable answer.
+- Do not invent journalists, titles, or emails. If you can't verify, write "no current beat contact identified" - that's an acceptable answer.
 - Prefer dropping a stale contact over including it. Stale contacts cost trust; missing ones don't.
 - In a methodology tab, list every confirmed house email pattern with the evidence used to confirm it (which staff email proves the pattern).
 - Flag known reshuffles in the last 24 months for major outlets (e.g. who moved on/up).
@@ -5229,17 +5229,17 @@ function MediaResearchPage() {
       <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${m.url}">${m.url}</a> · ${m.category} · Rank ${m.categoryRank} in category · <b>Authority ${m.authority}/100</b></p>
       <p><b>Description:</b> ${m.description}</p>
       <p><b>Readership:</b> ${m.readership}</p>
-      <p><b>Audience reach:</b> ${m.reach}${m.reachVerified ? "" : " <i>(unverified — flag with client)</i>"}</p>
+      <p><b>Audience reach:</b> ${m.reach}${m.reachVerified ? "" : " <i>(unverified - flag with client)</i>"}</p>
       <p><b>Beat journalists (${m.journalists.length}):</b></p>
       ${m.journalists.length === 0
         ? `<p style="color:#a04040;"><i>${m.noBeatContactNote || "No current beat contact identified."}</i></p>`
-        : `<ul>${m.journalists.map((j) => `<li><b>${j.name}</b> — ${j.title} — <a href="mailto:${j.email}">${j.email}</a> — ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${j.roleCurrency}</i></li>`).join("")}</ul>`
+        : `<ul>${m.journalists.map((j) => `<li><b>${j.name}</b> - ${j.title} - <a href="mailto:${j.email}">${j.email}</a> - ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${j.roleCurrency}</i></li>`).join("")}</ul>`
       }
       ${m.authorityNote ? `<p><b>Authority note:</b> ${m.authorityNote}</p>` : ""}
       <p><b>Suggested pitch angle:</b> ${m.pitchAngle}</p>
       <hr/>
     `).join("");
-    const patternsHtml = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<li><b>${p.publisher}</b> — <code>${p.pattern}</code><br/><i style="color:#666;">${p.evidence}</i></li>`).join("");
+    const patternsHtml = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<li><b>${p.publisher}</b> - <code>${p.pattern}</code><br/><i style="color:#666;">${p.evidence}</i></li>`).join("");
     const reshufflesHtml = DEMO_RESHUFFLES.map((r) => `<li><b>${r.publication}:</b> ${r.note}</li>`).join("");
     const methodology = `
       <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology, source caveats and first-wave outreach</h2>
@@ -5251,13 +5251,13 @@ function MediaResearchPage() {
       <p><b>Source caveats:</b> Audience reach figures are publisher-stated or SimilarWeb-derived and labelled "approximate". Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends.</p>
       <p><b>First-wave outreach sequence:</b></p>
       <ol>
-        <li>Day 0 — Exclusive offer to category leader PRWeek UK (24-hour window).</li>
-        <li>Day 1 — Embargoed release to remaining PR/comms category and to Campaign + The Drum.</li>
-        <li>Day 2 — Wire distribution to B2B marketing category with bespoke angles per outlet.</li>
-        <li>Day 5 — Follow-up commentary or data drop to outlets without first-wave coverage.</li>
+        <li>Day 0 - Exclusive offer to category leader PRWeek UK (24-hour window).</li>
+        <li>Day 1 - Embargoed release to remaining PR/comms category and to Campaign + The Drum.</li>
+        <li>Day 2 - Wire distribution to B2B marketing category with bespoke angles per outlet.</li>
+        <li>Day 5 - Follow-up commentary or data drop to outlets without first-wave coverage.</li>
       </ol>
     `;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List — ${selected.title}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List - ${selected.title}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
       <h1 style="font-family:Georgia,serif;">Target Media List</h1>
       <p><b>Content:</b> ${selected.title} (${selected.contentType})</p>
       <p><b>Generated:</b> ${new Date().toLocaleDateString("en-GB")}</p>
@@ -5303,7 +5303,7 @@ function MediaResearchPage() {
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
-<h2>Target Media List — ${selected.title}</h2>
+<h2>Target Media List - ${selected.title}</h2>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
     <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence | role-currency)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
@@ -5370,7 +5370,7 @@ function MediaResearchPage() {
             </div>
           ) : (
             <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMode("none"); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-              <option value="">— Choose a piece from Archive —</option>
+              <option value="">- Choose a piece from Archive -</option>
               {eligible.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType}{a.status ? ` · ${a.status}` : ""})</option>)}
             </select>
           );
@@ -5385,10 +5385,10 @@ function MediaResearchPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <SummaryRow label="Title" value={selected.title} />
               <SummaryRow label="Content type" value={selected.contentType} />
-              <SummaryRow label="Spokesperson" value={selected.spokesperson || "—"} />
+              <SummaryRow label="Spokesperson" value={selected.spokesperson || "-"} />
               <SummaryRow label="LLM target" value={selected.tags?.find((t) => t.startsWith("llm-")) || "General (All LLMs)"} />
-              <SummaryRow label="Key messages" value={messages.slice(0, 3).map((m) => m.short).join(" · ") || "—"} />
-              <SummaryRow label="Media categories" value={projectCats.length > 0 ? `${projectCats.length} from Project Data` : "—"} />
+              <SummaryRow label="Key messages" value={messages.slice(0, 3).map((m) => m.short).join(" · ") || "-"} />
+              <SummaryRow label="Media categories" value={projectCats.length > 0 ? `${projectCats.length} from Project Data` : "-"} />
             </div>
           </div>
 
@@ -5478,7 +5478,7 @@ function MediaResearchPage() {
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${confidenceColor(j.confidence)}1a`, color: confidenceColor(j.confidence) }}>[{j.confidence}] {confidenceLabel(j.confidence)}</span>
                                 <span className="font-semibold">{j.name}</span>
-                                <span style={{ color: vars.g500 }}>— {j.title}</span>
+                                <span style={{ color: vars.g500 }}>- {j.title}</span>
                                 <a href={`mailto:${j.email}`} className="text-[12px] underline" style={{ color: vars.accent }}>{j.email}</a>
                               </div>
                               <p className="text-[11px] italic mt-0.5 ml-1" style={{ color: vars.g400 }}>Role-currency: {j.roleCurrency}</p>
@@ -5550,14 +5550,14 @@ function MarketingIntelligencePage() {
   const confirmStyle = (c: EventConfirmFlag) =>
     c === "C"
       ? { color: "#1F7244", bg: "rgba(31,114,68,0.12)", label: "[C] Confirmed in next 12 months" }
-      : { color: "#A04040", bg: "rgba(160,64,64,0.12)", label: "[U] Unconfirmed — held in last 24 months" };
+      : { color: "#A04040", bg: "rgba(160,64,64,0.12)", label: "[U] Unconfirmed - held in last 24 months" };
 
   const downloadWordReport = () => {
     if (!results) return;
     const itemsHtml = results.map((e) => {
       const cs = confirmStyle(e.confirmStatus);
       const opsHtml = e.opportunities.map((o) => `
-        <li><b>${o.type}</b> — <b>Cost:</b> ${o.cost} · <b>Deadline:</b> ${o.deadline}
+        <li><b>${o.type}</b> - <b>Cost:</b> ${o.cost} · <b>Deadline:</b> ${o.deadline}
           ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${o.contactDetails}</i>` : ""}
           ${o.notes ? `<br/><i style="color:#666;">${o.notes}</i>` : ""}
           ${o.actionable ? `<br/><span style="color:#C8497A;font-weight:bold;">★ Top 3 actionable</span>` : ""}
@@ -5577,7 +5577,7 @@ function MarketingIntelligencePage() {
       `;
     }).join("");
     const topActionHtml = actionableOps.length === 0 ? "<p><i>No live windows flagged at search time.</i></p>" :
-      `<ol>${actionableOps.map((a) => `<li><b>${a.event.name}</b> — ${a.op.type} — deadline: ${a.op.deadline}</li>`).join("")}</ol>`;
+      `<ol>${actionableOps.map((a) => `<li><b>${a.event.name}</b> - ${a.op.type} - deadline: ${a.op.deadline}</li>`).join("")}</ol>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Event Opportunities Report</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
       <h1 style="font-family:Georgia,serif;">Event Opportunities Report</h1>
       <p><b>Marketing types:</b> ${marketingType.join(", ")}</p>
@@ -5588,7 +5588,7 @@ function MarketingIntelligencePage() {
       <hr/>
       ${itemsHtml}
       <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology &amp; source caveats</h2>
-      <p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked <b>[C] Confirmed</b>; events unconfirmed for the next 12 months but held in the previous 24 months are marked <b>[U] Unconfirmed</b> and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to the selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented — unverifiable entries are dropped.</p>
+      <p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked <b>[C] Confirmed</b>; events unconfirmed for the next 12 months but held in the previous 24 months are marked <b>[U] Unconfirmed</b> and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to the selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented - unverifiable entries are dropped.</p>
     </body></html>`;
     const blob = new Blob([html], { type: "application/msword" });
     const url = URL.createObjectURL(blob);
@@ -5614,7 +5614,7 @@ function MarketingIntelligencePage() {
           <td>${e.location}</td>
           <td>${e.audience}</td>
           <td>${e.titleDescription}</td>
-          <td style="color:${cs.color};font-weight:bold;">${e.confirmStatus} — ${cs.label.replace(`[${e.confirmStatus}] `, "")}</td>
+          <td style="color:${cs.color};font-weight:bold;">${e.confirmStatus} - ${cs.label.replace(`[${e.confirmStatus}] `, "")}</td>
           <td>${e.authority}</td>
           <td>${o.type}</td>
           <td>${o.cost}</td>
@@ -5629,7 +5629,7 @@ function MarketingIntelligencePage() {
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Opportunities</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
-<h2>Event Opportunities — one row per opportunity</h2>
+<h2>Event Opportunities - one row per opportunity</h2>
 <p><b>Marketing types:</b> ${marketingType.join(", ")} · <b>Categories:</b> ${categories.join(", ")} · <b>Period:</b> ${period === "6m" ? "Next 6 months" : "Next 12 months"} · <b>Region:</b> ${region === "UK" ? "United Kingdom" : "North America"}</p>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
@@ -5639,7 +5639,7 @@ function MarketingIntelligencePage() {
 </table>
 <br/><br/>
 <h2>Methodology</h2>
-<p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked [C] Confirmed; events unconfirmed for the next 12 months but held in the previous 24 months are marked [U] Unconfirmed and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented — unverifiable entries are dropped.</p>
+<p>Generated using the Project Data brief, with web-search verification of every named contact, event URL and deadline. Events with confirmed published dates within the next 12 months are marked [C] Confirmed; events unconfirmed for the next 12 months but held in the previous 24 months are marked [U] Unconfirmed and should be re-checked before commitment. Authority scores (0-100) are relevance-weighted to selected business categories, audience quality and LLM citation footprint. URLs, events, titles and emails are not invented - unverifiable entries are dropped.</p>
 </body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
@@ -5658,7 +5658,7 @@ function MarketingIntelligencePage() {
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          Use the Project Data brief plus an LLM search to produce a tailored list of recommended awards, conferences and speaker platforms — scored on the AI authority each delivers.
+          Use the Project Data brief plus an LLM search to produce a tailored list of recommended awards, conferences and speaker platforms - scored on the AI authority each delivers.
         </p>
       </div>
 
@@ -5745,7 +5745,7 @@ function MarketingIntelligencePage() {
               <ul className="space-y-1.5">
                 {actionableOps.map((a, i) => (
                   <li key={i} className="text-[13px]" style={{ color: vars.navy }}>
-                    <span className="font-semibold">{a.event.name}</span> — {a.op.type} — deadline: {a.op.deadline}
+                    <span className="font-semibold">{a.event.name}</span> - {a.op.type} - deadline: {a.op.deadline}
                   </li>
                 ))}
               </ul>
@@ -5883,18 +5883,18 @@ For each event, return in this order:
 - Entry cost (for conferences)
 - Award entry costs (for awards only)
 - Participation costs (for speaker opportunities only)
-- Sponsorship costs (for sponsorship opportunities only — include other relevant information including contact details)
+- Sponsorship costs (for sponsorship opportunities only - include other relevant information including contact details)
 - Events confirmed published data within next <12 months mark as [C] Confirmed
-- Unverified — events unconfirmed within next <12 months but held in previous 24 months — mark as [U] Unconfirmed
-- Authority score (0-100) — provide an LLM authority score for relevance weighted to categories listed above, the business, quality of audience and other relevant criteria
+- Unverified - events unconfirmed within next <12 months but held in previous 24 months - mark as [U] Unconfirmed
+- Authority score (0-100) - provide an LLM authority score for relevance weighted to categories listed above, the business, quality of audience and other relevant criteria
 - Short summary of reasons why an event is relevant to business
-- Flag the top 3 most immediately actionable opportunities — events with open entry windows, upcoming deadlines, or speaker pitch processes currently live.
+- Flag the top 3 most immediately actionable opportunities - events with open entry windows, upcoming deadlines, or speaker pitch processes currently live.
 
 Hard rules:
 - Do not invent URLs, events, titles, or emails.
 
 Deliverable:
-- A sortable Excel with one row per opportunity — include multiple opportunities for each event.
+- A sortable Excel with one row per opportunity - include multiple opportunities for each event.
 - A structured list on a Word document.`;
 
 const DEMO_EVENTS_V2: EventItem[] = [
@@ -5905,14 +5905,14 @@ const DEMO_EVENTS_V2: EventItem[] = [
     category: "PR & communications trade",
     date: "29 October 2026",
     audience: "Senior agency and in-house PR leaders, CMOs and comms directors from the UK's largest consumer and B2B brands and consultancies.",
-    titleDescription: "PRWeek (Haymarket Media Group) — flagship UK PR awards programme, annual ceremony with year-round editorial follow-up across PRWeek's news, profiles and best-practice features.",
+    titleDescription: "PRWeek (Haymarket Media Group) - flagship UK PR awards programme, annual ceremony with year-round editorial follow-up across PRWeek's news, profiles and best-practice features.",
     location: "Grosvenor House, Park Lane, London W1K 7TN",
     confirmStatus: "C",
     authority: 92,
     relevanceReason: "Industry's most-cited UK PR awards (widely called 'PR's Oscars'). A shortlisting or win for adtech, branding and martech client work generates highly visible, LLM-indexed editorial across PRWeek's authoritative domain.",
     opportunities: [
       { type: "Award entry", cost: "£395–£495 + VAT per category (50% off every 10th entry in one transaction)", deadline: "First entry window opens 12 May 2026; final 17 July 2026", actionable: true, notes: "33 categories across consumer, B2B, healthcare, public sector and craft." },
-      { type: "Sponsorship", cost: "£5,000–£30,000+ (category or table package)", deadline: "Booking from January 2026 on first-come basis", contactDetails: "events@haymarket.com — Awards Partnerships team", notes: "Headline, category and post-event content packages available." },
+      { type: "Sponsorship", cost: "£5,000–£30,000+ (category or table package)", deadline: "Booking from January 2026 on first-come basis", contactDetails: "events@haymarket.com - Awards Partnerships team", notes: "Headline, category and post-event content packages available." },
     ],
   },
   {
@@ -5921,15 +5921,15 @@ const DEMO_EVENTS_V2: EventItem[] = [
     url: "https://cipr.co.uk/excellence",
     category: "PR & communications trade",
     date: "1 July 2026",
-    audience: "Chartered Institute of Public Relations members and senior PR practitioners — strong representation from in-house corporate comms and independent consultancies.",
-    titleDescription: "Chartered Institute of Public Relations (CIPR) — professional body programme in its 42nd year, recognised as the formal quality benchmark for UK PR. Editorial follow-up via Influence magazine and CIPR newsroom.",
+    audience: "Chartered Institute of Public Relations members and senior PR practitioners - strong representation from in-house corporate comms and independent consultancies.",
+    titleDescription: "Chartered Institute of Public Relations (CIPR) - professional body programme in its 42nd year, recognised as the formal quality benchmark for UK PR. Editorial follow-up via Influence magazine and CIPR newsroom.",
     location: "Royal Lancaster Hotel, Lancaster Terrace, London W2 2TY",
     confirmStatus: "C",
     authority: 90,
-    relevanceReason: "Chartered seal of approval — the most established professional credential in UK PR and consistently cited by LLMs as the benchmark for PR quality. New 2026 category for In-House Campaigns and Corporate Communications suits B2B client portfolios.",
+    relevanceReason: "Chartered seal of approval - the most established professional credential in UK PR and consistently cited by LLMs as the benchmark for PR quality. New 2026 category for In-House Campaigns and Corporate Communications suits B2B client portfolios.",
     opportunities: [
-      { type: "Award entry", cost: "£345 (standard) / £400 (final) + VAT — Independent Practitioner rate £205–£260 + VAT", deadline: "Standard 27 March 2026; final 24 April 2026", actionable: true, notes: "44 categories including sector, channel and outstanding individual." },
-      { type: "Sponsorship", cost: "Category and ceremony partner packages from £4,500", deadline: "Open until categories sold", contactDetails: "events@cipr.co.uk — CIPR Events team" },
+      { type: "Award entry", cost: "£345 (standard) / £400 (final) + VAT - Independent Practitioner rate £205–£260 + VAT", deadline: "Standard 27 March 2026; final 24 April 2026", actionable: true, notes: "44 categories including sector, channel and outstanding individual." },
+      { type: "Sponsorship", cost: "Category and ceremony partner packages from £4,500", deadline: "Open until categories sold", contactDetails: "events@cipr.co.uk - CIPR Events team" },
     ],
   },
   {
@@ -5937,17 +5937,17 @@ const DEMO_EVENTS_V2: EventItem[] = [
     name: "The Drum Awards Festival 2026",
     url: "https://thedrumawards.com",
     category: "Marketing & advertising trade",
-    date: "Rolling 2026 programme — flagship ceremony 1 December 2026",
-    audience: "Senior marketing, creative and PR leaders across agency and in-house — global readership skewing UK/EMEA, with reach into the World Creative Rankings.",
-    titleDescription: "The Drum — global marketing publication with awards across PR, B2B, Design, Media and Advertising. Winners showcased to The Drum's c.11.5M global audience and indexed in the World Creative Rankings.",
+    date: "Rolling 2026 programme - flagship ceremony 1 December 2026",
+    audience: "Senior marketing, creative and PR leaders across agency and in-house - global readership skewing UK/EMEA, with reach into the World Creative Rankings.",
+    titleDescription: "The Drum - global marketing publication with awards across PR, B2B, Design, Media and Advertising. Winners showcased to The Drum's c.11.5M global audience and indexed in the World Creative Rankings.",
     location: "The Brewery, 52 Chiswell Street, London EC1Y 4SD",
     confirmStatus: "C",
     authority: 88,
-    relevanceReason: "One of the world's largest marketing awards programmes with dedicated PR and B2B tracks. Winning work indexed in the World Creative Rankings — among the highest-return LLM authority plays available at this budget level.",
+    relevanceReason: "One of the world's largest marketing awards programmes with dedicated PR and B2B tracks. Winning work indexed in the World Creative Rankings - among the highest-return LLM authority plays available at this budget level.",
     opportunities: [
-      { type: "Award entry", cost: "£295–£395 + VAT per category depending on deadline tier", deadline: "Rolling tier deadlines — next early-bird closes 27 February 2026", actionable: true },
+      { type: "Award entry", cost: "£295–£395 + VAT per category depending on deadline tier", deadline: "Rolling tier deadlines - next early-bird closes 27 February 2026", actionable: true },
       { type: "Speaker", cost: "Free for accepted speakers; B2B World Fest and Drum events run open pitches", deadline: "Speaker submissions open spring 2026", contactDetails: "speakers@thedrum.com" },
-      { type: "Sponsorship", cost: "Category partnership from £8,000; headline from £25,000", deadline: "Open until sold", contactDetails: "awards@thedrum.com — Awards Partnerships team" },
+      { type: "Sponsorship", cost: "Category partnership from £8,000; headline from £25,000", deadline: "Open until sold", contactDetails: "awards@thedrum.com - Awards Partnerships team" },
     ],
   },
   {
@@ -5957,14 +5957,14 @@ const DEMO_EVENTS_V2: EventItem[] = [
     category: "B2B marketing trade",
     date: "25 November 2026",
     audience: "Senior B2B marketers from technology, professional services and industrial brands; CMOs, heads of marketing and agency leaders.",
-    titleDescription: "B2B Marketing (Propolis/Xeim) — definitive UK B2B marketing community and publication, awards in 21st year with strong editorial follow-up on B2B Marketing's website and newsletter.",
+    titleDescription: "B2B Marketing (Propolis/Xeim) - definitive UK B2B marketing community and publication, awards in 21st year with strong editorial follow-up on B2B Marketing's website and newsletter.",
     location: "Evolution London, Battersea Park, London SW11 4NJ",
     confirmStatus: "C",
     authority: 84,
-    relevanceReason: "The definitive night for B2B marketing excellence — directly relevant to agency positioning and client campaigns in adtech, branding and martech. Well-indexed by LLMs as a B2B marketing quality benchmark.",
+    relevanceReason: "The definitive night for B2B marketing excellence - directly relevant to agency positioning and client campaigns in adtech, branding and martech. Well-indexed by LLMs as a B2B marketing quality benchmark.",
     opportunities: [
       { type: "Award entry", cost: "£395–£495 + VAT per category", deadline: "Entries close 26 June 2026", actionable: true },
-      { type: "Sponsorship", cost: "Tables from £1,500; headline sponsorship on request", deadline: "Booking from spring 2026", contactDetails: "events@b2bmarketing.net — B2B Marketing Events team" },
+      { type: "Sponsorship", cost: "Tables from £1,500; headline sponsorship on request", deadline: "Booking from spring 2026", contactDetails: "events@b2bmarketing.net - B2B Marketing Events team" },
     ],
   },
   {
@@ -5973,16 +5973,16 @@ const DEMO_EVENTS_V2: EventItem[] = [
     url: "https://festivalofmarketing.com",
     category: "Marketing & advertising trade",
     date: "14 October 2026",
-    audience: "Senior client-side marketers from the UK's largest consumer and B2B brands — directors, CMOs, brand and digital leads.",
-    titleDescription: "Marketing Week (Xeim) — flagship one-day conference and exhibition. Strong editorial follow-up across Marketing Week's website, podcasts and newsletter.",
+    audience: "Senior client-side marketers from the UK's largest consumer and B2B brands - directors, CMOs, brand and digital leads.",
+    titleDescription: "Marketing Week (Xeim) - flagship one-day conference and exhibition. Strong editorial follow-up across Marketing Week's website, podcasts and newsletter.",
     location: "Tobacco Dock, 50 Porters Walk, London E1W 2SF",
     confirmStatus: "C",
     authority: 82,
-    relevanceReason: "Marketing Week's flagship one-day event with thousands of senior marketers. Speaker pitches openly solicited and the event generates substantial editorial coverage in Marketing Week — a key, well-crawled LLM source.",
+    relevanceReason: "Marketing Week's flagship one-day event with thousands of senior marketers. Speaker pitches openly solicited and the event generates substantial editorial coverage in Marketing Week - a key, well-crawled LLM source.",
     opportunities: [
       { type: "Conference entry", cost: "£395–£595 + VAT (pre-sale opens mid-April 2026)", deadline: "Pre-sale April 2026; standard from June 2026" },
       { type: "Speaker", cost: "Free for accepted speakers; pitches reviewed by Marketing Week editorial", deadline: "Speaker pitches open spring 2026 via festivalofmarketing.com", actionable: true },
-      { type: "Sponsorship", cost: "Headline and session sponsor packages from £15,000", deadline: "Booking from spring 2026", contactDetails: "events@xeim.com — Festival of Marketing team" },
+      { type: "Sponsorship", cost: "Headline and session sponsor packages from £15,000", deadline: "Booking from spring 2026", contactDetails: "events@xeim.com - Festival of Marketing team" },
     ],
   },
   {
@@ -5991,15 +5991,15 @@ const DEMO_EVENTS_V2: EventItem[] = [
     url: "https://atslondon.exchangewire.com",
     category: "Marketing & advertising trade",
     date: "15 September 2026",
-    audience: "700+ senior professionals across media, advertising and commerce — programmatic, retail media and AI-advertising decision-makers.",
-    titleDescription: "ExchangeWire — flagship one-day adtech conference. Strong trade coverage on ExchangeWire's news and podcast channels.",
+    audience: "700+ senior professionals across media, advertising and commerce - programmatic, retail media and AI-advertising decision-makers.",
+    titleDescription: "ExchangeWire - flagship one-day adtech conference. Strong trade coverage on ExchangeWire's news and podcast channels.",
     location: "QEII Convention Centre, Broad Sanctuary, London SW1P 3EE",
     confirmStatus: "C",
     authority: 76,
     relevanceReason: "Premier platform to position adtech PR clients as thought leaders in programmatic, retail media and AI-driven advertising. Panel speaker slots are accessible with strong coverage in ExchangeWire trade media.",
     opportunities: [
       { type: "Conference entry", cost: "£595–£895 + VAT", deadline: "Early-bird closes 30 May 2026" },
-      { type: "Speaker", cost: "Free for accepted speakers; panel-based slots", deadline: "Pitches open through summer 2026", contactDetails: "events@exchangewire.com — ExchangeWire events team" },
+      { type: "Speaker", cost: "Free for accepted speakers; panel-based slots", deadline: "Pitches open through summer 2026", contactDetails: "events@exchangewire.com - ExchangeWire events team" },
       { type: "Sponsorship", cost: "£5,000–£25,000 depending on package", deadline: "Open until sold", contactDetails: "sponsors@exchangewire.com" },
     ],
   },
@@ -6009,8 +6009,8 @@ const DEMO_EVENTS_V2: EventItem[] = [
     url: "https://themartechsummit.com/london",
     category: "B2B marketing trade",
     date: "10–11 November 2026",
-    audience: "500+ senior MarTech, CX and digital strategy leaders — 85% Director level or above, strong EMEA representation.",
-    titleDescription: "Beyond Summits — two-day conference with 38+ sessions and complimentary brand/end-user passes on application. Editorial follow-up via the summit's content hub.",
+    audience: "500+ senior MarTech, CX and digital strategy leaders - 85% Director level or above, strong EMEA representation.",
+    titleDescription: "Beyond Summits - two-day conference with 38+ sessions and complimentary brand/end-user passes on application. Editorial follow-up via the summit's content hub.",
     location: "Park Plaza Westminster Bridge, 200 Westminster Bridge Road, London SE1 7UT",
     confirmStatus: "C",
     authority: 74,
@@ -6026,13 +6026,13 @@ const DEMO_EVENTS_V2: EventItem[] = [
     name: "DigiMarCon UK 2025 (last held)",
     url: "https://digimarconuk.co.uk",
     category: "Marketing & advertising trade",
-    date: "Last held 3–4 September 2025 — 2026 dates unconfirmed at time of search",
+    date: "Last held 3–4 September 2025 - 2026 dates unconfirmed at time of search",
     audience: "Mid-to-senior digital marketing leaders across AdTech, MarTech, SaaS and AI; agency-side and client-side mix.",
-    titleDescription: "DigiMarCon — two-day conference series covering digital marketing strategy. Open speaker submissions with virtual pass options for distributed reach.",
+    titleDescription: "DigiMarCon - two-day conference series covering digital marketing strategy. Open speaker submissions with virtual pass options for distributed reach.",
     location: "InterContinental London Park Lane, 1 Hamilton Place, London W1J 7QY",
     confirmStatus: "U",
     authority: 64,
-    relevanceReason: "Accessible platform for clients to establish thought leadership in digital marketing and advertising. Virtual pass option supports distributed reach. 2026 cycle not yet confirmed — flag with client before committing.",
+    relevanceReason: "Accessible platform for clients to establish thought leadership in digital marketing and advertising. Virtual pass option supports distributed reach. 2026 cycle not yet confirmed - flag with client before committing.",
     opportunities: [
       { type: "Conference entry", cost: "£595–£895 + VAT in-person; virtual pass at lower cost", deadline: "2026 dates not yet confirmed" },
       { type: "Speaker", cost: "Free for accepted speakers; strong acceptance rate", deadline: "Pitches typically open spring of event year", contactDetails: "speakers@digimarconuk.co.uk" },
@@ -6211,7 +6211,7 @@ function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNaviga
     <MarketingPage title={isGuidance ? "Guidance" : "Insights"} eyebrow={<><BookOpen size={12} /> {isGuidance ? "How-to library" : "Library"}</> as any} {...marketingProps}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
         {isGuidance
-          ? "How-to articles and videos for using the AIO Fusion platform — set-up, Authority Reports, Optimiser, Media Research and more."
+          ? "How-to articles and videos for using the AIO Fusion platform - set-up, Authority Reports, Optimiser, Media Research and more."
           : "Practical thinking on AI visibility, GEO, and the future of PR and marketing. Filter to Guidance for platform how-to content."}
       </p>
       <div className="flex flex-wrap items-center gap-2 mb-8">
@@ -6395,7 +6395,7 @@ function PlatformHomePage({
           </p>
         </div>
 
-        {/* LOGIN / SESSION — full-width across the page */}
+        {/* LOGIN / SESSION - full-width across the page */}
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="flex items-center gap-3 mb-6">
@@ -6514,7 +6514,7 @@ function PlatformHomePage({
           </div>
         )}
 
-        {/* AIO MARKETING LOOP — full-width below login so all 7 steps fit */}
+        {/* AIO MARKETING LOOP - full-width below login so all 7 steps fit */}
         <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
           <div className="flex items-center gap-3 mb-6 sm:mb-7">
             <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
@@ -6551,7 +6551,7 @@ function PlatformHomePage({
           </p>
         </div>
 
-        {/* HOW AIO FUSION WORKS — four guidance articles */}
+        {/* HOW AIO FUSION WORKS - four guidance articles */}
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Guidance</span>
