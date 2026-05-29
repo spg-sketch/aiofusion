@@ -163,6 +163,7 @@ const sections: SectionDef[] = [
         label: "100-word company descriptor",
         hint: "Enter or draft the raw ingredients for a new 100-word company descriptor for press use.",
         type: "textarea",
+        wordLimit: 100,
       },
       { id: "h-mh", label: "Message Hierarchy", type: "heading" },
       {
