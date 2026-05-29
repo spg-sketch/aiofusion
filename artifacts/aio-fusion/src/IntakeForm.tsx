@@ -23,6 +23,7 @@ import {
   Linkedin,
   Download,
   Info,
+  Save,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
@@ -770,6 +771,18 @@ export default function IntakePage() {
     window.print();
   };
 
+  const [justSaved, setJustSaved] = useState(false);
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(
+        INTAKE_KEY,
+        JSON.stringify({ formData, duals, dualLists, spokespeople, mediaCategories, intakeStatus, acceptedAt, preOptimiseSnapshot }),
+      );
+    } catch { /* noop */ }
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2500);
+  };
+
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
       {/* Header */}
@@ -778,12 +791,26 @@ export default function IntakePage() {
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
             Project Set-Up
           </h1>
-          <span
-            className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
-            style={{ background: statusBadge.bg, color: statusBadge.color }}
-          >
-            {statusBadge.label} - Project Data
-          </span>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={saveDraft}
+              title="Save your progress so you can finish later"
+              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] px-3.5 py-1.5 rounded-full border-2 transition-colors"
+              style={{
+                borderColor: justSaved ? vars.green : "#102B36",
+                color: justSaved ? vars.green : "#102B36",
+                background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
+              }}
+            >
+              {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
+            </button>
+            <span
+              className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
+              style={{ background: statusBadge.bg, color: statusBadge.color }}
+            >
+              {statusBadge.label} - Project Data
+            </span>
+          </div>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
@@ -1067,7 +1094,12 @@ export default function IntakePage() {
                             </div>
                           ))}
                         </div>
-                        <button onClick={() => addDualListItem(field.id)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Add message</button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => addDualListItem(field.id)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Add message</button>
+                          {list.length > 0 && (
+                            <button onClick={() => removeDualListItem(field.id, list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove message</button>
+                          )}
+                        </div>
                       </div>
                     );
                   }
