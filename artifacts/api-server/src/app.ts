@@ -30,21 +30,38 @@ if (allowedOrigins.length === 0) {
   logger.warn("No CORS origin allowlist configured (REPLIT_DEV_DOMAIN / ALLOWED_ORIGIN). Cross-origin browser requests will be denied.");
 }
 
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) {
-      callback(null, true);
-      return;
+const corsOptionsDelegate: cors.CorsOptionsDelegate<Request> = (req, callback) => {
+  const requestOrigin = req.headers.origin;
+
+  let allowed = false;
+  if (!requestOrigin) {
+    // Non-browser or same-origin requests without an Origin header.
+    allowed = true;
+  } else {
+    // Always allow the app to call its own API (same-origin). This covers the
+    // deployed app, whose own domain is not in the static allowlist.
+    try {
+      if (req.headers.host && new URL(requestOrigin).host === req.headers.host) {
+        allowed = true;
+      }
+    } catch {
+      /* malformed Origin header - treat as not allowed */
     }
-    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS: origin not allowed"));
+    if (!allowed && allowedOrigins.includes(requestOrigin)) {
+      allowed = true;
     }
-  },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
+  }
+
+  if (allowed) {
+    callback(null, {
+      origin: true,
+      methods: ["GET", "POST", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      credentials: true,
+    });
+  } else {
+    callback(new Error("CORS: origin not allowed"));
+  }
 };
 
 app.use(
@@ -66,7 +83,7 @@ app.use(
     },
   }),
 );
-app.use(cors(corsOptions));
+app.use(cors(corsOptionsDelegate));
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
