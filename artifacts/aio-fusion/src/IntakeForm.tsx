@@ -232,20 +232,20 @@ const sections: SectionDef[] = [
       {
         id: "2.5",
         label: "Homepage descriptor or proposed positioning copy",
-        hint: "Enter your current homepage descriptor or your proposed positioning copy - no more than 50 words. (Was Website 5.1.)",
+        hint: "Enter your current homepage descriptor or your proposed positioning copy - no more than 50 words.",
         type: "textarea",
         wordLimit: 50,
       },
       {
         id: "2.6",
         label: "Each core product or service",
-        hint: "For each: name, one-sentence description, primary audience. (Was Website 5.2.)",
+        hint: "For each: name, one-sentence description, primary audience.",
         type: "textarea",
       },
       {
         id: "2.7",
         label: "Search phrases and questions for each product or service area",
-        hint: "Think in questions as well as keywords. (Was Website 5.3.)",
+        hint: "Think in questions as well as keywords.",
         type: "textarea",
       },
     ],
