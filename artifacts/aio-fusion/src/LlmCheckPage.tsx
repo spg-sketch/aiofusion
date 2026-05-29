@@ -260,11 +260,11 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             <Eye size={20} color="#1f748f" />
             <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               Earned Media Visibility Audit
-              <InfoTip text="Sends real questions about your sector to ChatGPT and Claude, then checks whether your brand is mentioned in their answers. This is the test that matters - it measures actual AI citation behaviour." width={260} />
+              <InfoTip text="Sends real questions about the sectors you operate in and the markets you sell to, then checks whether your brand is mentioned by ChatGPT and Claude. This is the test that matters - it measures actual AI citation behaviour." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Score whether AI models mention {activeClient.name} when asked about your sector.
+            Score whether AI models mention {activeClient.name} when asked about the sectors you operate in and the markets you sell to.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
