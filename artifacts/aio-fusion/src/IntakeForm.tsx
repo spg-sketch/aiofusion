@@ -1051,13 +1051,36 @@ export default function IntakePage() {
               <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#102B36" }}>
                 Add your company website and use the "Ask AI to complete this" button under a question to draft an answer. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Always review what it writes.
               </p>
-              <input
-                value={aiWebsite}
-                onChange={(e) => setAiWebsite(e.target.value)}
-                placeholder="yourcompany.com"
-                className="w-full sm:max-w-md px-4 py-2.5 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
-              />
+              {(() => {
+                const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
+                return (
+                  <>
+                    <div className="relative w-full sm:max-w-md">
+                      <input
+                        value={aiWebsite}
+                        onChange={(e) => setAiWebsite(e.target.value)}
+                        placeholder="yourcompany.com"
+                        className="w-full pl-4 pr-11 py-2.5 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
+                        style={{ borderColor: websiteValid ? "#15803D" : "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                      />
+                      {websiteValid && (
+                        <span
+                          className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full"
+                          style={{ width: 22, height: 22, background: "#15803D" }}
+                          aria-hidden="true"
+                        >
+                          <Check size={14} color="white" strokeWidth={3} />
+                        </span>
+                      )}
+                    </div>
+                    {websiteValid && (
+                      <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#15803D" }}>
+                        <Check size={13} strokeWidth={3} /> Website saved. Use "Ask AI to complete this" under a question.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
               {aiError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
               {aiNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
             </div>
