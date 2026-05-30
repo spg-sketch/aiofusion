@@ -100,6 +100,7 @@ import {
   FolderOpen,
   List as ListIcon,
   Clock,
+  Undo2,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -5217,8 +5218,32 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
-        <div className="flex items-center justify-between gap-3 -mb-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
+        <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
+            {!optimised ? (
+              <button
+                type="button"
+                onClick={() => setShowOptimiseBriefModal(true)}
+                disabled={!hasAnyContent}
+                title="Optimise this copy: the LLM rewrites your headline, standfirst and body to be stronger and easier for AI models to cite, weaving in your key messages from Project Data. You can Reject to restore your original."
+                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: vars.teal, background: "rgba(40,150,185,0.08)" }}
+              >
+                <Sparkles size={12} /> Optimise this copy
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={rejectOptimised}
+                title="Reject the AI version and restore the copy you had"
+                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors"
+                style={{ color: "#C94A3E", background: "rgba(201,74,62,0.08)" }}
+              >
+                <Undo2 size={12} /> Reject optimised
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <label htmlFor="editor-font-size" className="text-[11px] font-medium" style={{ color: vars.g500 }}>Font size</label>
             <select
@@ -5355,22 +5380,16 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Content Actions</span>
           </div>
-          {optimised && (
-            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The LLM-optimised copy is shown in red. Use Accept & Archive to sign it off, or Reject Optimised Copy to restore your original draft.">
-              <Info size={12} />
-              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept &amp; Archive or Reject below</span>
-            </div>
-          )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           <button
-            onClick={() => setShowOptimiseBriefModal(true)}
-            disabled={!hasAnyContent || optimised}
+            onClick={acceptAndArchive}
+            disabled={!hasAnyContent}
             className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#C8497A" }}
-            title={optimised ? "Already optimised - reject the optimised copy first to re-run" : "Send the headline, standfirst and body to the LLM optimiser to weave in key messages from Project Data 1.2 & 1.3"}
+            style={{ background: vars.green }}
+            title="Sign off this piece and save it to the Archive"
           >
-            <Sparkles size={13} /> Optimise
+            <FileCheck2 size={13} /> Accept &amp; Archive
           </button>
           <button
             onClick={() => setShowDownloadNotesModal(true)}
@@ -5382,28 +5401,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             <FileText size={13} /> Download Notes
           </button>
           <button
-            onClick={rejectOptimised}
-            disabled={!optimised}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#9C4F47" }}
-            title="Discard the optimised version and restore the original copy you entered"
-          >
-            <XCircle size={13} /> Reject Optimised
-          </button>
-          <button
-            onClick={acceptAndArchive}
-            disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.green }}
-            title="Sign off this piece and save it to the Archive"
-          >
-            <FileCheck2 size={13} /> Accept &amp; Archive
-          </button>
-          <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.teal }}
+            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "#FBF6EC", color: "#102B36" }}
             title="Download the current draft as a plain-text brief"
           >
             <Download size={13} /> Download
