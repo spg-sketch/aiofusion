@@ -215,13 +215,6 @@ const sections: SectionDef[] = [
         type: "textarea",
       },
       {
-        id: "1.11",
-        label: "Ideal customer profile (ICP) - size and type of business you serve",
-        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies. Please also include the cities, towns, counties, states, countries or regions you specifically operate in.",
-        type: "textarea",
-        optional: true,
-      },
-      {
         id: "1.12",
         label: "Locations where you work with clients - cities, countries and regions",
         hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
@@ -300,23 +293,30 @@ const sections: SectionDef[] = [
     fields: [
       {
         id: "3.1",
-        label: "Primary audience(s)",
-        hint: "Include job title, seniority, sector or life stage. List multiple audiences separately.",
+        label: "Ideal Client Persona (Job Role)",
+        hint: "Include job title, seniority, function, sector or life stage. List multiple personas separately.",
         type: "textarea",
       },
       {
         id: "3.2",
+        label: "Ideal Client Profile (Company) - size and type of business you serve",
+        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies. Please also include the cities, towns, counties, states, countries or regions you specifically operate in.",
+        type: "textarea",
+        optional: true,
+      },
+      {
+        id: "3.3",
         label: "What phrases / language does each audience use when searching for your solutions?",
         hint: "Include informal, colloquial, and category-level terms - not just your preferred terminology entered above. These populate your semantic phrase guide.",
         type: "textarea",
       },
       {
-        id: "3.3",
+        id: "3.4",
         label: "What are the most common pain points, frustrations, or unmet needs your audience has before finding you? What challenges do you solve – add as much detail as possible.",
         type: "textarea",
       },
       {
-        id: "3.4",
+        id: "3.5",
         label: "What outcome does your audience most want to achieve by using your product or service? Please provide examples and links to case studies or evidence.",
         type: "textarea",
       },
@@ -1901,10 +1901,11 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
   pushLines(data.formData["2.6"], "2", "2.6", "Core products / services");
 
   // Section 3
-  pushLines(data.formData["3.1"], "3", "3.1", "Primary audience");
-  pushLines(data.formData["3.2"], "3", "3.2", "Audience language");
-  pushLines(data.formData["3.3"], "3", "3.3", "Pain points");
-  pushLines(data.formData["3.4"], "3", "3.4", "Desired outcomes");
+  pushLines(data.formData["3.1"], "3", "3.1", "Ideal client persona (job role)");
+  pushLines(data.formData["3.2"], "3", "3.2", "Ideal client profile (company)");
+  pushLines(data.formData["3.3"], "3", "3.3", "Audience language");
+  pushLines(data.formData["3.4"], "3", "3.4", "Pain points");
+  pushLines(data.formData["3.5"], "3", "3.5", "Desired outcomes");
 
   return out;
 }
@@ -1931,7 +1932,7 @@ export function getTargetSectors(): string[] {
 
 export function getIcpProfile(): string {
   const data = loadIntakeData();
-  const raw = data?.formData?.["1.11"];
+  const raw = data?.formData?.["3.2"];
   return typeof raw === "string" ? raw.trim() : "";
 }
 

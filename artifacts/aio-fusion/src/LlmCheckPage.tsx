@@ -562,8 +562,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
                 <Info size={11} />
                 {getIcpProfile()
-                  ? "Pulled in from your Project Set-Up (section 1.11). Describing the size and type of customer you serve steers results to specialist providers, not the household-name firms."
-                  : "Add this in Project Set-Up (section 1.11), or type it here. It steers results to specialist providers for your size of customer, not the household-name firms."}
+                  ? "Pulled in from your Project Set-Up (section 3.2). Describing the size and type of customer you serve steers results to specialist providers, not the household-name firms."
+                  : "Add this in Project Set-Up (section 3.2), or type it here. It steers results to specialist providers for your size of customer, not the household-name firms."}
               </p>
             </div>
             {error && (

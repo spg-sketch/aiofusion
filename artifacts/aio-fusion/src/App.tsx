@@ -262,6 +262,49 @@ function migrateAssignOwnerlessToAdmin(): void {
   } catch { /* noop */ }
 }
 
+// Section 3 was restructured: the old ICP question (1.11) moved into the
+// Audience section as 3.2, pushing the old 3.2/3.3/3.4 down to 3.3/3.4/3.5.
+// Field ids double as storage keys, so remap existing saved answers to match.
+// Runs at module load (before any component reads intake data) so the renamed
+// keys are in place on the very first render.
+const SECTION3_RENUMBER_FLAG = "aio.intake.section3.renumber.v1";
+function migrateRenumberSection3(): void {
+  try {
+    if (localStorage.getItem(SECTION3_RENUMBER_FLAG) === "1") return;
+    const REMAP: Record<string, string> = { "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" };
+    const remapKeys = (obj: unknown): unknown => {
+      if (!obj || typeof obj !== "object") return obj;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[REMAP[k] ?? k] = v;
+      return out;
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("aio.intake.v2")) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { continue; }
+      if (!parsed || typeof parsed !== "object") continue;
+      if (parsed.formData) parsed.formData = remapKeys(parsed.formData);
+      if (parsed.duals) parsed.duals = remapKeys(parsed.duals);
+      if (parsed.dualLists) parsed.dualLists = remapKeys(parsed.dualLists);
+      if (Array.isArray(parsed.optimisedFields)) {
+        parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => REMAP[id] ?? id);
+      }
+      const snap = parsed.preOptimiseSnapshot as Record<string, unknown> | null | undefined;
+      if (snap && typeof snap === "object") {
+        if (snap.formData) snap.formData = remapKeys(snap.formData);
+        if (snap.duals) snap.duals = remapKeys(snap.duals);
+        if (snap.dualLists) snap.dualLists = remapKeys(snap.dualLists);
+      }
+      localStorage.setItem(key, JSON.stringify(parsed));
+    }
+    localStorage.setItem(SECTION3_RENUMBER_FLAG, "1");
+  } catch { /* noop */ }
+}
+migrateRenumberSection3();
+
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
