@@ -1357,7 +1357,7 @@ export default function IntakePage() {
                   <section.icon size={20} color="#C8497A" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
+                  <div className="text-[13px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
                     Section {section.number}
                   </div>
                   <h2 className="text-xl font-semibold leading-tight" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>
