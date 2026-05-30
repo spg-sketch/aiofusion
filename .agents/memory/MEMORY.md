@@ -1,9 +1,1 @@
-- [LLM visibility audit scoring](llm-audit-scoring.md) — run-level results drive score/byModel (auto-average); probes aggregated by majority vote; one matcher for flag + context.
-- [Print/PDF + intake gating](print-and-intake-gating.md) — global print CSS hides #root so reports use a new window; optional intake fields must set `optional` and be excluded from all completion counters.
-- [ICP-aware audit probing](print-and-intake-gating.md) — Visibility Audit probe questions steer toward niche/boutique providers when an ICP profile is supplied (intake field 1.11 / editable in audit setup).
-- [Hub data storage](hub-data-storage.md) — projects/logos/intake/session are browser localStorage only, not backed up; logos persist via aio.clientLogos.v1; ~5MB cap so guard logo size.
-- [Bluhalo e2e test](bluhalo-e2e-test.md) — reusable intake test at artifacts/aio-fusion/test/; inject full dataset into aio.intake.v2::{activeProjectId} rather than typing; checkbox fields are string[], conditionals need exact option strings.
-- [api-server dev workflow](api-server-dev.md) — dev runs build+start (no watch) so restart after route edits or 404; test on localhost:8080, not the dev domain; AI via Anthropic Replit integration.
-- [Optimise field set sync](optimise-field-sync.md) — per-question Optimise is offered on all free-text answers (textarea/dual/dual-list, excl 1.8/1.9/1.10); frontend derives the set from config but backend has a parallel hardcoded allowlist that must be kept in sync by hand.
-- [Intake field ids are storage keys](intake-field-id-storage-keys.md) — renumbering an intake question is a data migration; ids double as localStorage keys, so add a flag-guarded remap at module load.
-- [undici dispatcher needs undici's own fetch](undici-fetch-dispatcher.md) — custom undici Agent must pair with undici's fetch, not Node's global fetch, or audits fail with "invalid onRequestStart method".
+- [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.

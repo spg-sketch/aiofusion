@@ -76,11 +76,11 @@ interface LlmCheckResult {
   probes: ProbeItem[];
 }
 
-type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
+export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
 
 const savedAuditsKey = (clientId: string) => `aio.savedAudits.${clientId}`;
 
-function loadSavedAudits(clientId: string): SavedAudit[] {
+export function loadSavedAudits(clientId: string): SavedAudit[] {
   try {
     const raw = localStorage.getItem(savedAuditsKey(clientId));
     if (!raw) return [];
@@ -251,7 +251,7 @@ function highlightName(text: string, name: string): React.ReactNode {
   );
 }
 
-export default function LlmCheckPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (p: string) => void }) {
+export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId, onConsumePending }: { activeClient: Client; onNavigate?: (p: string) => void; pendingAuditId?: string | null; onConsumePending?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
@@ -314,6 +314,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
     }
     setSavedAudits(next);
     setJustSaved(true);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 
   function openSavedAudit(a: SavedAudit) {
@@ -330,7 +331,16 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
       return;
     }
     setSavedAudits(next);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
+
+  useEffect(() => {
+    if (!pendingAuditId) return;
+    const match = savedAudits.find((a) => a.id === pendingAuditId);
+    if (match) openSavedAudit(match);
+    onConsumePending?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAuditId, savedAudits]);
 
   async function runCheck() {
     setLoading(true);

@@ -3,7 +3,7 @@ import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
-import LlmCheckPage from "./LlmCheckPage";
+import LlmCheckPage, { loadSavedAudits } from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
 import {
   type Session as LocalSession,
@@ -98,6 +98,7 @@ import {
   TrendingDown,
   FolderOpen,
   List as ListIcon,
+  Clock,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -635,6 +636,7 @@ function SidebarContent({
   onBackToClients,
   onItemClick,
   onLogoUpdate,
+  onOpenSavedAudit,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -642,7 +644,9 @@ function SidebarContent({
   onBackToClients: () => void;
   onItemClick?: () => void;
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
+  onOpenSavedAudit?: (id: string) => void;
 }) {
+  const recentAudits = loadSavedAudits(activeClient.id).slice(0, 3);
   const handleLogoUpload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onLogoUpdate) return;
@@ -727,8 +731,8 @@ function SidebarContent({
                 const isActive = currentPage === item.id;
                 const isLocked = !!item.locked;
                 return (
+                  <div key={item.id}>
                   <button
-                    key={item.id}
                     onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
                     disabled={isLocked}
                     aria-disabled={isLocked}
@@ -759,6 +763,27 @@ function SidebarContent({
                     </div>
                     {isActive && <ChevronRight size={14} className="mt-0.5 flex-shrink-0" />}
                   </button>
+                  {item.id === "llm-check" && recentAudits.length > 0 && (
+                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                      {recentAudits.map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => { onOpenSavedAudit?.(a.id); onItemClick?.(); }}
+                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          title={`Open saved audit (${a.result.visibilityScore}% visibility)`}
+                        >
+                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                            {new Date(a.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(a.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                            {a.result.visibilityScore}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  </div>
                 );
               })}
             </div>
@@ -786,12 +811,14 @@ function Sidebar({
   activeClient,
   onBackToClients,
   onLogoUpdate,
+  onOpenSavedAudit,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
   activeClient: Client;
   onBackToClients: () => void;
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
+  onOpenSavedAudit?: (id: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -808,13 +835,13 @@ function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} />
           </div>
         </div>
       )}
 
       <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} />
       </aside>
     </>
   );
@@ -7181,6 +7208,13 @@ function App() {
   const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
+  const [, setSavedAuditsVersion] = useState(0);
+  useEffect(() => {
+    const handler = () => setSavedAuditsVersion((v) => v + 1);
+    window.addEventListener("aio:saved-audits-changed", handler);
+    return () => window.removeEventListener("aio:saved-audits-changed", handler);
+  }, []);
   const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
   const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
@@ -7514,6 +7548,7 @@ function App() {
         activeClient={activeClient}
         onBackToClients={() => setActiveClient(null)}
         onLogoUpdate={handleLogoUpdate}
+        onOpenSavedAudit={(id) => { setPendingAuditId(id); setCurrentPage("llm-check"); }}
       />
       <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#FBF6EC" }}>
         {currentPage === "dashboard" && (
@@ -7523,7 +7558,7 @@ function App() {
         {currentPage === "diagnostic" && (
           <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
-        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} />}
+        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
