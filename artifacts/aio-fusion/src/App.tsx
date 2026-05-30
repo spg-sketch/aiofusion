@@ -7207,8 +7207,64 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
   );
 }
 
+// --- URL <-> view mapping for the public marketing pages ------------------
+// The app navigates via internal state, but the public pages should also live
+// at real URLs (e.g. /about, /for-agents) so they can be linked to, typed in
+// directly, refreshed and shared. These maps translate between the two.
+type PublicView =
+  | "landing" | "about" | "contact" | "insights"
+  | "for-inhouse" | "for-agencies" | "for-agents";
+
+const VIEW_TO_SLUG: Record<string, string> = {
+  landing: "",
+  about: "about",
+  contact: "contact",
+  insights: "insights",
+  "for-inhouse": "for-inhouse",
+  "for-agencies": "for-agencies",
+  "for-agents": "for-agents",
+};
+
+// Canonical slugs plus a few friendly aliases so common guesses resolve too.
+const SLUG_TO_VIEW: Record<string, PublicView> = {
+  "": "landing",
+  home: "landing",
+  about: "about",
+  contact: "contact",
+  insights: "insights",
+  "for-inhouse": "for-inhouse",
+  inhouse: "for-inhouse",
+  "in-house": "for-inhouse",
+  "for-agencies": "for-agencies",
+  agencies: "for-agencies",
+  "for-agents": "for-agents",
+  "ai-agents": "for-agents",
+  aiagents: "for-agents",
+};
+
+function appBase(): string {
+  // import.meta.env.BASE_URL always ends with a trailing slash ("/" or "/foo/").
+  return import.meta.env.BASE_URL || "/";
+}
+
+function slugFromLocation(): string {
+  const base = appBase().replace(/\/+$/, ""); // "" or "/foo"
+  let p = window.location.pathname;
+  if (base && (p === base || p.startsWith(base + "/"))) p = p.slice(base.length);
+  return p.replace(/^\/+/, "").replace(/\/+$/, "").split("/")[0].toLowerCase();
+}
+
+function publicViewFromLocation(): PublicView | null {
+  return SLUG_TO_VIEW[slugFromLocation()] ?? null;
+}
+
+function viewToUrl(v: string): string {
+  // Non-public (platform/admin) views have no dedicated URL; keep them at base.
+  return appBase() + (VIEW_TO_SLUG[v] ?? "");
+}
+
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">("landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">(() => publicViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
@@ -7278,9 +7334,10 @@ function App() {
 
   useEffect(() => {
     const navState = { __aioNav: true, view, currentPage };
+    const url = viewToUrl(view);
     if (!navInitDone.current) {
       navInitDone.current = true;
-      window.history.replaceState(navState, "");
+      window.history.replaceState(navState, "", url);
       return;
     }
     if (skipHistoryPush.current) {
@@ -7289,16 +7346,20 @@ function App() {
     }
     if (replaceNextNav.current) {
       replaceNextNav.current = false;
-      window.history.replaceState(navState, "");
+      window.history.replaceState(navState, "", url);
       return;
     }
-    window.history.pushState(navState, "");
+    window.history.pushState(navState, "", url);
   }, [view, currentPage]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
       const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string } | null;
-      const targetView = (s && s.__aioNav && s.view ? s.view : "landing") as typeof view;
+      // Prefer the navigation state we pushed; fall back to deriving a public
+      // page from the URL (e.g. a directly typed /about or a forward nav).
+      const targetView = (
+        s && s.__aioNav && s.view ? s.view : (publicViewFromLocation() ?? "landing")
+      ) as typeof view;
       const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
