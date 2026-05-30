@@ -1040,8 +1040,11 @@ export default function IntakePage() {
             </span>
           </div>
         </div>
+        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: vars.g500 }}>
+          Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information becomes your core Project Data, which helps optimise your future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
+        </p>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information will become your core Project Data that will help optimise future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
+          Setting up your company information here is vitally important, and it is a valuable investment in the success of your GEO strategy. We recommend setting aside around two hours to complete it properly. There is a copy icon next to each question, so if you already have an LLM trained on your business information, you can use it to help you answer faster.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
@@ -1170,6 +1173,90 @@ export default function IntakePage() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Project Data Actions - moved under Sections (stacked for the narrow column) */}
+          <div className="mt-6 rounded-2xl p-4 no-print" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+            </div>
+            {intakeStatus === "Optimised" && (
+              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
+                <Info size={12} className="flex-shrink-0 mt-0.5" />
+                <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
+              </div>
+            )}
+
+            {/* Group 1 - Optimise and sign off the data */}
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Optimise &amp; sign off</p>
+            <div className="grid grid-cols-1 gap-2 mb-4">
+              <button
+                onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
+                disabled={!isFullyComplete}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#C8497A" }}
+                title={isFullyComplete ? "Use AI to optimise the messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4" : `Complete every field across all sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
+              >
+                <Sparkles size={13} /> Optimise with AI
+              </button>
+              <button
+                onClick={acceptProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                style={{ background: vars.green }}
+                title="Sign off the Project Data and save it to the Project Data archive"
+              >
+                <FileCheck2 size={13} /> Accept
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Discard the AI-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
+                    rejectOptimised();
+                  }
+                }}
+                disabled={intakeStatus !== "Optimised"}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#9C4F47" }}
+                title="Discard the AI-optimised copy and go back to your original draft"
+              >
+                <XCircle size={13} /> Reject Optimised
+              </button>
+            </div>
+
+            {/* Group 2 - Manage and export the data */}
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Manage &amp; export</p>
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                onClick={editProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                style={{ background: "#C94A3E" }}
+                title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
+              >
+                <Pencil size={13} /> Edit
+              </button>
+              <button
+                onClick={downloadProjectData}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
+                style={{ background: "#FBF6EC", color: "#102B36" }}
+                title="Open the print dialog so you can save the full Project Data as a PDF - every answer is shown in full"
+              >
+                <Download size={13} /> Download as PDF
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Start a brand-new project? This will permanently delete everything you have entered in this Project Set-Up. This cannot be undone.")) {
+                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
+                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
+                    setCompleted(new Set()); setActiveSection(0); setTrack("pr");
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                style={{ background: "transparent", color: "#FBE3ED", borderColor: "rgba(200,73,122,0.6)" }}
+                title="Clear everything and start a brand-new project (deletes all current data)"
+              >
+                <Plus size={13} /> Create New
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1505,98 +1592,6 @@ export default function IntakePage() {
                   </button>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Project Data Actions - bottom panel, sits after data entry per Patrick's spec */}
-      <div className="mt-8 rounded-2xl p-4 sm:p-5 no-print" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
-          </div>
-          {intakeStatus === "Optimised" && (
-            <div className="flex items-center gap-2 text-[11px] font-medium px-3 py-1.5 rounded-full" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
-              <Info size={12} />
-              <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-4">
-          {/* Group 1 - Optimise and sign off the data */}
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Optimise &amp; sign off</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
-                disabled={!isFullyComplete}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "#C8497A" }}
-                title={isFullyComplete ? "Use AI to optimise the messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4" : `Complete every field across all sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
-              >
-                <Sparkles size={13} /> Optimise with AI
-              </button>
-              <button
-                onClick={acceptProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
-                style={{ background: vars.green }}
-                title="Sign off the Project Data and save it to the Project Data archive"
-              >
-                <FileCheck2 size={13} /> Accept
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm("Discard the AI-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
-                    rejectOptimised();
-                  }
-                }}
-                disabled={intakeStatus !== "Optimised"}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "#9C4F47" }}
-                title="Discard the AI-optimised copy and go back to your original draft"
-              >
-                <XCircle size={13} /> Reject Optimised
-              </button>
-            </div>
-          </div>
-
-          {/* Group 2 - Manage and export the data */}
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Manage &amp; export</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                onClick={editProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
-                style={{ background: "#C94A3E" }}
-                title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
-              >
-                <Pencil size={13} /> Edit
-              </button>
-              <button
-                onClick={downloadProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
-                style={{ background: "#FBF6EC", color: "#102B36" }}
-                title="Open the print dialog so you can save the full Project Data as a PDF - every answer is shown in full"
-              >
-                <Download size={13} /> Download as PDF
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm("Start a brand-new project? This will permanently delete everything you have entered in this Project Set-Up. This cannot be undone.")) {
-                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
-                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
-                    setCompleted(new Set()); setActiveSection(0); setTrack("pr");
-                  }
-                }}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
-                style={{ background: "transparent", color: "#FBE3ED", borderColor: "rgba(200,73,122,0.6)" }}
-                title="Clear everything and start a brand-new project (deletes all current data)"
-              >
-                <Plus size={13} /> Create New
-              </button>
             </div>
           </div>
         </div>
