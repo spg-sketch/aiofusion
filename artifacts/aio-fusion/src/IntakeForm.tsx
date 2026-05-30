@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect, useMemo } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -968,9 +967,148 @@ export default function IntakePage() {
   };
 
   const downloadProjectData = () => {
-    // Demo: browser print dialog → user picks "Save as PDF". Works for any
-    // status (incomplete / optimised / accepted) per Patrick's spec.
-    window.print();
+    // Build a self-contained, branded document in a new window and trigger the
+    // browser's print / "Save as PDF" dialog on it. This keeps the Planner where
+    // it is, carries the AIO Fusion and client logos, and avoids the blank lead
+    // page the old hidden-print-view approach produced.
+    const esc = (s: unknown): string =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const NP = `<span class="np">Not provided</span>`;
+
+    const valueHtml = (field: FieldDef): string => {
+      if (field.id === "1.8") {
+        if (!spokespeople.length) return NP;
+        return `<ul>${spokespeople
+          .map(
+            (s) =>
+              `<li>${esc([s.name, s.title, s.expertise].filter(Boolean).join(", "))}${s.linkedin ? ` (${esc(s.linkedin)})` : ""}</li>`,
+          )
+          .join("")}</ul>`;
+      }
+      if (field.id === "1.9") return businessCategories.length ? esc(businessCategories.join(", ")) : NP;
+      if (field.id === "1.10") return audienceCategories.length ? esc(audienceCategories.join(", ")) : NP;
+      if (field.type === "dual") {
+        const v = duals[field.id];
+        return v && (v.short || v.long)
+          ? `<div><strong>Short:</strong> ${esc(v.short || "-")}</div><div><strong>Long:</strong> ${esc(v.long || "-")}</div>`
+          : NP;
+      }
+      if (field.type === "dual-list") {
+        const items = (dualLists[field.id] || []).filter((it) => it.short || it.long);
+        return items.length
+          ? `<ul>${items
+              .map((it) => `<li><strong>${esc(it.short || "-")}</strong>${it.long ? ` - ${esc(it.long)}` : ""}</li>`)
+              .join("")}</ul>`
+          : NP;
+      }
+      if (field.type === "checkbox") {
+        const v = formData[field.id];
+        return Array.isArray(v) && v.length ? esc(v.join("; ")) : NP;
+      }
+      const v = formData[field.id];
+      return typeof v === "string" && v.trim() ? esc(v) : NP;
+    };
+
+    const fieldHtml = (field: FieldDef): string => {
+      if (!fieldApplies(field, formData)) return "";
+      if (field.type === "heading") return `<h3>${esc(field.label)}</h3>`;
+      const idPrefix = /^\d/.test(field.id) ? `${esc(field.id)}&nbsp;&nbsp;` : "";
+      return `<div class="f"><div class="fl">${idPrefix}${esc(field.label)}</div><div class="v">${valueHtml(field)}</div></div>`;
+    };
+
+    const sectionsHtml = sections
+      .map((sec) => {
+        const inner = sec.fields.map(fieldHtml).join("");
+        return `<div class="sec"><h2>Section ${esc(sec.number)}: ${esc(sec.title)}</h2>${inner}</div>`;
+      })
+      .join("");
+
+    const title = (formData["4.1"] as string)?.trim() || "Project Data";
+    const statusLine = `Status: ${esc(intakeStatus)}${
+      acceptedAt && intakeStatus === "Accepted"
+        ? ` (accepted ${esc(new Date(acceptedAt).toLocaleDateString("en-GB"))})`
+        : ""
+    }`;
+
+    let clientLogo: string | null = null;
+    try {
+      const pid = getActiveProjectId();
+      if (pid) {
+        const map = JSON.parse(localStorage.getItem("aio.clientLogos.v1") || "{}");
+        const raw = typeof map[pid] === "string" ? map[pid] : null;
+        clientLogo = raw && /^(data:image\/|https:\/\/)/i.test(raw) ? raw : null;
+      }
+    } catch {
+      /* noop */
+    }
+
+    const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
+    const clientLogoBlock = clientLogo
+      ? `<img src="${esc(clientLogo)}" alt="Client logo" class="client-logo" />`
+      : "";
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      alert("Pop-up blocked - allow pop-ups for this site to download the PDF.");
+      return;
+    }
+
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(title)} - AIO Fusion Project Data</title>
+<style>
+  @page { margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1C1C1C; margin: 0; }
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 2px solid #C8497A; padding-bottom: 14px; margin-bottom: 18px; }
+  .aio-logo { height: 40px; width: auto; }
+  .client-logo { height: 46px; max-width: 160px; object-fit: contain; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 22px; color: #102B36; margin: 0 0 4px; }
+  .status { font-size: 11px; color: #6B7280; margin: 0 0 22px; }
+  .sec { margin-bottom: 22px; break-inside: avoid; }
+  h2 { font-family: Georgia, "Times New Roman", serif; font-size: 15px; color: #102B36; margin: 0 0 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+  h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #C8497A; margin: 14px 0 6px; }
+  .f { margin-bottom: 10px; break-inside: avoid; }
+  .fl { font-size: 12px; font-weight: 700; color: #102B36; margin-bottom: 2px; }
+  .v { font-size: 12px; line-height: 1.5; color: #1C1C1C; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+  .v ul { padding-left: 16px; margin: 0; }
+  .v li { margin-bottom: 3px; }
+  .np { color: #9CA3AF; font-style: italic; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head>
+<body>
+  <div class="header">
+    <img src="${aioLogo}" alt="AIO Fusion" class="aio-logo" />
+    ${clientLogoBlock}
+  </div>
+  <h1>${esc(title)}</h1>
+  <p class="status">AIO Fusion Project Data &middot; ${statusLine}</p>
+  ${sectionsHtml}
+  <script>
+    (function () {
+      var fired = false;
+      function go() { if (fired) return; fired = true; try { window.focus(); window.print(); } catch (e) {} }
+      var imgs = Array.prototype.slice.call(document.images);
+      var pending = imgs.length;
+      if (pending === 0) { go(); return; }
+      function one() { if (--pending <= 0) go(); }
+      imgs.forEach(function (img) {
+        if (img.complete) { one(); }
+        else { img.addEventListener("load", one); img.addEventListener("error", one); }
+      });
+      setTimeout(go, 2500);
+    })();
+  </script>
+</body></html>`;
+
+    w.document.write(html);
+    w.document.close();
   };
 
   const [justSaved, setJustSaved] = useState(false);
@@ -985,75 +1123,6 @@ export default function IntakePage() {
     setTimeout(() => setJustSaved(false), 2500);
   };
 
-  // Printable value for a single field - used by the PDF / print view so that
-  // every answer is shown in full, no matter how long.
-  const emptyPrintValue = <span style={{ color: "#9CA3AF", fontStyle: "italic" }}>Not provided</span>;
-  const renderPrintField = (field: FieldDef) => {
-    if (!fieldApplies(field, formData)) return null;
-    if (field.type === "heading") {
-      return (
-        <h3 key={field.id} style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#C8497A", marginTop: 14, marginBottom: 6 }}>
-          {field.label}
-        </h3>
-      );
-    }
-    let valueNode: ReactNode = emptyPrintValue;
-    if (field.id === "1.8") {
-      valueNode = spokespeople.length
-        ? (
-          <ul style={{ paddingLeft: 16, margin: 0 }}>
-            {spokespeople.map((s, i) => (
-              <li key={i} style={{ marginBottom: 3 }}>
-                {[s.name, s.title, s.expertise].filter(Boolean).join(", ")}
-                {s.linkedin ? ` (${s.linkedin})` : ""}
-              </li>
-            ))}
-          </ul>
-        )
-        : emptyPrintValue;
-    } else if (field.id === "1.9") {
-      valueNode = businessCategories.length ? businessCategories.join(", ") : emptyPrintValue;
-    } else if (field.id === "1.10") {
-      valueNode = audienceCategories.length ? audienceCategories.join(", ") : emptyPrintValue;
-    } else if (field.type === "dual") {
-      const v = duals[field.id];
-      valueNode = v && (v.short || v.long)
-        ? (
-          <>
-            <div><strong>Short:</strong> {v.short || "-"}</div>
-            <div><strong>Long:</strong> {v.long || "-"}</div>
-          </>
-        )
-        : emptyPrintValue;
-    } else if (field.type === "dual-list") {
-      const items = (dualLists[field.id] || []).filter((it) => it.short || it.long);
-      valueNode = items.length
-        ? (
-          <ul style={{ paddingLeft: 16, margin: 0 }}>
-            {items.map((it, i) => (
-              <li key={i} style={{ marginBottom: 3 }}>
-                <strong>{it.short || "-"}</strong>{it.long ? ` - ${it.long}` : ""}
-              </li>
-            ))}
-          </ul>
-        )
-        : emptyPrintValue;
-    } else if (field.type === "checkbox") {
-      const v = formData[field.id];
-      valueNode = Array.isArray(v) && v.length ? v.join("; ") : emptyPrintValue;
-    } else {
-      const v = formData[field.id] as string | undefined;
-      valueNode = v && v.trim() ? v : emptyPrintValue;
-    }
-    return (
-      <div key={field.id} style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#102B36", marginBottom: 2 }}>
-          {/^\d/.test(field.id) ? `${field.id}  ` : ""}{field.label}
-        </div>
-        <div className="print-value" style={{ fontSize: 12, lineHeight: 1.5, color: "#1C1C1C" }}>{valueNode}</div>
-      </div>
-    );
-  };
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
@@ -1623,30 +1692,6 @@ export default function IntakePage() {
           </div>
         </div>
       </div>
-
-      {/* Printable Project Data view - rendered into document.body via a portal so
-          that, when saving as PDF, the rest of the app can be hidden cleanly and
-          every answer prints in full (no clipping). Hidden on screen. */}
-      {createPortal(
-        <div className="print-only">
-          <h1 style={{ fontFamily: "'Alice', Georgia, serif", fontSize: 22, color: "#102B36", marginBottom: 4 }}>
-            {(formData["4.1"] as string)?.trim() || "Project Data"}
-          </h1>
-          <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 16, borderBottom: "1px solid #E5E7EB", paddingBottom: 10 }}>
-            AIO Fusion Project Data &middot; Status: {intakeStatus}
-            {acceptedAt && intakeStatus === "Accepted" ? ` (accepted ${new Date(acceptedAt).toLocaleDateString()})` : ""}
-          </div>
-          {sections.map((sec) => (
-            <div key={sec.id} className="print-section" style={{ marginBottom: 22 }}>
-              <h2 style={{ fontFamily: "'Alice', Georgia, serif", fontSize: 15, color: "#102B36", marginBottom: 8, borderBottom: "2px solid #C8497A", paddingBottom: 4 }}>
-                Section {sec.number}: {sec.title}
-              </h2>
-              {sec.fields.map(renderPrintField)}
-            </div>
-          ))}
-        </div>,
-        document.body,
-      )}
 
       {/* Trade Media Categories picker */}
       {pickerTarget !== null && (() => {
