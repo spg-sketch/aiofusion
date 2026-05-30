@@ -75,6 +75,7 @@ import {
   Upload,
   Calendar,
   Check,
+  Save,
   Circle,
   Zap,
   Mail,
@@ -637,6 +638,7 @@ function SidebarContent({
   onItemClick,
   onLogoUpdate,
   onOpenSavedAudit,
+  onOpenSavedDiagnostic,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -645,8 +647,10 @@ function SidebarContent({
   onItemClick?: () => void;
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
   onOpenSavedAudit?: (id: string) => void;
+  onOpenSavedDiagnostic?: (id: string) => void;
 }) {
   const recentAudits = loadSavedAudits(activeClient.id).slice(0, 3);
+  const recentDiagnostics = loadSavedDiagnostics(activeClient.id).slice(0, 3);
   const handleLogoUpload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onLogoUpdate) return;
@@ -783,6 +787,26 @@ function SidebarContent({
                       ))}
                     </div>
                   )}
+                  {item.id === "diagnostic" && recentDiagnostics.length > 0 && (
+                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                      {recentDiagnostics.map((d) => (
+                        <button
+                          key={d.id}
+                          onClick={() => { onOpenSavedDiagnostic?.(d.id); onItemClick?.(); }}
+                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          title={`Open saved audit (${d.result.overallScore}% readiness)`}
+                        >
+                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                            {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                            {d.result.overallScore}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   </div>
                 );
               })}
@@ -812,6 +836,7 @@ function Sidebar({
   onBackToClients,
   onLogoUpdate,
   onOpenSavedAudit,
+  onOpenSavedDiagnostic,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -819,6 +844,7 @@ function Sidebar({
   onBackToClients: () => void;
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
   onOpenSavedAudit?: (id: string) => void;
+  onOpenSavedDiagnostic?: (id: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -835,13 +861,13 @@ function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} />
           </div>
         </div>
       )}
 
       <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} />
       </aside>
     </>
   );
@@ -1610,12 +1636,40 @@ type DiagnosticResult = {
   };
 };
 
+export type SavedDiagnostic = { id: string; savedAt: string; result: DiagnosticResult };
+
+const savedDiagnosticsKey = (clientId: string) => `aio.savedDiagnostics.${clientId}`;
+
+function loadSavedDiagnostics(clientId: string): SavedDiagnostic[] {
+  try {
+    const raw = localStorage.getItem(savedDiagnosticsKey(clientId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedDiagnostics(clientId: string, list: SavedDiagnostic[]): boolean {
+  try {
+    localStorage.setItem(savedDiagnosticsKey(clientId), JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function DiagnosticPage({
   onNavigate,
   activeClient,
+  pendingDiagnosticId,
+  onConsumePendingDiagnostic,
 }: {
   onNavigate: (p: string) => void;
   activeClient: Client;
+  pendingDiagnosticId?: string | null;
+  onConsumePendingDiagnostic?: () => void;
 }) {
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
@@ -1623,6 +1677,45 @@ function DiagnosticPage({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [showBrief, setShowBrief] = useState(false);
+  const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
+    setResult(null);
+    setError(null);
+    setJustSaved(false);
+  }, [activeClient.id]);
+
+  useEffect(() => {
+    if (!pendingDiagnosticId) return;
+    const match = savedDiagnostics.find((d) => d.id === pendingDiagnosticId);
+    if (match) {
+      setResult(match.result);
+      setError(null);
+      setJustSaved(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    onConsumePendingDiagnostic?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDiagnosticId, savedDiagnostics]);
+
+  function saveDiagnostic() {
+    if (!result || justSaved) return;
+    const entry: SavedDiagnostic = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      savedAt: new Date().toISOString(),
+      result,
+    };
+    const next = [entry, ...savedDiagnostics];
+    if (!persistSavedDiagnostics(activeClient.id, next)) {
+      alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
+      return;
+    }
+    setSavedDiagnostics(next);
+    setJustSaved(true);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
 
   const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
 
@@ -1668,6 +1761,7 @@ Engines used:
       }
       const data = await resp.json();
       setResult(data);
+      setJustSaved(false);
     } catch (err: any) {
       setError(err.message || "Analysis failed. Please try again.");
     } finally {
@@ -1810,9 +1904,14 @@ Engines used:
                 </p>
               )}
             </div>
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
-              <Download size={14} /> Save as PDF
-            </button>
+            <div className="flex items-center gap-2 self-start flex-shrink-0">
+              <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+                {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
+              </button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+                <Download size={14} /> Print / PDF
+              </button>
+            </div>
           </div>
           {result.sources && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t" style={{ borderColor: vars.g100 }}>
@@ -7260,6 +7359,7 @@ function App() {
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
+  const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
   const [, setSavedAuditsVersion] = useState(0);
   useEffect(() => {
     const handler = () => setSavedAuditsVersion((v) => v + 1);
@@ -7595,6 +7695,7 @@ function App() {
         onBackToClients={() => setActiveClient(null)}
         onLogoUpdate={handleLogoUpdate}
         onOpenSavedAudit={(id) => { setPendingAuditId(id); setCurrentPage("llm-check"); }}
+        onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); setCurrentPage("diagnostic"); }}
       />
       <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#FBF6EC" }}>
         {currentPage === "dashboard" && (
@@ -7602,7 +7703,7 @@ function App() {
         )}
         {currentPage === "intake" && <IntakePage />}
         {currentPage === "diagnostic" && (
-          <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} />
+          <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
         )}
         {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
         {currentPage === "optimiser" && (
