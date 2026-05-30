@@ -1689,6 +1689,9 @@ Engines used:
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             Score your site for AI agent visibility and citation.
           </p>
+          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: vars.g500 }}>
+            This assessment looks at your website the way AI tools like ChatGPT, Claude and Google's AI Overviews now read it. We check the things that decide whether an AI will trust your site, understand what you do, and name you in its answers: how your content is structured, how clearly your brand and services are described, the behind the scenes markup that helps machines make sense of the page, and the signals that show you are a credible source. You get a single readiness score and a short, prioritised list of fixes, so you can see exactly where you stand today and what to improve to be mentioned more often when people ask AI about your sector.
+          </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="max-w-lg mx-auto">
