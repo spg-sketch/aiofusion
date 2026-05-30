@@ -7216,6 +7216,16 @@ function App() {
   // history stack so Back moves through previous in-app screens instead.
   const navInitDone = useRef(false);
   const skipHistoryPush = useRef(false);
+  // When a navigation should overwrite the current history entry instead of
+  // adding a new one (e.g. an access-denied redirect), set this first.
+  const replaceNextNav = useRef(false);
+  // Always-current copies of the nav state so the popstate handler (which has
+  // no deps) can tell whether a pop actually changes anything.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const pageRef = useRef(currentPage);
+  pageRef.current = currentPage;
+
   useEffect(() => {
     const navState = { __aioNav: true, view, currentPage };
     if (!navInitDone.current) {
@@ -7227,26 +7237,41 @@ function App() {
       skipHistoryPush.current = false;
       return;
     }
+    if (replaceNextNav.current) {
+      replaceNextNav.current = false;
+      window.history.replaceState(navState, "");
+      return;
+    }
     window.history.pushState(navState, "");
   }, [view, currentPage]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
       const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string } | null;
-      skipHistoryPush.current = true;
-      if (s && s.__aioNav) {
-        setView((s.view as typeof view) ?? "landing");
-        if (s.currentPage) setCurrentPage(s.currentPage);
-      } else {
-        // Backed past the first in-app entry: keep them on the site at the
-        // landing page rather than dropping them out unexpectedly.
-        setView("landing");
+      const targetView = (s && s.__aioNav && s.view ? s.view : "landing") as typeof view;
+      const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
+      // Only apply (and arm the skip guard) when something actually changes,
+      // otherwise the guard could stay armed and swallow the next real push.
+      if (targetView !== viewRef.current || targetPage !== pageRef.current) {
+        skipHistoryPush.current = true;
+        setView(targetView);
+        setCurrentPage(targetPage);
       }
       window.scrollTo(0, 0);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // Access guard for the admin-only users page. Done in an effect (not during
+  // render) and as a history-replacing redirect so Back does not loop back
+  // onto the denied page.
+  useEffect(() => {
+    if (view === "users-admin" && (!session || session.role !== "admin")) {
+      replaceNextNav.current = true;
+      setView("platform-home");
+    }
+  }, [view, session]);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
@@ -7333,7 +7358,6 @@ function App() {
   }
   if (view === "users-admin") {
     if (!session || session.role !== "admin") {
-      setTimeout(() => setView("platform-home"), 0);
       return null;
     }
     return <UsersAdminPage session={session} onBack={() => setView("platform-home")} />;
