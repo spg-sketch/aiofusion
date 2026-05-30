@@ -639,6 +639,8 @@ function SidebarContent({
   onLogoUpdate,
   onOpenSavedAudit,
   onOpenSavedDiagnostic,
+  onOpenSavedContentGeo,
+  onOpenSavedTechGeo,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -648,9 +650,13 @@ function SidebarContent({
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
   onOpenSavedAudit?: (id: string) => void;
   onOpenSavedDiagnostic?: (id: string) => void;
+  onOpenSavedContentGeo?: (id: string) => void;
+  onOpenSavedTechGeo?: (id: string) => void;
 }) {
   const recentAudits = loadSavedAudits(activeClient.id).slice(0, 3);
   const recentDiagnostics = loadSavedDiagnostics(activeClient.id).slice(0, 3);
+  const recentContentGeo = loadSavedScored(contentGeoKey(activeClient.id)).slice(0, 3);
+  const recentTechGeo = loadSavedScored(techGeoKey(activeClient.id)).slice(0, 3);
   const handleLogoUpload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onLogoUpdate) return;
@@ -807,6 +813,46 @@ function SidebarContent({
                       ))}
                     </div>
                   )}
+                  {item.id === "geo-content" && recentContentGeo.length > 0 && (
+                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                      {recentContentGeo.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => { onOpenSavedContentGeo?.(s.id); onItemClick?.(); }}
+                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          title={`Open saved audit (${s.score}% readiness)`}
+                        >
+                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                            {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                            {s.score}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {item.id === "seo-audit" && recentTechGeo.length > 0 && (
+                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                      {recentTechGeo.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => { onOpenSavedTechGeo?.(s.id); onItemClick?.(); }}
+                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          title={`Open saved audit (${s.score}% readiness)`}
+                        >
+                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                            {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                            {s.score}%
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   </div>
                 );
               })}
@@ -837,6 +883,8 @@ function Sidebar({
   onLogoUpdate,
   onOpenSavedAudit,
   onOpenSavedDiagnostic,
+  onOpenSavedContentGeo,
+  onOpenSavedTechGeo,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -845,6 +893,8 @@ function Sidebar({
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
   onOpenSavedAudit?: (id: string) => void;
   onOpenSavedDiagnostic?: (id: string) => void;
+  onOpenSavedContentGeo?: (id: string) => void;
+  onOpenSavedTechGeo?: (id: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -861,13 +911,13 @@ function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
           </div>
         </div>
       )}
 
       <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
       </aside>
     </>
   );
@@ -1654,6 +1704,31 @@ function loadSavedDiagnostics(clientId: string): SavedDiagnostic[] {
 function persistSavedDiagnostics(clientId: string, list: SavedDiagnostic[]): boolean {
   try {
     localStorage.setItem(savedDiagnosticsKey(clientId), JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export type SavedScored = { id: string; savedAt: string; score: number };
+
+export const contentGeoKey = (clientId: string) => `aio.savedContentGeo.${clientId}`;
+export const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
+
+function loadSavedScored(storageKey: string): SavedScored[] {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedScored(storageKey: string, list: SavedScored[]): boolean {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(list));
     return true;
   } catch {
     return false;
@@ -4663,10 +4738,20 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   );
 }
 
-function GeoContentPage() {
+function GeoContentPage({
+  activeClient,
+  pendingContentGeoId,
+  onConsumePendingContentGeo,
+}: {
+  activeClient: Client;
+  pendingContentGeoId?: string | null;
+  onConsumePendingContentGeo?: () => void;
+}) {
   const [scanning, setScanning] = useState(false);
   const [hasResults, setHasResults] = useState(false);
   const [showLLMBrief, setShowLLMBrief] = useState(false);
+  const [savedContentGeo, setSavedContentGeo] = useState<SavedScored[]>(() => loadSavedScored(contentGeoKey(activeClient.id)));
+  const [justSaved, setJustSaved] = useState(false);
   const corePages = [
     { url: "/about", title: "About Us", contentScore: 78, alignmentScore: 82, status: "Optimised" },
     { url: "/products", title: "Products & Solutions", contentScore: 64, alignmentScore: 71, status: "Needs work" },
@@ -4683,6 +4768,42 @@ function GeoContentPage() {
     { page: "/insights", priority: "Low", action: "Strengthen internal linking - add author-byline links pointing to leadership pages.", impact: "+8 internal authority graph" },
   ];
   const overall = Math.round(corePages.reduce((s, p) => s + (p.contentScore + p.alignmentScore) / 2, 0) / corePages.length);
+
+  useEffect(() => {
+    setSavedContentGeo(loadSavedScored(contentGeoKey(activeClient.id)));
+    setHasResults(false);
+    setScanning(false);
+    setJustSaved(false);
+  }, [activeClient.id]);
+
+  useEffect(() => {
+    if (!pendingContentGeoId) return;
+    if (savedContentGeo.some((s) => s.id === pendingContentGeoId)) {
+      setHasResults(true);
+      setJustSaved(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    onConsumePendingContentGeo?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingContentGeoId, savedContentGeo]);
+
+  function saveContentGeo() {
+    if (!hasResults || justSaved) return;
+    const entry: SavedScored = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      savedAt: new Date().toISOString(),
+      score: overall,
+    };
+    const next = [entry, ...savedContentGeo];
+    if (!persistSavedScored(contentGeoKey(activeClient.id), next)) {
+      alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
+      return;
+    }
+    setSavedContentGeo(next);
+    setJustSaved(true);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
@@ -4691,13 +4812,16 @@ function GeoContentPage() {
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <button onClick={() => { setScanning(true); setTimeout(() => { setScanning(false); setHasResults(true); }, 1100); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: vars.accent }}>
+        <button onClick={() => { setScanning(true); setJustSaved(false); setTimeout(() => { setScanning(false); setHasResults(true); }, 1100); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: vars.accent }}>
           <Search size={14} /> {hasResults ? "Re-scan Site" : "Scan Site Content"}
         </button>
         {hasResults && (
           <>
-            <button onClick={() => alert("Action report downloaded (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: vars.cream, color: vars.navy, border: `1px solid ${vars.g200}` }}>
-              <Download size={14} /> Download Action Report
+            <button onClick={saveContentGeo} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
+            </button>
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
+              <Download size={14} /> Print / PDF
             </button>
             <button onClick={() => alert("Recommendations pushed to PR Set-Up sections 2.5–2.7 (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: "white", color: vars.accent, border: `1px solid ${vars.accent}` }}>
               <Zap size={14} /> Push to Project Set-Up
@@ -7380,6 +7504,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
   const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
+  const [pendingContentGeoId, setPendingContentGeoId] = useState<string | null>(null);
+  const [pendingTechGeoId, setPendingTechGeoId] = useState<string | null>(null);
   const [, setSavedAuditsVersion] = useState(0);
   useEffect(() => {
     const handler = () => setSavedAuditsVersion((v) => v + 1);
@@ -7716,6 +7842,8 @@ function App() {
         onLogoUpdate={handleLogoUpdate}
         onOpenSavedAudit={(id) => { setPendingAuditId(id); setCurrentPage("llm-check"); }}
         onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); setCurrentPage("diagnostic"); }}
+        onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
+        onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
       />
       <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#FBF6EC" }}>
         {currentPage === "dashboard" && (
@@ -7729,8 +7857,8 @@ function App() {
         {currentPage === "optimiser" && (
           <OptimiserPage onNavigate={setCurrentPage} />
         )}
-        {currentPage === "seo-audit" && <SeoAuditPage />}
-        {currentPage === "geo-content" && <GeoContentPage />}
+        {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
+        {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
         {currentPage === "planner" && <PlannerPage onNavigate={setCurrentPage} />}
         {currentPage === "creator" && <ContentCreatorPage onNavigate={setCurrentPage} />}
         {currentPage === "media-research" && <MediaResearchPage />}

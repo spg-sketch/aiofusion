@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import {
   Globe,
@@ -18,7 +18,35 @@ import {
   Loader2,
   ExternalLink,
   Tag,
+  Save,
+  Download,
 } from "lucide-react";
+
+type Client = { id: string; name: string };
+
+type SavedTechGeo = { id: string; savedAt: string; score: number; result: AuditResult };
+
+const techGeoStorageKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
+
+function loadSavedTechGeo(clientId: string): SavedTechGeo[] {
+  try {
+    const raw = localStorage.getItem(techGeoStorageKey(clientId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedTechGeo(clientId: string, list: SavedTechGeo[]): boolean {
+  try {
+    localStorage.setItem(techGeoStorageKey(clientId), JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const vars = {
   navy: "#102B36",
@@ -192,17 +220,68 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-export default function SeoAuditPage() {
+export default function SeoAuditPage({
+  activeClient,
+  pendingTechGeoId,
+  onConsumePendingTechGeo,
+}: {
+  activeClient: Client;
+  pendingTechGeoId?: string | null;
+  onConsumePendingTechGeo?: () => void;
+}) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AuditResult | null>(null);
+  const [savedTechGeo, setSavedTechGeo] = useState<SavedTechGeo[]>(() => loadSavedTechGeo(activeClient.id));
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    setSavedTechGeo(loadSavedTechGeo(activeClient.id));
+    setResult(null);
+    setUrl("");
+    setError("");
+    setLoading(false);
+    setJustSaved(false);
+  }, [activeClient.id]);
+
+  useEffect(() => {
+    if (!pendingTechGeoId) return;
+    const match = savedTechGeo.find((s) => s.id === pendingTechGeoId);
+    if (match) {
+      setResult(match.result);
+      setUrl(match.result.url);
+      setJustSaved(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    onConsumePendingTechGeo?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTechGeoId, savedTechGeo]);
+
+  function saveAudit() {
+    if (!result || justSaved) return;
+    const entry: SavedTechGeo = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      savedAt: new Date().toISOString(),
+      score: result.scores.overall,
+      result,
+    };
+    const next = [entry, ...savedTechGeo];
+    if (!persistSavedTechGeo(activeClient.id, next)) {
+      alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
+      return;
+    }
+    setSavedTechGeo(next);
+    setJustSaved(true);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
 
   async function runAudit() {
     if (!url.trim()) return;
     setLoading(true);
     setError("");
     setResult(null);
+    setJustSaved(false);
 
     try {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
@@ -302,6 +381,14 @@ export default function SeoAuditPage() {
 
         {result && !loading && (
           <div className="space-y-5">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button onClick={saveAudit} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+                {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
+              </button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
+                <Download size={14} /> Print / PDF
+              </button>
+            </div>
             <div className="border rounded-xl p-6" style={{ background: "white", borderColor: vars.g200 }}>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
                 <div className="relative">

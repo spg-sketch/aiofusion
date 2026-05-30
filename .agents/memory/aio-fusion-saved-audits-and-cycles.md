@@ -6,7 +6,17 @@ description: Cross-component refresh signal for saved audits and the pre-existin
 # Saved-audit refresh signal
 Saved Earned Media Visibility audits live in `localStorage` per client (`aio.savedAudits.{clientId}`) and are owned by `LlmCheckPage` state. The sidebar in `App.tsx` (`SidebarContent`) reads them on render via the exported `loadSavedAudits`, so it does NOT see saves/deletes made inside `LlmCheckPage` automatically.
 
-There is now a SECOND saved-list of the same shape: Website Visibility audits (`aio.savedDiagnostics.{clientId}`, owned by `DiagnosticPage` in `App.tsx`, helpers `loadSavedDiagnostics`). Both saved-lists share the ONE `aio:saved-audits-changed` event below; the sidebar re-reads both on that event. Earned items render under nav id `llm-check`, website items under nav id `diagnostic`.
+All FOUR audits now share this saved-list + sidebar pattern, each keyed per client and rendered in the sidebar under its nav id:
+- Earned Media: `aio.savedAudits.{clientId}` (owned by `LlmCheckPage`, helper `loadSavedAudits`), nav id `llm-check`.
+- Website Visibility: `aio.savedDiagnostics.{clientId}` (owned by `DiagnosticPage` in `App.tsx`, helper `loadSavedDiagnostics`), nav id `diagnostic`.
+- Website Content GEO: `aio.savedContentGeo.{clientId}` (owned by `GeoContentPage` in `App.tsx`), nav id `geo-content`. Static data, so reopen just sets `hasResults=true`; saved entry stores only `{id,savedAt,score}`.
+- Website Technical GEO: `aio.savedTechGeo.{clientId}` (owned by `SeoAuditPage.tsx`), nav id `seo-audit`. Stores the FULL `{id,savedAt,score,result}` so reopen can restore the live result + url.
+
+The two GEO audits use generic helpers `loadSavedScored`/`persistSavedScored` + key builders `contentGeoKey`/`techGeoKey` exported from `App.tsx` (shape `SavedScored = {id,savedAt,score}`). `SeoAuditPage` deliberately re-implements its own local load/persist (same `aio.savedTechGeo.{clientId}` key) instead of importing from `App.tsx`, to avoid widening the circular import below — the sidebar still reads it via `loadSavedScored(techGeoKey(id))`.
+
+All saved-lists share the ONE `aio:saved-audits-changed` event below; the sidebar re-reads all on that event.
+
+**Gotcha (parity bug fixed once already):** a "re-run/re-scan" handler must `setJustSaved(false)` so the just-run audit can be saved again; otherwise the Save button stays disabled after the first save of the session.
 
 **Rule:** any save/delete of saved audits must dispatch `window.dispatchEvent(new Event("aio:saved-audits-changed"))`. `App` listens for that event and bumps a version state to force the sidebar to re-read.
 
