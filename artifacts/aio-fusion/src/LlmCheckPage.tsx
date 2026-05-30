@@ -21,6 +21,8 @@ import {
   Info,
   Download,
   Building2,
+  Clock,
+  Trash2,
 } from "lucide-react";
 
 const vars = {
@@ -72,6 +74,30 @@ interface LlmCheckResult {
   };
   topCompetitors: { name: string; mentions: number }[];
   probes: ProbeItem[];
+}
+
+type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
+
+const savedAuditsKey = (clientId: string) => `aio.savedAudits.${clientId}`;
+
+function loadSavedAudits(clientId: string): SavedAudit[] {
+  try {
+    const raw = localStorage.getItem(savedAuditsKey(clientId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedAudits(clientId: string, list: SavedAudit[]): boolean {
+  try {
+    localStorage.setItem(savedAuditsKey(clientId), JSON.stringify(list));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(s: string): string {
@@ -259,15 +285,58 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
+  const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
+  const [justSaved, setJustSaved] = useState(false);
 
   useEffect(() => {
     setCycleData(loadCycle(activeClient.id));
+    setSavedAudits(loadSavedAudits(activeClient.id));
+    setResult(null);
+    setError("");
+    setJustSaved(false);
   }, [activeClient.id]);
+
+  function saveAuditToHistory() {
+    if (!result) return;
+    if (savedAudits.some((a) => a.result.checkedAt === result.checkedAt)) {
+      setJustSaved(true);
+      return;
+    }
+    const entry: SavedAudit = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      savedAt: new Date().toISOString(),
+      result,
+    };
+    const next = [entry, ...savedAudits];
+    if (!persistSavedAudits(activeClient.id, next)) {
+      alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
+      return;
+    }
+    setSavedAudits(next);
+    setJustSaved(true);
+  }
+
+  function openSavedAudit(a: SavedAudit) {
+    setResult(a.result);
+    setError("");
+    setJustSaved(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function deleteSavedAudit(id: string) {
+    const next = savedAudits.filter((a) => a.id !== id);
+    if (!persistSavedAudits(activeClient.id, next)) {
+      alert("Could not update saved audits - your browser storage may be unavailable.");
+      return;
+    }
+    setSavedAudits(next);
+  }
 
   async function runCheck() {
     setLoading(true);
     setError("");
     setResult(null);
+    setJustSaved(false);
 
     try {
       const keywords = customKeywords
@@ -628,6 +697,54 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             )}
           </div>
         </div>
+        {savedAudits.length > 0 && (
+          <div className="rounded-xl border p-4 sm:p-6 mt-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Clock size={16} color={vars.accent} />
+              <h2 className="text-[15px] font-semibold" style={{ color: vars.navy }}>Saved audits</h2>
+            </div>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>
+              Reopen a past audit to view its full report. Saved on this device only.
+            </p>
+            <div className="flex flex-col gap-2">
+              {savedAudits.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-[rgba(31,116,143,0.04)]"
+                  style={{ borderColor: vars.g200 }}
+                >
+                  <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
+                    <div
+                      className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
+                      style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
+                    >
+                      {a.result.visibilityScore}%
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>
+                        {a.result.companyName}
+                      </p>
+                      <p className="text-[11px] font-light" style={{ color: vars.g500 }}>
+                        Saved {new Date(a.savedAt).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </button>
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[12px] font-medium" style={{ color: vars.accent }}>
+                    Open <ArrowRight size={13} />
+                  </span>
+                  <button
+                    onClick={() => deleteSavedAudit(a.id)}
+                    className="p-2 rounded-lg transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                    style={{ color: vars.g400 }}
+                    title="Remove this saved audit"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -831,8 +948,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <button onClick={openReport} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-95" style={{ background: "white", color: vars.navy }}>
-            <Download size={14} /> Save this report
+          <button onClick={() => { saveAuditToHistory(); openReport(); }} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-95" style={{ background: "white", color: vars.navy }}>
+            {justSaved ? <CheckCircle2 size={14} /> : <Download size={14} />} {justSaved ? "Saved to history" : "Save this report"}
           </button>
           {onNavigate && (
             <>
