@@ -266,7 +266,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
   const kw = Array.isArray(keywords) ? keywords.filter((k: any) => typeof k === "string") : [];
   const icpProfile = typeof icp === "string" ? icp.trim().slice(0, 300) : "";
-  const locationProfile = typeof location === "string" ? location.trim().slice(0, 120) : "";
+  const locationProfile = typeof location === "string" ? location.trim().replace(/^in\s+/i, "").slice(0, 120) : "";
   const personaProfile = typeof persona === "string" ? persona.trim().slice(0, 150) : "";
 
   logger.info(
