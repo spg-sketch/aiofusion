@@ -4,7 +4,7 @@ import { logger } from "../lib/logger";
 import { URL } from "url";
 import * as dns from "dns/promises";
 import * as net from "net";
-import { Agent, buildConnector } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import { seoAuditLimiter } from "../middleware/rate-limit";
 import { seoAuditConcurrencyGuard } from "../middleware/concurrency-guard";
 
@@ -109,7 +109,7 @@ async function fetchWithSsrfSafeRedirects(
   url: string,
   reqHeaders: Record<string, string>,
   timeoutMs: number,
-): Promise<{ res: Awaited<ReturnType<typeof fetch>>; agent: Agent }> {
+): Promise<{ res: Awaited<ReturnType<typeof undiciFetch>>; agent: Agent }> {
   let currentUrl = url;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -120,11 +120,10 @@ async function fetchWithSsrfSafeRedirects(
       const parsed = new URL(currentUrl);
       const agent = createPinnedAgent(pinnedIp, parsed.hostname);
 
-      const res = await fetch(currentUrl, {
+      const res = await undiciFetch(currentUrl, {
         signal: controller.signal,
         headers: reqHeaders,
         redirect: "manual",
-        // @ts-expect-error - dispatcher is the undici-specific option accepted by Node's built-in fetch
         dispatcher: agent,
       });
 
