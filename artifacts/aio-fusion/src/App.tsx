@@ -135,73 +135,8 @@ type Client = {
   logo?: string;
 };
 
-const clients: Client[] = [
-  {
-    id: "bluhalo",
-    name: "Bluhalo",
-    sector: "Agency Advisory & Intelligence",
-    initials: "BH",
-    color: "#1f748f",
-    contentCount: 24,
-    avgScore: 73,
-    scoreTrend: 12,
-    activePlans: 3,
-    lastActive: "Today",
-    recentActivity: "Press release optimised",
-  },
-  {
-    id: "merkle",
-    name: "Merkle",
-    sector: "Customer Experience (dentsu)",
-    initials: "MK",
-    color: "#2896b9",
-    contentCount: 18,
-    avgScore: 61,
-    scoreTrend: 8,
-    activePlans: 2,
-    lastActive: "Yesterday",
-    recentActivity: "Diagnostic run on blog",
-  },
-  {
-    id: "kepler",
-    name: "Kepler",
-    sector: "Digital Marketing",
-    initials: "KP",
-    color: "#165265",
-    contentCount: 12,
-    avgScore: 54,
-    scoreTrend: 3,
-    activePlans: 1,
-    lastActive: "3 days ago",
-    recentActivity: "Q2 plan updated",
-  },
-  {
-    id: "the7stars",
-    name: "the7stars",
-    sector: "Media Agency",
-    initials: "7S",
-    color: "#D4922A",
-    contentCount: 9,
-    avgScore: 48,
-    scoreTrend: -2,
-    activePlans: 1,
-    lastActive: "5 days ago",
-    recentActivity: "Case study drafted",
-  },
-  {
-    id: "fjord",
-    name: "Fjord",
-    sector: "Design Innovation (Accenture Song)",
-    initials: "FJ",
-    color: "#C94A3E",
-    contentCount: 6,
-    avgScore: 39,
-    scoreTrend: 0,
-    activePlans: 0,
-    lastActive: "1 week ago",
-    recentActivity: "Onboarded, no content yet",
-  },
-];
+// Sample/demo agencies have been removed. The Project Hub now shows only real,
+// user-created projects loaded from localStorage.
 
 // ---------------------------------------------------------------------------
 // Created (real) projects. These are saved by the user when they set up a new
@@ -775,6 +710,7 @@ function ClientSelectorPage({
   onCreateProject,
   onArchivedProjects,
   onGuidance,
+  onDeleteProject,
 }: {
   projects: Client[];
   onSelectClient: (client: Client) => void;
@@ -784,14 +720,9 @@ function ClientSelectorPage({
   onCreateProject: () => void;
   onArchivedProjects: () => void;
   onGuidance: () => void;
+  onDeleteProject: (id: string) => void;
 }) {
-  const [demoView, setDemoView] = useState<"full" | "single" | "empty">("full");
-  // The demo toggle controls only the sample clients. Real, user-created
-  // projects always appear (newest first), except in the "empty" demo state.
-  const demoClients = demoView === "empty" ? [] : demoView === "single" ? clients.slice(0, 1) : clients;
-  const displayClients = demoView === "empty" ? [] : [...projects, ...demoClients];
-  void clients.reduce((s, c) => s + c.contentCount, 0);
-  void Math.round(clients.reduce((s, c) => s + c.avgScore, 0) / clients.length);
+  const displayClients = projects;
 
   const paper = "#FBF6EC";
   const ink = "#102B36";
@@ -849,21 +780,6 @@ function ClientSelectorPage({
                 ? "Set up your first project to start optimising your PR and marketing output for AI discoverability - or jump into archived work or platform guidance."
                 : "Select a project to manage AI optimisation, on-going PR and marketing output."}
             </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Demo view</span>
-            <div className="inline-flex rounded-full p-1" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
-              {([["full", "All"], ["single", "1 project"], ["empty", "Empty"]] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setDemoView(v)}
-                  className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.15em] transition-colors"
-                  style={{ background: demoView === v ? ink : "transparent", color: demoView === v ? paper : vars.g500 }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -1015,11 +931,26 @@ function ClientSelectorPage({
                         </span>
                       </div>
                     </div>
-                    <ArrowRight
-                      size={14}
-                      className="mt-1.5 transition-transform group-hover:translate-x-1"
-                      style={{ color: vars.g300 }}
-                    />
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Remove "${client.name}"? This deletes the project and cannot be undone.`)) {
+                            onDeleteProject(client.id);
+                          }
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                        style={{ color: vars.red, background: "rgba(201,74,62,0.08)" }}
+                        title="Remove project"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                      <ArrowRight
+                        size={14}
+                        className="transition-transform group-hover:translate-x-1"
+                        style={{ color: vars.g300 }}
+                      />
+                    </div>
                   </div>
                   <div className="flex items-center gap-5 mb-5">
                     <MiniDonut score={client.avgScore} color={client.color} size={56} />
@@ -7112,6 +7043,16 @@ function App() {
 
   const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
 
+  const handleDeleteProject = (id: string) => {
+    const next = loadStoredProjects().filter((p) => p.id !== id);
+    saveStoredProjects(next);
+    setStoredProjects(next);
+    setClientLogos((prev) => {
+      const { [id]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
   const confirmCreateProject = (name: string, logo?: string) => {
     const project = createStoredProject(name);
     setStoredProjects(loadStoredProjects());
@@ -7341,6 +7282,7 @@ function App() {
           setInsightsFilter("Guidance");
           setView("insights");
         }}
+        onDeleteProject={handleDeleteProject}
       />
       {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
       </>
