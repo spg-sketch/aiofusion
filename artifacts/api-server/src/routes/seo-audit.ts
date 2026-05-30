@@ -120,12 +120,18 @@ async function fetchWithSsrfSafeRedirects(
       const parsed = new URL(currentUrl);
       const agent = createPinnedAgent(pinnedIp, parsed.hostname);
 
-      const res = await undiciFetch(currentUrl, {
-        signal: controller.signal,
-        headers: reqHeaders,
-        redirect: "manual",
-        dispatcher: agent,
-      });
+      let res: Awaited<ReturnType<typeof undiciFetch>>;
+      try {
+        res = await undiciFetch(currentUrl, {
+          signal: controller.signal,
+          headers: reqHeaders,
+          redirect: "manual",
+          dispatcher: agent,
+        });
+      } catch (err) {
+        await agent.close().catch(() => {});
+        throw err;
+      }
 
       const isRedirect = res.status >= 300 && res.status < 400;
       if (!isRedirect) {
