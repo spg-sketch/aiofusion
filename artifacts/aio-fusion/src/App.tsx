@@ -2085,6 +2085,14 @@ Engines used:
         <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
           Run New Diagnostic
         </button>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+            {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+            <Download size={14} /> Print / PDF
+          </button>
+        </div>
       </div>
     </div>
   );
