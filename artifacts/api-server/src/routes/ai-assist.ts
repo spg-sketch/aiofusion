@@ -144,10 +144,13 @@ aiAssistRouter.post(
 // Unlike draft-field (which writes from the website), this takes the text the
 // user has already written and rewrites it to be stronger and easier for AI
 // models to cite, while preserving their facts and meaning.
-const OPTIMISE_FIELDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
-type OptimiseField = (typeof OPTIMISE_FIELDS)[number];
+// Optimise is offered on every free-text answer. These structured pickers on
+// the form (spokespeople and the two media-category fields) are never optimised.
+const OPTIMISE_EXCLUDED_FIELDS = new Set(["1.8", "1.9", "1.10"]);
 
-const OPTIMISE_INSTRUCTIONS: Record<OptimiseField, string> = {
+// Tailored instructions for specific questions. Any other field falls back to
+// GENERIC_OPTIMISE_INSTRUCTION below.
+const OPTIMISE_INSTRUCTIONS: Record<string, string> = {
   "1.1":
     'This is a company descriptor of roughly 100 words for press and PR use. Rewrite it to be clearer, more authoritative and easier for AI search and answer engines to cite. Keep it factual prose with no bullet points, aim for about 100 words and do not exceed 110. ' +
     'Return JSON: {"optimised": "the rewritten descriptor"}.',
@@ -164,6 +167,11 @@ const OPTIMISE_INSTRUCTIONS: Record<OptimiseField, string> = {
     'These are additional supporting messages, each with a short and a long form. Rewrite each to be punchier and clearer: every "short" six words or fewer, every "long" 25 words or fewer. Keep the same number of items and the same underlying points. ' +
     'Return JSON: {"items": [{"short": "...", "long": "..."}]}.',
 };
+
+const GENERIC_OPTIMISE_INSTRUCTION =
+  "Rewrite this answer to be clearer, stronger and easier for AI search and answer engines to cite, while keeping the user's facts, names, numbers and meaning. Keep the same format (prose, list or separate lines) and roughly the same length as the input. " +
+  "If the answer is mostly factual data such as names, addresses, URLs, phone numbers, dates or contact details, return it unchanged or only lightly tidied and never alter the actual data. " +
+  'Return JSON: {"optimised": "the rewritten answer, in the same layout as the input"}.';
 
 function hasOptimiseContent(fieldId: string, value: unknown): boolean {
   if (fieldId === "1.2") {
@@ -189,7 +197,7 @@ aiAssistRouter.post(
       companyName?: string;
     };
 
-    if (!fieldId || !OPTIMISE_FIELDS.includes(fieldId as OptimiseField)) {
+    if (!fieldId || OPTIMISE_EXCLUDED_FIELDS.has(fieldId)) {
       res.status(400).json({ error: "This field cannot be optimised." });
       return;
     }
@@ -204,7 +212,7 @@ aiAssistRouter.post(
       return;
     }
 
-    const instruction = OPTIMISE_INSTRUCTIONS[fieldId as OptimiseField];
+    const instruction = OPTIMISE_INSTRUCTIONS[fieldId] ?? GENERIC_OPTIMISE_INSTRUCTION;
     const prompt =
       `You are an expert PR and GEO (generative engine optimisation) editor improving one answer a client wrote on an intake form.\n\n` +
       (companyName && companyName.trim() ? `Company: ${companyName.trim()}\n\n` : "") +

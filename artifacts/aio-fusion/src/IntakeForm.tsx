@@ -119,9 +119,14 @@ export function getActiveProjectId(): string | null {
 const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
-// (POST /api/ai-assist/optimise-field). These ids are the questions that expose
-// the Optimise control; keep in sync with the backend's supported fields.
-export const OPTIMISED_FIELD_IDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
+// (POST /api/ai-assist/optimise-field). The control is offered on every
+// free-text answer (textarea, dual and dual-list), except the structured
+// pickers below (spokespeople and the two media-category fields). Keep the
+// excluded ids and the optimisable types in sync with the backend.
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.8", "1.9", "1.10"]);
+const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
+const isOptimisableField = (f: FieldDef): boolean =>
+  OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
 
 const wordCount = (s: string) => (s.trim() === "" ? 0 : s.trim().split(/\s+/).length);
 
@@ -549,6 +554,12 @@ const sections: SectionDef[] = [
     ],
   },
 ];
+
+// Questions that expose the Optimise control, derived from the form config.
+export const OPTIMISED_FIELD_IDS: readonly string[] = sections
+  .flatMap((s) => s.fields)
+  .filter(isOptimisableField)
+  .map((f) => f.id);
 
 type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 
