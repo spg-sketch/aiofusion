@@ -5478,7 +5478,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
                 Using the headline, standfirst summary and body copy entered below, weave the project's key messages (Project Data 1.2 &amp; 1.3) into the piece in a way that reads naturally and earns LLM citations. Return the optimised headline, standfirst and body, plus a bullet-pointed <strong>change log</strong> noting where and why each key message was embedded, any structural or phrasing changes made, and flag any instance where a key message could not be embedded naturally with a brief explanation.
               </div>
               <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
-                The optimised copy will replace the values in the Headline, Standfirst and Transcript fields and be displayed in red. Use Reject Optimised Copy to restore the original.
+                The optimised copy will replace the values in the Headline, Standfirst and Transcript fields and be displayed in red. Use Reject optimised, next to the Content entry heading, to restore the original.
               </p>
               <div className="flex justify-end gap-2">
                 <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
