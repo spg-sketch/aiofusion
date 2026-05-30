@@ -262,20 +262,17 @@ function migrateAssignOwnerlessToAdmin(): void {
   } catch { /* noop */ }
 }
 
-// Section 3 was restructured: the old ICP question (1.11) moved into the
-// Audience section as 3.2, pushing the old 3.2/3.3/3.4 down to 3.3/3.4/3.5.
-// Field ids double as storage keys, so remap existing saved answers to match.
-// Runs at module load (before any component reads intake data) so the renamed
-// keys are in place on the very first render.
-const SECTION3_RENUMBER_FLAG = "aio.intake.section3.renumber.v1";
-function migrateRenumberSection3(): void {
+// Section 3 was restructured in two steps. Field ids double as storage keys, so
+// existing saved answers are remapped to the new ids. Each step is guarded by its
+// own flag and runs at module load (before any component reads intake data) so the
+// renamed keys are in place on the very first render. Steps must run in order.
+function remapStoredIntakeKeys(remap: Record<string, string>, flag: string): void {
   try {
-    if (localStorage.getItem(SECTION3_RENUMBER_FLAG) === "1") return;
-    const REMAP: Record<string, string> = { "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" };
+    if (localStorage.getItem(flag) === "1") return;
     const remapKeys = (obj: unknown): unknown => {
       if (!obj || typeof obj !== "object") return obj;
       const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[REMAP[k] ?? k] = v;
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[remap[k] ?? k] = v;
       return out;
     };
     for (let i = 0; i < localStorage.length; i++) {
@@ -290,7 +287,7 @@ function migrateRenumberSection3(): void {
       if (parsed.duals) parsed.duals = remapKeys(parsed.duals);
       if (parsed.dualLists) parsed.dualLists = remapKeys(parsed.dualLists);
       if (Array.isArray(parsed.optimisedFields)) {
-        parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => REMAP[id] ?? id);
+        parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => remap[id] ?? id);
       }
       const snap = parsed.preOptimiseSnapshot as Record<string, unknown> | null | undefined;
       if (snap && typeof snap === "object") {
@@ -300,10 +297,13 @@ function migrateRenumberSection3(): void {
       }
       localStorage.setItem(key, JSON.stringify(parsed));
     }
-    localStorage.setItem(SECTION3_RENUMBER_FLAG, "1");
+    localStorage.setItem(flag, "1");
   } catch { /* noop */ }
 }
-migrateRenumberSection3();
+// Step 1: ICP (1.11) moved into the Audience section as 3.2.
+remapStoredIntakeKeys({ "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" }, "aio.intake.section3.renumber.v1");
+// Step 2: Locations (1.12) moved into the Audience section as 3.3.
+remapStoredIntakeKeys({ "1.12": "3.3", "3.3": "3.4", "3.4": "3.5", "3.5": "3.6" }, "aio.intake.section3.locations.v1");
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");

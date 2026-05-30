@@ -5,3 +5,4 @@
 - [Bluhalo e2e test](bluhalo-e2e-test.md) — reusable intake test at artifacts/aio-fusion/test/; inject full dataset into aio.intake.v2::{activeProjectId} rather than typing; checkbox fields are string[], conditionals need exact option strings.
 - [api-server dev workflow](api-server-dev.md) — dev runs build+start (no watch) so restart after route edits or 404; test on localhost:8080, not the dev domain; AI via Anthropic Replit integration.
 - [Optimise field set sync](optimise-field-sync.md) — per-question Optimise is offered on all free-text answers (textarea/dual/dual-list, excl 1.8/1.9/1.10); frontend derives the set from config but backend has a parallel hardcoded allowlist that must be kept in sync by hand.
+- [Intake field ids are storage keys](intake-field-id-storage-keys.md) — renumbering an intake question is a data migration; ids double as localStorage keys, so add a flag-guarded remap at module load.

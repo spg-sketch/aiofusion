@@ -214,13 +214,6 @@ const sections: SectionDef[] = [
         hint: "Multi-select the categories your target customers read and trust. This helps target coverage where your audience actually is.",
         type: "textarea",
       },
-      {
-        id: "1.12",
-        label: "Locations where you work with clients - cities, countries and regions",
-        hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
-        type: "textarea",
-        optional: true,
-      },
     ],
   },
   // ── PR Set-Up: Section 2 (FAQ + 3 items moved from old Web Section 5) ──
@@ -306,17 +299,24 @@ const sections: SectionDef[] = [
       },
       {
         id: "3.3",
+        label: "Locations where you work with clients - cities, countries and regions",
+        hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
+        type: "textarea",
+        optional: true,
+      },
+      {
+        id: "3.4",
         label: "What phrases / language does each audience use when searching for your solutions?",
         hint: "Include informal, colloquial, and category-level terms - not just your preferred terminology entered above. These populate your semantic phrase guide.",
         type: "textarea",
       },
       {
-        id: "3.4",
+        id: "3.5",
         label: "What are the most common pain points, frustrations, or unmet needs your audience has before finding you? What challenges do you solve – add as much detail as possible.",
         type: "textarea",
       },
       {
-        id: "3.5",
+        id: "3.6",
         label: "What outcome does your audience most want to achieve by using your product or service? Please provide examples and links to case studies or evidence.",
         type: "textarea",
       },
@@ -1903,9 +1903,10 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
   // Section 3
   pushLines(data.formData["3.1"], "3", "3.1", "Ideal client persona (job role)");
   pushLines(data.formData["3.2"], "3", "3.2", "Ideal client profile (company)");
-  pushLines(data.formData["3.3"], "3", "3.3", "Audience language");
-  pushLines(data.formData["3.4"], "3", "3.4", "Pain points");
-  pushLines(data.formData["3.5"], "3", "3.5", "Desired outcomes");
+  pushLines(data.formData["3.3"], "3", "3.3", "Client locations");
+  pushLines(data.formData["3.4"], "3", "3.4", "Audience language");
+  pushLines(data.formData["3.5"], "3", "3.5", "Pain points");
+  pushLines(data.formData["3.6"], "3", "3.6", "Desired outcomes");
 
   return out;
 }
