@@ -30,6 +30,40 @@ interface ProbeResult {
   competitors: string[];
 }
 
+const RUNS_PER_QUESTION = 3;
+
+const LEGAL_SUFFIXES = new Set([
+  "ltd", "limited", "inc", "incorporated", "llc", "plc", "llp", "co", "company",
+  "corp", "corporation", "group", "holdings", "gmbh", "sa", "ag", "pty", "io", "sas", "bv", "srl",
+]);
+
+function normalizeText(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function brandAliases(companyName: string): string[] {
+  const full = normalizeText(companyName);
+  if (!full) return [];
+  const tokens = full.split(" ").filter(Boolean);
+  const core = tokens.filter((t) => !LEGAL_SUFFIXES.has(t));
+  const aliases = new Set<string>();
+  aliases.add(full);
+  if (core.length) aliases.add(core.join(" "));
+  if (core[0] && core[0].length >= 4) aliases.add(core[0]);
+  return [...aliases].filter(Boolean);
+}
+
+function aliasRegex(alias: string): RegExp {
+  const tokens = alias.split(" ").filter(Boolean).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = tokens.join("[^a-z0-9]+");
+  return new RegExp(`(?<![a-z0-9])${pattern}(?![a-z0-9])`, "i");
+}
+
+function isMentioned(text: string, companyName: string): boolean {
+  if (!text) return false;
+  return brandAliases(companyName).some((alias) => aliasRegex(alias).test(text));
+}
+
 function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[]): string[] {
   const questions: string[] = [];
 
@@ -56,13 +90,20 @@ function generateProbeQuestions(companyName: string, sectors: string[], keywords
 }
 
 function findMentionContext(text: string, companyName: string): string | null {
-  const lowerText = text.toLowerCase();
-  const lowerName = companyName.toLowerCase();
-  const idx = lowerText.indexOf(lowerName);
+  if (!text) return null;
+  let idx = -1;
+  let matchLen = 0;
+  for (const alias of brandAliases(companyName)) {
+    const m = aliasRegex(alias).exec(text);
+    if (m && (idx === -1 || m.index < idx)) {
+      idx = m.index;
+      matchLen = m[0].length;
+    }
+  }
   if (idx === -1) return null;
 
   const start = Math.max(0, idx - 80);
-  const end = Math.min(text.length, idx + companyName.length + 120);
+  const end = Math.min(text.length, idx + matchLen + 120);
   let context = text.substring(start, end).trim();
   if (start > 0) context = "..." + context;
   if (end < text.length) context = context + "...";
@@ -109,7 +150,7 @@ async function probeOpenAI(question: string, companyName: string): Promise<Probe
     });
 
     const text = response.choices[0]?.message?.content || "";
-    const mentioned = text.toLowerCase().includes(companyName.toLowerCase());
+    const mentioned = isMentioned(text, companyName);
 
     return {
       question,
@@ -139,7 +180,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
-    const mentioned = text.toLowerCase().includes(companyName.toLowerCase());
+    const mentioned = isMentioned(text, companyName);
 
     return {
       question,
@@ -190,8 +231,10 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
-      probePromises.push(probeOpenAI(q, companyName));
-      probePromises.push(probeClaude(q, companyName));
+      for (let run = 0; run < RUNS_PER_QUESTION; run++) {
+        probePromises.push(probeOpenAI(q, companyName));
+        probePromises.push(probeClaude(q, companyName));
+      }
     }
 
     const results = await Promise.all(probePromises);
@@ -218,6 +261,31 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
     const visibilityScore = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
 
+    const grouped = new Map<string, ProbeResult[]>();
+    for (const r of validResults) {
+      const key = `${r.model}||${r.question}`;
+      const arr = grouped.get(key);
+      if (arr) arr.push(r);
+      else grouped.set(key, [r]);
+    }
+    const probes = [...grouped.values()].map((runs) => {
+      const runCount = runs.length;
+      const mentionRuns = runs.filter((r) => r.mentioned).length;
+      const mentioned = mentionRuns * 2 >= runCount;
+      const repr = runs.find((r) => r.mentioned) || runs[0];
+      const competitors = [...new Set(runs.flatMap((r) => r.competitors))].slice(0, 5);
+      return {
+        question: repr.question,
+        model: repr.model,
+        mentioned,
+        mentionRuns,
+        runCount,
+        mentionContext: repr.mentionContext,
+        competitors,
+        responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
+      };
+    });
+
     const summary = {
       companyName,
       sector: sectorList[0],
@@ -231,14 +299,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         claude: { probes: claudeResults.length, mentions: claudeMentions, rate: claudeResults.length > 0 ? Math.round((claudeMentions / claudeResults.length) * 100) : 0 },
       },
       topCompetitors,
-      probes: validResults.map((r) => ({
-        question: r.question,
-        model: r.model,
-        mentioned: r.mentioned,
-        mentionContext: r.mentionContext,
-        competitors: r.competitors.slice(0, 5),
-        responsePreview: r.response.substring(0, 300) + (r.response.length > 300 ? "..." : ""),
-      })),
+      probes,
     };
 
     res.json(summary);

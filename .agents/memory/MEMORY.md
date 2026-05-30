@@ -1,0 +1,1 @@
+- [LLM visibility audit scoring](llm-audit-scoring.md) — run-level results drive score/byModel (auto-average); probes aggregated by majority vote; one matcher for flag + context.

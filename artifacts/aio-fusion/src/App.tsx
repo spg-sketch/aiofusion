@@ -247,7 +247,7 @@ function migrateLegacyIntakeToProject(): void {
   projects.unshift({
     id: "default",
     name,
-    sector: "Project Set-Up",
+    sector: "Awaiting set-up",
     initials: deriveInitials(name),
     color: PROJECT_COLORS[0],
     contentCount: 0,
@@ -266,7 +266,7 @@ function createStoredProject(name: string): Client {
   const project: Client = {
     id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: clean,
-    sector: "Project Set-Up",
+    sector: "Awaiting set-up",
     initials: deriveInitials(clean),
     color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
     contentCount: 0,

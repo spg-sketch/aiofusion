@@ -51,6 +51,8 @@ interface ProbeItem {
   question: string;
   model: string;
   mentioned: boolean;
+  mentionRuns?: number;
+  runCount?: number;
   mentionContext: string | null;
   competitors: string[];
   responsePreview: string;
@@ -133,6 +135,11 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
           <p className="text-[11px] mt-0.5" style={{ color: vars.g400 }}>{probe.model}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {probe.runCount && probe.runCount > 1 && (
+            <span className="text-[10px] hidden sm:inline" style={{ color: vars.g400 }}>
+              {probe.mentionRuns}/{probe.runCount} runs
+            </span>
+          )}
           <span className="text-[11px] font-semibold px-2 py-0.5 rounded" style={{
             background: probe.mentioned ? "#ECFDF5" : "#FEE2E2",
             color: probe.mentioned ? vars.green : vars.red,
@@ -174,10 +181,29 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
   );
 }
 
+const NAME_SUFFIXES = new Set([
+  "ltd", "limited", "inc", "incorporated", "llc", "plc", "llp", "co", "company",
+  "corp", "corporation", "group", "holdings", "gmbh", "sa", "ag", "pty", "io", "sas", "bv", "srl",
+]);
+
+function nameCandidates(name: string): string[] {
+  const clean = name.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  const core = clean.split(" ").filter((t) => t && !NAME_SUFFIXES.has(t));
+  return Array.from(
+    new Set([name.trim(), core.join(" "), core[0] || ""].filter((c) => c && c.length >= 3)),
+  );
+}
+
 function highlightName(text: string, name: string): React.ReactNode {
-  const parts = text.split(new RegExp(`(${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  const candidates = nameCandidates(name);
+  if (candidates.length === 0) return text;
+  const escaped = candidates
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length);
+  const lowerCands = new Set(candidates.map((c) => c.toLowerCase()));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "gi"));
   return parts.map((part, i) =>
-    part.toLowerCase() === name.toLowerCase() ? (
+    lowerCands.has(part.toLowerCase()) ? (
       <strong key={i} style={{ color: vars.accent, background: "#E0F2F7", padding: "0 2px", borderRadius: 2 }}>{part}</strong>
     ) : (
       <span key={i}>{part}</span>
@@ -194,13 +220,23 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
   const businessSectors = getBusinessSectors();
   const targetSectors = getTargetSectors();
-  const auditSectors = Array.from(
-    new Set(
-      [...businessSectors, ...targetSectors, activeClient.sector]
-        .map((s) => (s || "").trim())
-        .filter(Boolean),
-    ),
+  const PLACEHOLDER_SECTORS = ["Project Set-Up", "Awaiting set-up", ""];
+  const setupSectors = Array.from(
+    new Set([...businessSectors, ...targetSectors].map((s) => (s || "").trim()).filter(Boolean)),
   );
+  const fallbackSector = PLACEHOLDER_SECTORS.includes((activeClient.sector || "").trim())
+    ? ""
+    : (activeClient.sector || "").trim();
+  const combinedSectors = setupSectors.length > 0 ? setupSectors : fallbackSector ? [fallbackSector] : [];
+  const combinedKey = combinedSectors.join("|");
+  const [selectedSectors, setSelectedSectors] = useState<string[]>(combinedSectors);
+  useEffect(() => {
+    setSelectedSectors(combinedKey ? combinedKey.split("|") : []);
+  }, [activeClient.id, combinedKey]);
+  const toggleSector = (s: string) =>
+    setSelectedSectors((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  const selectedCount = combinedSectors.filter((s) => selectedSectors.includes(s)).length;
+  const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
 
@@ -281,31 +317,68 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                 {activeClient.name}
               </div>
             </div>
-            {(businessSectors.length > 0 || targetSectors.length > 0) ? (
-              <div className="grid sm:grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you operate in</label>
-                  <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                    {businessSectors.length > 0 ? businessSectors.map((s) => (
-                      <span key={s} className="text-[12px] px-2 py-0.5 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>{s}</span>
-                    )) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.9)</span>}
+            {combinedSectors.length > 0 ? (
+              <div className="mb-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you operate in</label>
+                    <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                      {businessSectors.map((s) => (s || "").trim()).filter(Boolean).length > 0 ? (
+                        businessSectors.map((s) => (s || "").trim()).filter(Boolean).map((s) => {
+                          const on = selectedSectors.includes(s);
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => toggleSector(s)}
+                              className="text-[12px] px-2 py-0.5 rounded-full border transition-colors"
+                              style={on
+                                ? { background: vars.lightBg, color: vars.accent, borderColor: vars.accent }
+                                : { background: "white", color: vars.g400, borderColor: vars.g200 }}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })
+                      ) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.9)</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you're targeting</label>
+                    <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                      {targetSectors.map((s) => (s || "").trim()).filter(Boolean).length > 0 ? (
+                        targetSectors.map((s) => (s || "").trim()).filter(Boolean).map((s) => {
+                          const on = selectedSectors.includes(s);
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => toggleSector(s)}
+                              className="text-[12px] px-2 py-0.5 rounded-full border transition-colors"
+                              style={on
+                                ? { background: vars.lightBg, color: vars.accent, borderColor: vars.accent }
+                                : { background: "white", color: vars.g400, borderColor: vars.g200 }}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })
+                      ) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.10)</span>}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you're targeting</label>
-                  <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                    {targetSectors.length > 0 ? targetSectors.map((s) => (
-                      <span key={s} className="text-[12px] px-2 py-0.5 rounded-full" style={{ background: vars.lightBg, color: vars.accent }}>{s}</span>
-                    )) : <span className="text-sm" style={{ color: vars.g400 }}>Not set in Project Set-Up (1.10)</span>}
-                  </div>
-                </div>
+                <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: selectedCount === 0 ? vars.red : vars.g400 }}>
+                  <Info size={11} />
+                  {selectedCount === 0
+                    ? "Select at least one sector to run the audit."
+                    : selectedCount > 3
+                      ? "Tap to include or exclude. The audit probes up to 3 sectors, so only the first 3 are used."
+                      : "Tap a sector to include or exclude it. The audit probes the highlighted sectors."}
+                </p>
               </div>
             ) : (
-              <div className="mb-4">
-                <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sector</label>
-                <div className="px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}>
-                  {activeClient.sector}
-                </div>
+              <div className="mb-4 p-3 rounded-lg border text-[12px]" style={{ borderColor: "#F3D9A4", background: "#FDF6E7", color: "#8A6314" }}>
+                Add the sectors you operate in (Project Set-Up 1.9) and the markets you sell to (1.10) so the audit knows what to probe.
               </div>
             )}
             <div className="mb-6">
@@ -338,7 +411,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             <div className="flex items-center gap-3">
               <button
                 onClick={runCheck}
-                disabled={loading}
+                disabled={loading || auditSectors.length === 0}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
                 style={{ background: "#1f748f" }}
               >
