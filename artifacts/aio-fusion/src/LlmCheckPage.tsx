@@ -458,7 +458,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Score whether AI models mention {probeName || activeClient.name} when asked about the sectors you operate in and the markets you sell to.
+            Score whether AI models like ChatGPT and Claude mention {probeName || activeClient.name} when asked about the sectors you operate in and the markets you sell to.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
