@@ -1053,10 +1053,10 @@ export default function IntakePage() {
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
             <div className="flex-1">
               <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
-                Let AI draft from your website
+                Let AI draft from your website (Beta)
               </p>
               <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#102B36" }}>
-                Add your company website and use the "Ask AI to complete this" button under a question to draft an answer. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Always review what it writes.
+                Add your company website and use the "Ask AI to complete this" button under a question to draft an answer quicker. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Please always review and check what it writes.
               </p>
               {(() => {
                 const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
