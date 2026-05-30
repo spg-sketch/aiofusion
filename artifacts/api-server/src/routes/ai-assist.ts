@@ -140,4 +140,137 @@ aiAssistRouter.post(
   },
 );
 
+// ── Per-question Optimise: improve the user's OWN answer ──────────────────
+// Unlike draft-field (which writes from the website), this takes the text the
+// user has already written and rewrites it to be stronger and easier for AI
+// models to cite, while preserving their facts and meaning.
+const OPTIMISE_FIELDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
+type OptimiseField = (typeof OPTIMISE_FIELDS)[number];
+
+const OPTIMISE_INSTRUCTIONS: Record<OptimiseField, string> = {
+  "1.1":
+    'This is a company descriptor of roughly 100 words for press and PR use. Rewrite it to be clearer, more authoritative and easier for AI search and answer engines to cite. Keep it factual prose with no bullet points, aim for about 100 words and do not exceed 110. ' +
+    'Return JSON: {"optimised": "the rewritten descriptor"}.',
+  "1.6":
+    'This is a list of preferred terms and phrases (a semantic phrase guide). Tighten and improve it, removing duplicates and keeping the user\'s own terms. You may add only close variants that clearly mean the same thing. ' +
+    'Return JSON: {"optimised": "the rewritten phrases, kept in the same comma- or line-separated style as the input"}.',
+  "2.4":
+    'These are industry or category questions the business can answer with authority. Rewrite them to be sharper and to read like the real questions buyers ask AI assistants, keeping the same topics and roughly the same number of questions. ' +
+    'Return JSON: {"optimised": "the rewritten questions, in the same layout as the input"}.',
+  "1.2":
+    'This is a Primary Message in two forms. Rewrite both to be punchier and clearer. "short" must be six words or fewer. "long" must be 25 words or fewer and add proof or context. ' +
+    'Return JSON: {"short": "...", "long": "..."}.',
+  "1.3":
+    'These are additional supporting messages, each with a short and a long form. Rewrite each to be punchier and clearer: every "short" six words or fewer, every "long" 25 words or fewer. Keep the same number of items and the same underlying points. ' +
+    'Return JSON: {"items": [{"short": "...", "long": "..."}]}.',
+};
+
+function hasOptimiseContent(fieldId: string, value: unknown): boolean {
+  if (fieldId === "1.2") {
+    const v = value as { short?: string; long?: string } | null;
+    return !!v && typeof v === "object" && (!!(v.short || "").trim() || !!(v.long || "").trim());
+  }
+  if (fieldId === "1.3") {
+    return (
+      Array.isArray(value) &&
+      value.some((it) => !!((it?.short as string) || "").trim() || !!((it?.long as string) || "").trim())
+    );
+  }
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+aiAssistRouter.post(
+  "/ai-assist/optimise-field",
+  aiAssistLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    const { fieldId, value, companyName } = (req.body ?? {}) as {
+      fieldId?: string;
+      value?: unknown;
+      companyName?: string;
+    };
+
+    if (!fieldId || !OPTIMISE_FIELDS.includes(fieldId as OptimiseField)) {
+      res.status(400).json({ error: "This field cannot be optimised." });
+      return;
+    }
+    if (!hasOptimiseContent(fieldId, value)) {
+      res.status(400).json({ error: "Write your own answer first, then Optimise will improve it." });
+      return;
+    }
+
+    const client = createAnthropicClient();
+    if (!client) {
+      res.status(503).json({ error: "AI optimisation is not configured. Please try again later." });
+      return;
+    }
+
+    const instruction = OPTIMISE_INSTRUCTIONS[fieldId as OptimiseField];
+    const prompt =
+      `You are an expert PR and GEO (generative engine optimisation) editor improving one answer a client wrote on an intake form.\n\n` +
+      (companyName && companyName.trim() ? `Company: ${companyName.trim()}\n\n` : "") +
+      `Improve the user's OWN answer below. Strict rules:\n` +
+      `- Preserve every fact, name, number, product and claim the user provided. Do not invent new facts or details.\n` +
+      `- Do not replace their answer with generic marketing boilerplate, and never use placeholders like [Company Name], [audience] or [year].\n` +
+      `- Keep the user's meaning and voice. Just make it clearer, stronger and easier for AI models to cite.\n` +
+      `- Use British English. Respond with JSON only, no commentary.\n\n` +
+      `Field task: ${instruction}\n\n` +
+      `The user's current answer (JSON):\n"""\n${JSON.stringify(value)}\n"""`;
+
+    try {
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8192,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const block = message.content[0];
+      const raw = block && block.type === "text" ? block.text : "";
+      const parsed = extractJson(raw);
+
+      if (!parsed) {
+        res.status(502).json({ error: "The AI response could not be read. Please try again." });
+        return;
+      }
+
+      if (fieldId === "1.2") {
+        const short = typeof parsed.short === "string" ? parsed.short.trim() : "";
+        const long = typeof parsed.long === "string" ? parsed.long.trim() : "";
+        if (!short && !long) {
+          res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
+          return;
+        }
+        res.json({ fieldId, short, long });
+        return;
+      }
+
+      if (fieldId === "1.3") {
+        const items = Array.isArray(parsed.items)
+          ? parsed.items
+              .map((it: { short?: unknown; long?: unknown }) => ({
+                short: typeof it?.short === "string" ? it.short.trim() : "",
+                long: typeof it?.long === "string" ? it.long.trim() : "",
+              }))
+              .filter((it: { short: string; long: string }) => it.short || it.long)
+          : [];
+        if (items.length === 0) {
+          res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
+          return;
+        }
+        res.json({ fieldId, items });
+        return;
+      }
+
+      // string fields: 1.1, 1.6, 2.4
+      const optimised = typeof parsed.optimised === "string" ? parsed.optimised.trim() : "";
+      if (!optimised) {
+        res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
+        return;
+      }
+      res.json({ fieldId, optimised });
+    } catch (err) {
+      logger.error({ err, fieldId }, "ai-assist: optimise-field call failed");
+      res.status(502).json({ error: "The AI optimisation could not be generated right now. Please try again." });
+    }
+  },
+);
+
 export default aiAssistRouter;

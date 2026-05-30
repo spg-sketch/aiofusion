@@ -113,36 +113,12 @@ export function setActiveProjectId(id: string): void {
 
 const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
-// Fields that get rewritten by "Optimise Project Messages" - must be kept in
-// sync with the LLM prompt below and with the snapshot/restore logic.
+// Per-question Optimise rewrites the user's OWN answer via the AI backend
+// (POST /api/ai-assist/optimise-field). These ids are the questions that expose
+// the Optimise control; keep in sync with the backend's supported fields.
 export const OPTIMISED_FIELD_IDS = ["1.1", "1.2", "1.3", "1.6", "2.4"] as const;
 
 const wordCount = (s: string) => (s.trim() === "" ? 0 : s.trim().split(/\s+/).length);
-
-// Demo-only mock outputs from the LLM optimiser. Used so users can see the
-// "optimised copy in red" experience without a live model call. Replaced by
-// the real LLM response when wired to a backend.
-const MOCK_OPTIMISED_FORM_DATA: Record<string, string> = {
-  "1.1":
-    "[Company Name] is the AI-authority partner trusted by [audience] across [geographies] to win measurable visibility in earned media and AI-generated answers. Founded in [year], the company has helped [N] organisations earn citations from outlets including [publications] and references inside ChatGPT, Claude, Gemini and Perplexity. Combining proprietary scoring of LLM citation signals with disciplined PR craft, [Company Name] turns press coverage and owned content into a defensible, machine-readable authority footprint that compounds over time.",
-  "1.6":
-    "AI authority, generative engine optimisation (GEO), answer engine optimisation (AEO), large language model citation, earned media intelligence, AI Overviews, model-cited PR, retrieval-augmented generation source, semantic phrase guide, entity disambiguation, brand-as-source.",
-  "2.4":
-    "How is generative engine optimisation different from traditional SEO? Which AI models cite [industry] sources most reliably, and why? What does it take to be cited inside an AI Overview or a ChatGPT answer? How do PR and content teams measure earned visibility inside LLMs? What schema and structured data signals matter most for AI citation?",
-};
-const MOCK_OPTIMISED_DUALS: Record<string, DualValue> = {
-  "1.2": {
-    short: "AI authority for earned media",
-    long: "The dedicated platform that turns earned media coverage and owned content into measurable AI authority for PR and marketing leaders.",
-  },
-};
-const MOCK_OPTIMISED_DUAL_LISTS: Record<string, DualListValue> = {
-  "1.3": [
-    { short: "Earned + owned in one workflow", long: "Plan, optimise, score and measure both earned and owned media from a single AI-authority workflow." },
-    { short: "Predict before you publish", long: "Predict the AI authority score of every campaign and asset before you commit budget or distribution." },
-    { short: "Cited by ChatGPT, Claude, Gemini", long: "Engineered to make your brand a high-confidence source for the AI models your customers consult before buying." },
-  ],
-};
 
 // PR Set-Up sections 1–3 + AIO Set-Up sections 4–7. Field IDs are renumbered
 // to match the user-visible section numbers so LLMs can reference them
@@ -650,6 +626,8 @@ export default function IntakePage() {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const arr = JSON.parse(raw).optimisedFields; if (Array.isArray(arr)) return new Set<string>(arr); } } catch { /* noop */ }
     return new Set<string>();
   });
+  const [optimisingField, setOptimisingField] = useState<string | null>(null);
+  const [optimiseError, setOptimiseError] = useState<string>("");
 
   useEffect(() => {
     try {
@@ -847,23 +825,70 @@ export default function IntakePage() {
     return false;
   };
 
-  // Per-question optimise: snapshots that field's current value, applies the
-  // demo AI copy and flags the field so its answer is shown in red.
-  const optimiseField = (id: string) => {
-    if (!(OPTIMISED_FIELD_IDS as readonly string[]).includes(id) || optimisedFields.has(id)) return;
-    setPreOptimiseSnapshot((prev) => {
-      const snap = prev || { formData: {}, duals: {}, dualLists: {} };
-      const next = { formData: { ...snap.formData }, duals: { ...snap.duals }, dualLists: { ...snap.dualLists } };
-      if (formData[id] !== undefined) next.formData[id] = formData[id];
-      if (duals[id] !== undefined) next.duals[id] = duals[id];
-      if (dualLists[id] !== undefined) next.dualLists[id] = dualLists[id];
-      return next;
-    });
-    if (MOCK_OPTIMISED_FORM_DATA[id] !== undefined) setFormData((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_FORM_DATA[id] }));
-    if (MOCK_OPTIMISED_DUALS[id] !== undefined) setDuals((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_DUALS[id] }));
-    if (MOCK_OPTIMISED_DUAL_LISTS[id] !== undefined) setDualLists((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_DUAL_LISTS[id] }));
-    setOptimisedFields((prev) => new Set(prev).add(id));
-    if (intakeStatus !== "Accepted") setIntakeStatus("Optimised");
+  // Per-question optimise: sends the user's OWN answer to the AI backend, which
+  // rewrites it to be stronger while keeping their facts. The original is
+  // snapshotted so Reject can restore it, and the field is flagged so the
+  // optimised answer shows in red.
+  const optimiseField = async (id: string) => {
+    if (!(OPTIMISED_FIELD_IDS as readonly string[]).includes(id) || optimisedFields.has(id) || optimisingField) return;
+    setOptimiseError("");
+    if (!fieldHasContent(id)) {
+      setOptimiseError("Write your own answer first, then Optimise will improve it.");
+      return;
+    }
+    const isDual = id === "1.2";
+    const isDualList = id === "1.3";
+    let value: unknown;
+    if (isDual) value = { short: duals[id]?.short || "", long: duals[id]?.long || "" };
+    else if (isDualList) value = (dualLists[id] || []).map((it) => ({ short: it.short || "", long: it.long || "" }));
+    else value = (formData[id] as string) || "";
+
+    // Capture the user's original answer now so we can restore it on Reject.
+    const origForm = formData[id];
+    const origDual = duals[id];
+    const origDualList = dualLists[id];
+
+    setOptimisingField(id);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const resp = await fetch(`${apiBase}/api/ai-assist/optimise-field`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ fieldId: id, value, companyName: (formData["4.1"] as string) || "" }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ error: "Could not optimise this answer." }));
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+
+      setPreOptimiseSnapshot((prev) => {
+        const snap = prev || { formData: {}, duals: {}, dualLists: {} };
+        const next = { formData: { ...snap.formData }, duals: { ...snap.duals }, dualLists: { ...snap.dualLists } };
+        if (origForm !== undefined) next.formData[id] = origForm;
+        if (origDual !== undefined) next.duals[id] = origDual;
+        if (origDualList !== undefined) next.dualLists[id] = origDualList;
+        return next;
+      });
+
+      if (isDual) {
+        setDuals((prev) => ({ ...prev, [id]: { short: data.short || "", long: data.long || "" } }));
+      } else if (isDualList) {
+        const items: DualListValue = Array.isArray(data.items)
+          ? data.items.map((it: { short?: string; long?: string }) => ({ short: it.short || "", long: it.long || "" }))
+          : (origDualList || []);
+        setDualLists((prev) => ({ ...prev, [id]: items }));
+      } else {
+        setFormData((prev) => ({ ...prev, [id]: typeof data.optimised === "string" ? data.optimised : ((origForm as string) || "") }));
+      }
+      setOptimisedFields((prev) => new Set(prev).add(id));
+      if (intakeStatus !== "Accepted") setIntakeStatus("Optimised");
+    } catch (err: any) {
+      setOptimiseError(err.message || "Could not optimise this answer. Please try again.");
+    } finally {
+      setOptimisingField(null);
+    }
   };
 
   // Per-question reject: restores that field to what the user had before optimising.
@@ -871,19 +896,16 @@ export default function IntakePage() {
     setFormData((prev) => {
       const next = { ...prev };
       if (preOptimiseSnapshot?.formData[id] !== undefined) next[id] = preOptimiseSnapshot.formData[id];
-      else if (MOCK_OPTIMISED_FORM_DATA[id] !== undefined) delete next[id];
       return next;
     });
     setDuals((prev) => {
       const next = { ...prev };
       if (preOptimiseSnapshot?.duals[id] !== undefined) next[id] = preOptimiseSnapshot.duals[id];
-      else if (MOCK_OPTIMISED_DUALS[id] !== undefined) delete next[id];
       return next;
     });
     setDualLists((prev) => {
       const next = { ...prev };
       if (preOptimiseSnapshot?.dualLists[id] !== undefined) next[id] = preOptimiseSnapshot.dualLists[id];
-      else if (MOCK_OPTIMISED_DUAL_LISTS[id] !== undefined) delete next[id];
       return next;
     });
     setPreOptimiseSnapshot((prev) => {
@@ -1189,6 +1211,16 @@ export default function IntakePage() {
               <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Project Data Actions</span>
             </div>
             <div className="p-4">
+            <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(40,150,185,0.08)", color: "#1F748F" }}>
+              <Sparkles size={12} className="flex-shrink-0 mt-0.5" />
+              <span>The <span className="font-bold">Optimise this copy</span> icon next to a question rewrites the answer <span className="font-bold">you have written</span> to be stronger and easier for AI to cite, keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>; use <span className="font-bold">Reject</span> to restore your original.</span>
+            </div>
+            {optimiseError && (
+              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
+                <Info size={12} className="flex-shrink-0 mt-0.5" />
+                <span>{optimiseError}</span>
+              </div>
+            )}
             {optimisedFields.size > 0 && (
               <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }} title="AI-optimised answers are shown in red. Use the optimise and reject icons next to each question to apply or undo, then Accept to sign off.">
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
@@ -1295,7 +1327,7 @@ export default function IntakePage() {
                   if (field.id === "1.8") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
@@ -1337,7 +1369,7 @@ export default function IntakePage() {
                     const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
@@ -1379,7 +1411,7 @@ export default function IntakePage() {
                     const dualColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
@@ -1419,7 +1451,7 @@ export default function IntakePage() {
                     const listColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No additional messages yet.</p>
@@ -1464,7 +1496,7 @@ export default function IntakePage() {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
@@ -1497,7 +1529,7 @@ export default function IntakePage() {
                   const baseColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                   return (
                     <div key={field.id}>
-                      <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                      <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                       {field.type === "textarea" ? (
                         <>
                           <textarea
@@ -1677,7 +1709,7 @@ export default function IntakePage() {
   );
 }
 
-function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, optimised = false, onOptimise, onReject }: { id: string; label: string; hint?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; onOptimise?: () => void; onReject?: () => void }) {
+function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, optimised = false, optimising = false, onOptimise, onReject }: { id: string; label: string; hint?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; optimising?: boolean; onOptimise?: () => void; onReject?: () => void }) {
   const [copied, setCopied] = useState(false);
   const copyQuestion = () => {
     const text = hint ? `${label}\n${hint}` : label;
@@ -1723,11 +1755,12 @@ function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, 
           <button
             type="button"
             onClick={onOptimise}
-            title="Optimise this answer with AI"
+            disabled={optimising}
+            title="Optimise this copy: AI rewrites the answer you have written to be stronger and easier for AI models to cite, keeping your own facts. You can Reject to restore your original."
             className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
-            style={{ color: "#2896b9", fontFamily: "Inter, sans-serif", background: "rgba(40,150,185,0.08)" }}
+            style={{ color: "#2896b9", fontFamily: "Inter, sans-serif", background: "rgba(40,150,185,0.08)", cursor: optimising ? "default" : "pointer", opacity: optimising ? 0.7 : 1 }}
           >
-            <Sparkles size={12} /> Optimise
+            <Sparkles size={12} className={optimising ? "animate-pulse" : ""} /> {optimising ? "Optimising this copy..." : "Optimise this copy"}
           </button>
         )}
       </label>
