@@ -26,6 +26,7 @@ import {
   Download,
   Info,
   Save,
+  Undo2,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 
@@ -632,7 +633,6 @@ export default function IntakePage() {
   const [aiNotice, setAiNotice] = useState<string>("");
   const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
-  const [showOptimiseModal, setShowOptimiseModal] = useState(false);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).acceptedAt || null; } catch { /* noop */ }
     return null;
@@ -647,15 +647,19 @@ export default function IntakePage() {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).preOptimiseSnapshot || null; } catch { /* noop */ }
     return null;
   });
+  const [optimisedFields, setOptimisedFields] = useState<Set<string>>(() => {
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const arr = JSON.parse(raw).optimisedFields; if (Array.isArray(arr)) return new Set<string>(arr); } } catch { /* noop */ }
+    return new Set<string>();
+  });
 
   useEffect(() => {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, aiWebsite }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, aiWebsite]);
+  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
