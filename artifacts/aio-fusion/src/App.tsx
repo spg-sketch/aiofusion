@@ -133,6 +133,7 @@ type Client = {
   lastActive: string;
   recentActivity: string;
   logo?: string;
+  owner?: string;
 };
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
@@ -221,6 +222,7 @@ function migrateLegacyIntakeToProject(): void {
 function createStoredProject(name: string): Client {
   const projects = loadStoredProjects();
   const clean = name.trim() || "New Project";
+  const owner = getLocalSession()?.username;
   const project: Client = {
     id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: clean,
@@ -233,9 +235,31 @@ function createStoredProject(name: string): Client {
     activePlans: 0,
     lastActive: "Just now",
     recentActivity: "Project created",
+    ...(owner ? { owner } : {}),
   };
   saveStoredProjects([project, ...projects]);
   return project;
+}
+
+// One-time migration: projects created before ownership was tracked have no
+// owner. Assign them all to the first admin account so they appear under that
+// admin in User Management. Runs once, guarded by a flag.
+const OWNER_MIGRATION_FLAG = "aio.projects.owner.migrated.v1";
+function migrateAssignOwnerlessToAdmin(): void {
+  try {
+    if (localStorage.getItem(OWNER_MIGRATION_FLAG) === "1") return;
+    const projects = loadStoredProjects();
+    const hasOwnerless = projects.some((p) => !p.owner);
+    if (!hasOwnerless) {
+      localStorage.setItem(OWNER_MIGRATION_FLAG, "1");
+      return;
+    }
+    const admin = getLocalUsers().find((u) => u.role === "admin");
+    if (!admin) return; // try again next load once an admin exists
+    const next = projects.map((p) => (p.owner ? p : { ...p, owner: admin.username }));
+    saveStoredProjects(next);
+    localStorage.setItem(OWNER_MIGRATION_FLAG, "1");
+  } catch { /* noop */ }
 }
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
@@ -6819,6 +6843,9 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
+  const allProjects = loadStoredProjects();
+  const projectsByOwner = (username: string) =>
+    allProjects.filter((p) => (p.owner || "").toLowerCase() === username.toLowerCase());
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<LocalRole>("user");
@@ -7000,6 +7027,28 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
                       </button>
                     </div>
                   </div>
+                  {(() => {
+                    const owned = projectsByOwner(u.username);
+                    return (
+                      <div className="mt-3 sm:pl-[52px]">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>
+                          Projects ({owned.length})
+                        </p>
+                        {owned.length === 0 ? (
+                          <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {owned.map((p) => (
+                              <span key={p.id} className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
+                                {p.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {editingPw && (
                     <form onSubmit={handleSavePassword} className="mt-3 flex flex-wrap items-center gap-2">
                       <input
@@ -7126,6 +7175,7 @@ function App() {
 
   useEffect(() => {
     migrateLegacyIntakeToProject();
+    migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
   }, []);
 
