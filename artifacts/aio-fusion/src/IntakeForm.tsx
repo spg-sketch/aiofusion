@@ -1086,7 +1086,7 @@ export default function IntakePage() {
           Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information becomes your core Project Data, which helps optimise your future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
         </p>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          Setting up your company information here is vitally important, and it is a valuable investment in the success of your GEO strategy. We recommend setting aside around two hours to complete it properly. There is a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span> next to each question, so if you already have an LLM trained on your business information, you can use it to help you get your answers faster.
+          Setting up your company information here is vitally important, and it is a valuable investment in the success of your GEO strategy. We recommend setting aside around two hours to complete it properly. There is a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span> next to each question, so if you already have an LLM trained on your business information, you can use it to help you get your answers faster. The <span className="font-bold">Optimise this copy</span> icon next to a question rewrites the answer <span className="font-bold">you have written</span> to be stronger and easier for AI to cite, keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>; use <span className="font-bold">Reject</span> to restore your original.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
@@ -1224,10 +1224,6 @@ export default function IntakePage() {
               <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Project Data Actions</span>
             </div>
             <div className="p-4">
-            <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(40,150,185,0.08)", color: "#1F748F" }}>
-              <Sparkles size={12} className="flex-shrink-0 mt-0.5" />
-              <span>The <span className="font-bold">Optimise this copy</span> icon next to a question rewrites the answer <span className="font-bold">you have written</span> to be stronger and easier for AI to cite, keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>; use <span className="font-bold">Reject</span> to restore your original.</span>
-            </div>
             {optimiseError && (
               <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
