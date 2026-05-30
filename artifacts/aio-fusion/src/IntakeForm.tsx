@@ -1262,7 +1262,7 @@ export default function IntakePage() {
               </button>
               <button
                 onClick={() => {
-                  if (window.confirm("Start a brand-new project? This will permanently delete everything you have entered in this Project Set-Up. This cannot be undone.")) {
+                  if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
                     setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
                     setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
@@ -1270,9 +1270,9 @@ export default function IntakePage() {
                 }}
                 className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
                 style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
-                title="Clear everything and start a brand-new project (deletes all current data)"
+                title="Clear everything and start a new project - you will lose all the data entered here"
               >
-                <Plus size={13} /> Create New
+                <Plus size={13} /> Create New Project
               </button>
             </div>
             </div>
