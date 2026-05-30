@@ -144,9 +144,19 @@ aiAssistRouter.post(
 // Unlike draft-field (which writes from the website), this takes the text the
 // user has already written and rewrites it to be stronger and easier for AI
 // models to cite, while preserving their facts and meaning.
-// Optimise is offered on every free-text answer. These structured pickers on
-// the form (spokespeople and the two media-category fields) are never optimised.
-const OPTIMISE_EXCLUDED_FIELDS = new Set(["1.8", "1.9", "1.10"]);
+// Questions that expose the Optimise control. Must stay in sync with the
+// frontend rule in artifacts/aio-fusion/src/IntakeForm.tsx: every free-text
+// answer (textarea, dual and dual-list) except the structured pickers 1.8, 1.9
+// and 1.10. Short factual `text` fields, checkboxes and headings are excluded.
+const OPTIMISE_FIELDS = new Set([
+  "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.11", "1.12",
+  "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7",
+  "3.1", "3.2", "3.3", "3.4",
+  "4.2", "4.3", "4.5", "4.7", "4.8",
+  "5.1b", "5.2", "5.5", "5.6", "5.7",
+  "6.1", "6.2", "6.3", "6.4b", "6.5b", "6.6", "6.7",
+  "7.2", "7.3", "7.4", "7.5",
+]);
 
 // Tailored instructions for specific questions. Any other field falls back to
 // GENERIC_OPTIMISE_INSTRUCTION below.
@@ -197,7 +207,7 @@ aiAssistRouter.post(
       companyName?: string;
     };
 
-    if (!fieldId || OPTIMISE_EXCLUDED_FIELDS.has(fieldId)) {
+    if (!fieldId || !OPTIMISE_FIELDS.has(fieldId)) {
       res.status(400).json({ error: "This field cannot be optimised." });
       return;
     }

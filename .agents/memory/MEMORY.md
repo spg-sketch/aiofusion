@@ -4,3 +4,4 @@
 - [Hub data storage](hub-data-storage.md) — projects/logos/intake/session are browser localStorage only, not backed up; logos persist via aio.clientLogos.v1; ~5MB cap so guard logo size.
 - [Bluhalo e2e test](bluhalo-e2e-test.md) — reusable intake test at artifacts/aio-fusion/test/; inject full dataset into aio.intake.v2::{activeProjectId} rather than typing; checkbox fields are string[], conditionals need exact option strings.
 - [api-server dev workflow](api-server-dev.md) — dev runs build+start (no watch) so restart after route edits or 404; test on localhost:8080, not the dev domain; AI via Anthropic Replit integration.
+- [Optimise field set sync](optimise-field-sync.md) — per-question Optimise is offered on all free-text answers (textarea/dual/dual-list, excl 1.8/1.9/1.10); frontend derives the set from config but backend has a parallel hardcoded allowlist that must be kept in sync by hand.
