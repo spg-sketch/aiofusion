@@ -1154,13 +1154,13 @@ export default function IntakePage() {
           </div>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: vars.g500 }}>
-          Capture the business information, messaging and content that will inform your PR, content marketing and AI Authority strategy for this project. This information becomes your core Project Data, which helps optimise your future PR and marketing output as well as your owned website. Please complete both the PR set-up and Website set-up sections to create your Project Data.
+          This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR set-up and Website set-up sections to build it.
         </p>
         <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: vars.g500 }}>
-          Setting up your company information here is vitally important, and it is a valuable investment in the success of your GEO strategy. We recommend setting aside around two hours to complete it properly.
+          Getting this right matters, so set aside around two hours to do it properly. It is one of the most valuable investments you can make in your GEO strategy.
         </p>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          There is a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span> next to each question, so if you already have an LLM trained on your business information, you can use it to help you get your answers faster. The <span className="font-bold">Optimise this copy</span> icon next to a question rewrites the answer <span className="font-bold">you have written</span> to be stronger and easier for AI to cite, keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>; use <span className="font-bold">Reject</span> to restore your original.
+          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>, so if you have an LLM trained on your business you can use it to draft answers faster. The <span className="font-bold">Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>, and <span className="font-bold">Reject</span> restores your original.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
