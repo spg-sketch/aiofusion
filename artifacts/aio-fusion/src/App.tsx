@@ -29,7 +29,7 @@ import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
 import heroBgImg from "./assets/hero-bg.png";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronRight,
   Lock,
@@ -7208,6 +7208,45 @@ function App() {
   });
 
   useEffect(() => { seedDemoDataIfEmpty(); migrateGlobalStoresToFirstProject(); }, []);
+
+  // --- Browser history sync ---------------------------------------------
+  // The app navigates via internal state (view/currentPage) rather than URLs.
+  // Without this, the browser Back button has no in-app history to step
+  // through and leaves the site entirely. We mirror each navigation into the
+  // history stack so Back moves through previous in-app screens instead.
+  const navInitDone = useRef(false);
+  const skipHistoryPush = useRef(false);
+  useEffect(() => {
+    const navState = { __aioNav: true, view, currentPage };
+    if (!navInitDone.current) {
+      navInitDone.current = true;
+      window.history.replaceState(navState, "");
+      return;
+    }
+    if (skipHistoryPush.current) {
+      skipHistoryPush.current = false;
+      return;
+    }
+    window.history.pushState(navState, "");
+  }, [view, currentPage]);
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string } | null;
+      skipHistoryPush.current = true;
+      if (s && s.__aioNav) {
+        setView((s.view as typeof view) ?? "landing");
+        if (s.currentPage) setCurrentPage(s.currentPage);
+      } else {
+        // Backed past the first in-app entry: keep them on the site at the
+        // landing page rather than dropping them out unexpectedly.
+        setView("landing");
+      }
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
