@@ -207,6 +207,11 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const [result, setResult] = useState<LlmCheckResult | null>(null);
   const prefilledKeywords = getPreferredKeywords();
   const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
+  const [companyName, setCompanyName] = useState(activeClient.name);
+  useEffect(() => {
+    setCompanyName(activeClient.name);
+  }, [activeClient.id, activeClient.name]);
+  const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
   const targetSectors = getTargetSectors();
   const PLACEHOLDER_SECTORS = ["Project Set-Up", "Awaiting set-up", ""];
@@ -254,7 +259,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          companyName: activeClient.name,
+          companyName: probeName,
           sector: auditSectors[0] || activeClient.sector,
           sectors: auditSectors,
           keywords,
@@ -289,7 +294,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Score whether AI models mention {activeClient.name} when asked about the sectors you operate in and the markets you sell to.
+            Score whether AI models mention {probeName || activeClient.name} when asked about the sectors you operate in and the markets you sell to.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
@@ -302,9 +307,20 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             </div>
             <div className="mb-4">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Company</label>
-              <div className="px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}>
-                {activeClient.name}
-              </div>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Enter the brand or sub-brand to probe"
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none"
+                style={{ borderColor: vars.g200, color: vars.navy, background: "white" }}
+              />
+              <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: probeName.length === 0 ? vars.red : vars.g400 }}>
+                <Info size={11} />
+                {probeName.length === 0
+                  ? "Enter a brand name to probe."
+                  : "Edit to probe just the core brand (for example \"Bluhalo\") or a specific sub-brand."}
+              </p>
             </div>
             {combinedSectors.length > 0 ? (
               <div className="mb-4">
@@ -400,7 +416,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             <div className="flex items-center gap-3">
               <button
                 onClick={runCheck}
-                disabled={loading || auditSectors.length === 0}
+                disabled={loading || auditSectors.length === 0 || probeName.length === 0}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
                 style={{ background: "#1f748f" }}
               >
@@ -423,7 +439,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine visibility probes</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  We're asking both Claude and ChatGPT real sector questions and counting whether {activeClient.name} appears in their responses. This typically takes 30-60 seconds.
+                  We're asking both Claude and ChatGPT real sector questions and counting whether {probeName || activeClient.name} appears in their responses. This typically takes 30-60 seconds.
                 </p>
               </div>
             )}
