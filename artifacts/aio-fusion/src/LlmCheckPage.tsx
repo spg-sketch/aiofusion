@@ -554,9 +554,9 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
               <textarea
                 value={icpProfile}
                 onChange={(e) => setIcpProfile(e.target.value)}
-                rows={2}
+                rows={6}
                 placeholder="e.g. small to mid-sized marketing and creative agencies, 10 to 150 staff - not the large global consultancies"
-                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-none"
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-y"
                 style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
               />
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
