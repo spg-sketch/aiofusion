@@ -211,6 +211,13 @@ const sections: SectionDef[] = [
         type: "textarea",
         optional: true,
       },
+      {
+        id: "1.12",
+        label: "Locations where you work with clients - cities, countries and regions",
+        hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
+        type: "textarea",
+        optional: true,
+      },
     ],
   },
   // ── PR Set-Up: Section 2 (FAQ + 3 items moved from old Web Section 5) ──
