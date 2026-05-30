@@ -487,13 +487,16 @@ function countWords(s: string): number {
   return s.trim() ? s.trim().split(/\s+/).length : 0;
 }
 
-function Labelled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Labelled({ label, hint, children, action }: { label: string; hint?: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
-        {label}
-        {hint && <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· {hint}</span>}
-      </label>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <label className="block text-[12px] font-semibold" style={{ color: vars.navy }}>
+          {label}
+          {hint && <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· {hint}</span>}
+        </label>
+        {action && <div className="flex-shrink-0">{action}</div>}
+      </div>
       {children}
     </div>
   );
@@ -4969,6 +4972,8 @@ function PlaceholderPage({
   );
 }
 
+type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
+
 function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
@@ -4983,10 +4988,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [transcript, setTranscript] = useState("");
   const [actionNotes, setActionNotes] = useState("");
   const [editorFontSize, setEditorFontSize] = useState<number>(13);
-  const [optimised, setOptimised] = useState(false);
-  const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; headline: string; transcript: string } | null>(null);
-  const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
-  const [showOptimiseBriefModal, setShowOptimiseBriefModal] = useState(false);
+  const [optimisedFields, setOptimisedFields] = useState<Set<CreatorFieldKey>>(new Set());
+  const [fieldSnapshots, setFieldSnapshots] = useState<Partial<Record<CreatorFieldKey, string>>>({});
+  const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string; field?: CreatorFieldKey }[]>([]);
   const [showDownloadNotesModal, setShowDownloadNotesModal] = useState(false);
   const [spokesperson, setSpokesperson] = useState(spokesList[0]?.name || "");
   const [spokesLi, setSpokesLi] = useState(spokesList[0]?.linkedin || "");
@@ -5036,58 +5040,108 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const projectMessages = getKeyMessages();
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || transcript.trim().length > 0 || headline.trim().length > 0;
+  const isOpt = (k: CreatorFieldKey) => optimisedFields.has(k);
+  const anyOptimised = optimisedFields.size > 0;
 
-  const runOptimise = () => {
-    if (!hasAnyContent) {
-      alert("Add some content first - at least a headline, standfirst or transcript.");
-      return;
-    }
-    setOptimiseSnapshot({ articleHeadline, standfirst, headline, transcript });
+  const getFieldValue = (key: CreatorFieldKey): string =>
+    key === "headline" ? articleHeadline : key === "standfirst" ? standfirst : key === "pitch" ? headline : key === "transcript" ? transcript : actionNotes;
+  const setFieldValue = (key: CreatorFieldKey, val: string) => {
+    if (key === "headline") setArticleHeadline(val);
+    else if (key === "standfirst") setStandfirst(val);
+    else if (key === "pitch") setHeadline(val);
+    else if (key === "transcript") setTranscript(val);
+    else setActionNotes(val);
+  };
+
+  type ChangeLogEntry = { kind: "embed" | "structure" | "flag"; text: string; field: CreatorFieldKey };
+  const buildFieldOptimisation = (key: CreatorFieldKey): { next: string; log: ChangeLogEntry[] } | null => {
     const msgs = projectMessages;
     const msg1 = msgs[0]?.short || "AI authority";
     const msg2 = msgs[1]?.short || "human-led PR expertise";
     const msg3 = msgs[2]?.short || "measurable earned-media impact";
-    const newHeadline = articleHeadline
-      ? articleHeadline.replace(/\b(PR|Marketing|Comms)\b/i, (m) => `${m} & ${msg1}`).slice(0, 140)
-      : `${msg1}: Why ${projectName || "Bluhalo"} is reframing modern ${contentType.toLowerCase()}`;
-    const newStandfirst = standfirst
-      ? `${standfirst.replace(/\.$/, "")} - building on ${msg2} and proving ${msg3}.`
-      : `A look at how ${msg2} is becoming the new battleground for ${msg1}, and what it means for brands chasing ${msg3}.`;
-    const newTranscript = transcript
-      ? `${transcript}\n\n- Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured opening to lead with the news hook.`
-      : transcript;
-    setArticleHeadline(newHeadline);
-    setStandfirst(newStandfirst);
-    setTranscript(newTranscript);
-    setChangeLog([
-      { kind: "structure", text: `Rewrote the headline to lead with "${msg1}" - strongest LLM-citation anchor for ${projectName || "this project"}.` },
-      { kind: "embed", text: `Embedded "${msg1}" in the opening clause of the headline and the first sentence of the standfirst.` },
-      { kind: "embed", text: `Embedded "${msg2}" mid-paragraph in the standfirst summary to bridge the news hook into the body.` },
-      { kind: "embed", text: `Embedded "${msg3}" in the closing sentence of the transcript as a measurable proof-point and call-to-action.` },
-      { kind: "structure", text: `Reordered the transcript opening so the news hook leads, followed by spokesperson quote, then supporting evidence - improves both reader pull-through and LLM extractability.` },
-      ...(msgs[3] ? [{ kind: "flag" as const, text: `Could not embed "${msgs[3].short}" naturally - it overlaps thematically with "${msg1}" and would have repeated the same claim. Recommend using it in the spokesperson LinkedIn post instead.` }] : []),
-      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 - used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
-    ]);
-    setOptimised(true);
-    setShowOptimiseBriefModal(false);
+    switch (key) {
+      case "headline": {
+        if (!articleHeadline.trim()) return null;
+        const next = articleHeadline.replace(/\b(PR|Marketing|Comms)\b/i, (m) => `${m} & ${msg1}`).slice(0, 140);
+        return { next, log: [{ kind: "structure", text: `Headline: rewrote it to lead with "${msg1}", the strongest LLM-citation anchor for ${projectName || "this project"}.`, field: key }] };
+      }
+      case "standfirst": {
+        if (!standfirst.trim()) return null;
+        const next = `${standfirst.replace(/\.$/, "")} - building on ${msg2} and proving ${msg3}.`;
+        return { next, log: [{ kind: "embed", text: `Standfirst: embedded "${msg2}" and "${msg3}" so the summary bridges the news hook into the body.`, field: key }] };
+      }
+      case "pitch": {
+        if (!headline.trim()) return null;
+        const next = `${headline.replace(/\.$/, "")}\n\nWhy it lands: anchors the angle in "${msg1}" and gives journalists a clear, quotable hook.`;
+        return { next, log: [{ kind: "embed", text: `Pitch idea: sharpened the angle around "${msg1}" and added a quotable hook for journalists.`, field: key }] };
+      }
+      case "transcript": {
+        if (!transcript.trim()) return null;
+        const next = `${transcript}\n\n- Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured the opening to lead with the news hook.`;
+        return { next, log: [
+          { kind: "embed", text: `Transcript: embedded "${msg1}", "${msg2}" and "${msg3}" across the intro, body and close.`, field: key },
+          { kind: "structure", text: `Transcript: reordered the opening so the news hook leads, then the spokesperson quote, then supporting evidence - improves reader pull-through and LLM extractability.`, field: key },
+        ] };
+      }
+      case "actionNotes": {
+        if (!actionNotes.trim()) return null;
+        const next = `${actionNotes.replace(/\.$/, "")}. Remember to brief the spokesperson on the key messages "${msg1}" and "${msg2}" ahead of sign-off.`;
+        return { next, log: [{ kind: "structure", text: `Action notes: tightened the wording and added a reminder to brief the spokesperson on the key messages.`, field: key }] };
+      }
+    }
   };
 
-  const rejectOptimised = () => {
-    if (!optimiseSnapshot) return;
-    if (!window.confirm("Discard the optimised version and restore the copy you originally entered?")) return;
-    setArticleHeadline(optimiseSnapshot.articleHeadline);
-    setStandfirst(optimiseSnapshot.standfirst);
-    setHeadline(optimiseSnapshot.headline);
-    setTranscript(optimiseSnapshot.transcript);
-    setOptimiseSnapshot(null);
-    setChangeLog([]);
-    setOptimised(false);
+  const optimiseField = (key: CreatorFieldKey) => {
+    if (optimisedFields.has(key)) return;
+    const result = buildFieldOptimisation(key);
+    if (!result) {
+      alert("Add some copy to this field first, then Optimise will improve it.");
+      return;
+    }
+    setFieldSnapshots((prev) => ({ ...prev, [key]: getFieldValue(key) }));
+    setFieldValue(key, result.next);
+    setChangeLog((prev) => [...prev, ...result.log]);
+    setOptimisedFields((prev) => new Set(prev).add(key));
   };
+
+  const rejectField = (key: CreatorFieldKey) => {
+    if (!optimisedFields.has(key)) return;
+    const snap = fieldSnapshots[key];
+    if (snap !== undefined) setFieldValue(key, snap);
+    setFieldSnapshots((prev) => { const next = { ...prev }; delete next[key]; return next; });
+    setChangeLog((prev) => prev.filter((c) => c.field !== key));
+    setOptimisedFields((prev) => { const next = new Set(prev); next.delete(key); return next; });
+  };
+
+  const optimisePill = (key: CreatorFieldKey) => (
+    isOpt(key) ? (
+      <button
+        type="button"
+        onClick={() => rejectField(key)}
+        title="Reject the AI version and restore the copy you had"
+        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors"
+        style={{ color: "#C94A3E", background: "rgba(201,74,62,0.08)" }}
+      >
+        <Undo2 size={12} /> Reject
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => optimiseField(key)}
+        disabled={getFieldValue(key).trim().length === 0}
+        title="Optimise this copy: the LLM rewrites what you have written to be stronger and easier for AI models to cite, weaving in your key messages from Project Data. You can Reject to restore your original."
+        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ color: vars.teal, background: "rgba(40,150,185,0.08)" }}
+      >
+        <Sparkles size={12} /> Optimise this copy
+      </button>
+    )
+  );
 
   const acceptAndArchive = () => {
     archiveItem();
-    setOptimised(false);
-    setOptimiseSnapshot(null);
+    setOptimisedFields(new Set());
+    setFieldSnapshots({});
   };
 
   const shareDraftFromCreator = () => {
@@ -5115,7 +5169,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   const pushToCommsPlanner = () => {
     const projects = loadPlannerProjects();
-    const fallbackNote = optimised ? "Pushed from Content Creator (LLM-optimised draft)." : "Pushed from Content Creator.";
+    const fallbackNote = anyOptimised ? "Pushed from Content Creator (LLM-optimised draft)." : "Pushed from Content Creator.";
     const proj: PlannerProject = {
       id: `pp-${Date.now()}`,
       title: articleHeadline.trim().slice(0, 120) || projectName || "Untitled draft",
@@ -5189,10 +5243,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   };
 
   const optimisedColor = "#DC2626";
-  const optimisedBorder = optimised ? optimisedColor : vars.g200;
-  const headlineColor = optimised ? optimisedColor : vars.navy;
-  const standfirstColor = optimised ? optimisedColor : vars.g600;
-  const bodyColor = optimised ? optimisedColor : undefined;
+  const headlineColor = isOpt("headline") ? optimisedColor : vars.navy;
+  const standfirstColor = isOpt("standfirst") ? optimisedColor : vars.g600;
+  const bodyColor = isOpt("transcript") ? optimisedColor : undefined;
+  const pitchColor = isOpt("pitch") ? optimisedColor : undefined;
+  const actionNotesColor = isOpt("actionNotes") ? optimisedColor : undefined;
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
@@ -5221,28 +5276,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
-            {!optimised ? (
-              <button
-                type="button"
-                onClick={() => setShowOptimiseBriefModal(true)}
-                disabled={!hasAnyContent}
-                title="Optimise this copy: the LLM rewrites your headline, standfirst and body to be stronger and easier for AI models to cite, weaving in your key messages from Project Data. You can Reject to restore your original."
-                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ color: vars.teal, background: "rgba(40,150,185,0.08)" }}
-              >
-                <Sparkles size={12} /> Optimise this copy
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={rejectOptimised}
-                title="Reject the AI version and restore the copy you had"
-                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors"
-                style={{ color: "#C94A3E", background: "rgba(201,74,62,0.08)" }}
-              >
-                <Undo2 size={12} /> Reject optimised
-              </button>
-            )}
+            <span className="text-[11px] font-light" style={{ color: vars.g400 }}>Use Optimise this copy on any field to weave in your key messages.</span>
           </div>
           <div className="flex items-center gap-2">
             <label htmlFor="editor-font-size" className="text-[11px] font-medium" style={{ color: vars.g500 }}>Font size</label>
@@ -5263,40 +5297,40 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </div>
         </div>
 
-        <Labelled label="Headline" hint={`The article headline as it will appear in print - short, bold and punchy. (${articleHeadlineWords} / 20 words)`}>
+        <Labelled label="Headline" hint={`The article headline as it will appear in print - short, bold and punchy. (${articleHeadlineWords} / 20 words)`} action={optimisePill("headline")}>
           <input
             value={articleHeadline}
             onChange={(e) => setArticleHeadline(e.target.value)}
             placeholder="e.g. AI Authority is the New PR Battleground"
             className="w-full px-3 py-3 rounded-lg border font-bold"
-            style={{ borderColor: articleHeadlineOver ? vars.red : optimisedBorder, fontSize: `${Math.round(editorFontSize * 1.45)}px`, color: headlineColor, lineHeight: 1.25, fontFamily: "'Alice', Georgia, serif" }}
+            style={{ borderColor: articleHeadlineOver ? vars.red : (isOpt("headline") ? optimisedColor : vars.g200), fontSize: `${Math.round(editorFontSize * 1.45)}px`, color: headlineColor, lineHeight: 1.25, fontFamily: "'Alice', Georgia, serif" }}
           />
           {articleHeadlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 20-word limit by {articleHeadlineWords - 20} words.</p>}
         </Labelled>
 
-        <Labelled label="Standfirst summary" hint={`The short summary that sits under the headline and previews the article. (${standfirstWords} / 50 words)`}>
+        <Labelled label="Standfirst summary" hint={`The short summary that sits under the headline and previews the article. (${standfirstWords} / 50 words)`} action={optimisePill("standfirst")}>
           <textarea
             value={standfirst}
             onChange={(e) => setStandfirst(e.target.value)}
             rows={2}
             placeholder="A one-or-two sentence preview that hooks the reader into the article…"
             className="w-full px-3 py-2.5 rounded-lg border italic"
-            style={{ borderColor: standfirstOver ? vars.red : optimisedBorder, fontSize: `${Math.round(editorFontSize * 1.1)}px`, color: standfirstColor, lineHeight: 1.45 }}
+            style={{ borderColor: standfirstOver ? vars.red : (isOpt("standfirst") ? optimisedColor : vars.g200), fontSize: `${Math.round(editorFontSize * 1.1)}px`, color: standfirstColor, lineHeight: 1.45 }}
           />
           {standfirstOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 50-word limit by {standfirstWords - 50} words.</p>}
         </Labelled>
 
-        <Labelled label="Pitch idea / news hook" hint={`Up to 150 words for the angle, news hook and supporting reasoning. (${headlineWords} / 150)`}>
-          <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border" style={{ borderColor: headlineOver ? vars.red : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.5 }} />
+        <Labelled label="Pitch idea / news hook" hint={`Up to 150 words for the angle, news hook and supporting reasoning. (${headlineWords} / 150)`} action={optimisePill("pitch")}>
+          <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border" style={{ borderColor: headlineOver ? vars.red : (isOpt("pitch") ? optimisedColor : vars.g200), fontSize: `${editorFontSize}px`, lineHeight: 1.5, color: pitchColor }} />
           {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
         </Labelled>
 
-        <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`}>
-          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : optimisedBorder, fontSize: `${editorFontSize}px`, lineHeight: 1.6, color: bodyColor }} />
+        <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`} action={optimisePill("transcript")}>
+          <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : (isOpt("transcript") ? optimisedColor : vars.g200), fontSize: `${editorFontSize}px`, lineHeight: 1.6, color: bodyColor }} />
           {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
         </Labelled>
 
-        <Labelled label="Action Notes" hint="Up to 150 words of internal notes - pushed through to the Notes column on the Comms Planner.">
+        <Labelled label="Action Notes" hint="Up to 150 words of internal notes - pushed through to the Notes column on the Comms Planner." action={optimisePill("actionNotes")}>
           <textarea
             value={actionNotes}
             onChange={(e) => {
@@ -5308,7 +5342,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             rows={4}
             placeholder="e.g. Pair with launch event the week of; spokesperson availability tight; coordinate with Spencer on quote sign-off."
             className="w-full px-3 py-2.5 rounded-lg border"
-            style={{ borderColor: vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.55 }}
+            style={{ borderColor: isOpt("actionNotes") ? optimisedColor : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.55, color: actionNotesColor }}
           />
           <p className="text-[10px] font-light mt-1" style={{ color: countWords(actionNotes) > 140 ? vars.red : vars.g400 }}>
             {countWords(actionNotes)} / 150 words · Also shown on the Comms Planner
@@ -5459,33 +5493,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* Optimise Brief modal */}
-      {showOptimiseBriefModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOptimiseBriefModal(false)}>
-          <div className="bg-white rounded-2xl max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                <Sparkles size={16} color={vars.teal} /> Optimise content
-              </h2>
-              <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
-            </div>
-            <div className="p-6">
-              <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>LLM brief</p>
-              <div className="rounded-xl p-4 mb-4 text-[13px] leading-relaxed font-light" style={{ background: "rgba(40,150,185,0.05)", border: `1px solid rgba(40,150,185,0.15)`, color: vars.g600 }}>
-                Using the headline, standfirst summary and body copy entered below, weave the project's key messages (Project Data 1.2 &amp; 1.3) into the piece in a way that reads naturally and earns LLM citations. Return the optimised headline, standfirst and body, plus a bullet-pointed <strong>change log</strong> noting where and why each key message was embedded, any structural or phrasing changes made, and flag any instance where a key message could not be embedded naturally with a brief explanation.
-              </div>
-              <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
-                The optimised copy will replace the values in the Headline, Standfirst and Transcript fields and be displayed in red. Use Reject optimised, next to the Content entry heading, to restore the original.
-              </p>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowOptimiseBriefModal(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-                <button onClick={runOptimise} className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white" style={{ background: vars.teal }}>Run optimisation</button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
