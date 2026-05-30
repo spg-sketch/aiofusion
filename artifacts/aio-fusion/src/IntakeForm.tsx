@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   FileCheck2,
   Sparkles,
-  Pencil,
   Plus,
   X,
   Linkedin,
@@ -957,14 +956,6 @@ export default function IntakePage() {
     alert("Project Data accepted and saved to the dedicated Project Data archive. The signed-off brief is now available to Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO Content and Website Technical GEO.");
   };
 
-  const editProjectData = () => {
-    setTrack("pr");
-    setActiveSection(0);
-    setIntakeStatus("Draft");
-    setAcceptedAt(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   const downloadProjectData = () => {
     // Demo: browser print dialog → user picks "Save as PDF". Works for any
     // status (incomplete / optimised / accepted) per Patrick's spec.
@@ -1247,14 +1238,6 @@ export default function IntakePage() {
             {/* Group 2 - Manage and export the data */}
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Manage &amp; export</p>
             <div className="grid grid-cols-1 gap-2">
-              <button
-                onClick={editProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
-                style={{ background: "#C94A3E" }}
-                title="Re-open the Project Data for editing - jumps to PR Set-Up Section 1"
-              >
-                <Pencil size={13} /> Edit
-              </button>
               <button
                 onClick={downloadProjectData}
                 className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
