@@ -1701,7 +1701,7 @@ Engines used:
             <div className="flex items-center gap-2 mb-6">
               <Globe size={18} style={{ color: vars.g400 }} />
               <span className="text-sm font-medium" style={{ color: vars.g500 }}>
-                Enter a URL or paste content to analyse
+                Enter your homepage URL to analyse
               </span>
             </div>
             <div className="mb-4">
@@ -1723,17 +1723,6 @@ Engines used:
               </p>
             </div>
 
-            <div className="mb-6">
-              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5 block" style={{ color: vars.g500 }}>Page content <span className="font-light normal-case tracking-normal" style={{ color: vars.g400 }}>· optional</span></label>
-              <textarea
-                value={contentInput}
-                onChange={(e) => setContentInput(e.target.value)}
-                placeholder="Paste your page content here..."
-                rows={6}
-                className="w-full p-4 rounded-lg border text-sm resize-y outline-none focus:ring-1"
-                style={{ borderColor: vars.g200, background: vars.g50, color: vars.navy, minHeight: 120 }}
-              />
-            </div>
             {error && (
               <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "#FBEEEC", color: "#B03D33" }}>
                 {error}
