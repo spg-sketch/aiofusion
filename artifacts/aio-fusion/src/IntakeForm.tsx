@@ -21,7 +21,6 @@ import {
   Pencil,
   Plus,
   X,
-  XCircle,
   Linkedin,
   Download,
   Info,
@@ -836,62 +835,65 @@ export default function IntakePage() {
     return { bg: "rgba(212,146,42,0.14)", color: vars.amber, label: "Draft" };
   })();
 
-  const isFullyComplete = allTrackProgress.pct === 100;
-  const isOptimisedField = (id: string) =>
-    intakeStatus === "Optimised" && (OPTIMISED_FIELD_IDS as readonly string[]).includes(id);
+  const isOptimisedField = (id: string) => optimisedFields.has(id);
 
-  const runOptimisation = () => {
-    // Snapshot current values for the 5 messaging fields so Reject can restore.
-    const snapFormData: Record<string, string | string[]> = {};
-    const snapDuals: Record<string, DualValue> = {};
-    const snapDualLists: Record<string, DualListValue> = {};
-    OPTIMISED_FIELD_IDS.forEach((id) => {
-      if (formData[id] !== undefined) snapFormData[id] = formData[id];
-      if (duals[id] !== undefined) snapDuals[id] = duals[id];
-      if (dualLists[id] !== undefined) snapDualLists[id] = dualLists[id];
-    });
-    setPreOptimiseSnapshot({ formData: snapFormData, duals: snapDuals, dualLists: snapDualLists });
-    setFormData((prev) => ({ ...prev, ...MOCK_OPTIMISED_FORM_DATA }));
-    setDuals((prev) => ({ ...prev, ...MOCK_OPTIMISED_DUALS }));
-    setDualLists((prev) => ({ ...prev, ...MOCK_OPTIMISED_DUAL_LISTS }));
-    setIntakeStatus("Optimised");
-    setShowOptimiseModal(false);
-    setActiveSection(0);
-    setTrack("pr");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const fieldHasContent = (id: string) => {
+    const fv = formData[id];
+    if (Array.isArray(fv) ? fv.length > 0 : fv != null && String(fv).trim() !== "") return true;
+    const dv = duals[id];
+    if (dv && ((dv.short || "").trim() !== "" || (dv.long || "").trim() !== "")) return true;
+    const dl = dualLists[id];
+    if (dl && dl.some((it) => (it.short || "").trim() !== "" || (it.long || "").trim() !== "")) return true;
+    return false;
   };
 
-  const rejectOptimised = () => {
-    if (!preOptimiseSnapshot) {
-      setIntakeStatus("Draft");
-      return;
-    }
+  // Per-question optimise: snapshots that field's current value, applies the
+  // demo AI copy and flags the field so its answer is shown in red.
+  const optimiseField = (id: string) => {
+    if (!(OPTIMISED_FIELD_IDS as readonly string[]).includes(id) || optimisedFields.has(id)) return;
+    setPreOptimiseSnapshot((prev) => {
+      const snap = prev || { formData: {}, duals: {}, dualLists: {} };
+      const next = { formData: { ...snap.formData }, duals: { ...snap.duals }, dualLists: { ...snap.dualLists } };
+      if (formData[id] !== undefined) next.formData[id] = formData[id];
+      if (duals[id] !== undefined) next.duals[id] = duals[id];
+      if (dualLists[id] !== undefined) next.dualLists[id] = dualLists[id];
+      return next;
+    });
+    if (MOCK_OPTIMISED_FORM_DATA[id] !== undefined) setFormData((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_FORM_DATA[id] }));
+    if (MOCK_OPTIMISED_DUALS[id] !== undefined) setDuals((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_DUALS[id] }));
+    if (MOCK_OPTIMISED_DUAL_LISTS[id] !== undefined) setDualLists((prev) => ({ ...prev, [id]: MOCK_OPTIMISED_DUAL_LISTS[id] }));
+    setOptimisedFields((prev) => new Set(prev).add(id));
+    if (intakeStatus !== "Accepted") setIntakeStatus("Optimised");
+  };
+
+  // Per-question reject: restores that field to what the user had before optimising.
+  const rejectField = (id: string) => {
     setFormData((prev) => {
       const next = { ...prev };
-      OPTIMISED_FIELD_IDS.forEach((id) => {
-        if (preOptimiseSnapshot.formData[id] !== undefined) next[id] = preOptimiseSnapshot.formData[id];
-        else delete next[id];
-      });
+      if (preOptimiseSnapshot?.formData[id] !== undefined) next[id] = preOptimiseSnapshot.formData[id];
+      else if (MOCK_OPTIMISED_FORM_DATA[id] !== undefined) delete next[id];
       return next;
     });
     setDuals((prev) => {
       const next = { ...prev };
-      OPTIMISED_FIELD_IDS.forEach((id) => {
-        if (preOptimiseSnapshot.duals[id] !== undefined) next[id] = preOptimiseSnapshot.duals[id];
-        else delete next[id];
-      });
+      if (preOptimiseSnapshot?.duals[id] !== undefined) next[id] = preOptimiseSnapshot.duals[id];
+      else if (MOCK_OPTIMISED_DUALS[id] !== undefined) delete next[id];
       return next;
     });
     setDualLists((prev) => {
       const next = { ...prev };
-      OPTIMISED_FIELD_IDS.forEach((id) => {
-        if (preOptimiseSnapshot.dualLists[id] !== undefined) next[id] = preOptimiseSnapshot.dualLists[id];
-        else delete next[id];
-      });
+      if (preOptimiseSnapshot?.dualLists[id] !== undefined) next[id] = preOptimiseSnapshot.dualLists[id];
+      else if (MOCK_OPTIMISED_DUAL_LISTS[id] !== undefined) delete next[id];
       return next;
     });
-    setPreOptimiseSnapshot(null);
-    setIntakeStatus("Draft");
+    setPreOptimiseSnapshot((prev) => {
+      if (!prev) return prev;
+      const next = { formData: { ...prev.formData }, duals: { ...prev.duals }, dualLists: { ...prev.dualLists } };
+      delete next.formData[id]; delete next.duals[id]; delete next.dualLists[id];
+      return next;
+    });
+    setOptimisedFields((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    if (optimisedFields.size <= 1 && intakeStatus === "Optimised") setIntakeStatus("Draft");
   };
 
   const acceptProjectData = () => {
@@ -899,6 +901,7 @@ export default function IntakePage() {
     setIntakeStatus("Accepted");
     setAcceptedAt(stamp);
     setPreOptimiseSnapshot(null);
+    setOptimisedFields(new Set<string>());
     try {
       const raw = localStorage.getItem(PROJECT_DATA_ARCHIVE_KEY);
       const arr = raw ? JSON.parse(raw) : [];
@@ -938,7 +941,7 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
       );
     } catch { /* noop */ }
     setJustSaved(true);
@@ -1186,25 +1189,16 @@ export default function IntakePage() {
               <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Project Data Actions</span>
             </div>
             <div className="p-4">
-            {intakeStatus === "Optimised" && (
-              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
+            {optimisedFields.size > 0 && (
+              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }} title="AI-optimised answers are shown in red. Use the optimise and reject icons next to each question to apply or undo, then Accept to sign off.">
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
-                <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
+                <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - review each question above, then Accept</span>
               </div>
             )}
 
-            {/* Group 1 - Optimise and sign off the data */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Optimise &amp; sign off</p>
+            {/* Group 1 - Sign off the data */}
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Sign off</p>
             <div className="grid grid-cols-1 gap-2 mb-4">
-              <button
-                onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
-                disabled={!isFullyComplete}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "#C8497A" }}
-                title={isFullyComplete ? "Use AI to optimise the messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4" : `Complete every field across all sections (PR + AIO) to enable - currently ${allTrackProgress.pct}% (${allTrackProgress.filled}/${allTrackProgress.total})`}
-              >
-                <Sparkles size={13} /> Optimise with AI
-              </button>
               <button
                 onClick={acceptProjectData}
                 className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
@@ -1212,19 +1206,6 @@ export default function IntakePage() {
                 title="Sign off the Project Data and save it to the Project Data archive"
               >
                 <FileCheck2 size={13} /> Accept
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm("Discard the AI-optimised copy and restore the original messaging in Parts 1.1, 1.2, 1.3, 1.6 and 2.4?")) {
-                    rejectOptimised();
-                  }
-                }}
-                disabled={intakeStatus !== "Optimised"}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "#9C4F47" }}
-                title="Discard the AI-optimised copy and go back to your original draft"
-              >
-                <XCircle size={13} /> Reject Optimised
               </button>
             </div>
 
@@ -1251,7 +1232,7 @@ export default function IntakePage() {
                 onClick={() => {
                   if (window.confirm("Start a brand-new project? This will permanently delete everything you have entered in this Project Set-Up. This cannot be undone.")) {
                     setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
-                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null);
+                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                   }
                 }}
@@ -1314,7 +1295,7 @@ export default function IntakePage() {
                   if (field.id === "1.8") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
@@ -1356,7 +1337,7 @@ export default function IntakePage() {
                     const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
@@ -1398,7 +1379,7 @@ export default function IntakePage() {
                     const dualColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
@@ -1438,7 +1419,7 @@ export default function IntakePage() {
                     const listColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No additional messages yet.</p>
@@ -1483,7 +1464,7 @@ export default function IntakePage() {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
@@ -1516,7 +1497,7 @@ export default function IntakePage() {
                   const baseColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                   return (
                     <div key={field.id}>
-                      <FieldLabel id={displayId} label={field.label} hint={field.hint} />
+                      <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                       {field.type === "textarea" ? (
                         <>
                           <textarea
@@ -1683,39 +1664,6 @@ export default function IntakePage() {
         );
       })()}
 
-      {/* Optimise modal */}
-      {showOptimiseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowOptimiseModal(false)}>
-          <div className="bg-white rounded-2xl max-w-xl w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                <Sparkles size={16} color={vars.teal} /> Optimise Project Messages
-              </h2>
-              <button onClick={() => setShowOptimiseModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
-            </div>
-            <div className="p-6">
-              <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>AI brief</p>
-              <div className="rounded-xl p-4 mb-4 text-[13px] leading-relaxed font-light" style={{ background: "rgba(40,150,185,0.05)", border: `1px solid rgba(40,150,185,0.15)`, color: vars.g600 }}>
-                Using all the information about this company contained in the Project Data, optimise the PR messaging content in Parts <strong>1.1, 1.2, 1.3, 1.6 and 2.4</strong> of PR Set-Up for authority in earned media and AI-generated answers. Cross-reference AIO Set-Up Sections 4–7 (business fundamentals, GEO/AEO priority, schema and consistency) and PR Set-Up Sections 2.5–2.7 (positioning copy, products / services, search phrases) to maximise visibility with AI models. Return optimised copy in the same field structure so it can be reviewed in red and accepted, edited or rejected.
-              </div>
-              <p className="text-[11px] font-light mb-4" style={{ color: vars.g500 }}>
-                Optimised copy will replace the values in Parts 1.1, 1.2, 1.3, 1.6 and 2.4 and be displayed in red. You can Accept, Edit or Reject the optimised copy from the Project Data Actions panel.
-              </p>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowOptimiseModal(false)} className="text-[13px] font-semibold px-4 py-2 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
-                <button
-                  onClick={runOptimisation}
-                  className="text-[13px] font-semibold px-4 py-2 rounded-lg text-white"
-                  style={{ background: vars.teal }}
-                >
-                  Run optimisation
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {acceptedAt && intakeStatus === "Accepted" && (
         <div className="mt-6 rounded-xl border p-4 flex items-start gap-3" style={{ background: "rgba(61,155,107,0.06)", borderColor: "rgba(61,155,107,0.25)" }}>
           <CheckCircle2 size={18} color={vars.green} className="mt-0.5 flex-shrink-0" />
@@ -1729,7 +1677,7 @@ export default function IntakePage() {
   );
 }
 
-function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: string }) {
+function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, optimised = false, onOptimise, onReject }: { id: string; label: string; hint?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; onOptimise?: () => void; onReject?: () => void }) {
   const [copied, setCopied] = useState(false);
   const copyQuestion = () => {
     const text = hint ? `${label}\n${hint}` : label;
@@ -1760,6 +1708,28 @@ function FieldLabel({ id, label, hint }: { id: string; label: string; hint?: str
         >
           {copied ? <><Check size={12} /> Copied</> : <Copy size={12} />}
         </button>
+        {optimisable && optimised && (
+          <button
+            type="button"
+            onClick={onReject}
+            title="Reject the AI version and restore what you had"
+            className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
+            style={{ color: "#C94A3E", fontFamily: "Inter, sans-serif", background: "rgba(201,74,62,0.08)" }}
+          >
+            <Undo2 size={12} /> Reject
+          </button>
+        )}
+        {optimisable && hasContent && !optimised && (
+          <button
+            type="button"
+            onClick={onOptimise}
+            title="Optimise this answer with AI"
+            className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
+            style={{ color: "#2896b9", fontFamily: "Inter, sans-serif", background: "rgba(40,150,185,0.08)" }}
+          >
+            <Sparkles size={12} /> Optimise
+          </button>
+        )}
       </label>
       {hint && <p className="text-[12px] font-light leading-relaxed mt-1.5 pl-0.5" style={{ color: "#374151" }}>{hint}</p>}
     </div>

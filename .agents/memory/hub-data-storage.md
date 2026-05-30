@@ -18,3 +18,5 @@ All hub data lives in **browser localStorage only**. There is no server-side sto
 **How to apply:**
 - Logos must be persisted via `saveClientLogos`/`loadClientLogos`; never leave logo state in-memory only (that was the original "can't add a logo" bug — it vanished on refresh).
 - If asked to "back up", "share across devices", or "why did my data disappear", the answer is the localStorage-only architecture; a real backend would be needed for durable/shared storage.
+
+**Intake persistence has parallel write paths — keep them in lockstep.** In `IntakeForm.tsx`, intake state is written to `currentIntakeKey()` in TWO places: the autosave `useEffect` and the manual `saveDraft()` ("Save for later"). Any new persisted field (e.g. `optimisedFields`, `aiWebsite`) must be added to BOTH JSON.stringify payloads AND rehydrated in the matching `useState` initialiser, or "Save for later" silently drops it on reload. `acceptProjectData` writes a separate archive record to `aio.projectData.archive` with its own field list — a third place to update for archived fields.
