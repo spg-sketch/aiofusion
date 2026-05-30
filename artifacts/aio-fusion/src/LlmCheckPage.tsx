@@ -830,16 +830,21 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
             Optimise the next piece of content, push it through Plan and Release, then re-run this audit. Each cycle should move the score.
           </p>
         </div>
-        {onNavigate && (
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button onClick={() => onNavigate("optimiser")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: vars.teal, color: "white" }}>
-              <FileEdit size={14} /> Optimise content
-            </button>
-            <button onClick={() => onNavigate("planner")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
-              Open Planner <ArrowRight size={14} />
-            </button>
-          </div>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button onClick={openReport} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-95" style={{ background: "white", color: vars.navy }}>
+            <Download size={14} /> Save this report
+          </button>
+          {onNavigate && (
+            <>
+              <button onClick={() => onNavigate("optimiser")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: vars.teal, color: "white" }}>
+                <FileEdit size={14} /> Optimise content
+              </button>
+              <button onClick={() => onNavigate("planner")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+                Open Planner <ArrowRight size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
