@@ -1230,12 +1230,6 @@ export default function IntakePage() {
                 <span>{optimiseError}</span>
               </div>
             )}
-            {optimisedFields.size > 0 && (
-              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }} title="AI-optimised answers are shown in red. Use the optimise and reject icons next to each question to apply or undo, then Accept to sign off.">
-                <Info size={12} className="flex-shrink-0 mt-0.5" />
-                <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - review each question above, then Accept</span>
-              </div>
-            )}
 
             {/* Group 1 - Sign off the data */}
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Sign off</p>
