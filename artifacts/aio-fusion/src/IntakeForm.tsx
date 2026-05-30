@@ -1645,6 +1645,17 @@ export default function IntakePage() {
         const pickerSelected = pickerTarget === "audience" ? audienceCategories : businessCategories;
         const pickerSet = pickerTarget === "audience" ? setAudienceCategories : setBusinessCategories;
         const pickerTitle = pickerTarget === "audience" ? "Where your customers are found" : "Your business categories";
+        const customLabel = categorySearch.trim();
+        const lowerSearch = customLabel.toLowerCase();
+        const alreadyExists =
+          TRADE_MEDIA_CATEGORIES.some((c) => c.toLowerCase() === lowerSearch) ||
+          pickerSelected.some((c) => c.toLowerCase() === lowerSearch);
+        const canAddCustom = customLabel.length > 0 && !alreadyExists;
+        const customSelected = pickerSelected.filter((c) => !TRADE_MEDIA_CATEGORIES.includes(c));
+        const customMatches = customSelected.filter(
+          (c) => !categorySearch || c.toLowerCase().includes(lowerSearch),
+        );
+        const displayCategories = [...customMatches, ...filteredCategories];
         return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setPickerTarget(null)}>
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -1656,17 +1667,33 @@ export default function IntakePage() {
               <input
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
-                placeholder="Filter categories..."
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canAddCustom) {
+                    e.preventDefault();
+                    pickerSet([...pickerSelected, customLabel]);
+                    setCategorySearch("");
+                  }
+                }}
+                placeholder="Filter or type a sector to add..."
                 className="w-full px-3 py-2 rounded-lg border text-[13px]"
                 style={{ borderColor: vars.g200 }}
               />
+              {canAddCustom && (
+                <button
+                  onClick={() => { pickerSet([...pickerSelected, customLabel]); setCategorySearch(""); }}
+                  className="mt-2 w-full text-left text-[12px] font-semibold px-3 py-2 rounded-lg border border-dashed flex items-center gap-2"
+                  style={{ borderColor: vars.accent, color: vars.accent, background: "rgba(200,73,122,0.06)" }}
+                >
+                  <Plus size={13} /> Add "{customLabel}" as a custom sector
+                </button>
+              )}
               <p className="text-[11px] font-medium mt-2" style={{ color: vars.g500 }}>
-                {pickerSelected.length} of {TRADE_MEDIA_CATEGORIES.length} selected
+                {pickerSelected.length} selected (can't find yours? type it above and add it)
               </p>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                {filteredCategories.map((cat) => {
+                {displayCategories.map((cat) => {
                   const on = pickerSelected.includes(cat);
                   return (
                     <button
