@@ -474,8 +474,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
             {activeClient.name} &middot; Generated {reportDate}
           </p>
-          <p className="text-[14px] font-light mt-2 max-w-3xl" style={{ color: vars.g500 }}>
-            Track how your AI authority is growing over time by bringing your audit scores, earned media and planned activity into one shareable report. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
+          <p className="text-[14px] font-light mt-3 max-w-3xl leading-relaxed" style={{ color: vars.g600 }}>
+            This is your shareable scorecard for the whole project. It pulls your audit scores, earned media and planned activity into one place so you can see how your AI authority is growing over time. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
