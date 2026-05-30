@@ -1382,7 +1382,7 @@ export default function IntakePage() {
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
-                              No categories selected yet. Click the button below to choose from the alphabetical list of {TRADE_MEDIA_CATEGORIES.length} media categories.
+                              No categories selected yet. Choose from the alphabetical list of {TRADE_MEDIA_CATEGORIES.length} media categories, or add your own if yours is not listed.
                             </p>
                           ) : (
                             <div className="flex flex-wrap gap-1.5">
@@ -1405,11 +1405,22 @@ export default function IntakePage() {
                           >
                             + Choose from {TRADE_MEDIA_CATEGORIES.length} categories
                           </button>
+                          <button
+                            onClick={openPicker}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-dashed inline-flex items-center gap-1.5"
+                            style={{ borderColor: vars.accent, color: vars.accent, background: "rgba(200,73,122,0.06)" }}
+                            title="Open the list, then type your own sector to add it"
+                          >
+                            <Plus size={13} /> Add your own sector
+                          </button>
                           {selected.length > 0 && (
                             <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>
                               {selected.length} selected
                             </span>
                           )}
+                          <p className="w-full text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                            Can't find your sector? Open the list and type it in to add a custom one.
+                          </p>
                         </div>
                       </div>
                     );
@@ -1674,6 +1685,7 @@ export default function IntakePage() {
             </div>
             <div className="px-6 py-3 border-b" style={{ borderColor: vars.g100 }}>
               <input
+                autoFocus
                 value={categorySearch}
                 onChange={(e) => setCategorySearch(e.target.value)}
                 onKeyDown={(e) => {
