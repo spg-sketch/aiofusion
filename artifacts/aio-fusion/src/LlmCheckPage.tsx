@@ -54,6 +54,7 @@ interface ProbeItem {
   runCount?: number;
   mentionContext: string | null;
   responsePreview: string;
+  competitors?: string[];
 }
 
 interface LlmCheckResult {
@@ -166,6 +167,20 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
               <p className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
                 {highlightName(probe.mentionContext, companyName)}
               </p>
+            </div>
+          )}
+          {probe.competitors && probe.competitors.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg" style={{ background: "#FFF7ED", border: "1px solid #FED7AA" }}>
+              <p className="text-[11px] font-semibold mb-2" style={{ color: "#C2410C" }}>
+                Companies the AI named instead{probe.mentioned ? " (alongside " + companyName + ")" : ""}:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {probe.competitors.map((c, i) => (
+                  <span key={i} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: "white", border: "1px solid #FED7AA", color: vars.navy }}>
+                    {c}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
           <div className="mt-3 p-3 rounded-lg" style={{ background: vars.g50 }}>
@@ -326,7 +341,13 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
           ? `<span class="tag yes">Mentioned</span>`
           : `<span class="tag no">Not mentioned</span>`;
         const model = p.model.includes("GPT") ? "ChatGPT" : "Claude";
-        return `<div class="probe"><div class="probe-q">${escapeHtml(p.question)}</div><div class="probe-meta"><span class="model">${escapeHtml(model)}</span>${tag}</div></div>`;
+        const coLine =
+          p.competitors && p.competitors.length > 0
+            ? `<div class="probe-cos"><span class="probe-cos-label">Named:</span>${p.competitors
+                .map((c) => `<span class="probe-co">${escapeHtml(c)}</span>`)
+                .join("")}</div>`
+            : "";
+        return `<div class="probe"><div class="probe-top"><div class="probe-q">${escapeHtml(p.question)}</div><div class="probe-meta"><span class="model">${escapeHtml(model)}</span>${tag}</div></div>${coLine}</div>`;
       })
       .join("");
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
@@ -359,7 +380,11 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   .pill { background: #e0f2f7; color: #1f748f; font-size: 11px; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
   .meta-line { font-size: 12px; color: #6B7280; margin: 0 0 4px; }
   .meta-line strong { color: #374151; }
-  .probe { border: 1px solid #E5E5E5; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .probe { border: 1px solid #E5E5E5; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
+  .probe-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .probe-cos { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .probe-cos-label { font-size: 11px; color: #C2410C; font-weight: 600; }
+  .probe-co { font-size: 11px; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 999px; padding: 2px 8px; color: #374151; }
   .probe-q { font-size: 13px; color: #1C1C1C; }
   .probe-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .model { font-size: 11px; color: #6B7280; }

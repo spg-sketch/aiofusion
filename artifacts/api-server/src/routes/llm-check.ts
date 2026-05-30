@@ -303,6 +303,13 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       const mentionRuns = runs.filter((r) => r.mentioned).length;
       const mentioned = mentionRuns * 2 >= runCount;
       const repr = runs.find((r) => r.mentioned) || runs[0];
+      const competitorMap = new Map<string, string>();
+      for (const r of runs) {
+        for (const c of r.competitors) {
+          const key = c.toLowerCase();
+          if (!competitorMap.has(key)) competitorMap.set(key, c);
+        }
+      }
       return {
         question: repr.question,
         model: repr.model,
@@ -311,6 +318,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         runCount,
         mentionContext: repr.mentionContext,
         responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
+        competitors: [...competitorMap.values()].slice(0, 12),
       };
     });
 
