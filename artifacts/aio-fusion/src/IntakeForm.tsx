@@ -1749,7 +1749,6 @@ export default function IntakePage() {
           <CheckCircle2 size={18} color={vars.green} className="mt-0.5 flex-shrink-0" />
           <div>
             <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>Project Data signed off on {new Date(acceptedAt).toLocaleDateString()}.</p>
-            <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Stored in Archive as the authority brief used by Optimiser, Creator, Media Research and Marketing Intelligence.</p>
           </div>
         </div>
       )}
