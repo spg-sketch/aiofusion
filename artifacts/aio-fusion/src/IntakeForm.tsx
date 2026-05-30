@@ -1176,20 +1176,21 @@ export default function IntakePage() {
           </div>
 
           {/* Project Data Actions - moved under Sections (stacked for the narrow column) */}
-          <div className="mt-6 rounded-2xl p-4 no-print" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-            <div className="flex items-center gap-2 mb-4">
+          <div className="mt-6 rounded-2xl border-2 overflow-hidden no-print" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
+            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#102B36", borderColor: "#102B36" }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Project Data Actions</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Project Data Actions</span>
             </div>
+            <div className="p-4">
             {intakeStatus === "Optimised" && (
-              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(220,38,38,0.12)", color: "#FCA5A5" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
+              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }} title="The AI-optimised copy for Parts 1.1, 1.2, 1.3, 1.6 and 2.4 is shown in red. Use Accept to sign it off, Edit to revise, or Reject Optimised to restore your original copy.">
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
                 <span>Optimised copy shown in <span className="font-bold" style={{ color: "#DC2626" }}>red</span> - Accept, Edit or Reject below</span>
               </div>
             )}
 
             {/* Group 1 - Optimise and sign off the data */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Optimise &amp; sign off</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Optimise &amp; sign off</p>
             <div className="grid grid-cols-1 gap-2 mb-4">
               <button
                 onClick={() => { if (isFullyComplete) setShowOptimiseModal(true); }}
@@ -1224,7 +1225,7 @@ export default function IntakePage() {
             </div>
 
             {/* Group 2 - Manage and export the data */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: "rgba(251,246,236,0.45)" }}>Manage &amp; export</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Manage &amp; export</p>
             <div className="grid grid-cols-1 gap-2">
               <button
                 onClick={editProjectData}
@@ -1236,8 +1237,8 @@ export default function IntakePage() {
               </button>
               <button
                 onClick={downloadProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap"
-                style={{ background: "#FBF6EC", color: "#102B36" }}
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                style={{ background: "white", color: "#102B36", borderColor: "rgba(16,43,54,0.2)" }}
                 title="Open the print dialog so you can save the full Project Data as a PDF - every answer is shown in full"
               >
                 <Download size={13} /> Download as PDF
@@ -1251,11 +1252,12 @@ export default function IntakePage() {
                   }
                 }}
                 className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
-                style={{ background: "transparent", color: "#FBE3ED", borderColor: "rgba(200,73,122,0.6)" }}
+                style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
                 title="Clear everything and start a brand-new project (deletes all current data)"
               >
                 <Plus size={13} /> Create New
               </button>
+            </div>
             </div>
           </div>
         </div>
