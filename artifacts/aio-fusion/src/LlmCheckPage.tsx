@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona } from "./IntakeForm";
 import {
@@ -537,7 +536,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <Eye size={20} color="#1f748f" />
             <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               Earned Media Visibility Audit
-              <InfoTip text="Sends real questions about the sectors you operate in and the markets you sell to, then checks whether your brand is mentioned by ChatGPT and Claude. This is the test that matters - it measures actual AI citation behaviour." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
