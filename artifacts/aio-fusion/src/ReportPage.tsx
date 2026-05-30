@@ -216,14 +216,20 @@ function CalloutBrief({ title, children }: { title: string; children: React.Reac
 
 export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
   const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo">("summary");
-  const reportDate = "14 April 2026";
   const projectStartDate = "2026-01-08";
+  const todayIso = new Date().toISOString().slice(0, 10);
   const authorityScore = activeClient.avgScore || 24;
   const earnedScore = 20;
   const websiteScore = 38;
 
   const [rangeFrom, setRangeFrom] = useState(projectStartDate);
-  const [rangeTo, setRangeTo] = useState("2026-04-30");
+  const [rangeTo, setRangeTo] = useState(todayIso);
+
+  const reportDate = (() => {
+    const d = new Date(`${rangeTo}T00:00:00`);
+    if (isNaN(d.getTime())) return new Date(`${todayIso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  })();
 
   const [tracker, setTracker] = useState<TrackerRow[]>(() => loadTracker());
   useEffect(() => saveTracker(tracker), [tracker]);
@@ -558,7 +564,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - To</label>
                 <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
-              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo("2026-04-30"); }} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
                 Reset to project start
               </button>
             </div>
