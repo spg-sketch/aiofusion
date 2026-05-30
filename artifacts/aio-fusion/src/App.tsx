@@ -5916,10 +5916,18 @@ function MarketingIntelligencePage() {
   const [region, setRegion] = useState<"UK" | "NA">("UK");
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [results, setResults] = useState<EventItem[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards"];
 
-  const search = () => setResults(DEMO_EVENTS_V2);
+  const search = () => {
+    setSearching(true);
+    setResults(null);
+    window.setTimeout(() => {
+      setResults(DEMO_EVENTS_V2);
+      setSearching(false);
+    }, 700);
+  };
   void EVENTS_RESEARCH_LLM_PROMPT_V2;
 
   const actionableOps = (results || []).flatMap((e) =>
@@ -6097,8 +6105,12 @@ function MarketingIntelligencePage() {
 
         <div className="pt-3 border-t" style={{ borderColor: vars.g100 }}>
           <div className="flex flex-wrap gap-2 mb-2">
-            <button onClick={search} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}>
-              <Search size={14} /> Search Events
+            <button onClick={search} disabled={searching} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-70 disabled:cursor-default" style={{ background: vars.coral }}>
+              {searching ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Searching...</>
+              ) : (
+                <><Search size={14} /> Search Events</>
+              )}
             </button>
             <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.accent }}>
               <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
