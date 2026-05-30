@@ -2556,7 +2556,7 @@ OUTPUT INSTRUCTIONS:
               </h1>
             </div>
             <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-              Transform PR and marketing content for maximum AI citation and retrieval. Pull approved Project Data into every optimisation.
+              Rewrite your drafts so AI models can clearly understand, trust and quote them, with sharper wording, better structure and your key messages built in. Well optimised content is far more likely to be cited in AI answers. Pull approved Project Data into every optimisation.
             </p>
           </div>
           <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
@@ -3094,7 +3094,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Comms Planner</span>
         </div>
         <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
-        <p className="text-[15px] font-light max-w-5xl" style={{ color: vars.g600 }}>Plan and score your PR and marketing schedule for AI authority impact. Click any content item to open and edit it in the Content Optimiser.</p>
+        <p className="text-[15px] font-light max-w-5xl" style={{ color: vars.g600 }}>Plan your whole PR and marketing schedule in one place and see a live score for the AI authority each activity will earn. A joined-up plan means every release, article and event builds your visibility in AI answers instead of working in isolation. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {/* Action toolbar - Variant C ink panel */}
@@ -4420,7 +4420,7 @@ function ReleaseGatewayPage() {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Release Gateway</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Release approved content via media APIs or download for manual management.</p>
+        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Send approved content out through connected media tools or download it for manual distribution, all from one controlled step. A clean, consistent release process gets your content live properly so it starts earning AI citations sooner.</p>
       </div>
 
       <section className="mb-10">
@@ -4616,7 +4616,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <Archive size={22} color={vars.accent} /> Archive - {projectName}
         </h1>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          The full library of accepted, drafted and reviewed PR and marketing content for this project - searchable by message, spokesperson, content type and time period. Click any card to send it back to the Content Optimiser.
+          Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept archive lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time. Click any card to send it back to the Content Optimiser.
         </p>
       </div>
 
@@ -5201,7 +5201,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
         </div>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          Generate AI-optimised media pitches, draft articles and case studies from raw transcripts and notes, using the signed-off Project Data as the authority brief.
+          Turn raw notes and transcripts into polished pitches, articles and case studies that are written to be AI friendly from the start. Content built this way is ready to earn citations the moment it goes live, rather than needing fixing later. Your signed-off Project Data is used as the authority brief.
         </p>
       </div>
 
@@ -5856,7 +5856,7 @@ function MediaResearchPage() {
         </div>
         <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
         <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>
-          Select draft and approved content from the Archive and ask the LLMs to recommend the publications and journalists most likely to run it. Media will be recommended from categories chosen in Project Set-Up.
+          Pick a piece from your Archive and let AI recommend the publications and journalists most likely to run it. Coverage on the right trusted outlets is one of the strongest signals AI models use when deciding who to cite, so targeted outreach grows your authority directly. Recommendations come from the media categories you chose in Project Set-Up.
         </p>
       </div>
 
@@ -6169,7 +6169,7 @@ function MarketingIntelligencePage() {
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
         <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          Use the Project Data brief plus an LLM search to produce a tailored list of recommended awards, conferences and speaker platforms - scored on the AI authority each delivers.
+          Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
         </p>
       </div>
 
