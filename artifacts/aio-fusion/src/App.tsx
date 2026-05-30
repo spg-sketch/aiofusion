@@ -165,6 +165,29 @@ function saveStoredProjects(list: Client[]): void {
   try { localStorage.setItem(CREATED_PROJECTS_KEY, JSON.stringify(list)); } catch { /* noop */ }
 }
 
+// Project logos are stored separately (keyed by project id) because they are
+// large data URLs. Persisted to localStorage so they survive a page refresh.
+const CLIENT_LOGOS_KEY = "aio.clientLogos.v1";
+
+function loadClientLogos(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(CLIENT_LOGOS_KEY);
+    if (raw) return JSON.parse(raw) as Record<string, string>;
+  } catch { /* noop */ }
+  return {};
+}
+
+function saveClientLogos(map: Record<string, string>): void {
+  try {
+    localStorage.setItem(CLIENT_LOGOS_KEY, JSON.stringify(map));
+  } catch {
+    // Most likely the browser storage limit was hit by a large logo image.
+    if (typeof window !== "undefined") {
+      window.alert("This logo could not be saved because it is too large for browser storage. Please try a smaller image (under 1MB).");
+    }
+  }
+}
+
 // One-time migration: if the user already completed an intake before projects
 // were saveable, that data lives under the bare "aio.intake.v2" key. Surface it
 // in the hub as a real "default" project so it is not orphaned.
@@ -874,6 +897,10 @@ function ClientSelectorPage({
               input.onchange = (ev) => {
                 const file = (ev.target as HTMLInputElement).files?.[0];
                 if (!file) return;
+                if (file.size > 1024 * 1024) {
+                  window.alert("That image is too large. Please choose a logo under 1MB.");
+                  return;
+                }
                 const reader = new FileReader();
                 reader.onload = () => {
                   if (typeof reader.result === "string") {
@@ -912,9 +939,9 @@ function ClientSelectorPage({
                         )}
                         <button
                           onClick={handleLogoUpload}
-                          className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity"
+                          className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center opacity-100 transition-opacity"
                           style={{ background: vars.accent }}
-                          title="Upload logo"
+                          title={logoUrl ? "Change logo" : "Add logo"}
                         >
                           <Upload size={9} className="text-white" />
                         </button>
@@ -7032,7 +7059,7 @@ function App() {
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
-  const [clientLogos, setClientLogos] = useState<Record<string, string>>({});
+  const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
@@ -7070,6 +7097,9 @@ function App() {
   });
 
   useEffect(() => { seedDemoDataIfEmpty(); }, []);
+
+  // Persist project logos whenever they change so they survive a refresh.
+  useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
 
   const handleSignOut = () => {
     clearLocalSession();
