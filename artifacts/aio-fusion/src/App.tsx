@@ -2914,7 +2914,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Comms Planner</span>
         </div>
         <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
-        <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>Plan and score your PR and marketing schedule for AI authority impact. Click any content item to open and edit it in the Content Optimiser.</p>
+        <p className="text-[15px] font-light max-w-5xl" style={{ color: vars.g600 }}>Plan and score your PR and marketing schedule for AI authority impact. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {/* Action toolbar - Variant C ink panel */}
