@@ -5,7 +5,6 @@ import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
 import LlmCheckPage from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
-import { useAuth } from "@workspace/replit-auth-web";
 import {
   type Session as LocalSession,
   type User as LocalUser,
@@ -1559,7 +1558,6 @@ function DiagnosticPage({
   onNavigate: (p: string) => void;
   activeClient: Client;
 }) {
-  const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const [urlInput, setUrlInput] = useState("");
   const [contentInput, setContentInput] = useState("");
   const [keyPages, setKeyPages] = useState<Array<{ label: string; url: string }>>([
@@ -1594,10 +1592,6 @@ Engines used:
 - Anthropic Claude (claude-sonnet-4-5) and OpenAI (gpt-4o) run in parallel; results are merged into a single dual-engine score where both succeed.`;
 
   const handleRunDiagnostic = async () => {
-    if (!isAuthenticated) {
-      login();
-      return;
-    }
     const filledKeyPages = keyPages.filter((p) => p.url.trim());
     if (!contentInput.trim() && !urlInput.trim() && filledKeyPages.length === 0) {
       setError("Please enter a homepage URL, paste content, or add at least one key page.");
