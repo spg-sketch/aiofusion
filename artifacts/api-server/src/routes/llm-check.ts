@@ -70,26 +70,42 @@ function normalizeCompetitor(name: string): string {
   return norm.split(" ").filter((t) => t && !LEGAL_SUFFIXES.has(t)).join(" ");
 }
 
-function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[]): string[] {
+function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[], icp: string): string[] {
   const questions: string[] = [];
 
   const uniqueSectors = [...new Set(sectors.map((s) => s.trim()).filter(Boolean))].slice(0, 3);
   const list = uniqueSectors.length > 0 ? uniqueSectors : ["the industry"];
 
+  const hasIcp = icp.trim().length > 0;
+  // ICP-aware clauses steer the AI toward specialist/boutique providers that
+  // serve a specific size and type of customer, rather than surfacing the big
+  // household-name firms a generic "leading companies" question always returns.
+  const forIcp = hasIcp ? ` for ${icp}` : "";
+  const servingIcp = hasIcp ? ` serving ${icp}` : "";
+
   questions.push(`What do you know about ${companyName}?`);
 
   const single = list.length === 1;
   for (const sector of list) {
-    questions.push(`What are the leading companies in the ${sector} space?`);
-    questions.push(`If a business needed ${sector} services, which companies would you recommend and why?`);
-    if (single) {
-      questions.push(`Who are the top ${sector} companies in the UK?`);
-      questions.push(`Compare the best ${sector} agencies or providers available today.`);
+    if (hasIcp) {
+      questions.push(`Which companies provide ${sector} services${forIcp}?`);
+      questions.push(`If ${icp} needed ${sector} support, which specialist or boutique firms would you recommend, and why?`);
+      if (single) {
+        questions.push(`Who are the top specialist ${sector} firms${servingIcp} in the UK?`);
+        questions.push(`Compare the best boutique ${sector} providers${forIcp}, rather than the large global firms.`);
+      }
+    } else {
+      questions.push(`What are the leading companies in the ${sector} space?`);
+      questions.push(`If a business needed ${sector} services, which companies would you recommend and why?`);
+      if (single) {
+        questions.push(`Who are the top ${sector} companies in the UK?`);
+        questions.push(`Compare the best ${sector} agencies or providers available today.`);
+      }
     }
   }
 
   if (keywords.length > 0) {
-    questions.push(`Which companies are known for ${keywords.slice(0, 3).join(", ")}?`);
+    questions.push(`Which companies are known for ${keywords.slice(0, 3).join(", ")}${forIcp}?`);
   }
 
   return questions;
@@ -203,7 +219,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 }
 
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, sectors, keywords } = req.body;
+  const { companyName, sector, sectors, keywords, icp } = req.body;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -229,11 +245,12 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   }
 
   const kw = Array.isArray(keywords) ? keywords.filter((k: any) => typeof k === "string") : [];
+  const icpProfile = typeof icp === "string" ? icp.trim().slice(0, 300) : "";
 
-  logger.info({ companyName, sectors: sectorList }, "Starting LLM visibility check");
+  logger.info({ companyName, sectors: sectorList, hasIcp: icpProfile.length > 0 }, "Starting LLM visibility check");
 
   try {
-    const questions = generateProbeQuestions(companyName, sectorList, kw);
+    const questions = generateProbeQuestions(companyName, sectorList, kw, icpProfile);
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
@@ -301,6 +318,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       companyName,
       sector: sectorList[0],
       sectors: sectorList,
+      icp: icpProfile,
       checkedAt: new Date().toISOString(),
       visibilityScore,
       totalProbes,

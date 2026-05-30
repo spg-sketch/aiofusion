@@ -61,6 +61,9 @@ type FieldDef = {
   shortPlaceholder?: string;
   longPlaceholder?: string;
   wordLimit?: number;
+  // Optional field: shown and usable, but excluded from completion percentage
+  // and the "fully complete" gate so it never blocks downstream actions.
+  optional?: boolean;
   // Conditional field: only applies (counts toward completion + is shown) when
   // the parent field's selected value includes one of these options.
   dependsOn?: { field: string; includes: string[] };
@@ -224,6 +227,13 @@ const sections: SectionDef[] = [
         label: "Media categories where your customers are found",
         hint: "Multi-select the categories your target customers read and trust. This helps target coverage where your audience actually is.",
         type: "textarea",
+      },
+      {
+        id: "1.11",
+        label: "Ideal customer profile (ICP) - size and type of business you serve",
+        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies.",
+        type: "textarea",
+        optional: true,
       },
     ],
   },
@@ -761,11 +771,11 @@ export default function IntakePage() {
   };
 
   const totalFields = visibleSections.reduce(
-    (s, sec) => s + sec.fields.filter((f) => f.type !== "heading" && fieldApplies(f, formData)).length,
+    (s, sec) => s + sec.fields.filter((f) => f.type !== "heading" && !f.optional && fieldApplies(f, formData)).length,
     0,
   );
   const filledFields = visibleSections.reduce((sum, sec) => {
-    return sum + sec.fields.filter((f) => f.type !== "heading" && fieldApplies(f, formData)).reduce((s, f) => {
+    return sum + sec.fields.filter((f) => f.type !== "heading" && !f.optional && fieldApplies(f, formData)).reduce((s, f) => {
       if (f.id === "1.8") return s + (spokespeople.length > 0 ? 1 : 0);
       if (f.id === "1.9") return s + (businessCategories.length > 0 ? 1 : 0);
       if (f.id === "1.10") return s + (audienceCategories.length > 0 ? 1 : 0);
@@ -788,6 +798,7 @@ export default function IntakePage() {
     sections.forEach((sec) => {
       sec.fields.forEach((f) => {
         if (f.type === "heading") return;
+        if (f.optional) return;
         if (!fieldApplies(f, formData)) return;
         total += 1;
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
@@ -1877,6 +1888,12 @@ export function getBusinessSectors(): string[] {
 export function getTargetSectors(): string[] {
   const data = loadIntakeData();
   return data?.audienceCategories || [];
+}
+
+export function getIcpProfile(): string {
+  const data = loadIntakeData();
+  const raw = data?.formData?.["1.11"];
+  return typeof raw === "string" ? raw.trim() : "";
 }
 
 export function getPreferredKeywords(): string[] {

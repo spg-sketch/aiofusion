@@ -1,1 +1,3 @@
 - [LLM visibility audit scoring](llm-audit-scoring.md) — run-level results drive score/byModel (auto-average); probes aggregated by majority vote; one matcher for flag + context.
+- [Print/PDF + intake gating](print-and-intake-gating.md) — global print CSS hides #root so reports use a new window; optional intake fields must set `optional` and be excluded from all completion counters.
+- [ICP-aware audit probing](print-and-intake-gating.md) — Visibility Audit probe questions steer toward niche/boutique providers when an ICP profile is supplied (intake field 1.11 / editable in audit setup).

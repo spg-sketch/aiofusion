@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -59,6 +59,8 @@ interface ProbeItem {
 interface LlmCheckResult {
   companyName: string;
   sector: string;
+  sectors?: string[];
+  icp?: string;
   checkedAt: string;
   visibilityScore: number;
   totalProbes: number;
@@ -69,6 +71,15 @@ interface LlmCheckResult {
   };
   topCompetitors: { name: string; mentions: number }[];
   probes: ProbeItem[];
+}
+
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
@@ -206,8 +217,10 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   const prefilledKeywords = getPreferredKeywords();
   const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
   const [companyName, setCompanyName] = useState(activeClient.name);
+  const [icpProfile, setIcpProfile] = useState(getIcpProfile());
   useEffect(() => {
     setCompanyName(activeClient.name);
+    setIcpProfile(getIcpProfile());
   }, [activeClient.id, activeClient.name]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
@@ -257,6 +270,7 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
           sector: auditSectors[0] || activeClient.sector,
           sectors: auditSectors,
           keywords,
+          icp: icpProfile.trim(),
         }),
       });
 
@@ -274,6 +288,137 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
     } finally {
       setLoading(false);
     }
+  }
+
+  function openReport() {
+    if (!result) return;
+    const w = window.open("", "_blank");
+    if (!w) {
+      alert("Pop-up blocked - allow pop-ups for this site to open the report.");
+      return;
+    }
+    const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
+    const verdict =
+      result.visibilityScore >= 60
+        ? "Strong AI visibility - this brand is being referenced reliably in your sector."
+        : result.visibilityScore >= 30
+          ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
+          : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector.";
+    const checked = new Date(result.checkedAt).toLocaleString("en-GB", {
+      day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    const sectorsUsed = result.sectors && result.sectors.length > 0 ? result.sectors : auditSectors;
+    const clientLogoBlock = activeClient.logo
+      ? `<img src="${escapeHtml(activeClient.logo)}" alt="${escapeHtml(activeClient.name)} logo" class="client-logo" />`
+      : `<div class="client-logo placeholder">${escapeHtml(activeClient.name)}</div>`;
+    const competitorsBlock =
+      result.topCompetitors.length > 0
+        ? `<div class="grid">${result.topCompetitors
+            .map(
+              (c) =>
+                `<div class="row"><span>${escapeHtml(c.name)}</span><span class="pill">in ${c.mentions} of ${result.totalProbes} answers</span></div>`,
+            )
+            .join("")}</div>`
+        : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.</p>`;
+    const probesBlock = result.probes
+      .map((p) => {
+        const tag = p.mentioned
+          ? `<span class="tag yes">Mentioned</span>`
+          : `<span class="tag no">Not mentioned</span>`;
+        const model = p.model.includes("GPT") ? "ChatGPT" : "Claude";
+        return `<div class="probe"><div class="probe-q">${escapeHtml(p.question)}</div><div class="probe-meta"><span class="model">${escapeHtml(model)}</span>${tag}</div></div>`;
+      })
+      .join("");
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Earned Media Visibility Audit - ${escapeHtml(result.companyName)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1C1C1C; margin: 0; padding: 0 0 40px; background: #fff; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  .header { background: linear-gradient(135deg, #165265 0%, #1f748f 60%, #2896b9 100%); color: #fff; padding: 22px 0; margin-bottom: 24px; }
+  .header .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .aio-logo { height: 46px; }
+  .header .eyebrow { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.65); margin: 0 0 2px; }
+  .header .title { font-size: 15px; font-weight: 600; margin: 0; }
+  .client-logo { height: 52px; max-width: 150px; object-fit: contain; background: #fff; border-radius: 10px; padding: 6px 10px; }
+  .client-logo.placeholder { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #165265; min-width: 90px; height: 52px; }
+  h1 { font-size: 22px; color: #165265; margin: 0 0 4px; }
+  .sub { color: #6B7280; font-size: 13px; margin: 0 0 18px; }
+  .card { border: 1px solid #E5E5E5; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  .score-row { display: flex; align-items: center; gap: 24px; }
+  .score { font-size: 46px; font-weight: 700; color: #165265; line-height: 1; }
+  .score small { display: block; font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
+  .verdict { font-size: 14px; color: #374151; }
+  .rates { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .rates span { font-size: 11px; border: 1px solid #E5E5E5; border-radius: 999px; padding: 4px 10px; color: #6B7280; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #165265; margin: 0 0 10px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FAFAFA; border: 1px solid #E5E5E5; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #165265; font-weight: 500; }
+  .pill { background: #e0f2f7; color: #1f748f; font-size: 11px; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+  .meta-line { font-size: 12px; color: #6B7280; margin: 0 0 4px; }
+  .meta-line strong { color: #374151; }
+  .probe { border: 1px solid #E5E5E5; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .probe-q { font-size: 13px; color: #1C1C1C; }
+  .probe-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .model { font-size: 11px; color: #6B7280; }
+  .tag { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 3px 9px; }
+  .tag.yes { background: #ECFDF5; color: #3D9B6B; }
+  .tag.no { background: #FEE2E2; color: #C94A3E; }
+  .box { background: #FAFAFA; border-radius: 8px; padding: 12px; }
+  .muted { color: #6B7280; font-size: 13px; }
+  .footer { font-size: 11px; color: #9CA3AF; margin-top: 18px; border-top: 1px solid #E5E5E5; padding-top: 12px; }
+  @media print { .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card, .probe, .row { break-inside: avoid; } }
+</style></head>
+<body>
+  <div class="header"><div class="wrap">
+    <div class="header-left">
+      <img src="${aioLogo}" alt="AIO Fusion" class="aio-logo" />
+      <div><p class="eyebrow">Authority &amp; Visibility Report</p><p class="title">Earned Media Visibility Audit</p></div>
+    </div>
+    ${clientLogoBlock}
+  </div></div>
+  <div class="wrap">
+    <h1>${escapeHtml(result.companyName)}</h1>
+    <p class="sub">Earned Media Visibility Audit &middot; ${escapeHtml(checked)}</p>
+    <div class="card">
+      <div class="score-row">
+        <div class="score">${result.visibilityScore}%<small>AI Visibility Score</small></div>
+        <div class="verdict">${escapeHtml(result.companyName)} was mentioned in <strong>${result.totalMentions}</strong> of <strong>${result.totalProbes}</strong> AI probes across ChatGPT and Claude.<br/>${verdict}</div>
+      </div>
+      <div class="rates">
+        <span>ChatGPT: ${result.byModel.chatgpt.rate}%</span>
+        <span>Claude: ${result.byModel.claude.rate}%</span>
+        <span>Cycle ${cycleData.cycle}</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>What we probed</h2>
+      ${sectorsUsed.length > 0 ? `<p class="meta-line"><strong>Sectors:</strong> ${escapeHtml(sectorsUsed.join(", "))}</p>` : ""}
+      ${result.icp ? `<p class="meta-line"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
+    </div>
+    <div class="card">
+      <h2>Who AI recommends instead of you</h2>
+      ${competitorsBlock}
+    </div>
+    <div class="card">
+      <h2>Detailed probe results</h2>
+      ${probesBlock}
+    </div>
+    <div class="footer">Generated by AIO Fusion &middot; Earned Media Visibility Audit &middot; Results reflect AI model knowledge at time of query and may vary between sessions.</div>
+  </div>
+</body></html>`;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => {
+      try {
+        w.focus();
+        w.print();
+      } catch {
+        /* noop */
+      }
+    }, 400);
   }
 
   if (!result) {
@@ -402,6 +547,25 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                   : "Adds extra prompts so we can probe niche queries you want to be cited for."}
               </p>
             </div>
+            <div className="mb-6">
+              <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
+                Who you serve - ideal customer profile <span className="font-normal" style={{ color: vars.g400 }}>(optional, recommended)</span>
+              </label>
+              <textarea
+                value={icpProfile}
+                onChange={(e) => setIcpProfile(e.target.value)}
+                rows={2}
+                placeholder="e.g. small to mid-sized marketing and creative agencies, 10 to 150 staff - not the large global consultancies"
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-none"
+                style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
+              />
+              <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
+                <Info size={11} />
+                {getIcpProfile()
+                  ? "Pulled in from your Project Set-Up (section 1.11). Describing the size and type of customer you serve steers results to specialist providers, not the household-name firms."
+                  : "Add this in Project Set-Up (section 1.11), or type it here. It steers results to specialist providers for your size of customer, not the household-name firms."}
+              </p>
+            </div>
             {error && (
               <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "#FBEEEC", color: "#B03D33" }}>
                 {error}
@@ -484,8 +648,8 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
                   : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector."}
               </p>
             </div>
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }}>
-              <Download size={14} /> Save as PDF
+            <button onClick={openReport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white self-start flex-shrink-0" style={{ background: "#1f748f" }} title="Opens a branded report in a new window and the print or save-as-PDF dialog, so your Planner stays where it is">
+              <Download size={14} /> Open report / Save as PDF
             </button>
           </div>
           <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t" style={{ borderColor: vars.g100 }}>
