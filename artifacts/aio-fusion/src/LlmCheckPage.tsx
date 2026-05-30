@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -259,9 +259,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
   const [companyName, setCompanyName] = useState(activeClient.name);
   const [icpProfile, setIcpProfile] = useState(getIcpProfile());
+  const [icpLocation, setIcpLocation] = useState(getClientLocations());
   useEffect(() => {
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
+    setIcpLocation(getClientLocations());
   }, [activeClient.id, activeClient.name]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
@@ -365,6 +367,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           sectors: auditSectors,
           keywords,
           icp: icpProfile.trim(),
+          location: icpLocation.trim(),
+          persona: getClientPersona(),
         }),
       });
 
@@ -668,6 +672,25 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 {getIcpProfile()
                   ? "Pulled in from your Project Set-Up (section 3.2). Describing the size and type of customer you serve steers results to specialist providers, not the household-name firms."
                   : "Add this in Project Set-Up (section 3.2), or type it here. It steers results to specialist providers for your size of customer, not the household-name firms."}
+              </p>
+            </div>
+            <div className="mb-6">
+              <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
+                Locations you serve <span className="font-normal" style={{ color: vars.g400 }}>(optional, recommended)</span>
+              </label>
+              <input
+                type="text"
+                value={icpLocation}
+                onChange={(e) => setIcpLocation(e.target.value)}
+                placeholder="e.g. London and the South East, UK-wide, Ireland"
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none"
+                style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
+              />
+              <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
+                <Info size={11} />
+                {getClientLocations()
+                  ? "Pulled in from your Project Set-Up (section 3.3). AI answers are often localised, so this checks how you show up in the places that matter to you."
+                  : "Add this in Project Set-Up (section 3.3), or type it here. AI answers are often localised, so this checks how you show up where it matters."}
               </p>
             </div>
             {error && (

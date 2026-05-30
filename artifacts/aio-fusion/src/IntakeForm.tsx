@@ -1985,6 +1985,18 @@ export function getIcpProfile(): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
+export function getClientPersona(): string {
+  const data = loadIntakeData();
+  const raw = data?.formData?.["3.1"];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+export function getClientLocations(): string {
+  const data = loadIntakeData();
+  const raw = data?.formData?.["3.3"];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
 export function getPreferredKeywords(): string[] {
   const data = loadIntakeData();
   const raw = data?.formData?.["1.6"];

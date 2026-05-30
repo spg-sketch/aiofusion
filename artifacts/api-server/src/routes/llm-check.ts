@@ -70,18 +70,31 @@ function normalizeCompetitor(name: string): string {
   return norm.split(" ").filter((t) => t && !LEGAL_SUFFIXES.has(t)).join(" ");
 }
 
-function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[], icp: string): string[] {
+function generateProbeQuestions(
+  companyName: string,
+  sectors: string[],
+  keywords: string[],
+  icp: string,
+  location: string,
+  persona: string,
+): string[] {
   const questions: string[] = [];
 
   const uniqueSectors = [...new Set(sectors.map((s) => s.trim()).filter(Boolean))].slice(0, 3);
   const list = uniqueSectors.length > 0 ? uniqueSectors : ["the industry"];
 
   const hasIcp = icp.trim().length > 0;
+  const hasLocation = location.trim().length > 0;
+  const hasPersona = persona.trim().length > 0;
   // ICP-aware clauses steer the AI toward specialist/boutique providers that
   // serve a specific size and type of customer, rather than surfacing the big
   // household-name firms a generic "leading companies" question always returns.
   const forIcp = hasIcp ? ` for ${icp}` : "";
   const servingIcp = hasIcp ? ` serving ${icp}` : "";
+  // Location is added as a clean qualifier because AI answers are heavily
+  // localised; "the UK" is the neutral fallback used by the original probes.
+  const inLocation = hasLocation ? ` in ${location}` : "";
+  const place = hasLocation ? location : "the UK";
 
   questions.push(`What do you know about ${companyName}?`);
 
@@ -89,19 +102,26 @@ function generateProbeQuestions(companyName: string, sectors: string[], keywords
   for (const sector of list) {
     if (hasIcp) {
       questions.push(`Which companies provide ${sector} services${forIcp}?`);
-      questions.push(`If ${icp} needed ${sector} support, which specialist or boutique firms would you recommend, and why?`);
+      questions.push(`If ${icp} needed ${sector} support${inLocation}, which specialist or boutique firms would you recommend, and why?`);
       if (single) {
-        questions.push(`Who are the top specialist ${sector} firms${servingIcp} in the UK?`);
+        questions.push(`Who are the top specialist ${sector} firms${servingIcp} in ${place}?`);
         questions.push(`Compare the best boutique ${sector} providers${forIcp}, rather than the large global firms.`);
       }
     } else {
-      questions.push(`What are the leading companies in the ${sector} space?`);
-      questions.push(`If a business needed ${sector} services, which companies would you recommend and why?`);
+      questions.push(`What are the leading companies in the ${sector} space${inLocation}?`);
+      questions.push(`If a business needed ${sector} services${inLocation}, which companies would you recommend and why?`);
       if (single) {
-        questions.push(`Who are the top ${sector} companies in the UK?`);
+        questions.push(`Who are the top ${sector} companies in ${place}?`);
         questions.push(`Compare the best ${sector} agencies or providers available today.`);
       }
     }
+  }
+
+  // Persona is folded in lightly: a single extra probe using the primary
+  // sector, so the buyer's role nuances the results without over-narrowing
+  // every question.
+  if (hasPersona) {
+    questions.push(`Which specialist ${list[0]} firms would you recommend to ${persona}${inLocation}?`);
   }
 
   if (keywords.length > 0) {
@@ -219,7 +239,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 }
 
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, sectors, keywords, icp } = req.body;
+  const { companyName, sector, sectors, keywords, icp, location, persona } = req.body;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -246,11 +266,16 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
   const kw = Array.isArray(keywords) ? keywords.filter((k: any) => typeof k === "string") : [];
   const icpProfile = typeof icp === "string" ? icp.trim().slice(0, 300) : "";
+  const locationProfile = typeof location === "string" ? location.trim().slice(0, 120) : "";
+  const personaProfile = typeof persona === "string" ? persona.trim().slice(0, 150) : "";
 
-  logger.info({ companyName, sectors: sectorList, hasIcp: icpProfile.length > 0 }, "Starting LLM visibility check");
+  logger.info(
+    { companyName, sectors: sectorList, hasIcp: icpProfile.length > 0, hasLocation: locationProfile.length > 0, hasPersona: personaProfile.length > 0 },
+    "Starting LLM visibility check",
+  );
 
   try {
-    const questions = generateProbeQuestions(companyName, sectorList, kw, icpProfile);
+    const questions = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile);
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
