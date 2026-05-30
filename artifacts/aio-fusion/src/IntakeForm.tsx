@@ -111,6 +111,12 @@ export function setActiveProjectId(id: string): void {
   try { localStorage.setItem(ACTIVE_PROJECT_KEY, id); } catch { /* noop */ }
 }
 
+// Read which project is currently active, so other stores (planner, archive)
+// can scope their data per project in the same way the intake data does.
+export function getActiveProjectId(): string | null {
+  try { return localStorage.getItem(ACTIVE_PROJECT_KEY); } catch { return null; }
+}
+
 const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend

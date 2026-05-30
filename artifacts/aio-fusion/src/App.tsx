@@ -1,4 +1,4 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId } from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId } from "./IntakeForm";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
@@ -887,7 +887,14 @@ function ClientSelectorPage({
         ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-7">
           {displayClients.map((client) => {
-            const scoreColor = client.avgScore >= 70 ? "#3D9B6B" : client.avgScore >= 50 ? "#D4922A" : "#C94A3E";
+            // Live figures for the scorecard, read per project so each card
+            // reflects that project's own audit score, plans and content.
+            const cyc = loadCycle(client.id);
+            const liveScore = cyc.history.length ? cyc.history[cyc.history.length - 1].score : 0;
+            const liveTrend = cyc.history.length > 1 ? liveScore - cyc.history[cyc.history.length - 2].score : 0;
+            const livePlans = loadPlannerProjects(client.id).length;
+            const liveContent = loadArchive(client.id).length;
+            const scoreColor = liveScore >= 70 ? "#3D9B6B" : liveScore >= 50 ? "#D4922A" : "#C94A3E";
             const logoUrl = clientLogos[client.id];
             const handleLogoUpload = (e: React.MouseEvent) => {
               e.stopPropagation();
@@ -980,17 +987,17 @@ function ClientSelectorPage({
                     </div>
                   </div>
                   <div className="flex items-center gap-5 mb-5">
-                    <MiniDonut score={client.avgScore} color={client.color} size={56} />
+                    <MiniDonut score={liveScore} color={client.color} size={56} />
                     <div className="flex-1 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-[12px] font-light" style={{ color: vars.g400 }}>Authority Score</span>
-                        {client.scoreTrend !== 0 && (
+                        {liveTrend !== 0 && (
                           <span
                             className="flex items-center gap-0.5 text-[11px] font-semibold"
-                            style={{ color: client.scoreTrend > 0 ? "#1f748f" : "#C94A3E" }}
+                            style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}
                           >
-                            <TrendingUp size={10} style={{ transform: client.scoreTrend < 0 ? "rotate(180deg)" : "none" }} />
-                            {client.scoreTrend > 0 ? "+" : ""}{client.scoreTrend}
+                            <TrendingUp size={10} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
+                            {liveTrend > 0 ? "+" : ""}{liveTrend}
                           </span>
                         )}
                       </div>
@@ -1000,7 +1007,7 @@ function ClientSelectorPage({
                           style={{ background: vars.g50 }}
                         >
                           <p className="text-[15px] font-bold" style={{ color: vars.navy }}>
-                            {client.contentCount}
+                            {liveContent}
                           </p>
                           <p className="text-[9px] uppercase tracking-[0.15em] font-medium mt-0.5" style={{ color: vars.g400 }}>
                             Content
@@ -1011,7 +1018,7 @@ function ClientSelectorPage({
                           style={{ background: vars.g50 }}
                         >
                           <p className="text-[15px] font-bold" style={{ color: vars.navy }}>
-                            {client.activePlans}
+                            {livePlans}
                           </p>
                           <p className="text-[9px] uppercase tracking-[0.15em] font-medium mt-0.5" style={{ color: vars.g400 }}>
                             Plans
@@ -3836,11 +3843,23 @@ function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: 
 const ARCHIVE_KEY = "aio.archive.v1";
 const PROJECTS_KEY = "aio.planner.projects.v1";
 
-function loadArchive(): ArchiveItem[] {
-  try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY) || "[]"); } catch { return []; }
+// Planner and archive data are scoped per project. The default/legacy project
+// keeps the bare key so existing data is never lost (mirrors the intake key
+// convention in IntakeForm). When no clientId is passed, the currently active
+// project is used, so existing call sites keep working unchanged.
+function scopedStoreKey(base: string, clientId?: string): string {
+  const id = clientId ?? getActiveProjectId();
+  if (id && id !== "default") return `${base}::${id}`;
+  return base;
 }
-function saveArchive(items: ArchiveItem[]) {
-  localStorage.setItem(ARCHIVE_KEY, JSON.stringify(items));
+function archiveKeyFor(clientId?: string): string { return scopedStoreKey(ARCHIVE_KEY, clientId); }
+function plannerKeyFor(clientId?: string): string { return scopedStoreKey(PROJECTS_KEY, clientId); }
+
+function loadArchive(clientId?: string): ArchiveItem[] {
+  try { return JSON.parse(localStorage.getItem(archiveKeyFor(clientId)) || "[]"); } catch { return []; }
+}
+function saveArchive(items: ArchiveItem[], clientId?: string) {
+  localStorage.setItem(archiveKeyFor(clientId), JSON.stringify(items));
 }
 
 type PlannerStatus = "Planned" | "Drafting" | "Review" | "Approved";
@@ -3859,11 +3878,11 @@ type PlannerProject = {
   notes: string;
 };
 
-function loadPlannerProjects(): PlannerProject[] {
-  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY) || "[]"); } catch { return []; }
+function loadPlannerProjects(clientId?: string): PlannerProject[] {
+  try { return JSON.parse(localStorage.getItem(plannerKeyFor(clientId)) || "[]"); } catch { return []; }
 }
-function savePlannerProjects(items: PlannerProject[]) {
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(items));
+function savePlannerProjects(items: PlannerProject[], clientId?: string) {
+  localStorage.setItem(plannerKeyFor(clientId), JSON.stringify(items));
 }
 
 const SEED_KEY = "aio.seed.demo.v1";
@@ -4009,6 +4028,48 @@ function seedDemoDataIfEmpty() {
     saveArchive(archiveSeed);
     savePlannerProjects(plannerSeed);
     localStorage.setItem(SEED_KEY, "v1");
+  } catch {
+    /* noop - never block app boot */
+  }
+}
+
+// One-time move of any legacy global planner/archive data (stored under the
+// bare key when these stores were shared across all projects) into the first
+// real project, so existing demo plans and content stay attached to a project
+// instead of disappearing once the stores became per-project.
+const STORES_MIGRATED_KEY = "aio.stores.perproject.migrated.v1";
+function migrateGlobalStoresToFirstProject() {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(STORES_MIGRATED_KEY)) return;
+
+    const bareArchive = localStorage.getItem(ARCHIVE_KEY);
+    const barePlanner = localStorage.getItem(PROJECTS_KEY);
+    const hasBareArchive = !!bareArchive && bareArchive !== "[]";
+    const hasBarePlanner = !!barePlanner && barePlanner !== "[]";
+
+    // Nothing legacy to move: mark done so this never runs again.
+    if (!hasBareArchive && !hasBarePlanner) {
+      localStorage.setItem(STORES_MIGRATED_KEY, "v1");
+      return;
+    }
+
+    // The default project reads the bare key directly, so legacy data only
+    // needs moving when there is a real (non-default) project to attach it to.
+    const target = loadStoredProjects().find((p) => p.id !== "default")?.id;
+    // No real project yet: leave the bare data in place (still shown via the
+    // default project) and retry on a later boot. Do NOT mark migrated.
+    if (!target) return;
+
+    if (hasBareArchive && (localStorage.getItem(archiveKeyFor(target)) || "[]") === "[]") {
+      localStorage.setItem(archiveKeyFor(target), bareArchive as string);
+      localStorage.removeItem(ARCHIVE_KEY);
+    }
+    if (hasBarePlanner && (localStorage.getItem(plannerKeyFor(target)) || "[]") === "[]") {
+      localStorage.setItem(plannerKeyFor(target), barePlanner as string);
+      localStorage.removeItem(PROJECTS_KEY);
+    }
+    localStorage.setItem(STORES_MIGRATED_KEY, "v1");
   } catch {
     /* noop - never block app boot */
   }
@@ -7096,7 +7157,7 @@ function App() {
     return getLocalSession();
   });
 
-  useEffect(() => { seedDemoDataIfEmpty(); }, []);
+  useEffect(() => { seedDemoDataIfEmpty(); migrateGlobalStoresToFirstProject(); }, []);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
