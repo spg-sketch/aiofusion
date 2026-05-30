@@ -64,6 +64,12 @@ function isMentioned(text: string, companyName: string): boolean {
   return brandAliases(companyName).some((alias) => aliasRegex(alias).test(text));
 }
 
+function normalizeCompetitor(name: string): string {
+  const norm = normalizeText(name);
+  if (!norm) return "";
+  return norm.split(" ").filter((t) => t && !LEGAL_SUFFIXES.has(t)).join(" ");
+}
+
 function generateProbeQuestions(companyName: string, sectors: string[], keywords: string[]): string[] {
   const questions: string[] = [];
 
@@ -248,16 +254,23 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const totalProbes = validResults.length;
     const totalMentions = validResults.filter((r) => r.mentioned).length;
 
-    const allCompetitors = new Map<string, number>();
+    const competitorHits = new Map<string, { display: string; count: number }>();
     for (const r of validResults) {
+      const seen = new Set<string>();
       for (const c of r.competitors) {
-        allCompetitors.set(c, (allCompetitors.get(c) || 0) + 1);
+        const key = normalizeCompetitor(c);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        const entry = competitorHits.get(key);
+        if (entry) entry.count += 1;
+        else competitorHits.set(key, { display: c.trim(), count: 1 });
       }
     }
-    const topCompetitors = [...allCompetitors.entries()]
-      .sort((a, b) => b[1] - a[1])
+    const topCompetitors = [...competitorHits.values()]
+      .filter((e) => e.count >= 2)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 8)
-      .map(([name, count]) => ({ name, mentions: count }));
+      .map((e) => ({ name: e.display, mentions: e.count }));
 
     const visibilityScore = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
 
@@ -273,7 +286,6 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       const mentionRuns = runs.filter((r) => r.mentioned).length;
       const mentioned = mentionRuns * 2 >= runCount;
       const repr = runs.find((r) => r.mentioned) || runs[0];
-      const competitors = [...new Set(runs.flatMap((r) => r.competitors))].slice(0, 5);
       return {
         question: repr.question,
         model: repr.model,
@@ -281,7 +293,6 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         mentionRuns,
         runCount,
         mentionContext: repr.mentionContext,
-        competitors,
         responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
       };
     });

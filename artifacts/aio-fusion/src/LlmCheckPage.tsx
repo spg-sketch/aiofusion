@@ -54,7 +54,6 @@ interface ProbeItem {
   mentionRuns?: number;
   runCount?: number;
   mentionContext: string | null;
-  competitors: string[];
   responsePreview: string;
 }
 
@@ -165,16 +164,6 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
               {highlightName(probe.responsePreview, companyName)}
             </p>
           </div>
-          {probe.competitors.length > 0 && (
-            <div className="mt-3">
-              <p className="text-[11px] font-semibold mb-1.5" style={{ color: vars.g500 }}>Competitors mentioned:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {probe.competitors.map((c) => (
-                  <span key={c} className="text-[11px] px-2 py-0.5 rounded" style={{ background: vars.g100, color: vars.g600 }}>{c}</span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -551,24 +540,31 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
         </div>
       </div>
 
-      {result.topCompetitors.length > 0 && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-            <Users size={14} style={{ color: vars.accent }} />
-            Competitors Mentioned by AI
-          </h3>
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
+          <Users size={14} style={{ color: vars.accent }} />
+          Who AI Recommends Instead of You
+        </h3>
+        <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
+          The brands that came up again and again when we asked AI about your sector. These are the names winning the visibility you want.
+        </p>
+        {result.topCompetitors.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-2">
             {result.topCompetitors.map((c) => (
               <div key={c.name} className="flex items-center justify-between p-3 rounded-lg border" style={{ background: vars.g50, borderColor: vars.g200 }}>
                 <span className="text-[13px] font-medium" style={{ color: vars.navy }}>{c.name}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded" style={{ background: vars.lightBg, color: vars.accent }}>
-                  {c.mentions}x mentioned
+                <span className="text-[11px] px-2 py-0.5 rounded whitespace-nowrap" style={{ background: vars.lightBg, color: vars.accent }}>
+                  in {c.mentions} of {result.totalProbes} answers
                 </span>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-[13px] p-3 rounded-lg" style={{ background: vars.g50, color: vars.g500 }}>
+            No single rival was recommended often enough to stand out across these searches. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.
+          </p>
+        )}
+      </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>

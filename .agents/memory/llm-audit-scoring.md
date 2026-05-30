@@ -25,6 +25,21 @@ non-determinism.
 - Brand matching tolerates legal suffixes (Ltd, Inc, .io, etc.) and punctuation via
   `brandAliases` + token-join with `[^a-z0-9]+` separators and alphanumeric boundaries.
 
+## Competitor handling
+
+- Competitors are the headline of the report ("Who AI Recommends Instead of You"),
+  not a side note. Keep it prominent.
+- Only names that come up **repeatedly** are shown: names are normalized
+  (`normalizeCompetitor` strips legal suffixes/punctuation), deduped per answer, counted
+  by how many run-level answers they appear in, and filtered to `count >= 2`.
+  **Why:** the extractor is heuristic/regex-based and pulls noise; showing one-off or
+  junk names in front of a client destroys credibility. The repeat filter is the guard.
+- Do NOT show competitors per-question (those chips were removed as redundant). The
+  single aggregated card is the only place competitors surface to the user. Run-level
+  `ProbeResult.competitors` still exists purely to feed the aggregation.
+- When no competitor clears the bar, the card shows a positive "opening" message rather
+  than hiding, so the headline section is always present.
+
 ## Frontend sector selection
 
 - Sectors come from setup (business "operate in" + audience "targeting"); the user
