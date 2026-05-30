@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@workspace/replit-auth-web";
 import InfoTip from "./InfoTip";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors } from "./IntakeForm";
@@ -201,7 +200,6 @@ function highlightName(text: string, name: string): React.ReactNode {
 }
 
 export default function LlmCheckPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (p: string) => void }) {
-  const { isAuthenticated, login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
@@ -239,10 +237,6 @@ export default function LlmCheckPage({ activeClient, onNavigate }: { activeClien
   }, [activeClient.id]);
 
   async function runCheck() {
-    if (!isAuthenticated) {
-      login();
-      return;
-    }
     setLoading(true);
     setError("");
     setResult(null);
