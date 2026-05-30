@@ -5918,7 +5918,7 @@ function MarketingIntelligencePage() {
   const [results, setResults] = useState<EventItem[] | null>(null);
   const [searching, setSearching] = useState(false);
 
-  const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards"];
+  const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards", "Networking"];
 
   const search = () => {
     setSearching(true);
