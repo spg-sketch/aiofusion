@@ -261,19 +261,58 @@ function migrateAssignOwnerlessToAdmin(): void {
   } catch { /* noop */ }
 }
 
-// Section 3 was restructured in two steps. Field ids double as storage keys, so
-// existing saved answers are remapped to the new ids. Each step is guarded by its
-// own flag and runs at module load (before any component reads intake data) so the
-// renamed keys are in place on the very first render. Steps must run in order.
-function remapStoredIntakeKeys(remap: Record<string, string>, flag: string): void {
+// Self-healing intake field renumbering. Field ids double as storage keys, and
+// this runs at module load (before any component reads intake data) so the
+// renamed keys are in place on the very first render.
+//
+// The live form no longer has fields 1.11 (ICP) or 1.12 (locations) - both were
+// moved into section 3. So the presence of a "1.11" or "1.12" key in a stored
+// project is an unambiguous signal that THAT project predates the move and still
+// needs migrating. We detect the move per project by that key, rather than a
+// single one-time browser flag, so a project saved, imported or synced after the
+// original migration ran still gets repaired on its next load instead of leaving
+// the answer orphaned under the old key. Because each step only fires when its
+// old source key is still present, the pass is idempotent and never double-shifts
+// an already-migrated project.
+function remapIntakeContainer(obj: unknown, remap: Record<string, string>): unknown {
+  if (!obj || typeof obj !== "object") return obj;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[remap[k] ?? k] = v;
+  return out;
+}
+
+function projectHasIntakeKey(parsed: Record<string, unknown>, fieldId: string): boolean {
+  const has = (o: unknown) =>
+    !!o && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, fieldId);
+  return has(parsed.formData) || has(parsed.duals) || has(parsed.dualLists);
+}
+
+function applyIntakeRemap(parsed: Record<string, unknown>, remap: Record<string, string>): void {
+  if (parsed.formData) parsed.formData = remapIntakeContainer(parsed.formData, remap);
+  if (parsed.duals) parsed.duals = remapIntakeContainer(parsed.duals, remap);
+  if (parsed.dualLists) parsed.dualLists = remapIntakeContainer(parsed.dualLists, remap);
+  if (Array.isArray(parsed.optimisedFields)) {
+    parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => remap[id] ?? id);
+  }
+  const snap = parsed.preOptimiseSnapshot as Record<string, unknown> | null | undefined;
+  if (snap && typeof snap === "object") {
+    if (snap.formData) snap.formData = remapIntakeContainer(snap.formData, remap);
+    if (snap.duals) snap.duals = remapIntakeContainer(snap.duals, remap);
+    if (snap.dualLists) snap.dualLists = remapIntakeContainer(snap.dualLists, remap);
+  }
+}
+
+// Step 1: ICP (1.11) -> 3.2. Step 2: locations (1.12) -> 3.3. Each step also
+// shifts the following section-3 fields down by one to make room. Order matters:
+// step 1 produces the intermediate numbering that step 2 expects, so both run in
+// sequence on the same project within a single pass.
+const INTAKE_RENUMBER_STEPS: { trigger: string; remap: Record<string, string> }[] = [
+  { trigger: "1.11", remap: { "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" } },
+  { trigger: "1.12", remap: { "1.12": "3.3", "3.3": "3.4", "3.4": "3.5", "3.5": "3.6" } },
+];
+
+function migrateStoredIntakeKeys(): void {
   try {
-    if (localStorage.getItem(flag) === "1") return;
-    const remapKeys = (obj: unknown): unknown => {
-      if (!obj || typeof obj !== "object") return obj;
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[remap[k] ?? k] = v;
-      return out;
-    };
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key || !key.startsWith("aio.intake.v2")) continue;
@@ -282,27 +321,18 @@ function remapStoredIntakeKeys(remap: Record<string, string>, flag: string): voi
       let parsed: Record<string, unknown>;
       try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { continue; }
       if (!parsed || typeof parsed !== "object") continue;
-      if (parsed.formData) parsed.formData = remapKeys(parsed.formData);
-      if (parsed.duals) parsed.duals = remapKeys(parsed.duals);
-      if (parsed.dualLists) parsed.dualLists = remapKeys(parsed.dualLists);
-      if (Array.isArray(parsed.optimisedFields)) {
-        parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => remap[id] ?? id);
+      let changed = false;
+      for (const step of INTAKE_RENUMBER_STEPS) {
+        if (projectHasIntakeKey(parsed, step.trigger)) {
+          applyIntakeRemap(parsed, step.remap);
+          changed = true;
+        }
       }
-      const snap = parsed.preOptimiseSnapshot as Record<string, unknown> | null | undefined;
-      if (snap && typeof snap === "object") {
-        if (snap.formData) snap.formData = remapKeys(snap.formData);
-        if (snap.duals) snap.duals = remapKeys(snap.duals);
-        if (snap.dualLists) snap.dualLists = remapKeys(snap.dualLists);
-      }
-      localStorage.setItem(key, JSON.stringify(parsed));
+      if (changed) localStorage.setItem(key, JSON.stringify(parsed));
     }
-    localStorage.setItem(flag, "1");
   } catch { /* noop */ }
 }
-// Step 1: ICP (1.11) moved into the Audience section as 3.2.
-remapStoredIntakeKeys({ "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" }, "aio.intake.section3.renumber.v1");
-// Step 2: Locations (1.12) moved into the Audience section as 3.3.
-remapStoredIntakeKeys({ "1.12": "3.3", "3.3": "3.4", "3.4": "3.5", "3.5": "3.6" }, "aio.intake.section3.locations.v1");
+migrateStoredIntakeKeys();
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");
