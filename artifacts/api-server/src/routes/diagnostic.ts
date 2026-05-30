@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
+import { fetchGeoAuditContext } from "../lib/safe-fetch";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 
@@ -219,9 +220,36 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     return;
   }
 
-  const textToAnalyse = typeof content === "string" && content.trim()
-    ? content.trim().slice(0, MAX_CONTENT_CHARS)
-    : `URL to analyse: ${String(url).slice(0, 2000)}\n(Note: I cannot fetch URLs, so this analysis is based on the URL structure alone. For accurate results, paste the page content directly.)`;
+  let textToAnalyse = "";
+  let fetchedUrl: string | undefined;
+  let pagesFetched: string[] = [];
+
+  if (typeof url === "string" && url.trim()) {
+    try {
+      const ctx = await fetchGeoAuditContext(url.trim());
+      fetchedUrl = ctx.url;
+      pagesFetched = ctx.pagesFetched;
+      textToAnalyse += ctx.text;
+    } catch (err: any) {
+      logger.warn({ err: err?.message, url: url.trim() }, "Diagnostic URL fetch failed");
+      if (!(typeof content === "string" && content.trim())) {
+        res.status(400).json({ error: "Could not fetch that URL. Check the address is correct and publicly reachable, or paste the page content instead." });
+        return;
+      }
+    }
+  }
+
+  if (typeof content === "string" && content.trim()) {
+    const pasted = content.trim();
+    textToAnalyse += (textToAnalyse ? "\n\nADDITIONAL CONTENT SUPPLIED BY USER:\n" : "") + pasted;
+  }
+
+  textToAnalyse = textToAnalyse.slice(0, MAX_CONTENT_CHARS);
+
+  if (!textToAnalyse.trim()) {
+    res.status(400).json({ error: "Nothing to analyse. Enter a homepage URL or paste page content." });
+    return;
+  }
 
   try {
     const [claudeResult, openaiResult] = await Promise.allSettled([
@@ -247,6 +275,9 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
       result = { ...openaiVal, provider: "openai", sources: { openai: { score: openaiVal.overallScore, summary: openaiVal.summary } } };
       logger.warn({ err: (claudeResult as PromiseRejectedResult).reason?.message }, "Claude failed, using OpenAI only");
     }
+
+    if (fetchedUrl) result.fetchedUrl = fetchedUrl;
+    if (pagesFetched.length) result.pagesFetched = pagesFetched;
 
     res.json(result);
   } catch (err: any) {

@@ -292,7 +292,7 @@ const sections: SectionDef[] = [
       {
         id: "3.2",
         label: "Ideal Client Profile (Company) - size and type of business you serve",
-        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies. Please also include the cities, towns, counties, states, countries or regions you specifically operate in.",
+        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies.",
         type: "textarea",
         optional: true,
       },

@@ -152,3 +152,120 @@ export async function fetchSiteContent(url: string, maxChars = 8000): Promise<Si
   const { title, description, text } = htmlToText(html);
   return { url: normalized, title, description, text: text.slice(0, maxChars) };
 }
+
+async function fetchTextResource(url: string, timeoutMs = 8000, maxChars = 100000): Promise<string | null> {
+  try {
+    const { res, agent } = await fetchWithSsrfSafeRedirects(
+      url,
+      { "User-Agent": "AIOFusion-Audit/1.0 (compatible; bot)" },
+      timeoutMs,
+    );
+    try {
+      if (!res.ok) return null;
+      const text = await res.text();
+      return text.slice(0, maxChars);
+    } finally {
+      await agent.close().catch(() => {});
+    }
+  } catch {
+    return null;
+  }
+}
+
+export interface GeoAuditContext {
+  url: string;
+  text: string;
+  pagesFetched: string[];
+}
+
+// Fetches a site's homepage plus its robots.txt and sitemap, then assembles a
+// single text block of real, observed signals for the GEO diagnostic to analyse.
+export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Promise<GeoAuditContext> {
+  const normalized = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  const html = await fetchHtml(normalized);
+  const origin = new URL(normalized).origin;
+
+  const $ = cheerio.load(html);
+
+  const jsonLdTypes: string[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).html() || "");
+      const arr = Array.isArray(data) ? data : [data];
+      for (const d of arr) {
+        if (d && d["@type"]) {
+          jsonLdTypes.push(Array.isArray(d["@type"]) ? d["@type"].join("/") : String(d["@type"]));
+        }
+      }
+    } catch {
+      // ignore malformed JSON-LD blocks
+    }
+  });
+
+  const microdata = $("[itemscope]").length;
+  const canonical = $('link[rel="canonical"]').attr("href") || "";
+  const ogTags = ["og:title", "og:description", "og:image", "og:type"].filter(
+    (p) => $(`meta[property="${p}"]`).attr("content"),
+  );
+  const metaDesc = ($('meta[name="description"]').attr("content") || "").trim();
+  const metaTitle = $("title").first().text().trim();
+  const h1 = $("h1").map((_, el) => $(el).text().trim()).get().filter(Boolean);
+  const h2 = $("h2").map((_, el) => $(el).text().trim()).get().filter(Boolean);
+  const h3 = $("h3").map((_, el) => $(el).text().trim()).get().filter(Boolean);
+  const imgTotal = $("img").length;
+  const imgWithAlt = $("img[alt]").filter((_, el) => ($(el).attr("alt") || "").trim() !== "").length;
+  const lists = $("ul, ol").length;
+  const tables = $("table").length;
+
+  const { text: bodyText } = htmlToText(html);
+
+  const pagesFetched = [normalized];
+
+  const robots = await fetchTextResource(`${origin}/robots.txt`);
+  if (robots) pagesFetched.push(`${origin}/robots.txt`);
+
+  let sitemapUrl = `${origin}/sitemap.xml`;
+  if (robots) {
+    const m = robots.match(/^\s*sitemap:\s*(\S+)/im);
+    if (m) {
+      try {
+        sitemapUrl = new URL(m[1].trim(), origin).href;
+      } catch {
+        // keep default sitemap URL
+      }
+    }
+  }
+  let sitemapSummary = "Not found or not accessible.";
+  const sitemapXml = await fetchTextResource(sitemapUrl, 8000, 300000);
+  if (sitemapXml) {
+    pagesFetched.push(sitemapUrl);
+    const locs = [...sitemapXml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((mm) => mm[1]);
+    sitemapSummary = `${locs.length} URL(s) listed. Sample: ${locs.slice(0, 15).join(", ") || "none"}`;
+  }
+
+  const parts: string[] = [
+    `HOMEPAGE: ${normalized}`,
+    `Page title: ${metaTitle || "(none)"}`,
+    `Meta description: ${metaDesc || "(none)"}`,
+    `Canonical URL: ${canonical || "(none)"}`,
+    `Open Graph tags present: ${ogTags.length ? ogTags.join(", ") : "none"}`,
+    `JSON-LD structured data: ${jsonLdTypes.length ? `${jsonLdTypes.length} block(s), types: ${jsonLdTypes.join(", ")}` : "none detected"}`,
+    `Microdata (itemscope) elements: ${microdata}`,
+    `Headings: ${h1.length} H1, ${h2.length} H2, ${h3.length} H3`,
+  ];
+  if (h1.length) parts.push(`H1: ${h1.slice(0, 3).join(" | ")}`);
+  if (h2.length) parts.push(`H2 sample: ${h2.slice(0, 8).join(" | ")}`);
+  parts.push(`Images: ${imgTotal} total, ${imgWithAlt} with non-empty alt text`);
+  parts.push(`Structured lists: ${lists}, data tables: ${tables}`);
+  parts.push("");
+  parts.push(`ROBOTS.TXT:\n${robots ? robots.slice(0, 4000) : "Not found or not accessible."}`);
+  parts.push("");
+  parts.push(`SITEMAP (${sitemapUrl}):\n${sitemapSummary}`);
+  parts.push("");
+  parts.push(`HOMEPAGE VISIBLE TEXT:\n${bodyText}`);
+
+  let assembled = parts.join("\n");
+  if (assembled.length > maxChars) assembled = assembled.slice(0, maxChars);
+
+  return { url: normalized, text: assembled, pagesFetched };
+}
