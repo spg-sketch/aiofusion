@@ -106,7 +106,7 @@ The platform is organised into modules. Below, each is described with its purpos
 
 ## 6. Scoring methodology (the intellectual property)
 
-AIO Fusion's defensibility lies in translating fuzzy "AI visibility" into consistent, trackable scores:
+AIO Fusion's edge lies in translating fuzzy "AI visibility" into consistent, trackable scores:
 
 - **AI Visibility Score (0-100%)** - share of AI responses, across multiple model families, that mention the brand for its target questions.
 - **Website GEO / reference-readiness score (0-100)** - a weighted composite across the technical and content signals that influence AI referencing.
@@ -221,7 +221,7 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 
 ---
 
-## 11. Why this is defensible
+## 11. Why this is hard to copy
 
 - **Proprietary scoring** across multiple model families and a unified six-category GEO framework, comparable over time and across portfolios.
 - **Dual-engine architecture** that is not dependent on any single AI provider.
