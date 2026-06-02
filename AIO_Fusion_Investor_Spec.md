@@ -166,6 +166,51 @@ The current platform assists a human operator through each step. The next phase 
 
 **Orchestration.** A coordinating layer that lets these agents work together across the diagnose-plan-create-release-measure loop, with human approval gates (via the Release Gateway) where it matters.
 
+### Agent hierarchy and roles
+
+Each user account runs its own pod of agents: a single coordinating agent at the top and a set of specialists beneath it, isolated per account so one client's data and agents never touch another's.
+
+**Account Strategist (orchestrator).** Owns the account's goals, brand voice and priorities. It reads the latest scores from the live engines, decides what matters most, assigns work to the specialist leads, reviews what they produce, resolves conflicts (for example, when SEO and PR both want to change the same page), and reports back to the user in plain language. It knows when to stop and request human sign-off.
+
+Beneath the orchestrator sit four leads, each managing narrow worker agents:
+
+**Earned Media Lead.**
+- Visibility Monitor - re-runs the Earned Media Visibility Audit on a schedule and flags drops or competitor gains.
+- Opportunity Scout - watches for relevant journalist requests, trends and stories the brand's spokespeople could comment on.
+- Pitch Drafter - writes tailored pitch ideas and outreach notes for named contacts and trade media.
+- Coverage Tracker - detects new mentions and citations, and notes which ones AI engines are picking up.
+
+**GEO / SEO Lead.**
+- Technical GEO Agent - runs the Website Visibility Audit, finds issues such as missing Person or Organization schema, and prepares the fixes.
+- Content GEO Agent - checks whether pages actually answer the questions people ask AI tools, and flags gaps to fill.
+- Citation Builder - works to get the brand and its named experts quoted and referenced so AI answers cite them.
+- Question Watcher - tracks the questions and terms the audience is asking AI and search.
+
+**Content Lead.**
+- Drafting Agent - turns approved pitch ideas and content gaps into headlines, standfirsts, articles and transcripts from the brand's gold messaging.
+- Optimisation Agent - applies per-field optimisation to sharpen each piece against the semantic phrase guide.
+- Repurposing Agent - spins one strong asset into social posts, Q and A snippets and FAQ entries built for AI extraction.
+
+**Measure and Report Lead.**
+- Scorekeeper - tracks how every score moves over time across all audits.
+- Impact Analyst - links activity to results, for example "adding Person schema lifted the visibility score".
+- Reporter - writes the client-ready summary in plain language.
+
+**How they work together.** The Monitor and Scorekeeper agents surface a problem or an opportunity to the orchestrator. The orchestrator sets priority and assigns it to the right lead, which breaks it into tasks for its workers. Workers return drafts or fixes, the orchestrator bundles them, and the user approves before anything goes live. The Measure team then checks whether the score actually moved, closing the loop.
+
+**Guardrails (built in from day one).**
+- Human in the loop for anything public. Agents draft, people approve, via the Release Gateway.
+- Per-account isolation of data and agents.
+- A clear activity log of what each agent did and why.
+- Spend and rate limits so no agent can run away with API or outreach costs.
+- A confidence threshold: low-confidence actions queue for a human, while routine high-confidence ones (such as re-running an audit) run on their own.
+
+**Phased rollout.**
+1. Monitors and Scorekeeper only - watch and alert, no actions. Low risk, immediate value.
+2. Add draft-only agents - pitches, content and prepared GEO fixes, none applied automatically.
+3. Add the orchestrator - prioritise and bundle work into a weekly plan.
+4. Allow approved, low-risk actions to run automatically, with everything logged.
+
 The strategic shift: from a tool a team uses, to an autonomous system that manages a brand's AI authority on the team's behalf. The live measurement engines already built are the feedback signal these agents will optimise against, which is precisely why they were built first.
 
 ---
