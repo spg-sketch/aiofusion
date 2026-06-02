@@ -16,7 +16,6 @@ import {
   TrendingUp,
   TrendingDown,
   Repeat,
-  FileEdit,
   Info,
   Download,
   Building2,
@@ -961,23 +960,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           <button onClick={() => { saveAuditToHistory(); openReport(); }} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-95" style={{ background: "white", color: vars.navy }}>
             {justSaved ? <CheckCircle2 size={14} /> : <Download size={14} />} {justSaved ? "Saved to history" : "Save this report"}
           </button>
-          {onNavigate && (
-            <>
-              <button onClick={() => onNavigate("optimiser")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: vars.teal, color: "white" }}>
-                <FileEdit size={14} /> Optimise content
-              </button>
-              <button onClick={() => onNavigate("planner")} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
-                Open Planner <ArrowRight size={14} />
-              </button>
-            </>
-          )}
+          <button onClick={() => { setResult(null); setError(""); }} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
+            <Repeat size={14} /> Run New Audit
+          </button>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => { setResult(null); setError(""); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-          Run New Audit
-        </button>
         <span className="text-[11px]" style={{ color: vars.g400 }}>
           Checked {new Date(result.checkedAt).toLocaleString()} · Results reflect AI model knowledge at time of query and may vary between sessions
         </span>
