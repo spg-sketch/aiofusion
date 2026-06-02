@@ -947,27 +947,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
       </div>
 
-      {cycleData.history.length > 1 && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-            <Repeat size={14} style={{ color: vars.accent }} /> Visibility Over Cycles
-          </h3>
-          <div className="flex items-end gap-2 h-24">
-            {cycleData.history.map((h, i) => {
-              const pct = Math.max(4, h.score);
-              const isLast = i === cycleData.history.length - 1;
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-semibold" style={{ color: vars.g500 }}>{h.score}%</span>
-                  <div className="w-full rounded-t" style={{ height: `${pct}%`, background: isLast ? vars.accent : vars.lightBg }} />
-                  <span className="text-[9px]" style={{ color: vars.g400 }}>C{i + 1}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div className="rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 mb-6" style={{ background: vars.navy, color: "white" }}>
         <div className="flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] mb-1" style={{ color: "rgba(255,255,255,0.6)" }}>
