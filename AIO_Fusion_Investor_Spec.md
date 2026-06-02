@@ -185,7 +185,8 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 **Earned Media Lead.**
 - Visibility Monitor - re-runs the Earned Media Visibility Audit on a schedule and flags drops or competitor gains.
 - Opportunity Scout - watches for relevant journalist requests, trends and stories the brand's spokespeople could comment on.
-- Pitch Drafter - writes tailored pitch ideas and outreach notes for named contacts and trade media.
+- Pitch Drafter - writes tailored pitch ideas and outreach notes for named contacts and trade media, ready for a human to approve or override before anything is sent.
+- Placement Agent - once a piece is approved, posts it to the brand's owned channels and major media platforms, and arranges paid advertorials and sponsored content, always behind human sign-off.
 - Coverage Tracker - detects new mentions and references, and notes which ones AI engines are picking up.
 
 **GEO / SEO Lead.**
@@ -195,7 +196,7 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 - Question Watcher - tracks the questions and terms the audience is asking AI and search.
 
 **Content Lead.**
-- Drafting Agent - turns approved pitch ideas and content gaps into headlines, standfirsts, articles and transcripts from the brand's gold messaging.
+- Drafting Agent - turns approved pitch ideas and content gaps into headlines, standfirsts, articles and transcripts from the brand's gold messaging, produced as drafts for a human to approve.
 - Optimisation Agent - applies per-field optimisation to sharpen each piece against the semantic phrase guide.
 - Repurposing Agent - spins one strong asset into social posts, Q and A snippets and FAQ entries built for AI extraction.
 
@@ -203,6 +204,8 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 - Scorekeeper - tracks how every score moves over time across all audits.
 - Impact Analyst - links activity to results, for example "adding Person schema lifted the visibility score".
 - Reporter - writes the client-ready summary in plain language.
+
+**From draft to publication.** These roles form a clear chain with a person in control at each gate: the Drafting Agent creates content for approval, the Pitch Drafter pitches approved stories to editors with a human override before anything is sent, and the Placement Agent posts the finished piece to major media platforms or arranges paid advertorials and sponsored content. People approve, agents do the legwork.
 
 **How they work together.** The Monitor and Scorekeeper agents surface a problem or an opportunity to the orchestrator. The orchestrator sets priority and assigns it to the right lead, which breaks it into tasks for its workers. Workers return drafts or fixes, the orchestrator bundles them, and the user approves before anything goes live. The Measure team then checks whether the score actually moved, closing the loop.
 
