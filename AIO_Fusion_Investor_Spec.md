@@ -8,9 +8,9 @@
 
 ## 1. Executive summary
 
-AIO Fusion is a Generative Engine Optimisation (GEO) platform. It helps brands measure, manage and grow how they are seen, cited and recommended by AI answer engines such as ChatGPT, Gemini, Claude, Perplexity and Copilot.
+AIO Fusion is a Generative Engine Optimisation (GEO) platform. It helps brands measure, manage and grow how they are seen, referenced and recommended by AI answer engines such as ChatGPT, Gemini, Claude, Perplexity and Copilot.
 
-Search is shifting from a list of blue links to a single AI-generated answer. When a buyer, journalist or partner asks an AI a question, the brands that get named in the answer win, and the rest become invisible. Traditional SEO does not optimise for this new surface. AIO Fusion does.
+Search is moving from a list of blue links to a single AI-generated answer. When a buyer, journalist or partner asks an AI a question, the brands that get named in the answer win, and the rest become invisible. Traditional SEO does not optimise for this new surface. AIO Fusion does.
 
 The platform combines live AI-visibility diagnostics with an end-to-end PR and marketing workflow, so a team can go from "how visible are we to AI today?" to planning, creating, optimising and publishing the earned media and website content that improves that visibility, and then measure the result.
 
@@ -20,11 +20,11 @@ The product is built and demonstrable today, with three live analysis engines ma
 
 ## 2. The problem and the market
 
-**The shift to answer engines.** A growing share of discovery now happens inside AI assistants that answer directly rather than linking out. In this world, the question that matters is no longer "where do we rank?" but "are we the brand the AI names, and is what it says about us accurate?"
+**The move to answer engines.** A growing share of discovery now happens inside AI assistants that answer directly rather than linking out. In this world, the question that matters is no longer "where do we rank?" but "are we the brand the AI names, and is what it says about us accurate?"
 
-**Traditional SEO does not solve this.** Keyword ranking and backlinks were built for a links-based web. They do not measure or influence whether an LLM cites you, what it says, or which competitors it mentions instead of you.
+**Traditional SEO does not solve this.** Keyword ranking and backlinks were built for a links-based web. They do not measure or influence whether an LLM names you, what it says, or which competitors it mentions instead of you.
 
-**Earned media is the strongest AI signal, and it is hard to manage.** Authority that AI engines trust comes disproportionately from credible third-party coverage and well-structured, citable content. PR and marketing teams produce exactly this, but they lack tools to connect their day-to-day work to measurable AI visibility outcomes.
+**Earned media is the strongest AI signal, and it is hard to manage.** Authority that AI engines trust comes disproportionately from credible third-party coverage and well-structured, quotable content. PR and marketing teams produce exactly this, but they lack tools to connect their day-to-day work to measurable AI visibility outcomes.
 
 **The opportunity.** AIO Fusion sits at the intersection of two large, established budgets, PR and SEO/content marketing, and reframes them around the fastest-growing discovery surface. It serves both in-house teams and the agencies that serve them.
 
@@ -34,10 +34,10 @@ The product is built and demonstrable today, with three live analysis engines ma
 
 AIO Fusion is a single platform that closes the loop on AI authority:
 
-1. **Diagnose** - measure current AI visibility and website citation-readiness with live data.
+1. **Diagnose** - measure current AI visibility and website reference-readiness with live data.
 2. **Set up** - capture the brand's profile, message hierarchy and audience so every downstream tool works from one source of truth.
 3. **Plan** - build and score a PR and marketing schedule against its likely AI-authority impact.
-4. **Create and optimise** - generate and refine pitches, articles and releases tuned for AI extraction and citation.
+4. **Create and optimise** - generate and refine pitches, articles and releases tuned for AI extraction and referencing.
 5. **Target** - identify the right journalists, publications, events and awards.
 6. **Release** - route content through approval before publication.
 7. **Measure** - track AI authority, earned media and website GEO scores over time.
@@ -72,7 +72,7 @@ The platform is organised into modules. Below, each is described with its purpos
 
 **Earned Media Visibility Audit (live engine).** Probes large language models in real time to see whether and how a brand is mentioned for industry-relevant questions. Inputs are company name, sector and optional keywords. Outputs include an **AI Visibility Score (0-100%)**, model-by-model mention rates (for example ChatGPT vs Claude), competitor mentions surfaced alongside the brand, and detailed probe results showing the exact context of each mention.
 
-**Website Visibility Audit / Technical GEO (live engine).** Crawls a target URL and scores its readiness to be cited by AI. Produces an **overall score (0-100)** across categories including metadata, heading structure, schema (JSON-LD), links, images, AI-readiness, performance and sources. It explicitly checks whether AI crawlers (such as GPTBot, ClaudeBot and PerplexityBot) are permitted, and returns prioritised recommendations graded Critical / High / Medium / Low.
+**Website Visibility Audit / Technical GEO (live engine).** Crawls a target URL and scores its readiness to be referenced by AI. Produces an **overall score (0-100)** across categories including metadata, heading structure, schema (JSON-LD), links, images, AI-readiness, performance and sources. It explicitly checks whether AI crawlers (such as GPTBot, ClaudeBot and PerplexityBot) are permitted, and returns prioritised recommendations graded Critical / High / Medium / Low.
 
 ### Strategy, planning and creation
 
@@ -80,7 +80,7 @@ The platform is organised into modules. Below, each is described with its purpos
 
 **Content Creator.** Generates pitches, articles and releases built from the brand's approved "gold" messaging captured in Set-Up.
 
-**Content Optimiser and Editor.** Scores and edits drafts against the brand's semantic phrase guide, restructuring copy so it is easier for AI to extract and cite.
+**Content Optimiser and Editor.** Scores and edits drafts against the brand's semantic phrase guide, restructuring copy so it is easier for AI to extract and reference.
 
 ### Media intelligence
 
@@ -109,7 +109,7 @@ The platform is organised into modules. Below, each is described with its purpos
 AIO Fusion's defensibility lies in translating fuzzy "AI visibility" into consistent, trackable scores:
 
 - **AI Visibility Score (0-100%)** - share of AI responses, across multiple model families, that mention the brand for its target questions.
-- **Website GEO / citation-readiness score (0-100)** - a weighted composite across the technical and content signals that influence AI citation.
+- **Website GEO / reference-readiness score (0-100)** - a weighted composite across the technical and content signals that influence AI referencing.
 - **Six GEO signal categories** - schema, content architecture, source authority, earned media signals, earned visibility and technical accessibility, each weighted to roll up into the authority score.
 - **Confidence flags** - Verified / Potential / Unverified for media contacts, and authority scores for events and awards.
 
@@ -127,7 +127,7 @@ The product is purpose-built for three audiences, each with a dedicated experien
 
 **AI agents.** A dedicated surface, paired with the site's machine-readable `llms.txt`, that presents the brand cleanly to AI systems arriving directly, leading by example on the exact practice the platform sells.
 
-The public site articulates the core thesis: the primacy of PR and earned media in the AI age, and the shift from SEO to GEO and AEO.
+The public site articulates the core thesis: the primacy of PR and earned media in the AI age, and the move from SEO to GEO and AEO.
 
 ---
 
@@ -150,13 +150,15 @@ This staging means the hardest, most differentiated parts, the live AI measureme
 
 ---
 
-## 9. Next phase: agentic agents
+## 9. Roadmap: autonomous agents (Phase 2)
 
-The current platform assists a human operator through each step. The next phase introduces autonomous agentic agents that carry out the work continuously and proactively. This is the core of the raise.
+*Important: this section and Section 10 describe Phase 2, the planned next phase of development. They are not part of the platform as built today (see Section 8: Build status).*
+
+The current platform assists a human operator through each step. Phase 2 introduces autonomous agentic agents that carry out the work continuously and proactively. This is the core of the raise.
 
 **Always-on visibility agents.** Continuously re-run AI-visibility and competitor probes on a schedule, detect drops or competitor gains, and alert the team, turning a one-off audit into live monitoring.
 
-**Website GEO remediation agents.** Watch a site for citation-readiness regressions and propose, or apply, fixes to schema, structure and metadata as content changes.
+**Website GEO remediation agents.** Watch a site for reference-readiness regressions and propose, or apply, fixes to schema, structure and metadata as content changes.
 
 **Content agents.** Draft pitches, articles and releases end-to-end from the brand's gold messaging and the live media landscape, then self-score and revise against GEO and AEO criteria before a human ever sees them.
 
@@ -166,7 +168,13 @@ The current platform assists a human operator through each step. The next phase 
 
 **Orchestration.** A coordinating layer that lets these agents work together across the diagnose-plan-create-release-measure loop, with human approval gates (via the Release Gateway) where it matters.
 
-### Agent hierarchy and roles
+The strategic change: from a tool a team uses, to an autonomous system that manages a brand's AI authority on the team's behalf. The live measurement engines already built are the feedback signal these agents will optimise against, which is precisely why they were built first. The detailed agent organisation and rollout follow in Section 10.
+
+---
+
+## 10. Agent strategy (Phase 2)
+
+*This section is Phase 2 and is not yet built. It sets out how the autonomous agents in Section 9 would be organised and rolled out, kept separate from the platform as built today.*
 
 Each user account runs its own pod of agents: a single coordinating agent at the top and a set of specialists beneath it, isolated per account so one client's data and agents never touch another's.
 
@@ -178,12 +186,12 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 - Visibility Monitor - re-runs the Earned Media Visibility Audit on a schedule and flags drops or competitor gains.
 - Opportunity Scout - watches for relevant journalist requests, trends and stories the brand's spokespeople could comment on.
 - Pitch Drafter - writes tailored pitch ideas and outreach notes for named contacts and trade media.
-- Coverage Tracker - detects new mentions and citations, and notes which ones AI engines are picking up.
+- Coverage Tracker - detects new mentions and references, and notes which ones AI engines are picking up.
 
 **GEO / SEO Lead.**
 - Technical GEO Agent - runs the Website Visibility Audit, finds issues such as missing Person or Organization schema, and prepares the fixes.
 - Content GEO Agent - checks whether pages actually answer the questions people ask AI tools, and flags gaps to fill.
-- Citation Builder - works to get the brand and its named experts quoted and referenced so AI answers cite them.
+- Reference Builder - works to get the brand and its named experts quoted and referenced so AI answers name them.
 - Question Watcher - tracks the questions and terms the audience is asking AI and search.
 
 **Content Lead.**
@@ -211,20 +219,18 @@ Beneath the orchestrator sit four leads, each managing narrow worker agents:
 3. Add the orchestrator - prioritise and bundle work into a weekly plan.
 4. Allow approved, low-risk actions to run automatically, with everything logged.
 
-The strategic shift: from a tool a team uses, to an autonomous system that manages a brand's AI authority on the team's behalf. The live measurement engines already built are the feedback signal these agents will optimise against, which is precisely why they were built first.
-
 ---
 
-## 10. Why this is defensible
+## 11. Why this is defensible
 
 - **Proprietary scoring** across multiple model families and a unified six-category GEO framework, comparable over time and across portfolios.
 - **Dual-engine architecture** that is not dependent on any single AI provider.
 - **The full loop in one platform** - measurement, workflow and (next) autonomous execution, rather than a point tool.
 - **Right place in the budget** - sits across both PR and SEO/content spend and reframes them for the AI era.
-- **A data flywheel** - every probe, audit and project enriches the benchmark of what drives AI citation, which in turn sharpens scoring and agent behaviour.
+- **A data flywheel** - every probe, audit and project enriches the benchmark of what drives AI referencing, which in turn sharpens scoring and agent behaviour.
 
 ---
 
-## 11. Summary
+## 12. Summary
 
-AIO Fusion already does the hard part: it measures, with live data, whether AI engines see and recommend a brand, and it wraps that measurement in a complete PR and marketing workflow. The investment unlocks the next phase, a layer of autonomous agentic agents that turn that workflow into a self-driving system for growing AI authority, at the exact moment the market is shifting from search to answers.
+AIO Fusion already does the hard part: it measures, with live data, whether AI engines see and recommend a brand, and it wraps that measurement in a complete PR and marketing workflow. The investment unlocks the next phase, a layer of autonomous agentic agents that turn that workflow into a self-driving system for growing AI authority, at the exact moment the market is moving from search to answers.
