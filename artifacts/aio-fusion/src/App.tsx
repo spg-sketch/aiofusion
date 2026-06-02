@@ -1740,12 +1740,10 @@ function persistSavedScored(storageKey: string, list: SavedScored[]): boolean {
 }
 
 function DiagnosticPage({
-  onNavigate,
   activeClient,
   pendingDiagnosticId,
   onConsumePendingDiagnostic,
 }: {
-  onNavigate: (p: string) => void;
   activeClient: Client;
   pendingDiagnosticId?: string | null;
   onConsumePendingDiagnostic?: () => void;
@@ -1758,6 +1756,7 @@ function DiagnosticPage({
   const [showBrief, setShowBrief] = useState(false);
   const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
@@ -1795,6 +1794,89 @@ function DiagnosticPage({
     setJustSaved(true);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
+
+  const copyToClipboard = async (text: string, key: string) => {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (!ok) {
+      alert("Could not copy to your clipboard. Your browser may be blocking clipboard access.");
+      return;
+    }
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
+  };
+
+  const buildSeoImprovementsText = (r: DiagnosticResult): string => {
+    const lines: string[] = [];
+    lines.push(`SEO / AIO improvements for ${activeClient.name}`);
+    lines.push(`Overall AIO score: ${r.overallScore}/100`);
+    if (r.fetchedUrl) lines.push(`Site analysed: ${r.fetchedUrl}`);
+    lines.push("");
+    if ((r.priorityActions || []).length > 0) {
+      lines.push("PRIORITY ACTIONS");
+      r.priorityActions.forEach((a, i) => {
+        lines.push(`${i + 1}. [${a.priority}] ${a.action} (${a.timeframe} · ${a.category})`);
+      });
+      lines.push("");
+    }
+    const withRecs = (r.categories || []).filter((c) => (c.recommendations || []).length > 0);
+    if (withRecs.length > 0) {
+      lines.push("RECOMMENDATIONS BY CATEGORY");
+      withRecs.forEach((c) => {
+        lines.push(`${c.name} (${c.score}/${c.max})`);
+        c.recommendations.forEach((rec) => lines.push(`  - ${rec}`));
+      });
+      lines.push("");
+    }
+    if ((r.criticalGaps || []).length > 0) {
+      lines.push("CRITICAL GAPS");
+      r.criticalGaps.forEach((g) => lines.push(`  - ${g}`));
+    }
+    return lines.join("\n").trim();
+  };
+
+  const buildVibeCodePrompt = (r: DiagnosticResult): string => {
+    const target = r.fetchedUrl || activeClient.name;
+    const lines: string[] = [];
+    lines.push("You are an expert technical SEO and GEO (generative engine optimisation) engineer.");
+    lines.push("Improve my website so it ranks in traditional search AND gets cited by AI answer engines (ChatGPT, Gemini, Perplexity, Google AI Overviews).");
+    lines.push("");
+    lines.push(`Website: ${target}`);
+    lines.push(`Current AIO score: ${r.overallScore}/100`);
+    lines.push("");
+    lines.push("Make the following changes. For each one, apply the concrete code or content change and briefly explain what you changed and why:");
+    lines.push("");
+    if ((r.priorityActions || []).length > 0) {
+      lines.push("PRIORITY ACTIONS (do these first)");
+      r.priorityActions.forEach((a, i) => {
+        lines.push(`${i + 1}. [${a.priority}] ${a.action}`);
+      });
+      lines.push("");
+    }
+    const withRecs = (r.categories || []).filter((c) => (c.recommendations || []).length > 0);
+    if (withRecs.length > 0) {
+      lines.push("DETAILED RECOMMENDATIONS");
+      withRecs.forEach((c) => {
+        lines.push(`${c.name}:`);
+        c.recommendations.forEach((rec) => lines.push(`  - ${rec}`));
+      });
+      lines.push("");
+    }
+    lines.push("Use clean semantic HTML, structured data (schema.org JSON-LD), clear heading hierarchy, fast load times, and content that directly answers real user questions so AI models can quote it. Return the changes ready to commit.");
+    return lines.join("\n").trim();
+  };
 
   const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
 
@@ -2158,8 +2240,11 @@ Engines used:
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => onNavigate("optimiser")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
-          Open Optimisation Tools <ArrowRight size={14} />
+        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+          {copiedKey === "vibe" ? <CheckCircle2 size={14} /> : <Code2 size={14} />} {copiedKey === "vibe" ? "Copied" : "Vibe Code Prompt"}
+        </button>
+        <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.navy }}>
+          {copiedKey === "seo" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "seo" ? "Copied" : "Copy SEO Improvements"}
         </button>
         <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
           Run New Diagnostic
@@ -7859,7 +7944,7 @@ function App() {
         )}
         {currentPage === "intake" && <IntakePage />}
         {currentPage === "diagnostic" && (
-          <DiagnosticPage onNavigate={setCurrentPage} activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
+          <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
         )}
         {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
         {currentPage === "optimiser" && (
