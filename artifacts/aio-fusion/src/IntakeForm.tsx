@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -21,6 +21,7 @@ import {
   X,
   Linkedin,
   Download,
+  FileText,
   Info,
   Save,
   Undo2,
@@ -48,7 +49,16 @@ const vars = {
 
 type Track = "pr" | "web";
 
-type Spokesperson = { name: string; title: string; expertise: string; linkedin: string };
+type Spokesperson = { name: string; title: string; expertise: string[]; linkedin: string };
+
+// Expertise began life as a single free-text string and is now a repeatable
+// list of areas. Only fall back to wrapping the legacy string when it is NOT
+// already an array, so saved multi-area data is never flattened.
+function normaliseExpertise(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((x): x is string => typeof x === "string");
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
 
 type Product = { name: string; description: string; audience: string };
 
@@ -98,6 +108,79 @@ type SectionDef = {
   fields: FieldDef[];
   track: Track;
 };
+
+// Escape user/content text for safe insertion into a print document.
+function escapeHtml(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Wrap a body of HTML in the shared branded print template (logos, fonts,
+// print CSS, and the image-wait-then-print script). Title and subtitle must
+// already be escaped by the caller. Used for the project-data export, the
+// per-section question sheets and the how-to guide so they all look the same.
+function buildPrintHtml(opts: { title: string; subtitle: string; bodyHtml: string; aioLogo: string; clientLogoBlock: string }): string {
+  const { title, subtitle, bodyHtml, aioLogo, clientLogoBlock } = opts;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${title}</title>
+<style>
+  @page { margin: 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1C1C1C; margin: 0; }
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 2px solid #C8497A; padding-bottom: 14px; margin-bottom: 18px; }
+  .aio-logo { height: 40px; width: auto; }
+  .client-logo { height: 46px; max-width: 160px; object-fit: contain; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 22px; color: #102B36; margin: 0 0 4px; }
+  .status { font-size: 11px; color: #6B7280; margin: 0 0 22px; }
+  .sec { margin-bottom: 22px; break-inside: avoid; }
+  h2 { font-family: Georgia, "Times New Roman", serif; font-size: 15px; color: #102B36; margin: 0 0 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
+  h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #C8497A; margin: 14px 0 6px; }
+  .secintro { font-size: 12px; color: #4B5563; line-height: 1.5; margin: 0 0 14px; }
+  .f, .q { margin-bottom: 10px; break-inside: avoid; }
+  .q { margin-bottom: 16px; }
+  .fl { font-size: 12px; font-weight: 700; color: #102B36; margin-bottom: 2px; }
+  .hint { font-size: 11px; color: #6B7280; font-style: italic; margin-bottom: 6px; }
+  .ans { border-bottom: 1px solid #D1D5DB; min-height: 26px; margin-top: 4px; }
+  .v { font-size: 12px; line-height: 1.5; color: #1C1C1C; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+  .v ul { padding-left: 16px; margin: 0; }
+  .v li { margin-bottom: 3px; }
+  .guide { font-size: 12.5px; line-height: 1.6; color: #1C1C1C; }
+  .guide p { margin: 0 0 10px; }
+  .guide ol, .guide ul { padding-left: 18px; margin: 0 0 12px; }
+  .guide li { margin-bottom: 6px; }
+  .np { color: #9CA3AF; font-style: italic; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head>
+<body>
+  <div class="header">
+    <img src="${aioLogo}" alt="AIO Fusion" class="aio-logo" />
+    ${clientLogoBlock}
+  </div>
+  <h1>${title}</h1>
+  <p class="status">${subtitle}</p>
+  ${bodyHtml}
+  <script>
+    (function () {
+      var fired = false;
+      function go() { if (fired) return; fired = true; try { window.focus(); window.print(); } catch (e) {} }
+      var imgs = Array.prototype.slice.call(document.images);
+      var pending = imgs.length;
+      if (pending === 0) { go(); return; }
+      function one() { if (--pending <= 0) go(); }
+      imgs.forEach(function (img) {
+        if (img.complete) { one(); }
+        else { img.addEventListener("load", one); img.addEventListener("error", one); }
+      });
+      setTimeout(go, 2500);
+    })();
+  </script>
+</body></html>`;
+}
 
 type DualValue = { short: string; long: string };
 type DualListValue = DualValue[];
@@ -660,7 +743,7 @@ export default function IntakePage() {
         return arr.map((s: Partial<Spokesperson>) => ({
           name: s.name || "",
           title: s.title || "",
-          expertise: s.expertise || "",
+          expertise: normaliseExpertise(s.expertise),
           linkedin: s.linkedin || "",
         }));
       }
@@ -768,6 +851,17 @@ export default function IntakePage() {
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
+  // Jump back to the top of the form whenever the user moves to a different
+  // section (Next/Previous, sidebar click or track switch). Without this the
+  // page stays scrolled at the bottom where the last buttons were.
+  const topRef = useRef<HTMLDivElement>(null);
+  const scrollToTop = () => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const didMountSection = useRef(false);
+  useEffect(() => {
+    if (!didMountSection.current) { didMountSection.current = true; return; }
+    scrollToTop();
+  }, [activeSection]);
+
   const updateField = (fieldId: string, value: string) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
   };
@@ -864,7 +958,7 @@ export default function IntakePage() {
     </button>
   );
 
-  const markComplete = (idx: number) => setCompleted((prev) => new Set(prev).add(idx));
+  const markComplete = (idx: number) => { setCompleted((prev) => new Set(prev).add(idx)); scrollToTop(); };
 
   const sectionHasData = (idx: number): boolean => {
     return visibleSections[idx].fields.some((f) => {
@@ -1097,18 +1191,38 @@ export default function IntakePage() {
     alert("Project Data accepted and saved to the dedicated Project Data archive. The signed-off brief is now available to Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO Content and Website Technical GEO.");
   };
 
+  // Open a branded print/"Save as PDF" window with the given body HTML. Title
+  // and subtitle must already be escaped. Shared by the project-data export,
+  // the per-section question sheets and the how-to guide.
+  const openPrintWindow = (title: string, subtitle: string, bodyHtml: string) => {
+    let clientLogo: string | null = null;
+    try {
+      const pid = getActiveProjectId();
+      if (pid) {
+        const map = JSON.parse(localStorage.getItem("aio.clientLogos.v1") || "{}");
+        const raw = typeof map[pid] === "string" ? map[pid] : null;
+        clientLogo = raw && /^(data:image\/|https:\/\/)/i.test(raw) ? raw : null;
+      }
+    } catch {
+      /* noop */
+    }
+    const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
+    const clientLogoBlock = clientLogo
+      ? `<img src="${escapeHtml(clientLogo)}" alt="Client logo" class="client-logo" />`
+      : "";
+    const w = window.open("", "_blank");
+    if (!w) {
+      alert("Pop-up blocked - allow pop-ups for this site to download the PDF.");
+      return;
+    }
+    w.document.write(buildPrintHtml({ title, subtitle, bodyHtml, aioLogo, clientLogoBlock }));
+    w.document.close();
+  };
+
   const downloadProjectData = () => {
-    // Build a self-contained, branded document in a new window and trigger the
-    // browser's print / "Save as PDF" dialog on it. This keeps the Planner where
-    // it is, carries the AIO Fusion and client logos, and avoids the blank lead
-    // page the old hidden-print-view approach produced.
-    const esc = (s: unknown): string =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+    // Build a self-contained, branded document and trigger the browser's print /
+    // "Save as PDF" dialog on it, carrying the AIO Fusion and client logos.
+    const esc = escapeHtml;
 
     const NP = `<span class="np">Not provided</span>`;
 
@@ -1118,7 +1232,7 @@ export default function IntakePage() {
         return `<ul>${spokespeople
           .map(
             (s) =>
-              `<li>${esc([s.name, s.title, s.expertise].filter(Boolean).join(", "))}${s.linkedin ? ` (${esc(s.linkedin)})` : ""}</li>`,
+              `<li>${esc([s.name, s.title, s.expertise.filter(Boolean).join(" / ")].filter(Boolean).join(", "))}${s.linkedin ? ` (${esc(s.linkedin)})` : ""}</li>`,
           )
           .join("")}</ul>`;
       }
@@ -1185,79 +1299,75 @@ export default function IntakePage() {
         : ""
     }`;
 
-    let clientLogo: string | null = null;
-    try {
-      const pid = getActiveProjectId();
-      if (pid) {
-        const map = JSON.parse(localStorage.getItem("aio.clientLogos.v1") || "{}");
-        const raw = typeof map[pid] === "string" ? map[pid] : null;
-        clientLogo = raw && /^(data:image\/|https:\/\/)/i.test(raw) ? raw : null;
-      }
-    } catch {
-      /* noop */
-    }
+    openPrintWindow(esc(title), `AIO Fusion Project Data &middot; ${statusLine}`, sectionsHtml);
+  };
 
-    const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
-    const clientLogoBlock = clientLogo
-      ? `<img src="${esc(clientLogo)}" alt="Client logo" class="client-logo" />`
-      : "";
+  // Build a printable worksheet of the questions for one or more sections, each
+  // with its hint and a blank line to write the answer. Lets people gather
+  // answers offline and type them in later.
+  const buildQuestionsBody = (secs: SectionDef[]): string =>
+    secs
+      .map((sec) => {
+        const inner = sec.fields
+          .map((f) => {
+            if (f.type === "heading") return `<h3>${escapeHtml(f.label)}</h3>`;
+            const idPrefix = /^\d/.test(f.id) ? `${escapeHtml(f.id)}&nbsp;&nbsp;` : "";
+            const hint = f.hint ? `<div class="hint">${escapeHtml(f.hint)}</div>` : "";
+            return `<div class="q"><div class="fl">${idPrefix}${escapeHtml(f.label)}</div>${hint}<div class="ans"></div></div>`;
+          })
+          .join("");
+        return `<div class="sec"><h2>Section ${escapeHtml(String(sec.number))}: ${escapeHtml(sec.title)}</h2><p class="secintro">${escapeHtml(sec.intro)}</p>${inner}</div>`;
+      })
+      .join("");
 
-    const w = window.open("", "_blank");
-    if (!w) {
-      alert("Pop-up blocked - allow pop-ups for this site to download the PDF.");
-      return;
-    }
+  const downloadSectionQuestions = (sec: SectionDef) => {
+    openPrintWindow(
+      `${escapeHtml(sec.title)} - Questions`,
+      `AIO Fusion Set-Up &middot; Section ${escapeHtml(String(sec.number))} questions`,
+      buildQuestionsBody([sec]),
+    );
+  };
 
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(title)} - AIO Fusion Project Data</title>
-<style>
-  @page { margin: 16mm; }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1C1C1C; margin: 0; }
-  .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 2px solid #C8497A; padding-bottom: 14px; margin-bottom: 18px; }
-  .aio-logo { height: 40px; width: auto; }
-  .client-logo { height: 46px; max-width: 160px; object-fit: contain; }
-  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 22px; color: #102B36; margin: 0 0 4px; }
-  .status { font-size: 11px; color: #6B7280; margin: 0 0 22px; }
-  .sec { margin-bottom: 22px; break-inside: avoid; }
-  h2 { font-family: Georgia, "Times New Roman", serif; font-size: 15px; color: #102B36; margin: 0 0 8px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; }
-  h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #C8497A; margin: 14px 0 6px; }
-  .f { margin-bottom: 10px; break-inside: avoid; }
-  .fl { font-size: 12px; font-weight: 700; color: #102B36; margin-bottom: 2px; }
-  .v { font-size: 12px; line-height: 1.5; color: #1C1C1C; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-  .v ul { padding-left: 16px; margin: 0; }
-  .v li { margin-bottom: 3px; }
-  .np { color: #9CA3AF; font-style: italic; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-</style></head>
-<body>
-  <div class="header">
-    <img src="${aioLogo}" alt="AIO Fusion" class="aio-logo" />
-    ${clientLogoBlock}
-  </div>
-  <h1>${esc(title)}</h1>
-  <p class="status">AIO Fusion Project Data &middot; ${statusLine}</p>
-  ${sectionsHtml}
-  <script>
-    (function () {
-      var fired = false;
-      function go() { if (fired) return; fired = true; try { window.focus(); window.print(); } catch (e) {} }
-      var imgs = Array.prototype.slice.call(document.images);
-      var pending = imgs.length;
-      if (pending === 0) { go(); return; }
-      function one() { if (--pending <= 0) go(); }
-      imgs.forEach(function (img) {
-        if (img.complete) { one(); }
-        else { img.addEventListener("load", one); img.addEventListener("error", one); }
-      });
-      setTimeout(go, 2500);
-    })();
-  </script>
-</body></html>`;
-
-    w.document.write(html);
-    w.document.close();
+  const downloadHowToGuide = () => {
+    const body = `<div class="guide">
+      <div class="sec">
+        <h2>What this Set-Up is for</h2>
+        <p>The Set-Up captures everything AIO Fusion needs to represent your business accurately to AI answer engines. The more complete and precise your answers, the better the Optimiser, Content Creator and Media Research tools perform. Treat it like briefing a new team member who will speak on your behalf.</p>
+      </div>
+      <div class="sec">
+        <h2>How it is organised</h2>
+        <p>There are two tracks, each with its own progress bar:</p>
+        <ul>
+          <li><strong>PR Set-Up (Sections 1 to 3)</strong> covers your business messaging: boilerplate, message hierarchy, evidence, spokespeople and media categories.</li>
+          <li><strong>AIO Set-Up (Sections 4 to 7)</strong> covers your business profile: products, audiences, technical and structured-data details.</li>
+        </ul>
+        <p>Use the buttons at the top to switch tracks, and the section list on the left to move around. You do not have to finish in order.</p>
+      </div>
+      <div class="sec">
+        <h2>Filling it in</h2>
+        <ol>
+          <li>Work through each section, answering the questions in plain language. Hints under each question tell you what good looks like.</li>
+          <li>For repeatable items (such as spokespeople, messages, products) use the "Add" buttons to add as many entries as you need.</li>
+          <li>Where you see "Ask AI to complete this", you can add your company website at the top of the form first, then let the tool draft an answer from your site for you to review and edit. The website is used only as a reference so the draft reflects your real business, not generic text.</li>
+          <li>Use "Mark section complete" when you are happy with a section. This updates your progress bar. You can re-open a section at any time.</li>
+          <li>Use "Save for later" at any point. Your answers are stored so you can come back and carry on.</li>
+        </ol>
+      </div>
+      <div class="sec">
+        <h2>Gathering answers offline</h2>
+        <p>Each section has a "Download these questions" button. This gives you a printable sheet of that section's questions with space to write, which is handy for collecting input from colleagues before typing the final answers into the platform.</p>
+      </div>
+      <div class="sec">
+        <h2>Tips for strong answers</h2>
+        <ul>
+          <li>Be specific. Name real products, audiences, sectors and phrases your customers actually use.</li>
+          <li>Reuse your agreed FAQs and approved company messaging so everything stays consistent.</li>
+          <li>Avoid jargon and internal shorthand. Write as you would explain your business to an interested outsider.</li>
+          <li>If a question does not apply, leave it blank rather than forcing an answer.</li>
+        </ul>
+      </div>
+    </div>`;
+    openPrintWindow("AIO Fusion Set-Up - How-to Guide", "A short guide to completing your Set-Up", body);
   };
 
   const [justSaved, setJustSaved] = useState(false);
@@ -1280,6 +1390,7 @@ export default function IntakePage() {
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
+      <div ref={topRef} aria-hidden="true" />
       {/* Header */}
       <div className="mb-6 sm:mb-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
@@ -1314,7 +1425,7 @@ export default function IntakePage() {
           Getting this right matters, so set aside around two hours to do it properly. It is one of the most valuable investments you can make in your GEO strategy.
         </p>
         <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>, so if you have an LLM trained on your business you can use it to draft answers faster. The <span className="font-bold">Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>, and <span className="font-bold">Reject</span> restores your original.
+          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>. It copies a ready-to-paste prompt, with your company website built in, that you can drop straight into your own AI assistant (such as ChatGPT) to draft the answer faster. Add your website at the top first so the draft reflects your real business. The <span className="font-bold">Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>, and <span className="font-bold">Reject</span> restores your original.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
@@ -1551,6 +1662,25 @@ export default function IntakePage() {
                 <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>{section.intro}</p>
               </div>
 
+              <div className="flex flex-wrap items-center gap-2 -mt-4 mb-8">
+                <button
+                  type="button"
+                  onClick={() => downloadSectionQuestions(section)}
+                  className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                  style={{ borderColor: "rgba(16,43,54,0.18)", color: "#C8497A", background: "white" }}
+                >
+                  <Download size={13} /> Download these questions
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadHowToGuide}
+                  className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                  style={{ borderColor: "rgba(16,43,54,0.18)", color: "#102B36", background: "white" }}
+                >
+                  <FileText size={13} /> How-to guide
+                </button>
+              </div>
+
               <div className="space-y-6">
                 {section.fields.map((field) => {
                   if (!fieldApplies(field, formData)) return null;
@@ -1574,25 +1704,61 @@ export default function IntakePage() {
                   if (field.id === "1.8") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
-                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
-                              <div className="grid grid-cols-12 gap-2 mb-2">
-                                <input value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="Name" className="col-span-3 px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
-                                <input value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="Title" className="col-span-4 px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
-                                <input value={sp.expertise} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: e.target.value } : s))} placeholder="Expertise" className="col-span-4 px-3 py-2 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }} />
-                                <button onClick={() => setSpokespeople(spokespeople.filter((_, j) => j !== i))} className="col-span-1 text-[11px] font-medium" style={{ color: vars.g400 }} title="Remove spokesperson"><X size={14} className="mx-auto" /></button>
+                            <div key={i} className="rounded-xl border p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Spokesperson {i + 1}</span>
+                                <button onClick={() => setSpokespeople(spokespeople.filter((_, j) => j !== i))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove spokesperson"><X size={14} /></button>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Linkedin size={14} style={{ color: "#0A66C2", flexShrink: 0 }} />
-                                <input
-                                  value={sp.linkedin}
-                                  onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, linkedin: e.target.value } : s))}
-                                  placeholder="LinkedIn URL - e.g. https://www.linkedin.com/in/yourname"
-                                  className="flex-1 px-3 py-2 rounded-lg border text-[12px] font-light bg-white"
-                                  style={{ borderColor: vars.g200 }}
-                                />
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                <div>
+                                  <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Name</label>
+                                  <input value={sp.name} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} placeholder="e.g. Jane Smith" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Title</label>
+                                  <input value={sp.title} onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, title: e.target.value } : s))} placeholder="e.g. Chief Executive" className="w-full px-3 py-2.5 rounded-lg border text-[14px] bg-white" style={{ borderColor: vars.g200 }} />
+                                </div>
+                              </div>
+                              <div className="mb-3">
+                                <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>Areas of expertise</label>
+                                <div className="space-y-2">
+                                  {sp.expertise.length === 0 && (
+                                    <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No areas yet. Add one below.</p>
+                                  )}
+                                  {sp.expertise.map((area, k) => (
+                                    <div key={k} className="flex items-center gap-2">
+                                      <input
+                                        value={area}
+                                        onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: s.expertise.map((a, m) => m === k ? e.target.value : a) } : s))}
+                                        placeholder="e.g. B2B marketing strategy"
+                                        className="flex-1 px-3 py-2.5 rounded-lg border text-[14px] bg-white"
+                                        style={{ borderColor: vars.g200 }}
+                                      />
+                                      <button onClick={() => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: s.expertise.filter((_, m) => m !== k) } : s))} className="text-[11px]" style={{ color: vars.g400 }} title="Remove area"><X size={14} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, expertise: [...s.expertise, ""] } : s))}
+                                  className="mt-2 text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                                  style={{ borderColor: vars.g200, color: vars.accent }}
+                                >+ Add area</button>
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold mb-1" style={{ color: vars.g500 }}>LinkedIn</label>
+                                <div className="flex items-center gap-2">
+                                  <Linkedin size={14} style={{ color: "#0A66C2", flexShrink: 0 }} />
+                                  <input
+                                    value={sp.linkedin}
+                                    onChange={(e) => setSpokespeople(spokespeople.map((s, j) => j === i ? { ...s, linkedin: e.target.value } : s))}
+                                    placeholder="LinkedIn URL - e.g. https://www.linkedin.com/in/yourname"
+                                    className="flex-1 px-3 py-2.5 rounded-lg border text-[13px] font-light bg-white"
+                                    style={{ borderColor: vars.g200 }}
+                                  />
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1621,7 +1787,7 @@ export default function IntakePage() {
                     const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
@@ -1674,7 +1840,7 @@ export default function IntakePage() {
                     const dualColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
@@ -1718,7 +1884,7 @@ export default function IntakePage() {
                     const emptyText = field.itemLabel ? `No ${nounPlural} yet.` : "No additional messages yet.";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>{emptyText}</p>
@@ -1772,7 +1938,7 @@ export default function IntakePage() {
                   if (field.id === "2.6") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {products.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No products or services yet.</p>
@@ -1827,7 +1993,7 @@ export default function IntakePage() {
                   if (field.id === "2.7") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {productQueries.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No product or service areas yet.</p>
@@ -1876,7 +2042,7 @@ export default function IntakePage() {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
@@ -1909,7 +2075,7 @@ export default function IntakePage() {
                   const baseColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                   return (
                     <div key={field.id}>
-                      <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                      <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                       {field.type === "textarea" ? (
                         <>
                           <textarea
@@ -2104,10 +2270,32 @@ export default function IntakePage() {
   );
 }
 
-function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, optimised = false, optimising = false, onOptimise, onReject }: { id: string; label: string; hint?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; optimising?: boolean; onOptimise?: () => void; onReject?: () => void }) {
+function FieldLabel({ id, label, hint, website = "", companyName = "", optimisable = false, hasContent = false, optimised = false, optimising = false, onOptimise, onReject }: { id: string; label: string; hint?: string; website?: string; companyName?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; optimising?: boolean; onOptimise?: () => void; onReject?: () => void }) {
   const [copied, setCopied] = useState(false);
+  // Build a ready-to-paste prompt for an external AI assistant, with the
+  // company name and website built in so the draft reflects the real business.
+  const buildPrompt = (): string => {
+    const site = (website || "").trim();
+    const company = (companyName || "").trim();
+    const lines: string[] = [];
+    lines.push(
+      `I am completing a business profile${company ? ` for ${company}` : ""}${site ? ` (website: ${site})` : ""}. I need help drafting one answer.`,
+    );
+    lines.push("");
+    lines.push(
+      site
+        ? "Use the website above as your primary source. Write in British English and keep the answer concise, specific and factual to this business. Do not invent details that are not supported by the website."
+        : "Write in British English and keep the answer concise, specific and factual to this business. Do not invent details.",
+    );
+    lines.push("");
+    lines.push(`Question: ${label}`);
+    if (hint) lines.push(`Guidance: ${hint}`);
+    lines.push("");
+    lines.push("Please draft a suggested answer for me to review and edit.");
+    return lines.join("\n");
+  };
   const copyQuestion = () => {
-    const text = hint ? `${label}\n${hint}` : label;
+    const text = buildPrompt();
     const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
     try {
       if (navigator.clipboard?.writeText) {
@@ -2129,7 +2317,7 @@ function FieldLabel({ id, label, hint, optimisable = false, hasContent = false, 
         <button
           type="button"
           onClick={copyQuestion}
-          title="Copy this question to paste into your own AI assistant for help with your answer"
+          title="Copy a ready-to-paste prompt (with your company website built in) for your own AI assistant to draft this answer"
           className="inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-md transition-colors self-center"
           style={{ color: copied ? "#3D9B6B" : "#C8497A", fontFamily: "Inter, sans-serif", background: copied ? "rgba(61,155,107,0.1)" : "transparent" }}
         >
@@ -2191,7 +2379,7 @@ export function loadIntakeData(): IntakeData | null {
       spokespeople: (parsed.spokespeople || []).map((s: Partial<Spokesperson>) => ({
         name: s.name || "",
         title: s.title || "",
-        expertise: s.expertise || "",
+        expertise: normaliseExpertise(s.expertise),
         linkedin: s.linkedin || "",
       })),
       products: (() => {
