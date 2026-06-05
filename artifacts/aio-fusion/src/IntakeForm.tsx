@@ -1466,13 +1466,18 @@ export default function IntakePage() {
                             </div>
                           ))}
                         </div>
-                        <button
-                          onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: "", linkedin: "" }])}
-                          className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
-                          style={{ borderColor: vars.g200, color: vars.accent }}
-                        >
-                          + Add spokesperson
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: "", linkedin: "" }])}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            style={{ borderColor: vars.g200, color: vars.accent }}
+                          >
+                            + Add spokesperson
+                          </button>
+                          {spokespeople.length > 0 && (
+                            <button onClick={() => setSpokespeople(spokespeople.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove spokesperson</button>
+                          )}
+                        </div>
                       </div>
                     );
                   }
