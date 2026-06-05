@@ -174,7 +174,7 @@ const sections: SectionDef[] = [
       {
         id: "1.4",
         label: "Online evidence",
-        hint: "Cut and paste links to online evidence. Statistics, case studies, awards, certifications, third-party validation.",
+        hint: "Cut and paste links to web pages evidencing company statistics, case studies, awards, certificates, third-party validation.",
         type: "textarea",
       },
       {
