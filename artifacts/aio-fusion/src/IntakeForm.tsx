@@ -1330,6 +1330,23 @@ export default function IntakePage() {
               </div>
             )}
 
+            {/* Save progress */}
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Save progress</p>
+            <div className="grid grid-cols-1 gap-2 mb-4">
+              <button
+                onClick={saveDraft}
+                title="Save your progress so you can finish later"
+                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border-2"
+                style={{
+                  borderColor: justSaved ? vars.green : "#102B36",
+                  color: justSaved ? vars.green : "#102B36",
+                  background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
+                }}
+              >
+                {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
+              </button>
+            </div>
+
             {/* Group 1 - Sign off the data */}
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Sign off</p>
             <div className="grid grid-cols-1 gap-2 mb-4">
@@ -1681,7 +1698,19 @@ export default function IntakePage() {
               >
                 <ArrowLeft size={14} /> Previous
               </button>
-              <div className="flex items-center gap-3 justify-end">
+              <div className="flex items-center gap-3 justify-end flex-wrap">
+                <button
+                  onClick={saveDraft}
+                  title="Save your progress so you can finish later"
+                  className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] px-4 py-2.5 rounded-full border-2 transition-colors"
+                  style={{
+                    borderColor: justSaved ? vars.green : "#102B36",
+                    color: justSaved ? vars.green : "#102B36",
+                    background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
+                  }}
+                >
+                  {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
+                </button>
                 <button
                   onClick={() => {
                     if (completed.has(activeSection)) {
