@@ -499,7 +499,7 @@ const sections: SectionDef[] = [
       },
       {
         id: "5.7",
-        label: "Industry questions or topics where you have unique expertise or data",
+        label: "List industry trends, issues or topics where you have unique or specialist expertise or data",
         type: "textarea",
       },
     ],
