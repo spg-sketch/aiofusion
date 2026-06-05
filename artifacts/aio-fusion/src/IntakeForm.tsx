@@ -418,8 +418,8 @@ const sections: SectionDef[] = [
       },
       {
         id: "4.7",
-        label: "Key trust signals",
-        hint: "e.g. accreditations, awards, notable clients, media coverage, certifications.",
+        label: "Key trust signals - submit links to key media coverage over the last 12 months",
+        hint: "Add links to your most important media coverage from the last 12 months. Include the outlet name alongside each link where you can.",
         type: "textarea",
       },
       {
