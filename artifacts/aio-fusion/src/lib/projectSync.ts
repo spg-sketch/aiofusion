@@ -60,10 +60,28 @@ function setIntakeTime(id: string, when: number): void {
 
 type ServerProject = {
   id: string;
+  name?: string | null;
   data: StoredProject;
   logo: string | null;
   updatedAt: string | null;
 };
+
+// Build a usable project object from a server record. Guarantees a valid id and
+// a non-empty name even when the stored data blob is empty or malformed (which
+// happens for intake-only rows saved before the hub record was pushed up). This
+// is what stops projects created elsewhere showing up blank or invisible.
+function hydrateServerProject(sp: ServerProject): StoredProject {
+  const data: Record<string, unknown> =
+    sp.data && typeof sp.data === "object" ? (sp.data as Record<string, unknown>) : {};
+  const dataId = typeof data.id === "string" ? data.id : "";
+  const dataName = typeof data.name === "string" ? data.name.trim() : "";
+  const colName = typeof sp.name === "string" ? sp.name.trim() : "";
+  return {
+    ...data,
+    id: dataId || sp.id,
+    name: dataName || colName || "New Project",
+  };
+}
 
 async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null> {
   try {
@@ -162,12 +180,15 @@ export async function syncProjectsOnLoad(): Promise<
     seen.add(lp.id);
     const sp = serverById.get(lp.id);
     if (sp) {
-      // Exists in both: server record wins for content. Prefer a logo that
-      // actually exists, pushing a local-only logo up so it is shared too.
-      merged.push(sp.data);
+      // Exists in both: server record wins for content, but keep the local
+      // cosmetic fields as a base so an empty/malformed server blob never wipes
+      // a good local entry. Prefer a logo that actually exists, pushing a
+      // local-only logo up so it is shared too.
+      const hydrated = { ...lp, ...hydrateServerProject(sp) };
+      merged.push(hydrated);
       const logo = sp.logo ?? localLogos[lp.id];
       if (logo) mergedLogos[lp.id] = logo;
-      if (!sp.logo && localLogos[lp.id]) void pushProjectMeta(sp.data, localLogos[lp.id]);
+      if (!sp.logo && localLogos[lp.id]) void pushProjectMeta(hydrated, localLogos[lp.id]);
     } else {
       // Local only: keep it and push it up so other devices get it.
       merged.push(lp);
@@ -179,7 +200,7 @@ export async function syncProjectsOnLoad(): Promise<
   // Then any project that exists only on the server (created elsewhere).
   for (const sp of server.projects) {
     if (seen.has(sp.id) || deleted.has(sp.id)) continue;
-    merged.push(sp.data);
+    merged.push(hydrateServerProject(sp));
     if (sp.logo) mergedLogos[sp.id] = sp.logo;
   }
 

@@ -15,6 +15,7 @@ router.get("/store/projects", async (_req, res) => {
     const rows = await db
       .select({
         id: projectsTable.id,
+        name: projectsTable.name,
         data: projectsTable.data,
         logo: projectsTable.logo,
         updatedAt: projectsTable.updatedAt,
@@ -24,7 +25,9 @@ router.get("/store/projects", async (_req, res) => {
 
     const projects = rows
       .filter((r) => !r.deletedAt)
-      .map((r) => ({ id: r.id, data: r.data, logo: r.logo, updatedAt: r.updatedAt }));
+      // name is returned alongside data so the client can recover a project's
+      // name even if its data blob was saved empty (e.g. an intake-only row).
+      .map((r) => ({ id: r.id, name: r.name, data: r.data, logo: r.logo, updatedAt: r.updatedAt }));
     const deletedIds = rows.filter((r) => r.deletedAt).map((r) => r.id);
 
     res.json({ projects, deletedIds });

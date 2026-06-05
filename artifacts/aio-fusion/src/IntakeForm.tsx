@@ -1436,8 +1436,11 @@ export default function IntakePage() {
               <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
                 Let AI draft from your website (Beta)
               </p>
-              <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#102B36" }}>
+              <p className="text-[12px] font-light mt-0.5 mb-2" style={{ color: "#102B36" }}>
                 Add your company website and use the "Ask AI to complete this" button under a question to draft an answer quicker. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Please always review and check what it writes.
+              </p>
+              <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#374151" }}>
+                <span className="font-semibold" style={{ color: "#102B36" }}>Why the website?</span> The AI reads your site and uses it as the source for the draft, so the answer reflects your real products, language and positioning rather than generic filler. The more your website says, the better the starting point. It is only used as a reference; nothing is published or changed.
               </p>
               {(() => {
                 const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
@@ -1662,6 +1665,15 @@ export default function IntakePage() {
                 <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>{section.intro}</p>
               </div>
 
+              {section.track === "pr" && (
+                <div className="rounded-xl p-4 mb-8 flex items-start gap-2.5" style={{ background: "rgba(40,150,185,0.07)", border: "1px solid rgba(40,150,185,0.25)" }}>
+                  <Info size={16} color="#2896b9" className="mt-0.5 flex-shrink-0" />
+                  <p className="text-[12.5px] font-light leading-relaxed" style={{ color: "#102B36" }}>
+                    <span className="font-semibold">Use your agreed FAQs and approved company messaging.</span> Where you already have signed-off boilerplate, key messages or a published FAQ, reuse that exact wording here rather than writing something new. Keeping your earned media, your website and these answers consistent is what builds authority with AI models, so pull from your existing approved sources wherever you can.
+                  </p>
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-2 -mt-4 mb-8">
                 <button
                   type="button"
@@ -1765,7 +1777,7 @@ export default function IntakePage() {
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
-                            onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: "", linkedin: "" }])}
+                            onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: [], linkedin: "" }])}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >

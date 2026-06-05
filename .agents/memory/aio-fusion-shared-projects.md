@@ -33,6 +33,23 @@ not a bug.
    Conflict timing is per-device (localStorage map), not embedded in the payload,
    so a missing timestamp means "unknown age", not "old".
 
+## Visibility relies on the list endpoint returning `name` + client hydration
+The `/store/projects` list endpoint must return the `name` COLUMN, not just the
+`data` jsonb blob. Intake-only rows (created via the `/intake` route before the
+hub `upsert` reached the server) have `data = {}`, so without the name column the
+client renders them blank or drops them. `projectSync.hydrateServerProject` then
+guarantees every merged project has a valid `id` + non-empty `name`, and the
+both-exist merge spreads local under server (`{...lp, ...hydrate(sp)}`) so an
+empty server blob never wipes a good local entry.
+**Why:** root cause of "colleagues can't see each other's projects" was nameless
+`data={}` rows plus sync only running on mount.
+**How to apply:** keep name in the list select; never `merged.push(sp.data)` raw.
+
+## Live refresh, not just on-load
+The hub re-syncs on `visibilitychange`, window `focus`, and a 60s interval (all
+no-op when offline) so a project created on another device appears without a
+manual reload. Sync still also runs once on mount.
+
 ## Testing the api-server
 `$REPLIT_DEV_DOMAIN/api/...` routes to the WEB app (Vite), NOT api-server, so it
 returns empty. Test api-server directly at `http://localhost:8080` (its PORT), or

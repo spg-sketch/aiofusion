@@ -29,7 +29,7 @@ import blogTile1 from "./assets/blog-tile-1.png";
 import blogTile2 from "./assets/blog-tile-2.png";
 import blogTile3 from "./assets/blog-tile-3.png";
 import heroBgImg from "./assets/hero-bg.png";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   ChevronRight,
   Lock,
@@ -7611,20 +7611,45 @@ function App() {
   const [namingProject, setNamingProject] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
+  // Pull the shared project list and refresh the hub. Used on first load and
+  // again whenever the tab regains focus, so a project a colleague created on
+  // another device shows up without a manual page reload.
+  const resyncProjects = useCallback(async () => {
+    const result = await syncProjectsOnLoad();
+    if (result) {
+      setStoredProjects(result.projects as unknown as Client[]);
+      setClientLogos(result.logos);
+    }
+  }, []);
+
   useEffect(() => {
     migrateLegacyIntakeToProject();
     migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
     // Then sync with the shared server store so this login sees every project,
     // on every device. Local-only projects are pushed up, not lost.
-    (async () => {
-      const result = await syncProjectsOnLoad();
-      if (result) {
-        setStoredProjects(result.projects as unknown as Client[]);
-        setClientLogos(result.logos);
-      }
-    })();
-  }, []);
+    void resyncProjects();
+  }, [resyncProjects]);
+
+  // Live refresh: re-sync when the tab becomes visible or regains focus, and on
+  // a gentle interval while open, so colleagues see each other's new projects
+  // without reloading. All calls are no-ops when the server is unreachable.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void resyncProjects();
+    };
+    const onFocus = () => void resyncProjects();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void resyncProjects();
+    }, 60000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(interval);
+    };
+  }, [resyncProjects]);
 
   const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
 
