@@ -48,3 +48,14 @@ Genericise the single shared dual-list renderer with optional copy overrides
 unchanged, and a `singleField` flag to render only the long box (one box per
 entry). Optimise for dual-list is hardcoded to id 1.3, so any new dual-list id
 must be added to the optimise-excluded sets unless that path is generalised.
+
+## Optimise grounds on the project website
+The per-field Optimise (POST /api/ai-assist/optimise-field) sends the Set-Up
+website (`aiWebsite`, persisted in localStorage) as `url`. The backend
+best-effort fetches it via fetchSiteContent and injects it as reference-only
+grounding in the prompt. fetchSiteContent has a fixed 15s internal timeout, so
+the route caps the fetch with a ~3s Promise.race against null - never await it
+bare or a dead site stalls every Optimise. Site text is untrusted: wrap it in
+delimiters and tell the model to ignore instructions inside it.
+**Why:** rewrites should stay grounded in the real business without blocking on
+slow sites or being hijacked by scraped page content.
