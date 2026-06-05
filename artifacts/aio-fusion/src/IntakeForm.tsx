@@ -394,8 +394,8 @@ const sections: SectionDef[] = [
       { id: "4.2", label: "Trading names, product names or sub-brands", type: "textarea" },
       {
         id: "4.3",
-        label: "In one sentence, what does the business do and for whom?",
-        hint: "Think: \"We help [audience] do [outcome] by [method].\" This becomes your AI-readable boilerplate.",
+        label: "Create or adapt a short, one sentence LLM-readable boilerplate for your business or brand.",
+        hint: "For example: \"We help [audience] do [outcome] by [method].\" This becomes your AI-readable boilerplate.",
         type: "textarea",
       },
       {
