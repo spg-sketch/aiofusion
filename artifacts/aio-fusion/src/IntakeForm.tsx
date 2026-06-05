@@ -600,16 +600,6 @@ const sections: SectionDef[] = [
         hint: "e.g. Google Business Profile, Trustpilot, industry directories, Crunchbase, LinkedIn company page.",
         type: "textarea",
       },
-      {
-        id: "7.4",
-        label: "Outdated press releases, articles or web pages that describe your business inaccurately",
-        type: "textarea",
-      },
-      {
-        id: "7.5",
-        label: "Anything else we should know about your brand, content or competitive landscape?",
-        type: "textarea",
-      },
     ],
   },
 ];
