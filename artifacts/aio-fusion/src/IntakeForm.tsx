@@ -106,7 +106,7 @@ type DualListValue = DualValue[];
 // entries. Their old answer is migrated into one entry, but only when the field
 // has no dual-list data yet, so clearing all entries cannot bring the legacy
 // text back.
-const LEGACY_DUAL_LIST_IDS = ["3.1", "3.2"];
+const LEGACY_DUAL_LIST_IDS = ["3.1", "3.2", "3.5"];
 function migrateLegacyDualLists(
   dualLists: Record<string, DualListValue>,
   formData: Record<string, unknown>,
@@ -153,10 +153,10 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
 // free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7, 3.1,
-// 3.2 and the structured fields below (products, search phrases, personas, ICPs,
-// spokespeople and the two media-category pickers).
+// 3.2, 3.5 and the structured fields below (products, search phrases, personas,
+// ICPs, pain points, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -353,7 +353,18 @@ const sections: SectionDef[] = [
       },
       {
         id: "3.5",
-        label: "What are the most common pain points, frustrations, or unmet needs your audience has before finding you? What challenges do you solve – add as much detail as possible.",
+        label: "What are the most common pain points, frustrations, or unmet needs your potential clients / customers have before finding you?",
+        hint: "Add each pain point in its own box so they stay distinct. Use Add problem for as many as you need.",
+        type: "dual-list",
+        itemLabel: "problem",
+        addLabel: "+ Add problem",
+        singleField: true,
+        longPlaceholder: "Describe one pain point, frustration or unmet need",
+      },
+      {
+        id: "3.5b",
+        label: "What challenges do you solve for them?",
+        hint: "Describe the challenges you solve in as much detail as possible. Link to case studies or evidence where you can.",
         type: "textarea",
       },
       {
@@ -2308,7 +2319,13 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
   });
   pushLines(data.formData["3.3"], "3", "3.3", "Client locations");
   pushLines(data.formData["3.4"], "3", "3.4", "Audience language");
-  pushLines(data.formData["3.5"], "3", "3.5", "Pain points");
+  (data.dualLists["3.5"] || []).forEach((p, i) => {
+    if (!(p.short || p.long)) return;
+    const value = [p.short, p.long].filter(Boolean).join(" - ");
+    const label = value.length > 90 ? `${value.slice(0, 90)}…` : value;
+    out.push({ label, value, section: "3", fieldId: "3.5", fieldLabel: `Pain point ${i + 1}` });
+  });
+  pushLines(data.formData["3.5b"], "3", "3.5b", "Challenges solved");
   pushLines(data.formData["3.6"], "3", "3.6", "Desired outcomes");
 
   return out;
