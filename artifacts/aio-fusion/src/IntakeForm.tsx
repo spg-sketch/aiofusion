@@ -581,6 +581,7 @@ const sections: SectionDef[] = [
         id: "7.1",
         label: "Is your business name, address and phone (NAP) consistent across all channels?",
         type: "checkbox",
+        single: true,
         options: [
           "Yes, fully consistent",
           "Mostly: some older listings may be outdated",
