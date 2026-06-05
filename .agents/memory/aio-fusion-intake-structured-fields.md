@@ -30,4 +30,21 @@ If you migrate an old free-text answer into the new array, only fall back to
 the legacy text when the array key is genuinely undefined (`!Array.isArray`),
 NOT when it is an empty array. The old formData value is still persisted, so a
 `length > 0` guard would re-seed an entry every reload after the user clears
-all entries.
+all entries. This applies to BOTH the seeding migration (only seed when the key
+is undefined) AND every downstream getter that reads the array (e.g.
+getIcpProfile/getClientPersona): they must gate their formData fallback on the
+key being undefined, never on the joined value being empty, or a cleared
+field still returns the stale legacy text.
+
+## Shortcut: reuse the existing `dual-list` type instead of new state
+If a question only needs short+long (or one long box) per entry, convert it to
+the existing `dual-list` field type rather than adding a new state array. This
+skips almost all the wiring above (the three completion counters, persistence,
+saveDraft, archive, loadIntakeData mapping all already handle `dualLists`
+generically), so you only touch: the field config, the shared dual-list render
+branch, getProjectDataMessages, the relevant getters, and the optimise excludes.
+Genericise the single shared dual-list renderer with optional copy overrides
+(itemLabel/addLabel) that DEFAULT to the original "message" wording so 1.3 is
+unchanged, and a `singleField` flag to render only the long box (one box per
+entry). Optimise for dual-list is hardcoded to id 1.3, so any new dual-list id
+must be added to the optimise-excluded sets unless that path is generalised.

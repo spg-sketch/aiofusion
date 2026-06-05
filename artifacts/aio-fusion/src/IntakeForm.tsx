@@ -64,6 +64,13 @@ type FieldDef = {
   shortPlaceholder?: string;
   longPlaceholder?: string;
   wordLimit?: number;
+  // dual-list copy overrides (default wording is "message"). itemLabel is the
+  // singular noun used in the entry header and Remove button; addLabel is the
+  // full Add-button text. singleField renders only the long box (one box per
+  // entry) instead of the short + long pair.
+  itemLabel?: string;
+  addLabel?: string;
+  singleField?: boolean;
   // Optional field: shown and usable, but excluded from completion percentage
   // and the "fully complete" gate so it never blocks downstream actions.
   optional?: boolean;
@@ -95,6 +102,27 @@ type SectionDef = {
 type DualValue = { short: string; long: string };
 type DualListValue = DualValue[];
 
+// Fields that began as a single free-text answer but are now repeatable dual-list
+// entries. Their old answer is migrated into one entry, but only when the field
+// has no dual-list data yet, so clearing all entries cannot bring the legacy
+// text back.
+const LEGACY_DUAL_LIST_IDS = ["3.1", "3.2"];
+function migrateLegacyDualLists(
+  dualLists: Record<string, DualListValue>,
+  formData: Record<string, unknown>,
+): Record<string, DualListValue> {
+  const next = { ...dualLists };
+  for (const id of LEGACY_DUAL_LIST_IDS) {
+    if (next[id] === undefined) {
+      const legacy = formData?.[id];
+      if (typeof legacy === "string" && legacy.trim()) {
+        next[id] = [{ short: "", long: legacy }];
+      }
+    }
+  }
+  return next;
+}
+
 const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
 
 // Resolve the localStorage key for the currently active project's intake data.
@@ -124,10 +152,11 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
-// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7 and
-// the structured fields below (products, search phrases, spokespeople and the two media-category pickers).
+// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7, 3.1,
+// 3.2 and the structured fields below (products, search phrases, personas, ICPs,
+// spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -290,15 +319,23 @@ const sections: SectionDef[] = [
     fields: [
       {
         id: "3.1",
-        label: "Ideal Client Persona (Job Role)",
-        hint: "Include job title, seniority, function, sector or life stage. List multiple personas separately.",
-        type: "textarea",
+        label: "Who is the ideal target client or customer?",
+        hint: "List the different job titles and a brief description of their function. Add a persona for each one - the first persona is your primary customer, the second your secondary, and so on. Include seniority, function, sector or life stage where it helps.",
+        type: "dual-list",
+        itemLabel: "persona",
+        addLabel: "+ Add persona",
+        shortPlaceholder: "Job title - e.g. Head of Marketing",
+        longPlaceholder: "Brief description of their function and seniority",
       },
       {
         id: "3.2",
-        label: "Ideal Client Profile (Company) - size and type of business you serve",
-        hint: "Describe the size and type of organisation you target so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Include employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue - not the large global consultancies.",
-        type: "textarea",
+        label: "What is the ideal target client profile?",
+        hint: "Describe the size and type of organisation you serve so the Visibility Audit looks for the right kind of provider, not just the household-name firms. Add a separate profile for each ideal client type, including employee bands or revenue ranges and whether they are boutique, mid-market or enterprise. Example one: small to mid-sized marketing and creative agencies, 10 to 150 staff, under 20m revenue, not the large global consultancies. Example two: medium to enterprise-level financial services companies specialising in retail banking services, with 5,000 plus staff and revenue of more than 50m. Example three: SMEs in multiple sectors seeking to transform and enhance their CRM and retention operations, with 100 to 5,000 staff and revenues between 5 and 100m.",
+        type: "dual-list",
+        itemLabel: "ICP",
+        addLabel: "+ Add multiple ICPs",
+        singleField: true,
+        longPlaceholder: "Describe one ideal client profile - size, sector and type",
         optional: true,
       },
       {
@@ -594,7 +631,13 @@ export default function IntakePage() {
     return {};
   });
   const [dualLists, setDualLists] = useState<Record<string, DualListValue>>(() => {
-    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).dualLists || {}; } catch { /* noop */ }
+    try {
+      const raw = localStorage.getItem(currentIntakeKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return migrateLegacyDualLists(parsed.dualLists || {}, parsed.formData || {});
+      }
+    } catch { /* noop */ }
     return {};
   });
   const [spokespeople, setSpokespeople] = useState<Spokesperson[]>(() => {
@@ -1658,32 +1701,38 @@ export default function IntakePage() {
                   if (field.type === "dual-list") {
                     const list = dualLists[field.id] || [];
                     const listColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
+                    const noun = field.itemLabel || "message";
+                    const nounCap = noun.charAt(0).toUpperCase() + noun.slice(1);
+                    const nounPlural = `${noun}s`;
+                    const emptyText = field.itemLabel ? `No ${nounPlural} yet.` : "No additional messages yet.";
                     return (
                       <div key={field.id}>
                         <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
-                            <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No additional messages yet.</p>
+                            <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>{emptyText}</p>
                           )}
                           {list.map((item, i) => (
                             <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Message {i + 1}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>{nounCap} {i + 1}</span>
                                 <button onClick={() => removeDualListItem(field.id, i)} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <input
-                                  value={item.short}
-                                  onChange={(e) => updateDualListItem(field.id, i, "short", e.target.value)}
-                                  placeholder={field.shortPlaceholder || "≤6 words"}
-                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
-                                  style={{ borderColor: vars.g200, color: listColor }}
-                                />
+                              <div className={field.singleField ? "" : "grid grid-cols-1 md:grid-cols-2 gap-2"}>
+                                {!field.singleField && (
+                                  <input
+                                    value={item.short}
+                                    onChange={(e) => updateDualListItem(field.id, i, "short", e.target.value)}
+                                    placeholder={field.shortPlaceholder || "≤6 words"}
+                                    className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                    style={{ borderColor: vars.g200, color: listColor }}
+                                  />
+                                )}
                                 <textarea
                                   value={item.long}
                                   onChange={(e) => updateDualListItem(field.id, i, "long", e.target.value)}
                                   placeholder={field.longPlaceholder || "≤25 words"}
-                                  rows={2}
+                                  rows={field.singleField ? 3 : 2}
                                   className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
                                   style={{ borderColor: vars.g200, color: listColor }}
                                 />
@@ -1697,12 +1746,12 @@ export default function IntakePage() {
                             disabled={list.length >= MAX_ADDITIONAL_MESSAGES}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ borderColor: vars.g200, color: vars.accent }}
-                          >+ Add message</button>
+                          >{field.addLabel || "+ Add message"}</button>
                           {list.length > 0 && (
-                            <button onClick={() => removeDualListItem(field.id, list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove message</button>
+                            <button onClick={() => removeDualListItem(field.id, list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove {noun}</button>
                           )}
                           {list.length >= MAX_ADDITIONAL_MESSAGES && (
-                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_ADDITIONAL_MESSAGES} messages reached.</span>
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_ADDITIONAL_MESSAGES} {nounPlural} reached.</span>
                           )}
                         </div>
                       </div>
@@ -2127,7 +2176,7 @@ export function loadIntakeData(): IntakeData | null {
     return {
       formData: parsed.formData || {},
       duals: parsed.duals || {},
-      dualLists: parsed.dualLists || {},
+      dualLists: migrateLegacyDualLists(parsed.dualLists || {}, parsed.formData || {}),
       spokespeople: (parsed.spokespeople || []).map((s: Partial<Spokesperson>) => ({
         name: s.name || "",
         title: s.title || "",
@@ -2245,8 +2294,18 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
   });
 
   // Section 3
-  pushLines(data.formData["3.1"], "3", "3.1", "Ideal client persona (job role)");
-  pushLines(data.formData["3.2"], "3", "3.2", "Ideal client profile (company)");
+  (data.dualLists["3.1"] || []).forEach((p, i) => {
+    if (!(p.short || p.long)) return;
+    const value = [p.short, p.long].filter(Boolean).join(" - ");
+    const label = p.short || (value.length > 90 ? `${value.slice(0, 90)}…` : value);
+    out.push({ label, value, section: "3", fieldId: "3.1", fieldLabel: `Ideal client persona ${i + 1}` });
+  });
+  (data.dualLists["3.2"] || []).forEach((p, i) => {
+    if (!(p.short || p.long)) return;
+    const value = [p.short, p.long].filter(Boolean).join(" - ");
+    const label = value.length > 90 ? `${value.slice(0, 90)}…` : value;
+    out.push({ label, value, section: "3", fieldId: "3.2", fieldLabel: `Ideal client profile ${i + 1}` });
+  });
   pushLines(data.formData["3.3"], "3", "3.3", "Client locations");
   pushLines(data.formData["3.4"], "3", "3.4", "Audience language");
   pushLines(data.formData["3.5"], "3", "3.5", "Pain points");
@@ -2275,14 +2334,29 @@ export function getTargetSectors(): string[] {
   return data?.audienceCategories || [];
 }
 
+function joinDualList(items: DualListValue | undefined): string {
+  return (items || [])
+    .map((it) => [it.short, it.long].filter(Boolean).join(" - "))
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function getIcpProfile(): string {
   const data = loadIntakeData();
+  // loadIntakeData migrates legacy free text into dualLists, so once the key
+  // exists it is the source of truth. Only fall back to the legacy free-text
+  // answer when the key is absent, so clearing all entries (saved as []) cannot
+  // resurrect the old text here.
+  const items = data?.dualLists?.["3.2"];
+  if (items !== undefined) return joinDualList(items);
   const raw = data?.formData?.["3.2"];
   return typeof raw === "string" ? raw.trim() : "";
 }
 
 export function getClientPersona(): string {
   const data = loadIntakeData();
+  const items = data?.dualLists?.["3.1"];
+  if (items !== undefined) return joinDualList(items);
   const raw = data?.formData?.["3.1"];
   return typeof raw === "string" ? raw.trim() : "";
 }
