@@ -154,8 +154,8 @@ const OPTIMISE_FIELDS = new Set([
   "3.3", "3.4", "3.5b",
   "4.2", "4.3", "4.5", "4.7", "4.8",
   "5.1b", "5.2", "5.5", "5.6", "5.7",
-  "6.4b", "6.5b", "6.6", "6.7",
-  "7.2b", "7.3",
+  "6.4b", "6.5b", "6.7",
+  "7.2b",
 ]);
 
 // Tailored instructions for specific questions. Any other field falls back to
