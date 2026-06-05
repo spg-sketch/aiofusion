@@ -347,7 +347,7 @@ const sections: SectionDef[] = [
       },
       {
         id: "3.4",
-        label: "What phrases / language does each audience use when searching for your solutions?",
+        label: "What phrases / language do clients / customers use when searching for your solutions?",
         hint: "Include informal, colloquial, and category-level terms - not just your preferred terminology entered above. These populate your semantic phrase guide.",
         type: "textarea",
       },
