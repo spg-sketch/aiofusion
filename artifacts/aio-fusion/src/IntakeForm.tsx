@@ -453,6 +453,8 @@ const sections: SectionDef[] = [
           "Referral-led: they hear of us via press, podcasts, social or word of mouth, then look us up",
           "AI-led: they increasingly find or vet us through AI tools or voice assistants",
           "Local-led: maps and local search in our area are how they find us",
+          "Direct marketing",
+          "Direct email prospecting",
           "A mix: describe below",
         ],
       },
