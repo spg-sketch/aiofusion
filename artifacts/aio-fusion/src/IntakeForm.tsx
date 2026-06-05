@@ -591,9 +591,11 @@ const sections: SectionDef[] = [
       {
         id: "7.2",
         label: "Has the business changed name, address, products or core description in the last 3 years?",
-        hint: "If yes, list what changed and when.",
-        type: "textarea",
+        type: "checkbox",
+        single: true,
+        options: ["Yes", "No"],
       },
+      { id: "7.2b", label: "If yes, what changed and when?", type: "textarea", dependsOn: { field: "7.2", includes: ["Yes"] } },
       {
         id: "7.3",
         label: "URLs for most important third-party profiles and citations",
