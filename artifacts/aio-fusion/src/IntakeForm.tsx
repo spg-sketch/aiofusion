@@ -687,8 +687,13 @@ export default function IntakePage() {
       return { ...prev, [fieldId]: next };
     });
   };
+  const MAX_ADDITIONAL_MESSAGES = 6;
   const addDualListItem = (fieldId: string) => {
-    setDualLists((prev) => ({ ...prev, [fieldId]: [...(prev[fieldId] || []), { short: "", long: "" }] }));
+    setDualLists((prev) => {
+      const current = prev[fieldId] || [];
+      if (current.length >= MAX_ADDITIONAL_MESSAGES) return prev;
+      return { ...prev, [fieldId]: [...current, { short: "", long: "" }] };
+    });
   };
   const removeDualListItem = (fieldId: string, idx: number) => {
     setDualLists((prev) => ({ ...prev, [fieldId]: (prev[fieldId] || []).filter((_, i) => i !== idx) }));
@@ -1604,10 +1609,18 @@ export default function IntakePage() {
                             </div>
                           ))}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => addDualListItem(field.id)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Add message</button>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => addDualListItem(field.id)}
+                            disabled={list.length >= MAX_ADDITIONAL_MESSAGES}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{ borderColor: vars.g200, color: vars.accent }}
+                          >+ Add message</button>
                           {list.length > 0 && (
                             <button onClick={() => removeDualListItem(field.id, list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove message</button>
+                          )}
+                          {list.length >= MAX_ADDITIONAL_MESSAGES && (
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_ADDITIONAL_MESSAGES} messages reached.</span>
                           )}
                         </div>
                       </div>
