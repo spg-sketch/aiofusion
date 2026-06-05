@@ -401,7 +401,7 @@ const sections: SectionDef[] = [
       {
         id: "4.4",
         label: "Sector or industry",
-        hint: "Include sub-sectors if relevant. This shapes schema markup and entity classification.",
+        hint: "Define your sector or industry. Add the main industry or sector your business operates in. Include sub-sectors if relevant (but do not add a full SEO term list). This shapes schema markup and entity classification.",
         type: "text",
       },
       {
