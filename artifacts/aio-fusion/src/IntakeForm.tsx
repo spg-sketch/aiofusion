@@ -106,7 +106,7 @@ type DualListValue = DualValue[];
 // entries. Their old answer is migrated into one entry, but only when the field
 // has no dual-list data yet, so clearing all entries cannot bring the legacy
 // text back.
-const LEGACY_DUAL_LIST_IDS = ["3.1", "3.2", "3.5"];
+const LEGACY_DUAL_LIST_IDS = ["3.1", "3.2", "3.5", "3.6"];
 function migrateLegacyDualLists(
   dualLists: Record<string, DualListValue>,
   formData: Record<string, unknown>,
@@ -153,10 +153,10 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
 // free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7, 3.1,
-// 3.2, 3.5 and the structured fields below (products, search phrases, personas,
-// ICPs, pain points, spokespeople and the two media-category pickers).
+// 3.2, 3.5, 3.6 and the structured fields below (products, search phrases, personas,
+// ICPs, pain points, outcomes, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "3.6", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -369,8 +369,13 @@ const sections: SectionDef[] = [
       },
       {
         id: "3.6",
-        label: "What outcome does your audience most want to achieve by using your product or service? Please provide examples and links to case studies or evidence.",
-        type: "textarea",
+        label: "What outcome do clients / customers most want to achieve by working with you? Please provide examples and links to case studies or evidence.",
+        hint: "Add each example or case study in its own box. Include links to evidence where you can. Use Add example for as many as you need.",
+        type: "dual-list",
+        itemLabel: "example",
+        addLabel: "+ Add example",
+        singleField: true,
+        longPlaceholder: "Describe one outcome, with a case study or evidence link",
       },
     ],
   },
@@ -2326,7 +2331,12 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
     out.push({ label, value, section: "3", fieldId: "3.5", fieldLabel: `Pain point ${i + 1}` });
   });
   pushLines(data.formData["3.5b"], "3", "3.5b", "Challenges solved");
-  pushLines(data.formData["3.6"], "3", "3.6", "Desired outcomes");
+  (data.dualLists["3.6"] || []).forEach((p, i) => {
+    if (!(p.short || p.long)) return;
+    const value = [p.short, p.long].filter(Boolean).join(" - ");
+    const label = value.length > 90 ? `${value.slice(0, 90)}…` : value;
+    out.push({ label, value, section: "3", fieldId: "3.6", fieldLabel: `Desired outcome ${i + 1}` });
+  });
 
   return out;
 }
