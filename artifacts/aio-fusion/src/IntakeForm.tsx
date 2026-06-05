@@ -186,7 +186,7 @@ const sections: SectionDef[] = [
       { id: "h-sp", label: "Semantic Phrase Guide & Topics", type: "heading" },
       {
         id: "1.6",
-        label: "Preferred terms, phrases and category descriptors",
+        label: "Preferred SEO terms, phrases and category descriptors",
         hint: "Enter a list of short phrases or sentences. Include category labels, technology descriptors, industry terms.",
         type: "textarea",
       },
