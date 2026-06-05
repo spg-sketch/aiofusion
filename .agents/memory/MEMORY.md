@@ -1,1 +1,2 @@
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
+- [AIO Fusion shared projects store](aio-fusion-shared-projects.md) — `/api/store/*` is intentionally global/ungated; keep the deletedAt + untimestamped-intake data-loss guards; test api-server at localhost:8080 not the dev domain.

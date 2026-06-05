@@ -85,8 +85,10 @@ app.use(
 );
 app.use(cors(corsOptionsDelegate));
 app.use(cookieParser());
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+// Logos are stored as data URLs and the intake blob can be sizeable, so the
+// project store needs more headroom than the default 1mb.
+app.use(express.json({ limit: "12mb" }));
+app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 app.use(authMiddleware);
 
 app.use("/api", generalLimiter, router);

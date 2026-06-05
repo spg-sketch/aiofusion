@@ -26,6 +26,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
+import { markIntakeSaved } from "./lib/projectSync";
 
 const vars = {
   navy: "#102B36",
@@ -1113,11 +1114,16 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
+    const blob = { formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
     try {
-      localStorage.setItem(
-        currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
-      );
+      localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
+    } catch { /* noop */ }
+    // Mirror the save to the shared server store so it is visible on other
+    // devices and to colleagues on the same login.
+    try {
+      const id = getActiveProjectId() || "default";
+      const name = typeof formData["4.1"] === "string" ? (formData["4.1"] as string) : "";
+      markIntakeSaved(id, blob, name);
     } catch { /* noop */ }
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2500);

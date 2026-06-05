@@ -1,4 +1,5 @@
 import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId } from "./IntakeForm";
+import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
@@ -7614,6 +7615,15 @@ function App() {
     migrateLegacyIntakeToProject();
     migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
+    // Then sync with the shared server store so this login sees every project,
+    // on every device. Local-only projects are pushed up, not lost.
+    (async () => {
+      const result = await syncProjectsOnLoad();
+      if (result) {
+        setStoredProjects(result.projects as unknown as Client[]);
+        setClientLogos(result.logos);
+      }
+    })();
   }, []);
 
   const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
@@ -7626,6 +7636,7 @@ function App() {
       const { [id]: _removed, ...rest } = prev;
       return rest;
     });
+    void deleteRemoteProject(id);
   };
 
   const confirmCreateProject = (name: string, logo?: string) => {
@@ -7637,6 +7648,7 @@ function App() {
     setActiveClient(logo ? { ...project, logo } : project);
     setCurrentPage("intake");
     setView("platform");
+    void pushProjectMeta(project as unknown as Record<string, unknown> & { id: string }, logo);
   };
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
@@ -7738,6 +7750,8 @@ function App() {
   const handleLogoUpdate = (clientId: string, logoDataUrl: string) => {
     setClientLogos((prev) => ({ ...prev, [clientId]: logoDataUrl }));
     setActiveClient((prev) => (prev && prev.id === clientId ? { ...prev, logo: logoDataUrl } : prev));
+    const project = loadStoredProjects().find((p) => p.id === clientId);
+    if (project) void pushProjectMeta(project as unknown as Record<string, unknown> & { id: string }, logoDataUrl);
   };
 
   const goHome = () => {
@@ -7901,8 +7915,11 @@ function App() {
       <>
       <ClientSelectorPage
         projects={storedProjects}
-        onSelectClient={(client) => {
+        onSelectClient={async (client) => {
           setActiveProjectId(client.id);
+          // Pull this project's latest Set-Up from the shared store before
+          // opening it, so a colleague's saved work shows here too.
+          await syncIntakeForProject(client.id);
           setActiveClient({ ...client, logo: clientLogos[client.id] });
           setCurrentPage("dashboard");
         }}
