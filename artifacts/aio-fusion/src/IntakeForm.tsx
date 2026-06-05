@@ -52,6 +52,8 @@ type Spokesperson = { name: string; title: string; expertise: string; linkedin: 
 
 type Product = { name: string; description: string; audience: string };
 
+type ProductQuery = { area: string; phrases: string };
+
 type FieldDef = {
   id: string;
   label: string;
@@ -122,10 +124,10 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
-// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6 and the
-// structured fields below (products, spokespeople and the two media-category pickers).
+// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7 and
+// the structured fields below (products, search phrases, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -270,7 +272,7 @@ const sections: SectionDef[] = [
       {
         id: "2.7",
         label: "Search phrases and questions for each product or service area",
-        hint: "Think in questions as well as keywords.",
+        hint: "Add each product or service area in its own entry, then list its search phrases and questions. Think in questions as well as keywords. Use Add product / service area for as many as you need.",
         type: "textarea",
       },
     ],
@@ -635,6 +637,29 @@ export default function IntakePage() {
     } catch { /* noop */ }
     return [];
   });
+  const [productQueries, setProductQueries] = useState<ProductQuery[]>(() => {
+    try {
+      const raw = localStorage.getItem(currentIntakeKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const arr = parsed.productQueries;
+        // Once productQueries has been saved (even as an empty list) it is the
+        // source of truth. Only fall back to the legacy free-text 2.7 answer
+        // when it was never set, so clearing all entries cannot resurrect it.
+        if (Array.isArray(arr)) {
+          return arr.map((q: Partial<ProductQuery>) => ({
+            area: q.area || "",
+            phrases: q.phrases || "",
+          }));
+        }
+        const legacy = parsed.formData?.["2.7"];
+        if (typeof legacy === "string" && legacy.trim()) {
+          return [{ area: "", phrases: legacy }];
+        }
+      }
+    } catch { /* noop */ }
+    return [];
+  });
   const [businessCategories, setBusinessCategories] = useState<string[]>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
     return [];
@@ -682,10 +707,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -793,6 +818,7 @@ export default function IntakePage() {
       if (!fieldApplies(f, formData)) return false;
       if (f.id === "1.8") return spokespeople.length > 0;
       if (f.id === "2.6") return products.length > 0;
+      if (f.id === "2.7") return productQueries.length > 0;
       if (f.id === "1.9") return businessCategories.length > 0;
       if (f.id === "1.10") return audienceCategories.length > 0;
       if (f.type === "dual") {
@@ -820,6 +846,7 @@ export default function IntakePage() {
           total += 1;
           if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
           if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
+          if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
           if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
           if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
           if (f.type === "dual") {
@@ -838,7 +865,7 @@ export default function IntakePage() {
       return total ? Math.round((filled / total) * 100) : 0;
     };
     return { pr: calc("pr"), web: calc("web") };
-  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories]);
 
   // Full-form completion across BOTH PR and AIO tracks (independent of which
   // track is currently visible). Used to gate "Optimise Project Messages".
@@ -852,6 +879,7 @@ export default function IntakePage() {
         total += 1;
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
         if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
+        if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
         if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
         if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
         if (f.type === "dual") {
@@ -868,7 +896,7 @@ export default function IntakePage() {
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
-  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -1005,6 +1033,7 @@ export default function IntakePage() {
         dualLists,
         spokespeople,
         products,
+        productQueries,
         businessCategories,
         audienceCategories,
         mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])),
@@ -1045,6 +1074,15 @@ export default function IntakePage() {
           .map(
             (p) =>
               `<li>${esc([p.name, p.description, p.audience ? `Primary audience: ${p.audience}` : ""].filter(Boolean).join(" - "))}</li>`,
+          )
+          .join("")}</ul>`;
+      }
+      if (field.id === "2.7") {
+        if (!productQueries.length) return NP;
+        return `<ul>${productQueries
+          .map(
+            (q) =>
+              `<li>${esc([q.area, q.phrases].filter(Boolean).join(" - "))}</li>`,
           )
           .join("")}</ul>`;
       }
@@ -1170,7 +1208,7 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
-    const blob = { formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
+    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
     } catch { /* noop */ }
@@ -1418,7 +1456,7 @@ export default function IntakePage() {
               <button
                 onClick={() => {
                   if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
-                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setBusinessCategories([]); setAudienceCategories([]);
+                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setProductQueries([]); setBusinessCategories([]); setAudienceCategories([]);
                     setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                   }
@@ -1726,6 +1764,54 @@ export default function IntakePage() {
                     );
                   }
 
+                  if (field.id === "2.7") {
+                    return (
+                      <div key={field.id}>
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <div className="space-y-3 mb-2">
+                          {productQueries.length === 0 && (
+                            <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No product or service areas yet.</p>
+                          )}
+                          {productQueries.map((q, i) => (
+                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Product / service area {i + 1}</span>
+                                <button onClick={() => setProductQueries(productQueries.filter((_, j) => j !== i))} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
+                              </div>
+                              <div className="space-y-2">
+                                <input
+                                  value={q.area}
+                                  onChange={(e) => setProductQueries(productQueries.map((x, j) => j === i ? { ...x, area: e.target.value } : x))}
+                                  placeholder="Product or service area"
+                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                  style={{ borderColor: vars.g200 }}
+                                />
+                                <textarea
+                                  value={q.phrases}
+                                  onChange={(e) => setProductQueries(productQueries.map((x, j) => j === i ? { ...x, phrases: e.target.value } : x))}
+                                  placeholder="Search phrases and questions (think in questions as well as keywords)"
+                                  rows={3}
+                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                  style={{ borderColor: vars.g200 }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setProductQueries([...productQueries, { area: "", phrases: "" }])}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            style={{ borderColor: vars.g200, color: vars.accent }}
+                          >+ Add product / service area</button>
+                          {productQueries.length > 0 && (
+                            <button onClick={() => setProductQueries(productQueries.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove product / service area</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (field.type === "checkbox" && field.options) {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
@@ -2025,6 +2111,7 @@ export type IntakeData = {
   dualLists: Record<string, DualListValue>;
   spokespeople: Spokesperson[];
   products: Product[];
+  productQueries: ProductQuery[];
   businessCategories: string[];
   audienceCategories: string[];
   mediaCategories: string[];
@@ -2059,6 +2146,20 @@ export function loadIntakeData(): IntakeData | null {
         const legacy = parsed.formData?.["2.6"];
         if (typeof legacy === "string" && legacy.trim()) {
           return [{ name: "", description: legacy, audience: "" }];
+        }
+        return [];
+      })(),
+      productQueries: (() => {
+        const arr = parsed.productQueries;
+        if (Array.isArray(arr)) {
+          return arr.map((q: Partial<ProductQuery>) => ({
+            area: q.area || "",
+            phrases: q.phrases || "",
+          }));
+        }
+        const legacy = parsed.formData?.["2.7"];
+        if (typeof legacy === "string" && legacy.trim()) {
+          return [{ area: "", phrases: legacy }];
         }
         return [];
       })(),
@@ -2134,6 +2235,13 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
     const value = parts.join(" - ");
     const label = p.name || (value.length > 90 ? `${value.slice(0, 90)}…` : value);
     out.push({ label, value, section: "2", fieldId: "2.6", fieldLabel: `Core product / service ${i + 1}` });
+  });
+  (data.productQueries || []).forEach((q, i) => {
+    const parts = [q.area, q.phrases].filter(Boolean);
+    if (parts.length === 0) return;
+    const value = parts.join(" - ");
+    const label = q.area || (value.length > 90 ? `${value.slice(0, 90)}…` : value);
+    out.push({ label, value, section: "2", fieldId: "2.7", fieldLabel: `Search phrases - area ${i + 1}` });
   });
 
   // Section 3
