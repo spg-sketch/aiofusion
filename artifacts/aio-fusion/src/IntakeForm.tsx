@@ -152,11 +152,11 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
-// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6, 2.7, 3.1,
+// free-text answer (textarea, dual and dual-list), except 1.4, 1.5, 1.7, 2.6, 2.7, 3.1,
 // 3.2, 3.5, 3.6 and the structured fields below (products, search phrases, personas,
 // ICPs, pain points, outcomes, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "3.6", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.4", "1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "3.6", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
