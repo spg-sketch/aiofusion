@@ -148,10 +148,10 @@ const sections: SectionDef[] = [
       { id: "h-bp", label: "Core Boilerplate", type: "heading" },
       {
         id: "1.1",
-        label: "100-word company descriptor",
-        hint: "Enter or draft the raw ingredients for a new 100-word company descriptor for press use.",
+        label: "250-word company descriptor",
+        hint: "Enter or draft the raw ingredients for a new 250-word company descriptor for press use.",
         type: "textarea",
-        wordLimit: 100,
+        wordLimit: 250,
       },
       { id: "h-mh", label: "Message Hierarchy", type: "heading" },
       {
