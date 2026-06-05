@@ -774,26 +774,38 @@ export default function IntakePage() {
     });
   };
 
-  const totalFields = visibleSections.reduce(
-    (s, sec) => s + sec.fields.filter((f) => f.type !== "heading" && !f.optional && fieldApplies(f, formData)).length,
-    0,
-  );
-  const filledFields = visibleSections.reduce((sum, sec) => {
-    return sum + sec.fields.filter((f) => f.type !== "heading" && !f.optional && fieldApplies(f, formData)).reduce((s, f) => {
-      if (f.id === "1.8") return s + (spokespeople.length > 0 ? 1 : 0);
-      if (f.id === "1.9") return s + (businessCategories.length > 0 ? 1 : 0);
-      if (f.id === "1.10") return s + (audienceCategories.length > 0 ? 1 : 0);
-      if (f.type === "dual") {
-        const v = duals[f.id]; return s + (v && (v.short || v.long) ? 1 : 0);
-      }
-      if (f.type === "dual-list") {
-        const v = dualLists[f.id]; return s + (v && v.length && v.some((it) => it.short || it.long) ? 1 : 0);
-      }
-      const val = formData[f.id];
-      return s + ((Array.isArray(val) ? val.length > 0 : !!(val && val.trim().length > 0)) ? 1 : 0);
-    }, 0);
-  }, 0);
-  const progressPct = totalFields ? Math.round((filledFields / totalFields) * 100) : 0;
+  // Progress per track (PR sections 1-3 and AIO sections 4-7), shown as two
+  // separate bars so each set-up has its own completion meter regardless of
+  // which one is currently open.
+  const trackProgress = useMemo(() => {
+    const calc = (trk: Track) => {
+      let total = 0; let filled = 0;
+      sections.filter((s) => s.track === trk).forEach((sec) => {
+        sec.fields.forEach((f) => {
+          if (f.type === "heading") return;
+          if (f.optional) return;
+          if (!fieldApplies(f, formData)) return;
+          total += 1;
+          if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
+          if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
+          if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
+          if (f.type === "dual") {
+            const v = duals[f.id]; if (v && (v.short || v.long)) filled += 1; return;
+          }
+          if (f.type === "dual-list") {
+            const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
+          }
+          if (f.type === "checkbox") {
+            const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
+          }
+          const v = formData[f.id];
+          if (typeof v === "string" && v.trim().length > 0) filled += 1;
+        });
+      });
+      return total ? Math.round((filled / total) * 100) : 0;
+    };
+    return { pr: calc("pr"), web: calc("web") };
+  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories]);
 
   // Full-form completion across BOTH PR and AIO tracks (independent of which
   // track is currently visible). Used to gate "Optimise Project Messages".
@@ -1242,14 +1254,21 @@ export default function IntakePage() {
                 );
               })}
             </div>
-            <div className="flex-1 lg:max-w-md lg:ml-6">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>Set-Up Progress</span>
-                <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{progressPct}%</span>
-              </div>
-              <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
-                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
-              </div>
+            <div className="flex-1 lg:max-w-md lg:ml-6 flex flex-col gap-3">
+              {([
+                { key: "pr", label: "PR Set-Up Progress", pct: trackProgress.pr },
+                { key: "web", label: "AIO Set-Up Progress", pct: trackProgress.web },
+              ]).map((p) => (
+                <div key={p.key}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>{p.label}</span>
+                    <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{p.pct}%</span>
+                  </div>
+                  <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.pct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
