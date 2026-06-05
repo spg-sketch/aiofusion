@@ -50,6 +50,8 @@ type Track = "pr" | "web";
 
 type Spokesperson = { name: string; title: string; expertise: string; linkedin: string };
 
+type Product = { name: string; description: string; audience: string };
+
 type FieldDef = {
   id: string;
   label: string;
@@ -120,10 +122,10 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 
 // Per-question Optimise rewrites the user's OWN answer via the AI backend
 // (POST /api/ai-assist/optimise-field). The control is offered on every
-// free-text answer (textarea, dual and dual-list), except 1.5, 1.7 and the
-// structured pickers below (spokespeople and the two media-category fields).
+// free-text answer (textarea, dual and dual-list), except 1.5, 1.7, 2.6 and the
+// structured fields below (products, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "1.8", "1.9", "1.10"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.5", "1.7", "2.6", "1.8", "1.9", "1.10"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -262,7 +264,7 @@ const sections: SectionDef[] = [
       {
         id: "2.6",
         label: "Each core product or service",
-        hint: "For each: name, one-sentence description, primary audience.",
+        hint: "Add each product or service in its own entry: the name, a one-sentence description and its primary audience. Use Add product / service for as many as you need.",
         type: "textarea",
       },
       {
@@ -609,6 +611,30 @@ export default function IntakePage() {
     } catch { /* noop */ }
     return [];
   });
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const raw = localStorage.getItem(currentIntakeKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const arr = parsed.products;
+        // Once products has been saved (even as an empty list) it is the source
+        // of truth. Only fall back to the legacy free-text 2.6 answer when
+        // products was never set, so clearing all entries cannot resurrect it.
+        if (Array.isArray(arr)) {
+          return arr.map((p: Partial<Product>) => ({
+            name: p.name || "",
+            description: p.description || "",
+            audience: p.audience || "",
+          }));
+        }
+        const legacy = parsed.formData?.["2.6"];
+        if (typeof legacy === "string" && legacy.trim()) {
+          return [{ name: "", description: legacy, audience: "" }];
+        }
+      }
+    } catch { /* noop */ }
+    return [];
+  });
   const [businessCategories, setBusinessCategories] = useState<string[]>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
     return [];
@@ -656,10 +682,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
+  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -766,6 +792,7 @@ export default function IntakePage() {
       if (f.type === "heading") return false;
       if (!fieldApplies(f, formData)) return false;
       if (f.id === "1.8") return spokespeople.length > 0;
+      if (f.id === "2.6") return products.length > 0;
       if (f.id === "1.9") return businessCategories.length > 0;
       if (f.id === "1.10") return audienceCategories.length > 0;
       if (f.type === "dual") {
@@ -792,6 +819,7 @@ export default function IntakePage() {
           if (!fieldApplies(f, formData)) return;
           total += 1;
           if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
+          if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
           if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
           if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
           if (f.type === "dual") {
@@ -810,7 +838,7 @@ export default function IntakePage() {
       return total ? Math.round((filled / total) * 100) : 0;
     };
     return { pr: calc("pr"), web: calc("web") };
-  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories]);
 
   // Full-form completion across BOTH PR and AIO tracks (independent of which
   // track is currently visible). Used to gate "Optimise Project Messages".
@@ -823,6 +851,7 @@ export default function IntakePage() {
         if (!fieldApplies(f, formData)) return;
         total += 1;
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
+        if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
         if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
         if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
         if (f.type === "dual") {
@@ -839,7 +868,7 @@ export default function IntakePage() {
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
-  }, [formData, duals, dualLists, spokespeople, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -975,6 +1004,7 @@ export default function IntakePage() {
         duals,
         dualLists,
         spokespeople,
+        products,
         businessCategories,
         audienceCategories,
         mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])),
@@ -1006,6 +1036,15 @@ export default function IntakePage() {
           .map(
             (s) =>
               `<li>${esc([s.name, s.title, s.expertise].filter(Boolean).join(", "))}${s.linkedin ? ` (${esc(s.linkedin)})` : ""}</li>`,
+          )
+          .join("")}</ul>`;
+      }
+      if (field.id === "2.6") {
+        if (!products.length) return NP;
+        return `<ul>${products
+          .map(
+            (p) =>
+              `<li>${esc([p.name, p.description, p.audience ? `Primary audience: ${p.audience}` : ""].filter(Boolean).join(" - "))}</li>`,
           )
           .join("")}</ul>`;
       }
@@ -1131,7 +1170,7 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
-    const blob = { formData, duals, dualLists, spokespeople, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
+    const blob = { formData, duals, dualLists, spokespeople, products, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
     } catch { /* noop */ }
@@ -1379,7 +1418,7 @@ export default function IntakePage() {
               <button
                 onClick={() => {
                   if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
-                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setBusinessCategories([]); setAudienceCategories([]);
+                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setBusinessCategories([]); setAudienceCategories([]);
                     setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                   }
@@ -1626,6 +1665,61 @@ export default function IntakePage() {
                           )}
                           {list.length >= MAX_ADDITIONAL_MESSAGES && (
                             <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_ADDITIONAL_MESSAGES} messages reached.</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (field.id === "2.6") {
+                    return (
+                      <div key={field.id}>
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <div className="space-y-3 mb-2">
+                          {products.length === 0 && (
+                            <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No products or services yet.</p>
+                          )}
+                          {products.map((p, i) => (
+                            <div key={i} className="rounded-xl border p-3" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#C8497A" }}>Product / service {i + 1}</span>
+                                <button onClick={() => setProducts(products.filter((_, j) => j !== i))} title="Remove" className="text-[11px]" style={{ color: vars.g400 }}><X size={14} /></button>
+                              </div>
+                              <div className="space-y-2">
+                                <input
+                                  value={p.name}
+                                  onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                                  placeholder="Core product or service"
+                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                  style={{ borderColor: vars.g200 }}
+                                />
+                                <textarea
+                                  value={p.description}
+                                  onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                                  placeholder="One-sentence description"
+                                  rows={2}
+                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                  style={{ borderColor: vars.g200 }}
+                                />
+                                <input
+                                  value={p.audience}
+                                  onChange={(e) => setProducts(products.map((x, j) => j === i ? { ...x, audience: e.target.value } : x))}
+                                  placeholder="Primary audience"
+                                  className="w-full px-3 py-2 rounded-lg border text-[13px] bg-white"
+                                  style={{ borderColor: vars.g200 }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => setProducts([...products, { name: "", description: "", audience: "" }])}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            style={{ borderColor: vars.g200, color: vars.accent }}
+                          >+ Add product / service</button>
+                          {products.length > 0 && (
+                            <button onClick={() => setProducts(products.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove product / service</button>
                           )}
                         </div>
                       </div>
@@ -1930,6 +2024,7 @@ export type IntakeData = {
   duals: Record<string, DualValue>;
   dualLists: Record<string, DualListValue>;
   spokespeople: Spokesperson[];
+  products: Product[];
   businessCategories: string[];
   audienceCategories: string[];
   mediaCategories: string[];
@@ -1952,6 +2047,21 @@ export function loadIntakeData(): IntakeData | null {
         expertise: s.expertise || "",
         linkedin: s.linkedin || "",
       })),
+      products: (() => {
+        const arr = parsed.products;
+        if (Array.isArray(arr)) {
+          return arr.map((p: Partial<Product>) => ({
+            name: p.name || "",
+            description: p.description || "",
+            audience: p.audience || "",
+          }));
+        }
+        const legacy = parsed.formData?.["2.6"];
+        if (typeof legacy === "string" && legacy.trim()) {
+          return [{ name: "", description: legacy, audience: "" }];
+        }
+        return [];
+      })(),
       businessCategories: parsed.businessCategories || parsed.mediaCategories || [],
       audienceCategories: parsed.audienceCategories || [],
       mediaCategories: Array.from(new Set([...(parsed.businessCategories || parsed.mediaCategories || []), ...(parsed.audienceCategories || [])])),
@@ -2018,7 +2128,13 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
   pushLines(data.formData["2.3"], "2", "2.3", "Misconceptions / objections");
   pushLines(data.formData["2.4"], "2", "2.4", "Category questions");
   pushLines(data.formData["2.5"], "2", "2.5", "Positioning copy");
-  pushLines(data.formData["2.6"], "2", "2.6", "Core products / services");
+  (data.products || []).forEach((p, i) => {
+    const parts = [p.name, p.description, p.audience ? `Primary audience: ${p.audience}` : ""].filter(Boolean);
+    if (parts.length === 0) return;
+    const value = parts.join(" - ");
+    const label = p.name || (value.length > 90 ? `${value.slice(0, 90)}…` : value);
+    out.push({ label, value, section: "2", fieldId: "2.6", fieldLabel: `Core product / service ${i + 1}` });
+  });
 
   // Section 3
   pushLines(data.formData["3.1"], "3", "3.1", "Ideal client persona (job role)");

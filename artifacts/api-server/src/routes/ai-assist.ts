@@ -146,11 +146,11 @@ aiAssistRouter.post(
 // models to cite, while preserving their facts and meaning.
 // Questions that expose the Optimise control. Must stay in sync with the
 // frontend rule in artifacts/aio-fusion/src/IntakeForm.tsx: every free-text
-// answer (textarea, dual and dual-list) except 1.5, 1.7 and the structured
-// pickers 1.8, 1.9 and 1.10. Short factual `text` fields, checkboxes and headings are excluded.
+// answer (textarea, dual and dual-list) except 1.5, 1.7, 2.6 and the structured
+// fields 1.8, 1.9 and 1.10. Short factual `text` fields, checkboxes and headings are excluded.
 const OPTIMISE_FIELDS = new Set([
   "1.1", "1.2", "1.3", "1.4", "1.6",
-  "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7",
+  "2.1", "2.2", "2.3", "2.4", "2.5", "2.7",
   "3.1", "3.2", "3.3", "3.4", "3.5", "3.6",
   "4.2", "4.3", "4.5", "4.7", "4.8",
   "5.1b", "5.2", "5.5", "5.6", "5.7",

@@ -1,2 +1,3 @@
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
+- [AIO Fusion IntakeForm structured fields](aio-fusion-intake-structured-fields.md) — adding a repeatable field needs wiring in 3 completion counters (diff indentation) + legacy migration must only fall back when array undefined.
 - [AIO Fusion shared projects store](aio-fusion-shared-projects.md) — `/api/store/*` is intentionally global/ungated; keep the deletedAt + untimestamped-intake data-loss guards; test api-server at localhost:8080 not the dev domain.
