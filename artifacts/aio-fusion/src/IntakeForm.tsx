@@ -157,9 +157,9 @@ const sections: SectionDef[] = [
       {
         id: "1.2",
         label: "Primary Message",
-        hint: "Enter a Primary Message providing a short summary (no more than six words). And a longer version of no more than 25 words.",
+        hint: "Enter a Primary Message providing a short summary (no more than 10 words). And a longer version of no more than 25 words.",
         type: "dual",
-        shortPlaceholder: "≤6 words - e.g. AI authority for PR",
+        shortPlaceholder: "≤10 words - e.g. AI authority for PR",
         longPlaceholder: "≤25 words - the longer version that adds proof and context",
       },
       {
