@@ -394,46 +394,84 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       return;
     }
     const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
-    const verdict =
-      result.visibilityScore >= 60
-        ? "Strong AI visibility - this brand is being referenced reliably in your sector."
-        : result.visibilityScore >= 30
-          ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
-          : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector.";
+    const idx = result.visibilityScore;
+    const grade = idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+    const gradeRead =
+      idx >= 60
+        ? "Strong - this brand is being referenced reliably at the discovery stage."
+        : idx >= 30
+          ? "Moderate - the brand appears in some answers but is not consistently surfaced."
+          : "Low - AI engines rarely surface this brand on non-branded category queries.";
     const checked = new Date(result.checkedAt).toLocaleString("en-GB", {
       day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
     });
     const sectorsUsed = result.sectors && result.sectors.length > 0 ? result.sectors : auditSectors;
+    const presencePct = result.totalProbes > 0 ? Math.round((result.totalMentions / result.totalProbes) * 100) : 0;
+    // Share of voice from the full probe set (every named rival across all probes),
+    // not the server-truncated topCompetitors list, so the percentage stays honest.
+    const competitorMentionTotal = result.probes.reduce((s, p) => s + (p.competitors?.length || 0), 0);
+    const sovDenom = result.totalMentions + competitorMentionTotal;
+    const sov = sovDenom > 0 ? Math.round((result.totalMentions / sovDenom) * 100) : 0;
+
+    // Group per-model probes into one row per unique query for the evidence log.
+    const byQuery = new Map<string, { question: string; appeared: boolean; models: Set<string>; competitors: Set<string> }>();
+    for (const p of result.probes) {
+      let g = byQuery.get(p.question);
+      if (!g) { g = { question: p.question, appeared: false, models: new Set(), competitors: new Set() }; byQuery.set(p.question, g); }
+      if (p.mentioned) g.appeared = true;
+      g.models.add(p.model.includes("GPT") ? "ChatGPT" : "Claude");
+      (p.competitors || []).forEach((c) => g!.competitors.add(c));
+    }
+    const queryRows = [...byQuery.values()];
+    const appearedCount = queryRows.filter((q) => q.appeared).length;
+    const totalQueries = queryRows.length;
+
+    // Which queries each competitor surfaced in.
+    const compQueries = new Map<string, Set<string>>();
+    for (const p of result.probes) {
+      (p.competitors || []).forEach((c) => {
+        let s = compQueries.get(c);
+        if (!s) { s = new Set(); compQueries.set(c, s); }
+        s.add(p.question);
+      });
+    }
+
+    const topComp = result.topCompetitors[0];
+    const execSummary =
+      `${escapeHtml(result.companyName)} appeared in <strong>${appearedCount}</strong> of <strong>${totalQueries}</strong> non-branded category queries across ChatGPT and Claude (${presencePct}% presence). ` +
+      (result.topCompetitors.length > 0
+        ? `When ${escapeHtml(result.companyName)} was absent, the engines recommended rivals instead${topComp ? `, most often <strong>${escapeHtml(topComp.name)}</strong> (in ${topComp.mentions} of ${result.totalProbes} answers)` : ""}. `
+        : `No single rival was recommended often enough to dominate, so there is open space to claim the category. `) +
+      gradeRead;
+
     const clientLogoBlock = activeClient.logo
       ? `<img src="${escapeHtml(activeClient.logo)}" alt="${escapeHtml(activeClient.name)} logo" class="client-logo" />`
       : `<div class="client-logo placeholder">${escapeHtml(activeClient.name)}</div>`;
-    const competitorsBlock =
-      result.topCompetitors.length > 0
-        ? `<div class="grid">${result.topCompetitors
-            .map(
-              (c) =>
-                `<div class="row"><span>${escapeHtml(c.name)}</span><span class="pill">in ${c.mentions} of ${result.totalProbes} answers</span></div>`,
-            )
-            .join("")}</div>`
-        : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.</p>`;
-    const probesBlock = result.probes
-      .map((p) => {
-        const tag = p.mentioned
-          ? `<span class="tag yes">Mentioned</span>`
-          : `<span class="tag no">Not mentioned</span>`;
-        const model = p.model.includes("GPT") ? "ChatGPT" : "Claude";
-        const coLine =
-          p.competitors && p.competitors.length > 0
-            ? `<div class="probe-cos"><span class="probe-cos-label">Named:</span>${p.competitors
-                .map((c) => `<span class="probe-co">${escapeHtml(c)}</span>`)
-                .join("")}</div>`
-            : "";
-        return `<div class="probe"><div class="probe-top"><div class="probe-q">${escapeHtml(p.question)}</div><div class="probe-meta"><span class="model">${escapeHtml(model)}</span>${tag}</div></div>${coLine}</div>`;
+
+    const evidenceRows = queryRows
+      .map(
+        (q) =>
+          `<tr><td>${escapeHtml(q.question)}</td><td class="${q.appeared ? "appeared-yes" : "appeared-no"}">${q.appeared ? "Yes" : "No"}</td><td>${[...q.competitors].map((c) => escapeHtml(c)).join(", ") || `<span class="muted">none surfaced</span>`}</td><td class="muted">${[...q.models].join(", ")}</td></tr>`,
+      )
+      .join("");
+
+    const ownsRows = result.topCompetitors
+      .map((c) => {
+        const qs = compQueries.get(c.name);
+        const examples = qs ? [...qs].slice(0, 2).map((x) => escapeHtml(x)).join("; ") : "";
+        return `<tr><td>${escapeHtml(c.name)}</td><td>${c.mentions} of ${result.totalProbes} answers</td><td class="muted">${examples}</td></tr>`;
       })
       .join("");
+
+    const gaps = queryRows.filter((q) => !q.appeared).slice(0, 6);
+    const gapsBlock =
+      gaps.length > 0
+        ? `<ul class="gaps">${gaps.map((q) => `<li>${escapeHtml(q.question)}</li>`).join("")}</ul>`
+        : `<p class="muted box">No discovery gaps - ${escapeHtml(result.companyName)} appeared in every probed query.</p>`;
+
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Earned Media Visibility Audit - ${escapeHtml(result.companyName)}</title>
+<title>AI Authority &amp; Earned-Media Visibility Assessment - ${escapeHtml(result.companyName)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1C1C1C; margin: 0; padding: 0 0 40px; background: #fff; }
@@ -446,73 +484,90 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   .header .title { font-size: 15px; font-weight: 600; margin: 0; }
   .client-logo { height: 52px; max-width: 150px; object-fit: contain; background: #fff; border-radius: 10px; padding: 6px 10px; }
   .client-logo.placeholder { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #165265; min-width: 90px; height: 52px; }
-  h1 { font-size: 22px; color: #165265; margin: 0 0 4px; }
+  h1 { font-size: 24px; color: #165265; margin: 0 0 4px; }
   .sub { color: #6B7280; font-size: 13px; margin: 0 0 18px; }
   .card { border: 1px solid #E5E5E5; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
-  .score-row { display: flex; align-items: center; gap: 24px; }
-  .score { font-size: 46px; font-weight: 700; color: #165265; line-height: 1; }
-  .score small { display: block; font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px; }
-  .verdict { font-size: 14px; color: #374151; }
-  .rates { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-  .rates span { font-size: 11px; border: 1px solid #E5E5E5; border-radius: 999px; padding: 4px 10px; color: #6B7280; }
+  .index-row { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+  .index-num { font-size: 50px; font-weight: 700; color: #165265; line-height: 1; }
+  .index-num span { font-size: 22px; color: #9CA3AF; font-weight: 600; }
+  .index-label { font-size: 11px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 6px; }
+  .grade { font-size: 18px; font-weight: 700; padding: 6px 14px; border-radius: 10px; }
+  .grade.A, .grade.B { background: #ECFDF5; color: #2F855A; }
+  .grade.C { background: #FEFCE8; color: #A16207; }
+  .grade.D, .grade.F { background: #FEE2E2; color: #B91C1C; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; }
+  .stat { background: #FAFAFA; border: 1px solid #E5E5E5; border-radius: 10px; padding: 10px 14px; min-width: 120px; }
+  .stat b { display: block; font-size: 22px; color: #165265; }
+  .stat small { font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #165265; margin: 0 0 10px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FAFAFA; border: 1px solid #E5E5E5; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #165265; font-weight: 500; }
-  .pill { background: #e0f2f7; color: #1f748f; font-size: 11px; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+  p.lead { font-size: 14px; color: #374151; line-height: 1.6; margin: 0; }
   .meta-line { font-size: 12px; color: #6B7280; margin: 0 0 4px; }
   .meta-line strong { color: #374151; }
-  .probe { border: 1px solid #E5E5E5; border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; }
-  .probe-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .probe-cos { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .probe-cos-label { font-size: 11px; color: #C2410C; font-weight: 600; }
-  .probe-co { font-size: 11px; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 999px; padding: 2px 8px; color: #374151; }
-  .probe-q { font-size: 13px; color: #1C1C1C; }
-  .probe-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-  .model { font-size: 11px; color: #6B7280; }
-  .tag { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 3px 9px; }
-  .tag.yes { background: #ECFDF5; color: #3D9B6B; }
-  .tag.no { background: #FEE2E2; color: #C94A3E; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; background: #F3F4F6; color: #374151; font-weight: 600; padding: 8px 10px; border-bottom: 2px solid #E5E5E5; }
+  td { padding: 8px 10px; border-bottom: 1px solid #EEE; vertical-align: top; color: #1C1C1C; }
+  td.appeared-yes { color: #2F855A; font-weight: 600; }
+  td.appeared-no { color: #B91C1C; font-weight: 600; }
+  .gaps { margin: 0; padding-left: 18px; }
+  .gaps li { font-size: 13px; color: #374151; margin-bottom: 6px; }
   .box { background: #FAFAFA; border-radius: 8px; padding: 12px; }
-  .muted { color: #6B7280; font-size: 13px; }
+  .muted { color: #6B7280; font-size: 12px; }
   .footer { font-size: 11px; color: #9CA3AF; margin-top: 18px; border-top: 1px solid #E5E5E5; padding-top: 12px; }
-  @media print { .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card, .probe, .row { break-inside: avoid; } }
+  @media print { .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card, tr { break-inside: avoid; } }
 </style></head>
 <body>
   <div class="header"><div class="wrap">
     <div class="header-left">
       <img src="${aioLogo}" alt="AIO Fusion" class="aio-logo" />
-      <div><p class="eyebrow">Authority &amp; Visibility Report</p><p class="title">Earned Media Visibility Audit</p></div>
+      <div><p class="eyebrow">AI Authority &amp; Visibility</p><p class="title">Earned-Media Visibility Assessment</p></div>
     </div>
     ${clientLogoBlock}
   </div></div>
   <div class="wrap">
-    <h1>${escapeHtml(result.companyName)}</h1>
-    <p class="sub">Earned Media Visibility Audit &middot; ${escapeHtml(checked)}</p>
+    <h1>AI Authority &amp; Earned-Media Visibility Assessment</h1>
+    <p class="sub">${escapeHtml(result.companyName)} &middot; ${escapeHtml(checked)} &middot; Blind probes across ChatGPT and Claude${sectorsUsed.length > 0 ? ` &middot; ${escapeHtml(sectorsUsed.join(", "))}` : ""}</p>
     <div class="card">
-      <div class="score-row">
-        <div class="score">${result.visibilityScore}%<small>AI Visibility Score</small></div>
-        <div class="verdict">${escapeHtml(result.companyName)} was mentioned in <strong>${result.totalMentions}</strong> of <strong>${result.totalProbes}</strong> AI probes across ChatGPT and Claude.<br/>${verdict}</div>
+      <div class="index-row">
+        <div>
+          <div class="index-num">${idx}<span> / 100</span></div>
+          <div class="index-label">AI Authority Index</div>
+        </div>
+        <div class="grade ${grade}">Grade ${grade}</div>
+        <div class="stats">
+          <div class="stat"><b>${presencePct}%</b><small>Presence</small></div>
+          <div class="stat"><b>${sov}%</b><small>Share of voice</small></div>
+          <div class="stat"><b>${appearedCount} / ${totalQueries}</b><small>Queries appeared</small></div>
+        </div>
       </div>
-      <div class="rates">
-        <span>ChatGPT: ${result.byModel.chatgpt.rate}%</span>
-        <span>Claude: ${result.byModel.claude.rate}%</span>
-        <span>Cycle ${cycleData.cycle}</span>
-      </div>
+      <div style="margin-top:14px;font-size:11px;color:#6B7280;">ChatGPT: ${result.byModel.chatgpt.rate}% &middot; Claude: ${result.byModel.claude.rate}% &middot; Cycle ${cycleData.cycle}</div>
     </div>
     <div class="card">
-      <h2>What we probed</h2>
-      ${sectorsUsed.length > 0 ? `<p class="meta-line"><strong>Sectors:</strong> ${escapeHtml(sectorsUsed.join(", "))}</p>` : ""}
-      ${result.icp ? `<p class="meta-line"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
+      <h2>Executive summary</h2>
+      <p class="lead">${execSummary}</p>
+      ${result.icp ? `<p class="meta-line" style="margin-top:12px;"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
     </div>
     <div class="card">
-      <h2>Who AI recommends instead of you</h2>
-      ${competitorsBlock}
+      <h2>Blind-probe evidence log</h2>
+      <table>
+        <thead><tr><th>Query</th><th>Appeared</th><th>Competitors surfaced</th><th>Models</th></tr></thead>
+        <tbody>${evidenceRows}</tbody>
+      </table>
     </div>
     <div class="card">
-      <h2>Detailed probe results</h2>
-      ${probesBlock}
+      <h2>Who owns the category instead</h2>
+      ${result.topCompetitors.length > 0
+        ? `<table><thead><tr><th>Competitor</th><th>Surfaced in</th><th>Example queries</th></tr></thead><tbody>${ownsRows}</tbody></table>`
+        : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the engines have no clear go-to name in your sector yet, so there is space to claim it.</p>`}
     </div>
-    <div class="footer">Generated by AIO Fusion &middot; Earned Media Visibility Audit &middot; Results reflect AI model knowledge at time of query and may vary between sessions.</div>
+    <div class="card">
+      <h2>Top visibility gaps</h2>
+      ${gapsBlock}
+    </div>
+    <div class="card">
+      <h2>Method &amp; caveats</h2>
+      <p class="lead">This assessment fires the buyer's real, non-branded category questions at ChatGPT and Claude as blind probes (the brand is not named in the prompt), with multiple runs per model to account for AI non-determinism. Presence and share of voice are measured from those live answers. Branded queries that test message fidelity and entity clarity are not part of this run. Results reflect each engine's knowledge at the time of the probe and vary between sessions, so re-run on a schedule to chart the trend.</p>
+    </div>
+    <div class="footer">Generated by AIO Fusion &middot; AI Authority &amp; Earned-Media Visibility Assessment &middot; Results reflect AI model knowledge at time of query and may vary between sessions.</div>
   </div>
 </body></html>`;
     w.document.write(html);

@@ -2,3 +2,4 @@
 - [AIO Fusion IntakeForm structured fields](aio-fusion-intake-structured-fields.md) — adding a repeatable field needs wiring in 3 completion counters (diff indentation) + legacy migration must only fall back when array undefined.
 - [AIO Fusion shared projects store](aio-fusion-shared-projects.md) — `/api/store/*` is intentionally global/ungated; keep the deletedAt + untimestamped-intake data-loss guards; test api-server at localhost:8080 not the dev domain.
 - [AIO Fusion content AI features](aio-fusion-content-ai.md) — Optimiser/Creator/Media Research call real LLM via /api/content/*; media-list returns only items, never fabricate methodology; escapeHtml all model output in exports.
+- [AIO Fusion LLM Check audit report](aio-fusion-llm-check-audit.md) — topCompetitors is server-truncated (top 8, count>=2); use full probes[].competitors for aggregate metrics like share of voice; report omits unmeasured /5 scorecard dims.
