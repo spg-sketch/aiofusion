@@ -66,20 +66,36 @@ type ServerProject = {
   updatedAt: string | null;
 };
 
-// Build a usable project object from a server record. Guarantees a valid id and
-// a non-empty name even when the stored data blob is empty or malformed (which
-// happens for intake-only rows saved before the hub record was pushed up). This
-// is what stops projects created elsewhere showing up blank or invisible.
-function hydrateServerProject(sp: ServerProject): StoredProject {
+// The placeholder used for a project that has no real name yet. Treated as
+// "not a real name" when resolving, so a stale placeholder never wins over a
+// genuine name from another source.
+const GENERIC_PROJECT_NAME = "New Project";
+
+// Pick the best display name from a list of candidates. A real (non-empty,
+// non-placeholder) name always wins; only if none exists do we fall back to any
+// non-empty value and finally the generic placeholder. This is what stops a
+// stale "New Project" in one source from clobbering a genuine name in another.
+function pickName(...candidates: string[]): string {
+  const cleaned = candidates.map((c) => (typeof c === "string" ? c.trim() : ""));
+  const real = cleaned.find((c) => c && c !== GENERIC_PROJECT_NAME);
+  if (real) return real;
+  const anyNonEmpty = cleaned.find((c) => c);
+  return anyNonEmpty || GENERIC_PROJECT_NAME;
+}
+
+function hydrateServerProject(sp: ServerProject, fallbackName = ""): StoredProject {
   const data: Record<string, unknown> =
     sp.data && typeof sp.data === "object" ? (sp.data as Record<string, unknown>) : {};
   const dataId = typeof data.id === "string" ? data.id : "";
-  const dataName = typeof data.name === "string" ? data.name.trim() : "";
-  const colName = typeof sp.name === "string" ? sp.name.trim() : "";
+  const dataName = typeof data.name === "string" ? data.name : "";
+  const colName = typeof sp.name === "string" ? sp.name : "";
   return {
     ...data,
     id: dataId || sp.id,
-    name: dataName || colName || "New Project",
+    // Prefer a real name (server data, then the recovered column name, then the
+    // caller's local fallback) over a stale placeholder or empty value, so the
+    // merge never overwrites a good name with "New Project".
+    name: pickName(dataName, colName, fallbackName),
   };
 }
 
@@ -180,15 +196,34 @@ export async function syncProjectsOnLoad(): Promise<
     seen.add(lp.id);
     const sp = serverById.get(lp.id);
     if (sp) {
-      // Exists in both: server record wins for content, but keep the local
-      // cosmetic fields as a base so an empty/malformed server blob never wipes
-      // a good local entry. Prefer a logo that actually exists, pushing a
-      // local-only logo up so it is shared too.
-      const hydrated = { ...lp, ...hydrateServerProject(sp) };
+      // Exists in both: server record wins for real content, but never let an
+      // empty/nameless server row wipe a good local entry. Passing the local
+      // name as the fallback stops a blank server name overwriting it with the
+      // generic "New Project".
+      const localName = typeof lp.name === "string" ? lp.name : "";
+      const hydrated = { ...lp, ...hydrateServerProject(sp, localName) };
       merged.push(hydrated);
       const logo = sp.logo ?? localLogos[lp.id];
       if (logo) mergedLogos[lp.id] = logo;
-      if (!sp.logo && localLogos[lp.id]) void pushProjectMeta(hydrated, localLogos[lp.id]);
+      // Self-heal the shared record: if the server row's stored data blob is
+      // empty or only carries a placeholder name (e.g. an intake-only row) but
+      // we now have a real name, push the hydrated record up so every device
+      // gets the proper record instead of a blank "New Project". Also pushes a
+      // local-only logo up. Once the row carries the real name + data this stops
+      // triggering, so there is no repeated-push loop.
+      const serverData =
+        sp.data && typeof sp.data === "object" ? (sp.data as Record<string, unknown>) : {};
+      const serverDataName = typeof serverData.name === "string" ? serverData.name.trim() : "";
+      const serverRecordHealthy =
+        Object.keys(serverData).length > 0 &&
+        !!serverDataName &&
+        serverDataName !== GENERIC_PROJECT_NAME;
+      const hydratedName = typeof hydrated.name === "string" ? hydrated.name.trim() : "";
+      const nameWorthSaving = !!hydratedName && hydratedName !== GENERIC_PROJECT_NAME;
+      const repairRecord = !serverRecordHealthy && nameWorthSaving;
+      if (repairRecord || (!sp.logo && localLogos[lp.id])) {
+        void pushProjectMeta(hydrated, sp.logo ?? localLogos[lp.id] ?? null);
+      }
     } else {
       // Local only: keep it and push it up so other devices get it.
       merged.push(lp);

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, projectsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -15,7 +15,11 @@ router.get("/store/projects", async (_req, res) => {
     const rows = await db
       .select({
         id: projectsTable.id,
-        name: projectsTable.name,
+        // Recover a display name even when the name column was saved empty: fall
+        // back to the company-name answer (field 4.1) inside the intake blob.
+        // This is what an intake-only row has before the hub record is pushed
+        // up, and without this such a project shows up blank / "New Project".
+        name: sql<string>`coalesce(nullif(${projectsTable.name}, ''), ${projectsTable.intake}->'formData'->>'4.1', '')`,
         data: projectsTable.data,
         logo: projectsTable.logo,
         updatedAt: projectsTable.updatedAt,

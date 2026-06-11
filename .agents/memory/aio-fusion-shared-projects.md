@@ -45,6 +45,22 @@ empty server blob never wipes a good local entry.
 `data={}` rows plus sync only running on mount.
 **How to apply:** keep name in the list select; never `merged.push(sp.data)` raw.
 
+## A placeholder/empty project name must never win over a real name on merge
+Intake-only server rows have an empty name column + empty `data` blob (only the
+`/intake` route ran, never the hub `upsert`); their only real name is the intake
+company answer (Set-Up field 4.1). The sync merge (`{...lp, ...hydrate(sp)}`)
+persists its result to localStorage, so a bad resolved name corrupts the local
+copy too, not just the view.
+**Why:** resolving a name to the generic "New Project" (or trusting a stale
+placeholder in `data.name`) and letting it override a genuine name made
+"Simpatico PR" vanish from the hub and overwrote the good local copy.
+**How to apply:** (1) server list endpoint recovers the name from the intake
+company field when the name column is empty (do it in SQL, do not ship the heavy
+intake blob); (2) client name resolution must prefer a REAL (non-empty,
+non-placeholder) name across data/column/local sources before ever using the
+placeholder; (3) self-heal by pushing the repaired record up once when the
+server row is empty/placeholder, gated so it converges and never loops.
+
 ## Live refresh, not just on-load
 The hub re-syncs on `visibilitychange`, window `focus`, and a 60s interval (all
 no-op when offline) so a project created on another device appears without a
