@@ -47,3 +47,11 @@ export const aiAssistLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many AI draft requests. Please wait a moment before trying again." },
 });
+
+export const contentAiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many content requests. Please wait a moment before trying again." },
+});

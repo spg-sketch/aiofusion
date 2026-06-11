@@ -41,6 +41,7 @@ import {
   LineChart,
   ArrowRight,
   Sparkles,
+  Loader2,
   TrendingUp,
   FileText,
   FileCheck2,
@@ -2263,6 +2264,58 @@ Engines used:
   );
 }
 
+function apiBase(): string {
+  return import.meta.env.DEV ? `https://${window.location.host}` : "";
+}
+
+// Compact text summary of Project Data sections 1-3, sent to the LLM as the
+// authority brief behind every Content AI call.
+function buildProjectDataText(): string {
+  const data = loadIntakeData();
+  if (!data) return "";
+  const lines: string[] = [];
+  const descriptor = (data as { formData?: Record<string, unknown> }).formData?.["1.1"];
+  if (typeof descriptor === "string" && descriptor.trim()) lines.push(`Company descriptor: ${descriptor.trim()}`);
+  let lastLabel = "";
+  getProjectDataMessages().forEach((m) => {
+    if (m.fieldLabel !== lastLabel) {
+      lines.push(`\n${m.fieldLabel} [${m.fieldId}]:`);
+      lastLabel = m.fieldLabel;
+    }
+    lines.push(`- ${m.value}`);
+  });
+  return lines.join("\n").slice(0, 9000);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function textToHtmlParagraphs(text: string): string {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return "";
+  return trimmed
+    .split(/\n\n+/)
+    .map((p) => `<p style="margin:0 0 10pt 0;">${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+
+// Builds a Word-compatible .doc from an HTML body and triggers a download.
+function downloadWordDocument(filename: string, innerHtml: string): void {
+  const safeName = filename.endsWith(".doc") ? filename : `${filename}.doc`;
+  const html =
+    `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">` +
+    `<head><meta charset="utf-8"><title>${escapeHtml(filename)}</title></head>` +
+    `<body style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a2e; line-height: 1.5;">${innerHtml}</body></html>`;
+  const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = safeName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function OptimiserPage({
   onNavigate,
 }: {
@@ -2290,6 +2343,8 @@ function OptimiserPage({
   const [optimised, setOptimised] = useState(false);
   const [optimiseSnapshot, setOptimiseSnapshot] = useState<{ articleHeadline: string; standfirst: string; bodyCopy: string } | null>(null);
   const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
+  const [optimising, setOptimising] = useState(false);
+  const [optimiseError, setOptimiseError] = useState("");
   const [showRetrieve, setShowRetrieve] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showMsgPicker, setShowMsgPicker] = useState(false);
@@ -2303,6 +2358,9 @@ function OptimiserPage({
     PITCH_TYPES.includes(contentType) ? "pitch"
     : PROMPT_1_TYPES.includes(contentType) ? "prompt1"
     : "prompt2";
+
+  // Optimiser message picker only offers key messages from Project Set-Up 1.2 and 1.3.
+  const keyMessagePicks = projectDataMessages.filter((m) => m.fieldId === "1.2" || m.fieldId === "1.3");
 
   const RESEARCH_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
   const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
@@ -2331,6 +2389,9 @@ function OptimiserPage({
       setArticleHeadline(parts.headline);
       setStandfirst(parts.standfirst);
       setBodyCopy(parts.bodyCopy);
+      if (Array.isArray(arc.selectedMessages)) setSelectedMessages(arc.selectedMessages);
+      if (Array.isArray(arc.mediaCats)) setMediaCats(arc.mediaCats);
+      if (typeof arc.pubDate === "string") setPubDate(arc.pubDate);
     }
   }, []);
 
@@ -2342,6 +2403,9 @@ function OptimiserPage({
     setArticleHeadline(parts.headline);
     setStandfirst(parts.standfirst);
     setBodyCopy(parts.bodyCopy);
+    if (Array.isArray(a.selectedMessages)) setSelectedMessages(a.selectedMessages);
+    if (Array.isArray(a.mediaCats)) setMediaCats(a.mediaCats);
+    setPubDate(typeof a.pubDate === "string" ? a.pubDate : "");
     setShowRetrieve(false);
   };
 
@@ -2358,6 +2422,9 @@ function OptimiserPage({
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: bodyCopy,
+      selectedMessages,
+      mediaCats,
+      pubDate,
       createdAt: new Date().toISOString(),
     };
     saveArchive([item, ...items]);
@@ -2393,15 +2460,28 @@ function OptimiserPage({
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
   const downloadDraft = () => {
-    const blob = new Blob([
-      `${projectTitle}\n\n${contentType} · ${spokesperson} · ${contentStatus}\nPublication: ${pubDate || "TBC"}\n\nKey messages:\n- ${selectedMessages.join("\n- ") || "-"}\n\nMedia categories:\n- ${mediaCats.join("\n- ") || "-"}\n\n---\n\nHEADLINE\n${articleHeadline || "(no headline)"}\n\nSTANDFIRST\n${standfirst || "(no standfirst)"}\n\nBODY COPY\n${bodyCopy || "(no body content)"}`,
-    ], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(projectTitle || "draft").replace(/[^a-z0-9]/gi, "_")}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const accent = "#C8497A";
+    const meta = [contentType, spokesperson && spokesperson !== "NA" ? spokesperson : "", contentStatus]
+      .filter(Boolean)
+      .join("  &bull;  ");
+    const msgList = selectedMessages.length
+      ? `<ul style="margin:0 0 14pt 0; padding-left:18pt;">${selectedMessages.map((m) => `<li style="margin:0 0 4pt 0;">${escapeHtml(m)}</li>`).join("")}</ul>`
+      : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
+    const catList = mediaCats.length
+      ? `<p style="margin:0 0 14pt 0;">${mediaCats.map((c) => escapeHtml(c)).join(", ")}</p>`
+      : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
+    const html =
+      `<h1 style="font-family:Georgia,serif; font-size:22pt; color:#16213e; margin:0 0 6pt 0;">${escapeHtml(articleHeadline || projectTitle || "Untitled draft")}</h1>` +
+      (standfirst ? `<p style="font-size:13pt; font-style:italic; color:#374151; margin:0 0 14pt 0;">${escapeHtml(standfirst)}</p>` : "") +
+      `<p style="font-size:9pt; text-transform:uppercase; letter-spacing:1px; color:${accent}; margin:0 0 4pt 0;">${escapeHtml(meta)}</p>` +
+      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectTitle || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBC")}</p>` +
+      `<hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 16pt 0;"/>` +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Body copy</h2>` +
+      (textToHtmlParagraphs(bodyCopy) || `<p style="margin:0 0 14pt 0; color:#6b7280;">(no body content)</p>`) +
+      `<hr style="border:none; border-top:1px solid #e5e7eb; margin:16pt 0;"/>` +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Key messages</h2>${msgList}` +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Media categories</h2>${catList}`;
+    downloadWordDocument(`${(projectTitle || "draft").replace(/[^a-z0-9]/gi, "_")}.doc`, html);
   };
   const sendToMediaResearch = () => {
     const id = `temp-${Date.now()}`;
@@ -2478,43 +2558,48 @@ function OptimiserPage({
 
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
 
-  const runOptimise = () => {
+  const runOptimise = async () => {
     if (!hasAnyContent) {
       alert("Add some content first - at least a headline, standfirst or body copy.");
       return;
     }
-    setOptimiseSnapshot({ articleHeadline, standfirst, bodyCopy });
-    const msgs = keyMessages;
-    const selected = selectedMessages.length > 0 ? selectedMessages : msgs.slice(0, 3).map((m) => m.short || m.long);
-    const m1 = selected[0] || "AI authority";
-    const m2 = selected[1] || "expert spokesperson";
-    const m3 = selected[2] || "measurable earned-media impact";
-
-    const newHeadline = articleHeadline
-      ? articleHeadline.replace(/\.$/, "") + ` - ${m1}`
-      : `${projectTitle || "Bluhalo"}: ${m1}`;
-    const newStandfirst = standfirst
-      ? `${standfirst.replace(/\.$/, "")} - building on ${m2} and proving ${m3}.`
-      : `A look at how ${m2} is reshaping the conversation around ${m1}, and what it means for ${m3}.`;
-    const newBody = bodyCopy
-      ? `${bodyCopy}\n\n- Optimisation pass: opening restructured for answer-first retrieval, "${m1}" woven into the intro, "${m2}" anchored mid-section, and "${m3}" surfaced in the closing proof-point.`
-      : bodyCopy;
-
-    setArticleHeadline(newHeadline);
-    setStandfirst(newStandfirst);
-    setBodyCopy(newBody);
-    setChangeLog([
-      { kind: "structure", text: `Rewrote the headline to lead with "${m1}" - strongest LLM-citation anchor for ${projectTitle || "this project"}.` },
-      { kind: "embed", text: `Embedded "${m1}" verbatim in the headline and opening sentence of the standfirst.` },
-      { kind: "embed", text: `Embedded "${m2}" mid-paragraph in the standfirst as the bridge between hook and body.` },
-      { kind: "embed", text: `Embedded "${m3}" in the closing sentence of the body copy as a measurable proof-point.` },
-      { kind: "structure", text: `Reordered the body opening so the news hook leads, followed by spokesperson attribution, then supporting evidence - improves both reader pull-through and LLM extractability.` },
-      ...(promptVariant === "prompt2" ? [{ kind: "structure" as const, text: `Added a counter-argument paragraph rebutting the strongest opposing view - signals intellectual rigour to both readers and LLMs (Prompt 2 enhancement).` }] : []),
-      ...(selected[3] ? [{ kind: "flag" as const, text: `Could not embed "${selected[3]}" naturally - it overlaps thematically with "${m1}". Recommend using it on the spokesperson LinkedIn post instead.` }] : []),
-      ...(msgs.length === 0 ? [{ kind: "flag" as const, text: `No project key messages found in Project Data 1.2 & 1.3 - used placeholder anchors. Add key messages in Project Set-Up to lift optimisation quality.` }] : []),
-    ]);
-    setOptimised(true);
+    setOptimiseError("");
+    setOptimising(true);
     setShowOptimiseBriefModal(false);
+    const snapshot = { articleHeadline, standfirst, bodyCopy };
+    try {
+      const resp = await fetch(`${apiBase()}/api/content/optimise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contentType,
+          spokesperson: spokesperson === "NA" ? "" : spokesperson,
+          llmTarget,
+          projectTitle,
+          selectedMessages,
+          mediaCategories: mediaCats,
+          headline: articleHeadline,
+          standfirst,
+          bodyCopy,
+          promptBrief: promptBriefShort,
+          projectData: buildProjectDataText(),
+        }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data) {
+        throw new Error((data && data.error) || "The optimisation could not be generated right now. Please try again.");
+      }
+      setOptimiseSnapshot(snapshot);
+      if (typeof data.headline === "string") setArticleHeadline(data.headline);
+      if (typeof data.standfirst === "string") setStandfirst(data.standfirst);
+      if (typeof data.bodyCopy === "string") setBodyCopy(data.bodyCopy);
+      setChangeLog(Array.isArray(data.changeLog) ? data.changeLog : []);
+      setOptimised(true);
+    } catch (err) {
+      setOptimiseError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
+    } finally {
+      setOptimising(false);
+    }
   };
 
   const rejectOptimised = () => {
@@ -2710,45 +2795,37 @@ OUTPUT INSTRUCTIONS:
               </Labelled>
             </div>
 
-            {/* Row 3 - Select messages from Project Data (sections 1-3) */}
-            <Labelled label="Select messages from Project Data" hint="Multi-select from Project Data sections 1-3">
-              {projectDataMessages.length === 0 ? (
+            {/* Row 3 - Select messages from Project Data (Set-Up 1.2 & 1.3 key messages only) */}
+            <Labelled label="Select messages from Project Data" hint="Key messages from Project Set-Up 1.2 and 1.3">
+              {keyMessagePicks.length === 0 ? (
                 <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: "white" }}>
-                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No messages found in sections 1-3. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
+                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No key messages found in 1.2 / 1.3. Add them in <button onClick={() => onNavigate("intake")} className="underline" style={{ color: vars.accent }}>Project Set-Up</button>.</p>
                 </div>
               ) : (
                 <div className="relative">
                   <button type="button" onClick={() => setShowMsgPicker((v) => !v)} className="w-full text-left px-3 py-2.5 rounded-lg border text-sm flex items-center justify-between bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                    <span>{selectedMessages.length === 0 ? "Choose messages…" : `${selectedMessages.length} message${selectedMessages.length === 1 ? "" : "s"} selected`}</span>
+                    <span>{selectedMessages.length === 0 ? "Choose key messages…" : `${selectedMessages.length} message${selectedMessages.length === 1 ? "" : "s"} selected`}</span>
                     <ChevronDown size={14} color={vars.g400} style={{ transform: showMsgPicker ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
                   </button>
                   {showMsgPicker && (
                     <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border bg-white shadow-lg max-h-[340px] overflow-y-auto" style={{ borderColor: vars.g200 }}>
-                      {(["1", "2", "3"] as const).map((sec) => {
-                        const items = projectDataMessages.filter((m) => m.section === sec);
-                        if (items.length === 0) return null;
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] border-b sticky top-0" style={{ background: vars.g50, borderColor: vars.g100, color: vars.g500 }}>
+                        Key messages · Project Set-Up 1.2 &amp; 1.3
+                      </div>
+                      {keyMessagePicks.map((m, i) => {
+                        const on = selectedMessages.includes(m.value);
                         return (
-                          <div key={sec}>
-                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] border-b sticky top-0" style={{ background: vars.g50, borderColor: vars.g100, color: vars.g500 }}>
-                              Section {sec} · {sec === "1" ? "Earned Media Framework" : sec === "2" ? "FAQ & Customer Questions" : "Audience & Intent"}
-                            </div>
-                            {items.map((m, i) => {
-                              const on = selectedMessages.includes(m.value);
-                              return (
-                                <button key={`${m.fieldId}-${i}-${m.value}`} type="button" onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== m.value) : [...selectedMessages, m.value])}
-                                  className="w-full text-left px-3 py-2 flex items-start gap-2.5 border-b last:border-b-0 hover:bg-[rgba(200,73,122,0.06)]"
-                                  style={{ borderColor: vars.g100 }} title={m.value}>
-                                  <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: on ? "#C8497A" : vars.g300, background: on ? "#C8497A" : "white" }}>
-                                    {on && <Check size={11} color="white" />}
-                                  </span>
-                                  <span className="flex-1 min-w-0">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] mr-1.5" style={{ color: "#C8497A" }}>[{m.fieldId}]</span>
-                                    <span className="text-[12px]" style={{ color: vars.navy }}>{m.label}</span>
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <button key={`${m.fieldId}-${i}-${m.value}`} type="button" onClick={() => setSelectedMessages(on ? selectedMessages.filter((x) => x !== m.value) : [...selectedMessages, m.value])}
+                            className="w-full text-left px-3 py-2 flex items-start gap-2.5 border-b last:border-b-0 hover:bg-[rgba(200,73,122,0.06)]"
+                            style={{ borderColor: vars.g100 }} title={m.value}>
+                            <span className="mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: on ? "#C8497A" : vars.g300, background: on ? "#C8497A" : "white" }}>
+                              {on && <Check size={11} color="white" />}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="text-[10px] font-bold uppercase tracking-[0.14em] mr-1.5" style={{ color: "#C8497A" }}>[{m.fieldId}]</span>
+                              <span className="text-[12px]" style={{ color: vars.navy }}>{m.label}</span>
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
@@ -2869,10 +2946,16 @@ OUTPUT INSTRUCTIONS:
               </p>
             </Labelled>
 
+            {optimiseError && (
+              <div className="flex items-start gap-2 rounded-lg border p-3 text-[12px]" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
+                <X size={14} className="mt-0.5 flex-shrink-0" /> <span>{optimiseError}</span>
+              </div>
+            )}
+
             {/* Action bar */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t" style={{ borderColor: vars.g100 }}>
-              <button onClick={() => setShowOptimiseBriefModal(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: vars.coral }}>
-                <Sparkles size={14} /> Optimise
+              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: vars.coral }}>
+                {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
               </button>
               {optimised && (
                 <button onClick={rejectOptimised} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: "#B03D33" }}>
@@ -3035,7 +3118,7 @@ OUTPUT INSTRUCTIONS:
               </div>
               <div className="px-6 py-4 border-t flex items-center justify-end gap-2" style={{ borderColor: vars.g200 }}>
                 <button onClick={() => setShowOptimiseBriefModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>Cancel</button>
-                <button onClick={runOptimise} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.coral }}><Sparkles size={13} /> Run optimisation</button>
+                <button onClick={runOptimise} disabled={optimising} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: vars.coral }}>{optimising ? <><Loader2 size={13} className="animate-spin" /> Optimising…</> : <><Sparkles size={13} /> Run optimisation</>}</button>
               </div>
             </div>
           </div>
@@ -4156,6 +4239,9 @@ type ArchiveItem = {
   headline?: string;
   standfirst?: string;
   bodyCopy?: string;
+  selectedMessages?: string[];
+  mediaCats?: string[];
+  pubDate?: string;
   createdAt: string;
   releasedAt?: string;
   releaseChannel?: string;
@@ -5084,6 +5170,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [contentStatus, setContentStatus] = useState<"Draft" | "Review" | "Final">("Draft");
   const [pubDate, setPubDate] = useState("");
   const [showCatPicker, setShowCatPicker] = useState(false);
+  const [optimisingField, setOptimisingField] = useState<CreatorFieldKey | null>(null);
+  const [creatorError, setCreatorError] = useState("");
 
   const articleHeadlineWords = countWords(articleHeadline);
   const standfirstWords = countWords(standfirst);
@@ -5117,11 +5205,27 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   };
 
   const downloadDoc = () => {
-    const txt = `Project: ${projectName}\nContent type: ${contentType}\nSpokesperson: ${spokesperson}\nLinkedIn: ${spokesLi}\nMedia target: ${mediaTarget.join(", ")}\nStatus: ${contentStatus}\nPublication date: ${pubDate || "TBD"}\n\nHEADLINE\n${articleHeadline}\n\nSTANDFIRST SUMMARY\n${standfirst}\n\nPITCH IDEA / NEWS HOOK\n${headline}\n\nTRANSCRIPT / NOTES\n${transcript}\n`;
-    const blob = new Blob([txt], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${projectName || "creator-brief"}.txt`; a.click();
-    URL.revokeObjectURL(url);
+    const accent = "#C8497A";
+    const meta = [contentType, spokesperson && spokesperson !== "NA" ? spokesperson : "", contentStatus]
+      .filter(Boolean)
+      .join("  &bull;  ");
+    const targetList = mediaTarget.length
+      ? `<p style="margin:0 0 14pt 0;">${mediaTarget.map((c) => escapeHtml(c)).join(", ")}</p>`
+      : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
+    const html =
+      `<h1 style="font-family:Georgia,serif; font-size:22pt; color:#16213e; margin:0 0 6pt 0;">${escapeHtml(articleHeadline || projectName || "Untitled draft")}</h1>` +
+      (standfirst ? `<p style="font-size:13pt; font-style:italic; color:#374151; margin:0 0 14pt 0;">${escapeHtml(standfirst)}</p>` : "") +
+      `<p style="font-size:9pt; text-transform:uppercase; letter-spacing:1px; color:${accent}; margin:0 0 4pt 0;">${escapeHtml(meta)}</p>` +
+      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectName || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBD")}${spokesLi ? `  &bull;  ${escapeHtml(spokesLi)}` : ""}</p>` +
+      `<hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 16pt 0;"/>` +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Pitch idea / news hook</h2>` +
+      (textToHtmlParagraphs(headline) || `<p style="margin:0 0 14pt 0; color:#6b7280;">(none)</p>`) +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Article / transcript</h2>` +
+      (textToHtmlParagraphs(transcript) || `<p style="margin:0 0 14pt 0; color:#6b7280;">(none)</p>`) +
+      (actionNotes.trim() ? `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Action notes</h2>${textToHtmlParagraphs(actionNotes)}` : "") +
+      `<hr style="border:none; border-top:1px solid #e5e7eb; margin:16pt 0;"/>` +
+      `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Media target</h2>${targetList}`;
+    downloadWordDocument(`${(projectName || articleHeadline || "creator-brief").replace(/[^a-z0-9]/gi, "_")}.doc`, html);
   };
 
   const projectMessages = getKeyMessages();
@@ -5140,54 +5244,55 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   };
 
   type ChangeLogEntry = { kind: "embed" | "structure" | "flag"; text: string; field: CreatorFieldKey };
-  const buildFieldOptimisation = (key: CreatorFieldKey): { next: string; log: ChangeLogEntry[] } | null => {
-    const msgs = projectMessages;
-    const msg1 = msgs[0]?.short || "AI authority";
-    const msg2 = msgs[1]?.short || "human-led PR expertise";
-    const msg3 = msgs[2]?.short || "measurable earned-media impact";
-    switch (key) {
-      case "headline": {
-        if (!articleHeadline.trim()) return null;
-        const next = articleHeadline.replace(/\b(PR|Marketing|Comms)\b/i, (m) => `${m} & ${msg1}`).slice(0, 140);
-        return { next, log: [{ kind: "structure", text: `Headline: rewrote it to lead with "${msg1}", the strongest LLM-citation anchor for ${projectName || "this project"}.`, field: key }] };
-      }
-      case "standfirst": {
-        if (!standfirst.trim()) return null;
-        const next = `${standfirst.replace(/\.$/, "")} - building on ${msg2} and proving ${msg3}.`;
-        return { next, log: [{ kind: "embed", text: `Standfirst: embedded "${msg2}" and "${msg3}" so the summary bridges the news hook into the body.`, field: key }] };
-      }
-      case "pitch": {
-        if (!headline.trim()) return null;
-        const next = `${headline.replace(/\.$/, "")}\n\nWhy it lands: anchors the angle in "${msg1}" and gives journalists a clear, quotable hook.`;
-        return { next, log: [{ kind: "embed", text: `Pitch idea: sharpened the angle around "${msg1}" and added a quotable hook for journalists.`, field: key }] };
-      }
-      case "transcript": {
-        if (!transcript.trim()) return null;
-        const next = `${transcript}\n\n- Optimisation pass: woven in references to "${msg1}" (intro), "${msg2}" (mid-section) and "${msg3}" (closing call-to-action). Restructured the opening to lead with the news hook.`;
-        return { next, log: [
-          { kind: "embed", text: `Transcript: embedded "${msg1}", "${msg2}" and "${msg3}" across the intro, body and close.`, field: key },
-          { kind: "structure", text: `Transcript: reordered the opening so the news hook leads, then the spokesperson quote, then supporting evidence - improves reader pull-through and LLM extractability.`, field: key },
-        ] };
-      }
-      case "actionNotes": {
-        if (!actionNotes.trim()) return null;
-        const next = `${actionNotes.replace(/\.$/, "")}. Remember to brief the spokesperson on the key messages "${msg1}" and "${msg2}" ahead of sign-off.`;
-        return { next, log: [{ kind: "structure", text: `Action notes: tightened the wording and added a reminder to brief the spokesperson on the key messages.`, field: key }] };
-      }
-    }
-  };
 
-  const optimiseField = (key: CreatorFieldKey) => {
-    if (optimisedFields.has(key)) return;
-    const result = buildFieldOptimisation(key);
-    if (!result) {
+  const optimiseField = async (key: CreatorFieldKey) => {
+    if (optimisedFields.has(key) || optimisingField) return;
+    const value = getFieldValue(key);
+    if (!value.trim()) {
       alert("Add some copy to this field first, then Optimise will improve it.");
       return;
     }
-    setFieldSnapshots((prev) => ({ ...prev, [key]: getFieldValue(key) }));
-    setFieldValue(key, result.next);
-    setChangeLog((prev) => [...prev, ...result.log]);
-    setOptimisedFields((prev) => new Set(prev).add(key));
+    setCreatorError("");
+    setOptimisingField(key);
+    try {
+      const resp = await fetch(`${apiBase()}/api/content/creator-field`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fieldKey: key,
+          value,
+          contentType,
+          projectName,
+          spokesperson: spokesperson === "NA" ? "" : spokesperson,
+          headline: articleHeadline,
+          standfirst,
+          pitch: headline,
+          keyMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
+          projectData: buildProjectDataText(),
+        }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || typeof data.next !== "string") {
+        throw new Error((data && data.error) || "The optimisation could not be generated right now. Please try again.");
+      }
+      const log: ChangeLogEntry[] = Array.isArray(data.log)
+        ? data.log
+            .map((c: { kind?: string; text?: string }) => ({
+              kind: c.kind === "embed" || c.kind === "flag" ? c.kind : "structure",
+              text: String(c.text || ""),
+              field: key,
+            }))
+            .filter((c: ChangeLogEntry) => c.text.length > 0)
+        : [];
+      setFieldSnapshots((prev) => ({ ...prev, [key]: value }));
+      setFieldValue(key, data.next);
+      setChangeLog((prev) => [...prev, ...log]);
+      setOptimisedFields((prev) => new Set(prev).add(key));
+    } catch (err) {
+      setCreatorError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
+    } finally {
+      setOptimisingField(null);
+    }
   };
 
   const rejectField = (key: CreatorFieldKey) => {
@@ -5214,12 +5319,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       <button
         type="button"
         onClick={() => optimiseField(key)}
-        disabled={getFieldValue(key).trim().length === 0}
+        disabled={getFieldValue(key).trim().length === 0 || optimisingField !== null}
         title="Optimise this copy: the LLM rewrites what you have written to be stronger and easier for AI models to cite, weaving in your key messages from Project Data. You can Reject to restore your original."
         className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: vars.teal, background: "rgba(40,150,185,0.08)" }}
       >
-        <Sparkles size={12} /> Optimise this copy
+        {optimisingField === key ? <><Loader2 size={12} className="animate-spin" /> Optimising…</> : <><Sparkles size={12} /> Optimise this copy</>}
       </button>
     )
   );
@@ -5493,68 +5598,72 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
       </div>
 
-      {/* Content Actions - bottom panel, mirrors Project Data Actions on intake */}
-      <div className="mt-8 rounded-2xl p-4 sm:p-5" style={{ background: "#102B36", boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Content Actions</span>
-          </div>
+      {creatorError && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border p-3 text-[12px]" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
+          <X size={14} className="mt-0.5 flex-shrink-0" /> <span>{creatorError}</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      )}
+
+      {/* Content Actions - mirrors the Content Optimiser & Editor action buttons */}
+      <div className="mt-8 bg-white rounded-2xl border p-4 sm:p-5" style={{ borderColor: vars.g200 }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: vars.coral }} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g500 }}>Content Actions</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={acceptAndArchive}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.green }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.coral }}
             title="Sign off this piece and save it to the Archive"
           >
-            <FileCheck2 size={13} /> Accept &amp; Archive
-          </button>
-          <button
-            onClick={() => setShowDownloadNotesModal(true)}
-            disabled={changeLog.length === 0}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#FBF6EC", color: "#102B36" }}
-            title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece (headline, standfirst, body) with a change log explaining where each key message was embedded - as Word or PDF"}
-          >
-            <FileText size={13} /> Download Notes
-          </button>
-          <button
-            onClick={downloadDoc}
-            disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#FBF6EC", color: "#102B36" }}
-            title="Download the current draft as a plain-text brief"
-          >
-            <Download size={13} /> Download
+            <FileCheck2 size={14} /> Accept &amp; Archive
           </button>
           <button
             onClick={shareDraftFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#FBF6EC", color: "#102B36" }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.g200, color: vars.navy }}
             title="Open your email client with the current draft ready to send for review"
           >
-            <Send size={13} /> Share Draft
+            <Send size={14} /> Share draft
+          </button>
+          <button
+            onClick={downloadDoc}
+            disabled={!hasAnyContent}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.g200, color: vars.navy }}
+            title="Download the current draft as a Word document"
+          >
+            <Download size={14} /> Download
+          </button>
+          <button
+            onClick={() => setShowDownloadNotesModal(true)}
+            disabled={changeLog.length === 0}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.g200, color: vars.navy }}
+            title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece with a change log explaining where each key message was embedded - as Word or PDF"}
+          >
+            <FileText size={14} /> Download Notes
           </button>
           <button
             onClick={sendToMediaResearchFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.gold }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.gold, color: "#7A5E25", background: "rgba(201,160,78,0.06)" }}
             title="Save the draft and jump to Media Research to find target publications and journalists"
           >
-            <Target size={13} /> Media Research
+            <Target size={14} /> Media Research
           </button>
           <button
             onClick={pushToCommsPlanner}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-all whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.coral }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold ml-auto disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
             title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}
           >
-            <Calendar size={13} /> Push to Planner
+            <Calendar size={14} /> Push to Comms Planner
           </button>
         </div>
       </div>
@@ -5656,112 +5765,6 @@ type MediaListItem = {
   pitchAngle: string;
 };
 
-const DEMO_HOUSE_EMAIL_PATTERNS: { publisher: string; pattern: string; evidence: string }[] = [
-  { publisher: "Haymarket Media (PRWeek UK, Campaign)", pattern: "first.last@haymarket.com", evidence: "Confirmed against john.harrington@haymarket.com (PRWeek UK Editor, signed byline footer) and maisie.mccabe@haymarket.com (Campaign UK Editor, masthead)." },
-  { publisher: "The Drum (independent)", pattern: "first.last@thedrum.com", evidence: "Confirmed against sam.anderson@thedrum.com (News Editor, byline footer) and hannah.bowler@thedrum.com (Senior Reporter, staff bio page)." },
-  { publisher: "Xeim / Centaur (Marketing Week)", pattern: "first.last@xeim.com", evidence: "Confirmed against russell.parsons@xeim.com (Editor-in-Chief, masthead) and charlotte.rogers@xeim.com (Deputy Editor, Muck Rack listing)." },
-  { publisher: "B2B Marketing", pattern: "first.last@b2bmarketing.net", evidence: "Single verified address: molly.raycraft@b2bmarketing.net (Editor, signed editorial). Pattern inferred - flag with one further verified contact before sending at scale." },
-];
-
-const DEMO_RESHUFFLES: { publication: string; note: string }[] = [
-  { publication: "Mumbrella", note: "Founder Tim Burrowes departed full-time editorial role in 2021 (now at Unmade newsletter). UK desk now run by a smaller editorial team - verify any UK-focused contact before pitching." },
-  { publication: "Communicate Magazine", note: "Editorial team has rotated more than once in the last 24 months. Do not assume historic Editor still in role without confirming via current masthead." },
-];
-
-const DEMO_MEDIA_LIST: MediaListItem[] = [
-  {
-    rank: 1, publication: "PRWeek UK", url: "https://www.prweek.com/uk", category: "PR & communications trade", categoryRank: 1,
-    description: "Haymarket-owned weekly digital and monthly print covering UK PR industry news, agency moves, campaign analysis and comms-leadership profiles across consumer, B2B and corporate PR.",
-    readership: "PR directors, agency leaders and in-house comms heads across UK agencies and brand-side teams.",
-    reach: "~180,000 monthly UU (publisher figure)", reachVerified: true,
-    journalists: [
-      { name: "John Harrington", title: "UK Editor", email: "john.harrington@haymarket.com", confidence: "V", roleCurrency: "Signed byline within last 14 days; current on staff page." },
-      { name: "Daniel Farey-Jones", title: "Deputy Editor", email: "daniel.farey-jones@haymarket.com", confidence: "P", roleCurrency: "LinkedIn role current (≤30d); pattern email." },
-      { name: "Eleni Mitzali", title: "Reporter", email: "eleni.mitzali@haymarket.com", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email." },
-    ],
-    authority: 94, authorityNote: "Highest-relevance trade for UK PR audience; sets the agenda for sector peers.",
-    pitchAngle: "Offer as a Tuesday exclusive ahead of any wider distribution.",
-  },
-  {
-    rank: 2, publication: "Influence Magazine (CIPR)", url: "https://influenceonline.co.uk", category: "PR & communications trade", categoryRank: 2,
-    description: "CIPR member magazine, quarterly print plus rolling online, focused on professional PR practice, ethics and member opinion across UK chartered practitioners.",
-    readership: "Chartered PR practitioners and CIPR members across UK agencies and in-house teams.",
-    reach: "~40,000 CIPR members (member-only circulation)", reachVerified: true,
-    journalists: [
-      { name: "Koray Camgöz", title: "Editor", email: "editor@influenceonline.co.uk", confidence: "V", roleCurrency: "Editor inbox listed on current masthead; bylined editor's letter in latest issue." },
-    ],
-    authority: 76,
-    pitchAngle: "Offer as a CIPR-member opinion piece with a chartered practitioner byline.",
-  },
-  {
-    rank: 3, publication: "Communicate Magazine", url: "https://www.communicatemagazine.com", category: "PR & communications trade", categoryRank: 3,
-    description: "Cravenhill Publishing print quarterly and rolling online for corporate communications, brand and reputation practice across FTSE 250 and large private firms.",
-    readership: "Heads of corporate comms and reputation at FTSE 250 and large private firms.",
-    reach: "~25,000 print + digital readers (publisher figure, unverified)", reachVerified: false,
-    journalists: [],
-    noBeatContactNote: "No current beat contact identified - recent masthead unclear; recommend confirming via Cravenhill Publishing directly before approach.",
-    authority: 68,
-    pitchAngle: "Position as a corporate reputation angle, not an agency story.",
-  },
-  {
-    rank: 4, publication: "Campaign", url: "https://www.campaignlive.co.uk", category: "Marketing & advertising trade", categoryRank: 1,
-    description: "Haymarket-owned daily digital plus monthly print covering UK marketing, advertising, agency leadership and creative work across brand, media and creative agencies.",
-    readership: "CMOs, marketing directors and agency C-suite at brand and creative agencies.",
-    reach: "~520,000 monthly UU (SimilarWeb, approximate)", reachVerified: true,
-    journalists: [
-      { name: "Maisie McCabe", title: "UK Editor", email: "maisie.mccabe@haymarket.com", confidence: "V", roleCurrency: "Editor's letter signed within last 7 days." },
-      { name: "Gemma Charles", title: "Deputy Editor", email: "gemma.charles@haymarket.com", confidence: "P", roleCurrency: "LinkedIn role current (≤30d); pattern email." },
-    ],
-    authority: 91, authorityNote: "Broader marketing readership than PRWeek; strong agency C-suite reach.",
-    pitchAngle: "Position as a CMO-perspective opinion piece tied to a sector data point.",
-  },
-  {
-    rank: 5, publication: "The Drum", url: "https://www.thedrum.com", category: "Marketing & advertising trade", categoryRank: 2,
-    description: "Independent daily covering marketing, media and creative industries with strong agency angle, awards programmes and rolling news cadence across UK, EU and North America.",
-    readership: "Agency owners, brand marketers and martech leaders across UK, EU and North America.",
-    reach: "~1.2m monthly UU (publisher figure, approximate)", reachVerified: false,
-    journalists: [
-      { name: "Sam Anderson", title: "News Editor", email: "sam.anderson@thedrum.com", confidence: "P", roleCurrency: "Recent byline ≤30 days; pattern email." },
-      { name: "Hannah Bowler", title: "Senior Reporter", email: "hannah.bowler@thedrum.com", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email." },
-    ],
-    authority: 87,
-    pitchAngle: "Frame as an agency case study with a named client outcome.",
-  },
-  {
-    rank: 6, publication: "Mumbrella", url: "https://mumbrella.com", category: "Marketing & advertising trade", categoryRank: 3,
-    description: "Daily online news for marketing, media and advertising, APAC-headquartered with growing UK and global coverage.",
-    readership: "Marketing and PR professionals across APAC with a UK readership share.",
-    reach: "~180,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
-    journalists: [],
-    noBeatContactNote: "No current UK-beat contact identified - outlet's UK desk has rotated; route through public newsdesk only if pitching an APAC-relevant angle.",
-    authority: 58, authorityNote: "Audience is APAC-weighted; lower direct relevance to the UK primary audience.",
-    pitchAngle: "Only if the story has an APAC angle or a regional spokesperson.",
-  },
-  {
-    rank: 7, publication: "Marketing Week", url: "https://www.marketingweek.com", category: "B2B marketing trade", categoryRank: 1,
-    description: "Xeim-owned weekly digital and monthly print covering brand marketing strategy, careers and consumer trends with strong measurement and effectiveness focus.",
-    readership: "Brand marketing leaders and senior in-house marketers, mainly UK consumer and B2B brands.",
-    reach: "~340,000 monthly UU (SimilarWeb, approximate)", reachVerified: false,
-    journalists: [
-      { name: "Russell Parsons", title: "Editor-in-Chief", email: "russell.parsons@xeim.com", confidence: "V", roleCurrency: "Verified via masthead and bylined editor's letter this week." },
-      { name: "Charlotte Rogers", title: "Deputy Editor", email: "charlotte.rogers@xeim.com", confidence: "P", roleCurrency: "Recent byline ≤30 days; pattern email." },
-    ],
-    authority: 84,
-    pitchAngle: "Lead with a data point and a quote from a named brand-side marketer.",
-  },
-  {
-    rank: 8, publication: "B2B Marketing", url: "https://www.b2bmarketing.net", category: "B2B marketing trade", categoryRank: 2,
-    description: "Specialist online and print publication for B2B marketers with strong content marketing, ABM and demand-gen focus across UK B2B tech and professional services.",
-    readership: "Heads of marketing at B2B technology, services and professional firms.",
-    reach: "~95,000 monthly UU (publisher figure, unverified)", reachVerified: false,
-    journalists: [
-      { name: "Molly Raycraft", title: "Editor", email: "molly.raycraft@b2bmarketing.net", confidence: "P", roleCurrency: "Recent byline ≤45 days; pattern email (single-source - confirm before scale)." },
-    ],
-    authority: 79,
-    pitchAngle: "Pitch as a how-to feature with a checklist or framework attached.",
-  },
-];
-
 const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
 Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
 You are given permission to web-search and verify named contacts before answering.
@@ -5802,6 +5805,7 @@ function MediaResearchPage() {
   });
   const [mediaList, setMediaList] = useState<MediaListItem[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [mediaError, setMediaError] = useState("");
 
   useEffect(() => {
     try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
@@ -5809,54 +5813,78 @@ function MediaResearchPage() {
 
   const selected = archive.find((a) => a.id === selectedId);
 
-  const runRecommendMedia = () => {
+  const runRecommendMedia = async () => {
+    if (!selected) return;
     setGenerating(true);
     setMediaList(null);
-    setTimeout(() => {
-      setMediaList(DEMO_MEDIA_LIST);
+    setMediaError("");
+    try {
+      const resp = await fetch(`${apiBase()}/api/content/media-list`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: {
+            title: selected.title,
+            contentType: selected.contentType,
+            headline: selected.title,
+            standfirst: "",
+            bodyCopy: selected.body || "",
+          },
+          mediaCategories: projectCats,
+          keyMessages: messages.map((m) => m.long || m.short).filter(Boolean),
+          projectData: buildProjectDataText(),
+          prompt: MEDIA_LIST_LLM_PROMPT_V2,
+        }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || !Array.isArray(data.items)) {
+        throw new Error((data && data.error) || "The media list could not be generated right now. Please try again.");
+      }
+      if (data.items.length === 0) {
+        throw new Error("No publications were returned. Check that media categories are set in Project Set-Up 1.9, then try again.");
+      }
+      setMediaList(data.items as MediaListItem[]);
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "The media list could not be generated right now. Please try again.");
+    } finally {
       setGenerating(false);
-    }, 1100);
+    }
   };
 
   const downloadWordDoc = () => {
     if (!mediaList || !selected) return;
     const confidenceLabel = (c: ConfidenceFlag) => c === "V" ? "[V] Verified" : c === "P" ? "[P] Pattern-inferred" : "[U] Unverified";
+    const topOutlet = mediaList[0]?.publication ? escapeHtml(mediaList[0].publication) : "the top-ranked outlet";
     const itemsHtml = mediaList.map((m) => `
-      <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${m.rank}. ${m.publication}</h2>
-      <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${m.url}">${m.url}</a> · ${m.category} · Rank ${m.categoryRank} in category · <b>Authority ${m.authority}/100</b></p>
-      <p><b>Description:</b> ${m.description}</p>
-      <p><b>Readership:</b> ${m.readership}</p>
-      <p><b>Audience reach:</b> ${m.reach}${m.reachVerified ? "" : " <i>(unverified - flag with client)</i>"}</p>
+      <h2 style="font-family:Georgia,serif;color:#102B36;margin-bottom:4px;">${m.rank}. ${escapeHtml(m.publication)}</h2>
+      <p style="margin:0 0 8px 0;color:#1f748f;"><a href="${escapeHtml(m.url)}">${escapeHtml(m.url)}</a> · ${escapeHtml(m.category)} · Rank ${m.categoryRank} in category · <b>Authority ${m.authority}/100</b></p>
+      <p><b>Description:</b> ${escapeHtml(m.description)}</p>
+      <p><b>Readership:</b> ${escapeHtml(m.readership)}</p>
+      <p><b>Audience reach:</b> ${escapeHtml(m.reach)}${m.reachVerified ? "" : " <i>(unverified - flag with client)</i>"}</p>
       <p><b>Beat journalists (${m.journalists.length}):</b></p>
       ${m.journalists.length === 0
-        ? `<p style="color:#a04040;"><i>${m.noBeatContactNote || "No current beat contact identified."}</i></p>`
-        : `<ul>${m.journalists.map((j) => `<li><b>${j.name}</b> - ${j.title} - <a href="mailto:${j.email}">${j.email}</a> - ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${j.roleCurrency}</i></li>`).join("")}</ul>`
+        ? `<p style="color:#a04040;"><i>${escapeHtml(m.noBeatContactNote || "No current beat contact identified.")}</i></p>`
+        : `<ul>${m.journalists.map((j) => `<li><b>${escapeHtml(j.name)}</b> - ${escapeHtml(j.title)} - <a href="mailto:${escapeHtml(j.email)}">${escapeHtml(j.email)}</a> - ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${escapeHtml(j.roleCurrency)}</i></li>`).join("")}</ul>`
       }
-      ${m.authorityNote ? `<p><b>Authority note:</b> ${m.authorityNote}</p>` : ""}
-      <p><b>Suggested pitch angle:</b> ${m.pitchAngle}</p>
+      ${m.authorityNote ? `<p><b>Authority note:</b> ${escapeHtml(m.authorityNote)}</p>` : ""}
+      <p><b>Suggested pitch angle:</b> ${escapeHtml(m.pitchAngle)}</p>
       <hr/>
     `).join("");
-    const patternsHtml = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<li><b>${p.publisher}</b> - <code>${p.pattern}</code><br/><i style="color:#666;">${p.evidence}</i></li>`).join("");
-    const reshufflesHtml = DEMO_RESHUFFLES.map((r) => `<li><b>${r.publication}:</b> ${r.note}</li>`).join("");
     const methodology = `
       <h2 style="font-family:Georgia,serif;color:#102B36;">Methodology, source caveats and first-wave outreach</h2>
-      <p><b>Methodology:</b> Generated against the selected content "${selected.title}" (${selected.contentType}) using the Project Data media categories (section 1.9). Publications ranked within each category by relevance-weighted authority across the primary target audience. Every named contact verified via byline (≤60 days), LinkedIn current title, or staff bio before inclusion; unverifiable contacts dropped.</p>
-      <h3 style="font-family:Georgia,serif;color:#102B36;">Confirmed house email patterns</h3>
-      <ul>${patternsHtml}</ul>
-      <h3 style="font-family:Georgia,serif;color:#102B36;">Known reshuffles (last 24 months)</h3>
-      <ul>${reshufflesHtml}</ul>
-      <p><b>Source caveats:</b> Audience reach figures are publisher-stated or SimilarWeb-derived and labelled "approximate". Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends.</p>
+      <p><b>Methodology:</b> Generated against the selected content "${escapeHtml(selected.title)}" (${escapeHtml(selected.contentType)}) using the Project Data media categories (section 1.9). Publications are ranked within each category by relevance-weighted authority across the primary target audience. Confidence flags show how each contact was sourced: [V] verified against a public source, [P] pattern-inferred from a confirmed house email pattern, [U] unverified.</p>
+      <p><b>Source caveats:</b> Audience reach figures are publisher-stated or third-party-derived and labelled "approximate" where shown. Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends. Confirm every named contact is still in role before pitching.</p>
       <p><b>First-wave outreach sequence:</b></p>
       <ol>
-        <li>Day 0 - Exclusive offer to category leader PRWeek UK (24-hour window).</li>
-        <li>Day 1 - Embargoed release to remaining PR/comms category and to Campaign + The Drum.</li>
-        <li>Day 2 - Wire distribution to B2B marketing category with bespoke angles per outlet.</li>
+        <li>Day 0 - Exclusive offer to the top-ranked outlet (${topOutlet}) with a 24-hour window.</li>
+        <li>Day 1 - Embargoed release to the remaining category leaders.</li>
+        <li>Day 2 - Wider distribution with a bespoke angle per outlet.</li>
         <li>Day 5 - Follow-up commentary or data drop to outlets without first-wave coverage.</li>
       </ol>
     `;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List - ${selected.title}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Target Media List - ${escapeHtml(selected.title)}</title></head><body style="font-family:Calibri,Arial,sans-serif;color:#102B36;">
       <h1 style="font-family:Georgia,serif;">Target Media List</h1>
-      <p><b>Content:</b> ${selected.title} (${selected.contentType})</p>
+      <p><b>Content:</b> ${escapeHtml(selected.title)} (${escapeHtml(selected.contentType)})</p>
       <p><b>Generated:</b> ${new Date().toLocaleDateString("en-GB")}</p>
       <hr/>
       ${itemsHtml}
@@ -5874,33 +5902,32 @@ function MediaResearchPage() {
   const downloadExcelDoc = () => {
     if (!mediaList || !selected) return;
     const confidenceLabel = (c: ConfidenceFlag) => c === "V" ? "[V] Verified" : c === "P" ? "[P] Pattern-inferred" : "[U] Unverified";
+    const topOutlet = mediaList[0]?.publication ? escapeHtml(mediaList[0].publication) : "the top-ranked outlet";
     const journalistCell = (m: MediaListItem) =>
       m.journalists.length === 0
-        ? (m.noBeatContactNote || "No current beat contact identified.")
-        : m.journalists.map((j) => `${j.name} | ${j.title} | ${j.email} | ${confidenceLabel(j.confidence)} | ${j.roleCurrency}`).join("&#10;");
+        ? escapeHtml(m.noBeatContactNote || "No current beat contact identified.")
+        : m.journalists.map((j) => `${escapeHtml(j.name)} | ${escapeHtml(j.title)} | ${escapeHtml(j.email)} | ${confidenceLabel(j.confidence)} | ${escapeHtml(j.roleCurrency)}`).join("&#10;");
     const rows = mediaList.map((m) => `
       <tr>
         <td>${m.rank}</td>
-        <td>${m.publication}</td>
-        <td>${m.url}</td>
-        <td>${m.category}</td>
+        <td>${escapeHtml(m.publication)}</td>
+        <td>${escapeHtml(m.url)}</td>
+        <td>${escapeHtml(m.category)}</td>
         <td>${m.categoryRank}</td>
-        <td>${m.description}</td>
-        <td>${m.readership}</td>
-        <td>${m.reach}</td>
+        <td>${escapeHtml(m.description)}</td>
+        <td>${escapeHtml(m.readership)}</td>
+        <td>${escapeHtml(m.reach)}</td>
         <td>${m.reachVerified ? "Yes" : "No"}</td>
         <td style="white-space:pre-line;vertical-align:top;">${journalistCell(m)}</td>
         <td>${m.authority}</td>
-        <td>${m.authorityNote || ""}</td>
-        <td>${m.pitchAngle}</td>
+        <td>${escapeHtml(m.authorityNote || "")}</td>
+        <td>${escapeHtml(m.pitchAngle)}</td>
       </tr>
     `).join("");
-    const patternRows = DEMO_HOUSE_EMAIL_PATTERNS.map((p) => `<tr><td>${p.publisher}</td><td>${p.pattern}</td><td>${p.evidence}</td></tr>`).join("");
-    const reshuffleRows = DEMO_RESHUFFLES.map((r) => `<tr><td>${r.publication}</td><td>${r.note}</td></tr>`).join("");
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
-<h2>Target Media List - ${selected.title}</h2>
+<h2>Target Media List - ${escapeHtml(selected.title)}</h2>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
     <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence | role-currency)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
@@ -5909,18 +5936,14 @@ function MediaResearchPage() {
 </table>
 <br/><br/>
 <h2>Methodology</h2>
-<p>Generated against "${selected.title}" (${selected.contentType}) using Project Data media categories (section 1.9). Every named contact verified via byline (≤60 days), LinkedIn current title, or staff bio before inclusion; unverifiable contacts dropped. Reach figures are publisher-stated or SimilarWeb-derived and labelled approximate.</p>
-<h3>Confirmed house email patterns</h3>
-<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Publisher</th><th>Pattern</th><th>Evidence</th></tr></thead><tbody>${patternRows}</tbody></table>
-<br/>
-<h3>Known reshuffles (last 24 months)</h3>
-<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Publication</th><th>Note</th></tr></thead><tbody>${reshuffleRows}</tbody></table>
+<p>Generated against "${escapeHtml(selected.title)}" (${escapeHtml(selected.contentType)}) using Project Data media categories (section 1.9). Publications are ranked within each category by relevance-weighted authority across the primary target audience. Confidence flags show how each contact was sourced: [V] verified against a public source, [P] pattern-inferred from a confirmed house email pattern, [U] unverified. Reach figures are publisher-stated or third-party-derived and labelled approximate where shown.</p>
+<p>Source caveats: Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends. Confirm every named contact is still in role before pitching.</p>
 <br/>
 <h3>First-wave outreach sequence</h3>
 <table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>When</th><th>Action</th></tr></thead><tbody>
-  <tr><td>Day 0</td><td>Exclusive offer to category leader PRWeek UK (24-hour window).</td></tr>
-  <tr><td>Day 1</td><td>Embargoed release to remaining PR/comms category and to Campaign + The Drum.</td></tr>
-  <tr><td>Day 2</td><td>Wire distribution to B2B marketing category with bespoke angles.</td></tr>
+  <tr><td>Day 0</td><td>Exclusive offer to the top-ranked outlet (${topOutlet}) with a 24-hour window.</td></tr>
+  <tr><td>Day 1</td><td>Embargoed release to the remaining category leaders.</td></tr>
+  <tr><td>Day 2</td><td>Wider distribution with a bespoke angle per outlet.</td></tr>
   <tr><td>Day 5</td><td>Follow-up commentary or data drop to outlets without first-wave coverage.</td></tr>
 </tbody></table>
 </body></html>`;
@@ -5966,7 +5989,7 @@ function MediaResearchPage() {
               <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Send a piece from the Optimiser or Creator to start. Both approved and draft items will appear here.</p>
             </div>
           ) : (
-            <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMode("none"); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+            <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMediaList(null); setMediaError(""); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
               <option value="">- Choose a piece from Archive -</option>
               {eligible.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType}{a.status ? ` · ${a.status}` : ""})</option>)}
             </select>
@@ -6012,6 +6035,12 @@ function MediaResearchPage() {
               Submits the LLM prompt below. Returns a structured list, downloadable as Word and Excel.
             </span>
           </div>
+
+          {mediaError && (
+            <div className="flex items-start gap-2 rounded-lg border p-3 text-[12px] mb-6" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
+              <X size={14} className="mt-0.5 flex-shrink-0" /> <span>{mediaError}</span>
+            </div>
+          )}
 
           {/* Results */}
           {mediaList && (
