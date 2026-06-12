@@ -55,6 +55,89 @@ const BRITISH_RULE =
   "Use British English spelling throughout (optimise, organisation, programme, colour, etc.). " +
   "Do not use em dashes; use hyphens or rewrite the sentence. Do not use emojis.";
 
+// Hard cap on how long we let a single model call run before aborting it and
+// sending a friendly timeout to the client.
+const STREAM_TIMEOUT_MS = 90_000;
+
+// ── Server-Sent Events helpers ───────────────────────────────────────────
+// Each content endpoint streams its result so the client can show real,
+// incremental progress instead of a static spinner. Events:
+//   progress -> { chars }   sent as the model writes
+//   result   -> the final payload
+//   error    -> { error }   a friendly, ready-to-show message
+// Validation / config / rate-limit failures are still returned as ordinary
+// JSON before the stream starts, so the client must handle both shapes.
+function initSse(res: Response): void {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  const flushHeaders = (res as unknown as { flushHeaders?: () => void }).flushHeaders;
+  if (typeof flushHeaders === "function") flushHeaders.call(res);
+}
+
+function sse(res: Response, event: string, data: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+type TimeoutError = Error & { isTimeout?: boolean };
+
+// Streams a single-prompt completion, emitting `progress` events with the
+// running character count, and returns the full accumulated text. Aborts and
+// throws a timeout-flagged error if the model runs past STREAM_TIMEOUT_MS.
+async function streamModelText(
+  res: Response,
+  client: Anthropic,
+  prompt: string,
+  maxTokens = 8192,
+): Promise<string> {
+  let acc = "";
+  let lastSent = 0;
+  let timedOut = false;
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    stream.abort();
+  }, STREAM_TIMEOUT_MS);
+  stream.on("text", (delta: string) => {
+    acc += delta;
+    if (acc.length - lastSent >= 60) {
+      lastSent = acc.length;
+      sse(res, "progress", { chars: acc.length });
+    }
+  });
+  try {
+    await stream.finalMessage();
+  } catch (err) {
+    if (timedOut) {
+      const e: TimeoutError = new Error("model stream timed out");
+      e.isTimeout = true;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  return acc;
+}
+
+// Sends a friendly `error` event and ends the stream. Distinguishes timeouts so
+// the user gets a clear "taking too long" message.
+function sseFail(res: Response, err: unknown, fallback: string): void {
+  const timedOut = err instanceof Error && (err as TimeoutError).isTimeout === true;
+  sse(res, "error", {
+    error: timedOut
+      ? "The AI is taking longer than usual and the request timed out. Please try again in a moment."
+      : fallback,
+  });
+  res.end();
+}
+
 // ── Endpoint 1: Content Optimiser & Editor ───────────────────────────────
 // Rewrites the user's headline, standfirst and body into citation-ready,
 // AI-friendly copy, weaving in the selected key messages, and returns a
@@ -115,17 +198,13 @@ contentAiRouter.post(
       `{"headline": "...", "standfirst": "...", "bodyCopy": "...", "changeLog": [{"kind": "embed"|"structure"|"flag", "text": "..."}]}\n` +
       `Leave a field as an empty string only if the user left it empty.`;
 
+    initSse(res);
     try {
-      const message = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        messages: [{ role: "user", content: prompt }],
-      });
-      const block = message.content[0];
-      const raw = block && block.type === "text" ? block.text : "";
+      const raw = await streamModelText(res, client, prompt);
       const parsed = extractJson(raw);
       if (!parsed) {
-        res.status(502).json({ error: "The AI response could not be read. Please try again." });
+        sse(res, "error", { error: "The AI response could not be read. Please try again." });
+        res.end();
         return;
       }
       const outHeadline = typeof parsed.headline === "string" ? parsed.headline.trim() : headline;
@@ -133,18 +212,20 @@ contentAiRouter.post(
       const outBody = typeof parsed.bodyCopy === "string" ? parsed.bodyCopy.trim() : bodyCopy;
       const changeLog = normaliseChangeLog(parsed.changeLog);
       if (!outHeadline && !outStandfirst && !outBody) {
-        res.status(502).json({ error: "The AI did not return usable copy. Please try again." });
+        sse(res, "error", { error: "The AI did not return usable copy. Please try again." });
+        res.end();
         return;
       }
-      res.json({
+      sse(res, "result", {
         headline: outHeadline,
         standfirst: outStandfirst,
         bodyCopy: outBody,
         changeLog,
       });
+      res.end();
     } catch (err) {
       logger.error({ err }, "content-ai: optimise call failed");
-      res.status(502).json({ error: "The optimisation could not be generated right now. Please try again." });
+      sseFail(res, err, "The optimisation could not be generated right now. Please try again.");
     }
   },
 );
@@ -225,29 +306,27 @@ contentAiRouter.post(
       `{"next": "the rewritten field text", "log": [{"kind": "embed"|"structure"|"flag", "text": "..."}]}\n` +
       `The "log" should briefly explain what you changed and where each key message was woven in.`;
 
+    initSse(res);
     try {
-      const message = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        messages: [{ role: "user", content: prompt }],
-      });
-      const block = message.content[0];
-      const raw = block && block.type === "text" ? block.text : "";
+      const raw = await streamModelText(res, client, prompt);
       const parsed = extractJson(raw);
       if (!parsed) {
-        res.status(502).json({ error: "The AI response could not be read. Please try again." });
+        sse(res, "error", { error: "The AI response could not be read. Please try again." });
+        res.end();
         return;
       }
       const next = typeof parsed.next === "string" ? parsed.next.trim() : "";
       if (!next) {
-        res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
+        sse(res, "error", { error: "The AI did not return a usable result. Please try again." });
+        res.end();
         return;
       }
       const log = normaliseChangeLog(parsed.log).map((c) => ({ ...c, field: fieldKey }));
-      res.json({ fieldKey, next, log });
+      sse(res, "result", { fieldKey, next, log });
+      res.end();
     } catch (err) {
       logger.error({ err, fieldKey }, "content-ai: creator-field call failed");
-      res.status(502).json({ error: "The optimisation could not be generated right now. Please try again." });
+      sseFail(res, err, "The optimisation could not be generated right now. Please try again.");
     }
   },
 );
@@ -352,28 +431,26 @@ contentAiRouter.post(
       `{"items": [{"rank": 1, "publication": "...", "url": "https://...", "category": "...", "categoryRank": 1, "description": "one sentence on the title", "readership": "one sentence on the readership", "reach": "approximate audience figure or 'not publicly available'", "reachVerified": false, "journalists": [{"name": "...", "title": "...", "email": "...", "confidence": "V"|"P"|"U", "roleCurrency": "how currency was checked"}], "noBeatContactNote": "only if journalists is empty", "authority": 0-100, "authorityNote": "justify scores above 90 or below 60", "pitchAngle": "one sentence"}]}\n` +
       `Order items overall by likelihood of pickup. Return between 6 and 15 publications.`;
 
+    initSse(res);
     try {
-      const message = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        messages: [{ role: "user", content: prompt }],
-      });
-      const block = message.content[0];
-      const raw = block && block.type === "text" ? block.text : "";
+      const raw = await streamModelText(res, client, prompt);
       const parsed = extractJson(raw);
       if (!parsed) {
-        res.status(502).json({ error: "The AI response could not be read. Please try again." });
+        sse(res, "error", { error: "The AI response could not be read. Please try again." });
+        res.end();
         return;
       }
       const items = normaliseMediaList(parsed.items);
       if (items.length === 0) {
-        res.status(502).json({ error: "The AI did not return a usable media list. Please try again." });
+        sse(res, "error", { error: "The AI did not return a usable media list. Please try again." });
+        res.end();
         return;
       }
-      res.json({ items });
+      sse(res, "result", { items });
+      res.end();
     } catch (err) {
       logger.error({ err }, "content-ai: media-list call failed");
-      res.status(502).json({ error: "The media list could not be generated right now. Please try again." });
+      sseFail(res, err, "The media list could not be generated right now. Please try again.");
     }
   },
 );

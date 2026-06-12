@@ -21,6 +21,20 @@
   }
 }
 
+@keyframes aio-indeterminate {
+  0% { left: -45%; }
+  100% { left: 100%; }
+}
+
+.aio-indeterminate-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  border-radius: 9999px;
+  animation: aio-indeterminate 1.15s ease-in-out infinite;
+}
+
 [contenteditable] h1 {
   font-size: 1.5rem;
   font-weight: 700;

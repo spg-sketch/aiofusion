@@ -2291,6 +2291,133 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// How long the client waits before giving up on a content-AI request. Slightly
+// longer than the server's own stream timeout so the server's friendly message
+// wins when it can, but the user is never left waiting forever.
+const CONTENT_AI_TIMEOUT_MS = 100_000;
+
+// Streams a content-AI response. The server replies with Server-Sent Events:
+//   event: progress  -> { chars }   (incremental output as the model writes)
+//   event: result    -> the final payload
+//   event: error     -> { error }   (friendly, already-worded message)
+// Validation / rate-limit / config errors arrive as ordinary JSON instead, so
+// we handle both. onProgress fires with the running character count so callers
+// can show real, incremental progress rather than a static spinner.
+async function streamContent(
+  path: string,
+  body: unknown,
+  onProgress?: (chars: number) => void,
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONTENT_AI_TIMEOUT_MS);
+  try {
+    const resp = await fetch(`${apiBase()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const contentType = resp.headers.get("content-type") || "";
+    if (!contentType.includes("text/event-stream")) {
+      const data = await resp.json().catch(() => null);
+      throw new Error((data && (data as { error?: string }).error) || "The request could not be completed right now. Please try again.");
+    }
+    if (!resp.body) throw new Error("The response stream could not be read. Please try again.");
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: Record<string, unknown> | null = null;
+    let errorMsg: string | null = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        let event = "message";
+        let dataStr = "";
+        for (const line of chunk.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        let parsed: Record<string, unknown>;
+        try { parsed = JSON.parse(dataStr); } catch { continue; }
+        if (event === "progress") onProgress?.(typeof parsed.chars === "number" ? parsed.chars : 0);
+        else if (event === "result") result = parsed;
+        else if (event === "error") errorMsg = typeof parsed.error === "string" ? parsed.error : "Something went wrong. Please try again.";
+      }
+    }
+    if (errorMsg) throw new Error(errorMsg);
+    if (!result) throw new Error("The response ended before it finished. Please try again.");
+    return result;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("This is taking longer than expected and timed out. Please try again in a moment.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Shared progress panel for the long-running content-AI features. Shows the
+// real elapsed time, a stage label that advances over time, and the live
+// character count streamed back from the model. Remount it (e.g. via a `key`
+// or conditional render) to reset the timer for each run.
+function GenerationProgress({
+  stages,
+  chars,
+  accent = vars.accent,
+  compact = false,
+}: {
+  stages: string[];
+  chars: number;
+  accent?: string;
+  compact?: boolean;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 250);
+    return () => clearInterval(id);
+  }, []);
+  const stageIdx = Math.min(stages.length - 1, Math.floor(elapsed / 6));
+  const stage = stages[stageIdx] || stages[stages.length - 1] || "Working…";
+  const tint = `${accent}14`;
+  return (
+    <div
+      className={`rounded-lg border ${compact ? "px-3 py-2" : "p-4"}`}
+      style={{ borderColor: `${accent}40`, background: tint }}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Loader2 size={compact ? 13 : 15} className="animate-spin flex-shrink-0" style={{ color: accent }} />
+          <span className={`font-semibold truncate ${compact ? "text-[12px]" : "text-[13px]"}`} style={{ color: accent }}>
+            {stage}…
+          </span>
+        </div>
+        <span className={`flex-shrink-0 tabular-nums ${compact ? "text-[10px]" : "text-[11px]"}`} style={{ color: vars.g500 }}>
+          {elapsed}s{chars > 0 ? ` · ${chars.toLocaleString()} chars` : ""}
+        </span>
+      </div>
+      <div className={`relative overflow-hidden rounded-full ${compact ? "mt-1.5 h-1" : "mt-2.5 h-1.5"}`} style={{ background: `${accent}26` }}>
+        <span className="aio-indeterminate-bar" style={{ background: accent }} />
+      </div>
+      {!compact && (
+        <p className="text-[10.5px] font-light mt-2" style={{ color: vars.g500 }}>
+          Generating with AI - this can take up to a couple of minutes for longer pieces. You can keep this tab open.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function textToHtmlParagraphs(text: string): string {
   const trimmed = (text || "").trim();
   if (!trimmed) return "";
@@ -2345,6 +2472,7 @@ function OptimiserPage({
   const [changeLog, setChangeLog] = useState<{ kind: "embed" | "structure" | "flag"; text: string }[]>([]);
   const [optimising, setOptimising] = useState(false);
   const [optimiseError, setOptimiseError] = useState("");
+  const [optimiseChars, setOptimiseChars] = useState(0);
   const [showRetrieve, setShowRetrieve] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showMsgPicker, setShowMsgPicker] = useState(false);
@@ -2564,14 +2692,14 @@ function OptimiserPage({
       return;
     }
     setOptimiseError("");
+    setOptimiseChars(0);
     setOptimising(true);
     setShowOptimiseBriefModal(false);
     const snapshot = { articleHeadline, standfirst, bodyCopy };
     try {
-      const resp = await fetch(`${apiBase()}/api/content/optimise`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await streamContent(
+        "/api/content/optimise",
+        {
           contentType,
           spokesperson: spokesperson === "NA" ? "" : spokesperson,
           llmTarget,
@@ -2583,12 +2711,9 @@ function OptimiserPage({
           bodyCopy,
           promptBrief: promptBriefShort,
           projectData: buildProjectDataText(),
-        }),
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok || !data) {
-        throw new Error((data && data.error) || "The optimisation could not be generated right now. Please try again.");
-      }
+        },
+        setOptimiseChars,
+      );
       setOptimiseSnapshot(snapshot);
       if (typeof data.headline === "string") setArticleHeadline(data.headline);
       if (typeof data.standfirst === "string") setStandfirst(data.standfirst);
@@ -2945,6 +3070,20 @@ OUTPUT INSTRUCTIONS:
                 {countWords(actionNotes)} / 150 words · Also shown on the Comms Planner
               </p>
             </Labelled>
+
+            {optimising && (
+              <GenerationProgress
+                stages={[
+                  "Reading your draft",
+                  "Weaving in your key messages",
+                  "Restructuring answer-first for AI engines",
+                  "Sharpening the copy",
+                  "Finalising the optimised version",
+                ]}
+                chars={optimiseChars}
+                accent={vars.coral}
+              />
+            )}
 
             {optimiseError && (
               <div className="flex items-start gap-2 rounded-lg border p-3 text-[12px]" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
@@ -5146,6 +5285,14 @@ function PlaceholderPage({
 
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
+const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
+  headline: "headline",
+  standfirst: "standfirst",
+  pitch: "pitch idea",
+  transcript: "transcript",
+  actionNotes: "action notes",
+};
+
 function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
@@ -5171,6 +5318,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [pubDate, setPubDate] = useState("");
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [optimisingField, setOptimisingField] = useState<CreatorFieldKey | null>(null);
+  const [creatorChars, setCreatorChars] = useState(0);
   const [creatorError, setCreatorError] = useState("");
 
   const articleHeadlineWords = countWords(articleHeadline);
@@ -5253,12 +5401,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       return;
     }
     setCreatorError("");
+    setCreatorChars(0);
     setOptimisingField(key);
     try {
-      const resp = await fetch(`${apiBase()}/api/content/creator-field`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await streamContent(
+        "/api/content/creator-field",
+        {
           fieldKey: key,
           value,
           contentType,
@@ -5269,23 +5417,24 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           pitch: headline,
           keyMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
           projectData: buildProjectDataText(),
-        }),
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok || !data || typeof data.next !== "string") {
-        throw new Error((data && data.error) || "The optimisation could not be generated right now. Please try again.");
+        },
+        setCreatorChars,
+      );
+      const nextValue = data.next;
+      if (typeof nextValue !== "string") {
+        throw new Error("The optimisation could not be generated right now. Please try again.");
       }
       const log: ChangeLogEntry[] = Array.isArray(data.log)
         ? data.log
             .map((c: { kind?: string; text?: string }) => ({
-              kind: c.kind === "embed" || c.kind === "flag" ? c.kind : "structure",
+              kind: (c.kind === "embed" || c.kind === "flag" ? c.kind : "structure") as ChangeLogEntry["kind"],
               text: String(c.text || ""),
               field: key,
             }))
             .filter((c: ChangeLogEntry) => c.text.length > 0)
         : [];
       setFieldSnapshots((prev) => ({ ...prev, [key]: value }));
-      setFieldValue(key, data.next);
+      setFieldValue(key, nextValue);
       setChangeLog((prev) => [...prev, ...log]);
       setOptimisedFields((prev) => new Set(prev).add(key));
     } catch (err) {
@@ -5598,6 +5747,22 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
       </div>
 
+      {optimisingField && (
+        <div className="mt-4">
+          <GenerationProgress
+            stages={[
+              `Reading your ${CREATOR_FIELD_LABELS[optimisingField] || "copy"}`,
+              "Rewriting for AI citability",
+              "Weaving in your key messages",
+              "Polishing the result",
+            ]}
+            chars={creatorChars}
+            accent={vars.coral}
+            compact
+          />
+        </div>
+      )}
+
       {creatorError && (
         <div className="mt-4 flex items-start gap-2 rounded-lg border p-3 text-[12px]" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
           <X size={14} className="mt-0.5 flex-shrink-0" /> <span>{creatorError}</span>
@@ -5805,6 +5970,7 @@ function MediaResearchPage() {
   });
   const [mediaList, setMediaList] = useState<MediaListItem[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [mediaChars, setMediaChars] = useState(0);
   const [mediaError, setMediaError] = useState("");
 
   useEffect(() => {
@@ -5817,12 +5983,12 @@ function MediaResearchPage() {
     if (!selected) return;
     setGenerating(true);
     setMediaList(null);
+    setMediaChars(0);
     setMediaError("");
     try {
-      const resp = await fetch(`${apiBase()}/api/content/media-list`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await streamContent(
+        "/api/content/media-list",
+        {
           content: {
             title: selected.title,
             contentType: selected.contentType,
@@ -5834,11 +6000,11 @@ function MediaResearchPage() {
           keyMessages: messages.map((m) => m.long || m.short).filter(Boolean),
           projectData: buildProjectDataText(),
           prompt: MEDIA_LIST_LLM_PROMPT_V2,
-        }),
-      });
-      const data = await resp.json().catch(() => null);
-      if (!resp.ok || !data || !Array.isArray(data.items)) {
-        throw new Error((data && data.error) || "The media list could not be generated right now. Please try again.");
+        },
+        setMediaChars,
+      );
+      if (!Array.isArray(data.items)) {
+        throw new Error("The media list could not be generated right now. Please try again.");
       }
       if (data.items.length === 0) {
         throw new Error("No publications were returned. Check that media categories are set in Project Set-Up 1.9, then try again.");
@@ -6035,6 +6201,22 @@ function MediaResearchPage() {
               Submits the LLM prompt below. Returns a structured list, downloadable as Word and Excel.
             </span>
           </div>
+
+          {generating && (
+            <div className="mb-6">
+              <GenerationProgress
+                stages={[
+                  "Reviewing your content",
+                  "Matching outlets to your media categories",
+                  "Identifying beat journalists",
+                  "Scoring authority and likely pickup",
+                  "Compiling your media list",
+                ]}
+                chars={mediaChars}
+                accent={vars.coral}
+              />
+            </div>
+          )}
 
           {mediaError && (
             <div className="flex items-start gap-2 rounded-lg border p-3 text-[12px] mb-6" style={{ borderColor: "rgba(176,61,51,0.4)", background: "rgba(176,61,51,0.06)", color: "#B03D33" }}>
