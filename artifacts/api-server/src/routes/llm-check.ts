@@ -238,8 +238,278 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
   }
 }
 
+interface ProjectAuthorityData {
+  descriptor?: string;
+  legalName?: string;
+  boilerplate?: string;
+  competitors?: string[];
+  evidenceUrls?: string[];
+  buyerQuestions?: string[];
+  expertiseTopics?: string[];
+  spokespeople?: { name?: string; title?: string; expertise?: string[]; linkedin?: string }[];
+}
+
+interface AssessmentDimension {
+  name: string;
+  score: number;
+  justification: string;
+  confidence: "high" | "medium" | "low";
+}
+
+interface AuthorityAssessment {
+  index: number;
+  grade: string;
+  summary: string;
+  dimensions: AssessmentDimension[];
+  topGaps: string[];
+  priorityActions: { action: string; rationale: string; priority: string }[];
+  queryTable: { query: string; appeared: boolean; notes: string }[];
+}
+
+const DIMENSION_NAMES = [
+  "Presence",
+  "Prominence",
+  "Share of voice",
+  "Message fidelity",
+  "Factual accuracy",
+  "Source quality",
+  "Entity clarity",
+  "Spokesperson authority",
+];
+
+function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
+  const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const strArr = (v: unknown, cap: number, len: number): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string").map((s) => s.trim().slice(0, len)).filter(Boolean).slice(0, cap)
+      : [];
+  const str = (v: unknown, len: number): string => (typeof v === "string" ? v.trim().slice(0, len) : "");
+  return {
+    descriptor: str(d.descriptor, 2000),
+    legalName: str(d.legalName, 200),
+    boilerplate: str(d.boilerplate, 600),
+    competitors: strArr(d.competitors, 20, 120),
+    evidenceUrls: strArr(d.evidenceUrls, 30, 300),
+    buyerQuestions: strArr(d.buyerQuestions, 15, 300),
+    expertiseTopics: strArr(d.expertiseTopics, 15, 200),
+    spokespeople: Array.isArray(d.spokespeople)
+      ? (d.spokespeople as unknown[])
+          .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
+          .slice(0, 10)
+          .map((s) => ({
+            name: typeof s.name === "string" ? s.name.trim().slice(0, 120) : "",
+            title: typeof s.title === "string" ? s.title.trim().slice(0, 200) : "",
+            expertise: Array.isArray(s.expertise)
+              ? (s.expertise as unknown[]).filter((e): e is string => typeof e === "string").map((e) => e.trim().slice(0, 120)).filter(Boolean).slice(0, 10)
+              : [],
+            linkedin: typeof s.linkedin === "string" ? s.linkedin.trim().slice(0, 300) : "",
+          }))
+          .filter((s) => s.name)
+      : [],
+  };
+}
+
+function clampScore(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function gradeFor(idx: number): string {
+  return idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+}
+
+// Pull the first balanced JSON object out of a model response, tolerating
+// stray prose or markdown code fences around it.
+function extractJson(text: string): string | null {
+  if (!text) return null;
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenced ? fenced[1] : text;
+  const start = body.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < body.length; i++) {
+    const ch = body[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return body.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function parseAssessment(text: string): AuthorityAssessment | null {
+  const json = extractJson(text);
+  if (!json) return null;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+
+  const conf = (v: unknown): "high" | "medium" | "low" =>
+    v === "high" || v === "medium" || v === "low" ? v : "low";
+
+  const rawDims = Array.isArray(parsed.dimensions) ? parsed.dimensions : [];
+  const dimByName = new Map<string, any>();
+  for (const d of rawDims) {
+    if (d && typeof d === "object" && typeof d.name === "string") {
+      dimByName.set(d.name.trim().toLowerCase(), d);
+    }
+  }
+  const dimensions: AssessmentDimension[] = DIMENSION_NAMES.map((name) => {
+    const d = dimByName.get(name.toLowerCase());
+    return {
+      name,
+      score: clampScore(d?.score),
+      justification: typeof d?.justification === "string" && d.justification.trim() ? d.justification.trim().slice(0, 500) : "No evidence in this run.",
+      confidence: conf(d?.confidence),
+    };
+  });
+
+  const index = clampScore(parsed.index);
+
+  const topGaps = Array.isArray(parsed.topGaps)
+    ? parsed.topGaps.filter((g: unknown): g is string => typeof g === "string").map((g: string) => g.trim().slice(0, 300)).filter(Boolean).slice(0, 6)
+    : [];
+
+  const priorityActions = Array.isArray(parsed.priorityActions)
+    ? parsed.priorityActions
+        .filter((a: unknown): a is Record<string, unknown> => !!a && typeof a === "object")
+        .map((a: Record<string, unknown>) => ({
+          action: typeof a.action === "string" ? a.action.trim().slice(0, 300) : "",
+          rationale: typeof a.rationale === "string" ? a.rationale.trim().slice(0, 400) : "",
+          priority: a.priority === "high" || a.priority === "medium" || a.priority === "low" ? (a.priority as string) : "medium",
+        }))
+        .filter((a: { action: string }) => a.action)
+        .slice(0, 8)
+    : [];
+
+  const queryTable = Array.isArray(parsed.queryTable)
+    ? parsed.queryTable
+        .filter((q: unknown): q is Record<string, unknown> => !!q && typeof q === "object")
+        .map((q: Record<string, unknown>) => ({
+          query: typeof q.query === "string" ? q.query.trim().slice(0, 300) : "",
+          appeared: q.appeared === true,
+          notes: typeof q.notes === "string" ? q.notes.trim().slice(0, 400) : "",
+        }))
+        .filter((q: { query: string }) => q.query)
+        .slice(0, 40)
+    : [];
+
+  return {
+    index,
+    grade: typeof parsed.grade === "string" && /^[A-F]$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
+    summary: typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 1200) : "",
+    dimensions,
+    topGaps,
+    priorityActions,
+    queryTable,
+  };
+}
+
+async function scoreAuthority(
+  companyName: string,
+  projectData: ProjectAuthorityData,
+  evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
+  metrics: { presence: number; shareOfVoice: number; visibilityScore: number; topCompetitors: { name: string; mentions: number }[] },
+): Promise<AuthorityAssessment | null> {
+  const client = createAnthropicClient();
+  if (!client) return null;
+
+  const sp = (projectData.spokespeople || []).map((s) => ({
+    name: s.name,
+    title: s.title,
+    expertise: s.expertise,
+  }));
+
+  const prompt = `You are scoring the AI authority of a brand for a PR team, using ONLY the evidence and project data below.
+
+HOW THE EVIDENCE WAS GATHERED:
+The brand's real buyer questions and category questions were put to ChatGPT and Claude as blind probes - the brand was NOT named in the prompt. The answers were captured. "appeared: true" means the engine named the brand unprompted in that answer.
+
+YOUR TASK:
+Score the brand across these 8 dimensions, each 0-100, with a one-sentence justification and a confidence flag (high, medium or low):
+- Presence: how often the brand appears unprompted across the probes.
+- Prominence: when it appears, how centrally or favourably it is positioned versus being a passing mention.
+- Share of voice: the brand's mentions relative to the competitors the engines name.
+- Message fidelity: where the brand appears, does what the engines say about it match the brand's own messaging and boilerplate.
+- Factual accuracy: where the brand appears, is what the engines say factually correct against the project data.
+- Source quality: strength of the evidence URLs and third-party citations the brand supplied.
+- Entity clarity: how clearly the engines and the project data establish the brand as a distinct, well-defined entity.
+- Spokesperson authority: strength and relevance of the named spokespeople the brand supplied.
+
+CRITICAL RULES:
+- Use British spelling. No em dashes, use hyphens. No emojis. Plain, non-hyped language.
+- Do NOT invent facts, citations, outlets, quotes, competitors or spokespeople. Use only what is provided.
+- If the evidence does not support a dimension, score it low and write "No evidence in this run." as the justification with confidence "low". This is expected for message fidelity, factual accuracy, source quality and spokesperson authority when the brand rarely appeared or supplied no URLs or spokespeople.
+- Ground every justification in the actual evidence. Presence, prominence and share of voice come from the probe results. Source quality and spokesperson authority come from the supplied URLs and spokespeople only.
+
+Return STRICT JSON only - no prose before or after, no markdown fences. Exactly this shape:
+{
+  "index": <overall AI Authority Index 0-100>,
+  "grade": "<A|B|C|D|F>",
+  "summary": "<2 to 3 sentence executive summary in plain British English>",
+  "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
+  "topGaps": ["<the most important visibility gap>", ... up to 5],
+  "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low" }, ... up to 5],
+  "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence]
+}
+
+BRAND: ${companyName}
+
+PROJECT DATA:
+${JSON.stringify(
+    {
+      legalName: projectData.legalName || "",
+      descriptor: projectData.descriptor || "",
+      boilerplate: projectData.boilerplate || "",
+      competitors: projectData.competitors || [],
+      expertiseTopics: projectData.expertiseTopics || [],
+      evidenceUrls: projectData.evidenceUrls || [],
+      spokespeople: sp,
+    },
+    null,
+    1,
+  )}
+
+PRECOMPUTED METRICS (from the probes, for reference - you may refine the index):
+${JSON.stringify(metrics, null, 1)}
+
+PROBE EVIDENCE (one entry per query):
+${JSON.stringify(evidence, null, 1)}`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 4000,
+      system:
+        "You are a precise AI visibility analyst. You never fabricate evidence. You return strict JSON only, with British spelling, no em dashes and no emojis.",
+      messages: [{ role: "user", content: prompt }],
+    });
+    const textBlock = response.content.find((b) => b.type === "text");
+    const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    return parseAssessment(text);
+  } catch (err: any) {
+    logger.error({ err, companyName }, "Authority scoring (stage 2) failed");
+    return null;
+  }
+}
+
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, sectors, keywords, icp, location, persona } = req.body;
+  const { companyName, sector, sectors, keywords, icp, location, persona, projectData } = req.body;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -268,14 +538,20 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   const icpProfile = typeof icp === "string" ? icp.trim().slice(0, 300) : "";
   const locationProfile = typeof location === "string" ? location.trim().replace(/^in\s+/i, "").slice(0, 120) : "";
   const personaProfile = typeof persona === "string" ? persona.trim().slice(0, 150) : "";
+  const authorityData = sanitizeProjectData(projectData);
 
   logger.info(
-    { companyName, sectors: sectorList, hasIcp: icpProfile.length > 0, hasLocation: locationProfile.length > 0, hasPersona: personaProfile.length > 0 },
+    { companyName, sectors: sectorList, hasIcp: icpProfile.length > 0, hasLocation: locationProfile.length > 0, hasPersona: personaProfile.length > 0, buyerQuestions: (authorityData.buyerQuestions || []).length },
     "Starting LLM visibility check",
   );
 
   try {
-    const questions = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile);
+    const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile);
+    // Seed the probe set with the buyer's verbatim questions so the measurement
+    // uses real queries, not only generated ones. De-duplicate while preserving
+    // the buyer questions first, and cap the total so the run stays bounded.
+    const buyerQuestions = (authorityData.buyerQuestions || []).slice(0, 8);
+    const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, 18);
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
@@ -347,6 +623,45 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       };
     });
 
+    // Stage two: build one evidence row per unique query (both engines' first
+    // representative answer) and ask Claude to score authority against the
+    // project data. Responses are truncated to keep the scoring call bounded.
+    const evidenceByQuery = new Map<string, { question: string; appeared: boolean; competitors: Set<string>; chatgpt: string; claude: string }>();
+    for (const r of validResults) {
+      let e = evidenceByQuery.get(r.question);
+      if (!e) {
+        e = { question: r.question, appeared: false, competitors: new Set(), chatgpt: "", claude: "" };
+        evidenceByQuery.set(r.question, e);
+      }
+      if (r.mentioned) e.appeared = true;
+      r.competitors.forEach((c) => e!.competitors.add(c));
+      const trimmed = r.response.slice(0, 700);
+      if (r.model.includes("GPT")) {
+        if (!e.chatgpt || (r.mentioned && trimmed.length > e.chatgpt.length)) e.chatgpt = trimmed;
+      } else if (!e.claude || (r.mentioned && trimmed.length > e.claude.length)) {
+        e.claude = trimmed;
+      }
+    }
+    const evidence = [...evidenceByQuery.values()].slice(0, 18).map((e) => ({
+      question: e.question,
+      appeared: e.appeared,
+      competitors: [...e.competitors].slice(0, 12),
+      chatgpt: e.chatgpt,
+      claude: e.claude,
+    }));
+
+    const competitorMentionTotal = validResults.reduce((s, r) => s + r.competitors.length, 0);
+    const sovDenom = totalMentions + competitorMentionTotal;
+    const shareOfVoice = sovDenom > 0 ? Math.round((totalMentions / sovDenom) * 100) : 0;
+    const presence = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
+
+    const assessment = await scoreAuthority(companyName, authorityData, evidence, {
+      presence,
+      shareOfVoice,
+      visibilityScore,
+      topCompetitors,
+    });
+
     const summary = {
       companyName,
       sector: sectorList[0],
@@ -362,6 +677,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       },
       topCompetitors,
       probes,
+      assessment,
     };
 
     res.json(summary);

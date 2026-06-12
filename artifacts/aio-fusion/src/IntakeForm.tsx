@@ -2678,3 +2678,85 @@ export function getPreferredKeywords(): string[] {
     ),
   );
 }
+
+function fieldText(fieldId: string): string {
+  const data = loadIntakeData();
+  const raw = data?.formData?.[fieldId];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function fieldLines(fieldIds: string[], splitCommas = false): string[] {
+  const data = loadIntakeData();
+  if (!data) return [];
+  const out: string[] = [];
+  const splitter = splitCommas ? /[\n,]+/ : /\n+/;
+  for (const id of fieldIds) {
+    const raw = data.formData?.[id];
+    if (typeof raw !== "string") continue;
+    raw
+      .split(splitter)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((line) => out.push(line));
+  }
+  return Array.from(new Set(out));
+}
+
+// Company descriptor (1.1), legal name (4.1) and one-sentence boilerplate (4.3).
+export function getCompanyDescriptor(): string {
+  return fieldText("1.1");
+}
+
+export function getLegalName(): string {
+  return fieldText("4.1");
+}
+
+export function getBoilerplate(): string {
+  return fieldText("4.3");
+}
+
+// Primary competitors (4.8) - line or comma separated.
+export function getCompetitors(): string[] {
+  return fieldLines(["4.8"], true);
+}
+
+// Evidence, coverage and citation URLs: online evidence (1.4),
+// key media coverage links (4.7) and third-party profiles / citations (7.3).
+export function getEvidenceUrls(): string[] {
+  return fieldLines(["1.4", "4.7", "7.3"]);
+}
+
+// Verbatim buyer questions (5.6) - real questions to seed the blind probes.
+export function getBuyerQuestions(): string[] {
+  return fieldLines(["5.6"]);
+}
+
+// Topics where the brand has specialist expertise or data (5.7) - scoring context.
+export function getExpertiseTopics(): string[] {
+  return fieldLines(["5.7"]);
+}
+
+export type ProjectAuthorityData = {
+  descriptor: string;
+  legalName: string;
+  boilerplate: string;
+  competitors: string[];
+  evidenceUrls: string[];
+  buyerQuestions: string[];
+  expertiseTopics: string[];
+  spokespeople: Spokesperson[];
+};
+
+// Bundle of the intake data the Earned Media authority report scores against.
+export function getProjectAuthorityData(): ProjectAuthorityData {
+  return {
+    descriptor: getCompanyDescriptor(),
+    legalName: getLegalName(),
+    boilerplate: getBoilerplate(),
+    competitors: getCompetitors(),
+    evidenceUrls: getEvidenceUrls(),
+    buyerQuestions: getBuyerQuestions(),
+    expertiseTopics: getExpertiseTopics(),
+    spokespeople: getSpokespeople(),
+  };
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -57,6 +57,23 @@ interface ProbeItem {
   competitors?: string[];
 }
 
+interface AssessmentDimension {
+  name: string;
+  score: number;
+  justification: string;
+  confidence: "high" | "medium" | "low";
+}
+
+interface AuthorityAssessment {
+  index: number;
+  grade: string;
+  summary: string;
+  dimensions: AssessmentDimension[];
+  topGaps: string[];
+  priorityActions: { action: string; rationale: string; priority: string }[];
+  queryTable: { query: string; appeared: boolean; notes: string }[];
+}
+
 interface LlmCheckResult {
   companyName: string;
   sector: string;
@@ -72,6 +89,7 @@ interface LlmCheckResult {
   };
   topCompetitors: { name: string; mentions: number }[];
   probes: ProbeItem[];
+  assessment?: AuthorityAssessment | null;
 }
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
@@ -367,6 +385,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icp: icpProfile.trim(),
           location: icpLocation.trim(),
           persona: getClientPersona(),
+          projectData: getProjectAuthorityData(),
         }),
       });
 
@@ -394,8 +413,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       return;
     }
     const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
-    const idx = result.visibilityScore;
-    const grade = idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+    const assess = result.assessment || null;
+    const idx = assess ? assess.index : result.visibilityScore;
+    const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
     const gradeRead =
       idx >= 60
         ? "Strong - this brand is being referenced reliably at the discovery stage."
@@ -463,11 +483,59 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       })
       .join("");
 
-    const gaps = queryRows.filter((q) => !q.appeared).slice(0, 6);
+    const probeGaps = queryRows.filter((q) => !q.appeared).slice(0, 6);
+    const gapItems = assess && assess.topGaps.length > 0 ? assess.topGaps : probeGaps.map((q) => q.question);
     const gapsBlock =
-      gaps.length > 0
-        ? `<ul class="gaps">${gaps.map((q) => `<li>${escapeHtml(q.question)}</li>`).join("")}</ul>`
+      gapItems.length > 0
+        ? `<ul class="gaps">${gapItems.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>`
         : `<p class="muted box">No discovery gaps - ${escapeHtml(result.companyName)} appeared in every probed query.</p>`;
+
+    const summaryHtml = assess && assess.summary ? escapeHtml(assess.summary) : execSummary;
+
+    const confLabel = (c: string) => (c === "high" ? "High confidence" : c === "medium" ? "Medium confidence" : "Low confidence");
+    const scorecardBlock = assess
+      ? `<div class="card">
+      <h2>AI Authority scorecard</h2>
+      <table>
+        <thead><tr><th>Dimension</th><th>Score</th><th>What the evidence shows</th><th>Confidence</th></tr></thead>
+        <tbody>${assess.dimensions
+          .map(
+            (d) =>
+              `<tr><td><strong>${escapeHtml(d.name)}</strong></td><td><span class="score-pill ${d.score >= 60 ? "good" : d.score >= 30 ? "mid" : "low"}">${d.score}</span></td><td>${escapeHtml(d.justification)}</td><td class="conf conf-${d.confidence}">${confLabel(d.confidence)}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+    </div>`
+      : "";
+
+    const actionsBlock =
+      assess && assess.priorityActions.length > 0
+        ? `<div class="card">
+      <h2>Prioritised actions</h2>
+      <ol class="actions">${assess.priorityActions
+        .map(
+          (a) =>
+            `<li><span class="prio prio-${a.priority}">${escapeHtml((a.priority || "medium").toUpperCase())}</span> <strong>${escapeHtml(a.action)}</strong>${a.rationale ? `<br /><span class="muted">${escapeHtml(a.rationale)}</span>` : ""}</li>`,
+        )
+        .join("")}</ol>
+    </div>`
+        : "";
+
+    const assessmentQueryBlock =
+      assess && assess.queryTable.length > 0
+        ? `<div class="card">
+      <h2>Per-query authority read</h2>
+      <table>
+        <thead><tr><th>Query</th><th>Appeared</th><th>What the engines said</th></tr></thead>
+        <tbody>${assess.queryTable
+          .map(
+            (q) =>
+              `<tr><td>${escapeHtml(q.query)}</td><td class="${q.appeared ? "appeared-yes" : "appeared-no"}">${q.appeared ? "Yes" : "No"}</td><td>${escapeHtml(q.notes) || `<span class="muted">No evidence</span>`}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+    </div>`
+        : "";
 
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -512,6 +580,20 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   .gaps li { font-size: 13px; color: #374151; margin-bottom: 6px; }
   .box { background: #FAFAFA; border-radius: 8px; padding: 12px; }
   .muted { color: #6B7280; font-size: 12px; }
+  .score-pill { display: inline-block; min-width: 34px; text-align: center; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 8px; }
+  .score-pill.good { background: #ECFDF5; color: #2F855A; }
+  .score-pill.mid { background: #FEFCE8; color: #A16207; }
+  .score-pill.low { background: #FEE2E2; color: #B91C1C; }
+  .conf { font-size: 11px; white-space: nowrap; }
+  .conf-high { color: #2F855A; }
+  .conf-medium { color: #A16207; }
+  .conf-low { color: #9CA3AF; }
+  .actions { margin: 0; padding-left: 18px; }
+  .actions li { font-size: 13px; color: #374151; margin-bottom: 10px; line-height: 1.5; }
+  .prio { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 6px; border-radius: 6px; margin-right: 6px; vertical-align: middle; }
+  .prio-high { background: #FEE2E2; color: #B91C1C; }
+  .prio-medium { background: #FEFCE8; color: #A16207; }
+  .prio-low { background: #F3F4F6; color: #6B7280; }
   .footer { font-size: 11px; color: #9CA3AF; margin-top: 18px; border-top: 1px solid #E5E5E5; padding-top: 12px; }
   @media print { .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .card, tr { break-inside: avoid; } }
 </style></head>
@@ -543,15 +625,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     </div>
     <div class="card">
       <h2>Executive summary</h2>
-      <p class="lead">${execSummary}</p>
+      <p class="lead">${summaryHtml}</p>
       ${result.icp ? `<p class="meta-line" style="margin-top:12px;"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
     </div>
+    ${scorecardBlock}
+    ${actionsBlock}
     <div class="card">
-      <h2>Blind-probe evidence log</h2>
-      <table>
-        <thead><tr><th>Query</th><th>Appeared</th><th>Competitors surfaced</th><th>Models</th></tr></thead>
-        <tbody>${evidenceRows}</tbody>
-      </table>
+      <h2>Top visibility gaps</h2>
+      ${gapsBlock}
     </div>
     <div class="card">
       <h2>Who owns the category instead</h2>
@@ -559,9 +640,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         ? `<table><thead><tr><th>Competitor</th><th>Surfaced in</th><th>Example queries</th></tr></thead><tbody>${ownsRows}</tbody></table>`
         : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the engines have no clear go-to name in your sector yet, so there is space to claim it.</p>`}
     </div>
+    ${assessmentQueryBlock}
     <div class="card">
-      <h2>Top visibility gaps</h2>
-      ${gapsBlock}
+      <h2>Blind-probe evidence log</h2>
+      <table>
+        <thead><tr><th>Query</th><th>Appeared</th><th>Competitors surfaced</th><th>Models</th></tr></thead>
+        <tbody>${evidenceRows}</tbody>
+      </table>
     </div>
     <div class="card">
       <h2>Method &amp; caveats</h2>
@@ -940,6 +1025,80 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </div>
         </div>
       </div>
+
+      {result.assessment && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+            <div className="flex-1">
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
+                <Eye size={14} style={{ color: vars.accent }} />
+                AI Authority Scorecard
+              </h3>
+              {result.assessment.summary && (
+                <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>{result.assessment.summary}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="text-right">
+                <p className="text-3xl font-bold leading-none" style={{ color: vars.navy }}>
+                  {result.assessment.index}<span className="text-base" style={{ color: vars.g400 }}> / 100</span>
+                </p>
+                <p className="text-[10px] uppercase tracking-[0.1em] mt-1" style={{ color: vars.g400 }}>Authority Index</p>
+              </div>
+              <span
+                className="text-lg font-bold px-3 py-1.5 rounded-lg"
+                style={
+                  result.assessment.index >= 60
+                    ? { background: "#ECFDF5", color: "#2F855A" }
+                    : result.assessment.index >= 40
+                    ? { background: "#FEFCE8", color: "#A16207" }
+                    : { background: "#FEE2E2", color: "#B91C1C" }
+                }
+              >
+                {result.assessment.grade}
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+            {result.assessment.dimensions.map((d) => {
+              const color = d.score >= 60 ? vars.green : d.score >= 30 ? vars.amber : vars.red;
+              return (
+                <div key={d.name} className="p-3 rounded-lg border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{d.name}</span>
+                    <span className="text-[12px] font-bold px-1.5 py-0.5 rounded" style={{ color, background: "white" }}>{d.score}</span>
+                  </div>
+                  <p className="text-[11px] leading-snug" style={{ color: vars.g500 }}>{d.justification}</p>
+                  <span className="text-[10px] mt-1 inline-block" style={{ color: vars.g400 }}>
+                    {d.confidence === "high" ? "High confidence" : d.confidence === "medium" ? "Medium confidence" : "Low confidence"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {result.assessment.priorityActions.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.g400 }}>Prioritised actions</p>
+              <div className="flex flex-col gap-2">
+                {result.assessment.priorityActions.map((a, i) => {
+                  const pc = a.priority === "high" ? { bg: "#FEE2E2", c: "#B91C1C" } : a.priority === "low" ? { bg: vars.g100, c: vars.g500 } : { bg: "#FEFCE8", c: "#A16207" };
+                  return (
+                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg border" style={{ borderColor: vars.g200 }}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: pc.bg, color: pc.c }}>
+                        {(a.priority || "medium").toUpperCase()}
+                      </span>
+                      <div>
+                        <p className="text-[12px] font-medium" style={{ color: vars.navy }}>{a.action}</p>
+                        {a.rationale && <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>{a.rationale}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
