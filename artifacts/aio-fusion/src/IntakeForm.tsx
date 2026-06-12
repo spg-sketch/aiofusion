@@ -239,7 +239,7 @@ const PROJECT_DATA_ARCHIVE_KEY = "aio.projectData.archive.v1";
 // 3.2, 3.5, 3.6 and the structured fields below (products, search phrases, personas,
 // ICPs, pain points, outcomes, spokespeople and the two media-category pickers).
 // Keep the excluded ids and the optimisable types in sync with the backend.
-const OPTIMISE_EXCLUDED_IDS = new Set(["1.4", "1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "3.6", "1.8", "1.9", "1.10", "6.1", "6.2", "6.3", "6.6", "7.3"]);
+const OPTIMISE_EXCLUDED_IDS = new Set(["1.4", "1.5", "1.7", "2.6", "2.7", "3.1", "3.2", "3.5", "3.6", "1.8", "1.9", "1.10", "4.7", "4.8", "6.1", "6.2", "6.3", "6.6", "7.3"]);
 const OPTIMISABLE_FIELD_TYPES = new Set(["textarea", "dual", "dual-list"]);
 const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
@@ -528,9 +528,8 @@ const sections: SectionDef[] = [
       {
         id: "5.1",
         label: "How do most customers first find and decide on you?",
-        hint: "Pick the path that fits most of your customers. If it is genuinely split, choose \"A mix\" and explain below.",
+        hint: "Select all the paths that apply to your customers. If it is genuinely split, you can tick more than one, and use \"A mix\" to explain below.",
         type: "checkbox",
-        single: true,
         options: [
           "Search-led: they search, read our website, then contact us or buy",
           "Referral-led: they hear of us via press, podcasts, social or word of mouth, then look us up",
@@ -962,7 +961,7 @@ export default function IntakePage() {
     </button>
   );
 
-  const markComplete = (idx: number) => { setCompleted((prev) => new Set(prev).add(idx)); scrollToTop(); };
+  const markComplete = (idx: number, scroll = true) => { setCompleted((prev) => new Set(prev).add(idx)); if (scroll) scrollToTop(); };
 
   const sectionHasData = (idx: number): boolean => {
     return visibleSections[idx].fields.some((f) => {
@@ -2211,7 +2210,7 @@ export default function IntakePage() {
                     if (completed.has(activeSection)) {
                       setCompleted((prev) => { const next = new Set(prev); next.delete(activeSection); return next; });
                     } else {
-                      markComplete(activeSection);
+                      markComplete(activeSection, !(track === "pr" && activeSection === visibleSections.length - 1));
                     }
                   }}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -2230,6 +2229,24 @@ export default function IntakePage() {
                   >
                     Next <ArrowRight size={14} />
                   </button>
+                ) : track === "pr" ? (
+                  completed.has(activeSection) ? (
+                    <button
+                      onClick={() => setTrack("web")}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: vars.accent }}
+                    >
+                      Continue to AIO Set-Up <ArrowRight size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { markComplete(activeSection, false); }}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: vars.green }}
+                    >
+                      <CheckCircle2 size={14} /> Mark section complete
+                    </button>
+                  )
                 ) : (
                   <button
                     onClick={() => { markComplete(activeSection); }}
