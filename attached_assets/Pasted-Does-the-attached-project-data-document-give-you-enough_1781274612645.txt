@@ -1,0 +1,74 @@
+Does the attached project data document give you enough to carry out a thorough assessment of earned media authority and visibility for Simpatico PR Ltd? Using Simpatico as a test case. are you able to design an effective prompt that will work using the information in the Project Data document and for all LLMs, that will achieve this for any company? And, how would you present the findings - what information do you think would be useful and in what form?
+6 days ago
+Thought process
+Thought process
+I'll start by reading the project data document to assess what it contains.
+Read a file
+Read a file
+Short answer up front: the document is an excellent brief for the assessment but it is not, and cannot be, the assessment itself. Yes, a single templated prompt can be made to work across LLMs and for any company — but only if it's designed around one critical methodological point I'll explain. And the findings are best presented as a longitudinal scorecard, not a one-off report.
+Let me give you the full reasoning, the actual prompt, and the presentation design.
+1. Is the Project Data enough for a thorough assessment?
+It's genuinely strong as an input pack — better structured than most briefs I see. It gives you almost everything needed to configure a rigorous test:
+Entity definition (1.1, 4.1, 4.3) — who the company is, so you can judge whether an LLM understands it correctly.
+The competitor set (1.5 / 4.8 — 23 named rivals) — essential for share-of-voice benchmarking.
+The query universe (5.6, 5.7, plus the phrase lists in 1.6 / 2.7 / 3.4) — this is the gold. These are the actual prompts a buyer would type, which is exactly what you fire at the models.
+Named spokespeople (1.8) for person-level visibility, and evidence/trust URLs (1.4 / 4.7 / 7.3) to audit the real earned-media footprint.
+A self-reported baseline (5.5: "mentioned in AI answers? No") and known weaknesses (7.1 NAP inconsistencies; 6.4 no Wikidata/Wikipedia/Crunchbase).
+But here's the limit. "A thorough assessment of earned media authority and visibility" means measuring the company against external reality — what LLMs actually say today, and what earned media actually exists. The document is the map of what to test; it contains zero current-state measurement. On its own it can't produce an assessment any more than a recipe can produce a meal.
+Three specific gaps worth closing before you call any assessment "thorough":
+No live LLM output. You have to generate it — run the queries across models. Nothing in the doc substitutes for that.
+No enumerated earned-media corpus. The "evidence" URLs are mostly owned/profile pages (their own site, LinkedIn, ZoomInfo, SlideShare, Glassdoor, Medium). Only a couple (PRWeek, CampaignLive) are genuine third-party earned coverage. There's no dated log of real articles, outlets, and domain authority — which is the thing that supposedly drives 80% of citations.
+No defined test matrix. Which models, which locale/region settings, search on or off, and which dates. Visibility varies enormously by all four, so they must be fixed and recorded.
+So: sufficient to brief and configure a first-class assessment; insufficient by itself to be one.
+2. A universal prompt for all LLMs and any company
+The single most important design decision: don't ask a model to assess its own citation behaviour by introspection. If you prompt ChatGPT with "are you citing Simpatico?", you get confident fiction. The valid method is two-stage:
+Stage 1 — Blind probes. Fire the buyer's real questions at each model without naming the company, with web/search enabled where available. Capture the raw output. This is the actual measurement.
+Stage 2 — Scoring. Feed the captured outputs plus the Project Data into a structured scoring prompt that grades visibility, share of voice, accuracy and sentiment against ground truth.
+A prompt portable across LLMs has to be plain-language (no model-specific syntax), explicit about role/task/inputs/output schema, hard-guarded against hallucination, and produce a deterministic structure so results are comparable across models and over time. The "works for any company" part is solved by templating: every input maps to a Project Data field.
+I've written the full template as a reusable file. The core scoring prompt looks like this:
+ROLE: You are an AI Search Visibility & Earned-Media Authority analyst.
+Assess ONLY from evidence provided or retrieved live. Never invent
+citations, outlets, rankings, or quotes. Where you lack evidence, write
+"No evidence" and score 0. State your confidence (High/Med/Low) per item.
+
+INPUTS
+- Company: {{LEGAL_NAME}} — {{ONE_LINE_DESCRIPTOR}}
+- Sectors: {{SECTORS}}   Geographies: {{GEOS}}
+- Named competitors: {{COMPETITOR_LIST}}
+- Spokespeople: {{NAMES + EXPERTISE}}
+- Known earned media / citations: {{VERIFIED_URLS}}
+- Test queries (verbatim): {{QUERY_LIST}}
+- Captured model outputs for each query: {{PASTE_BLIND_PROBE_RESULTS}}
+
+TASK
+For each test query, using the captured output (or a live retrieval if
+you have web access):
+1. Appearance: did {{COMPANY}} appear? (Yes/No) Position/prominence.
+2. Framing: favourable / neutral / negative; on-message vs off-message.
+3. Accuracy: compare every claim to INPUTS; list errors & hallucinations.
+4. Competitors named, and their relative prominence (share of voice).
+5. Source attribution: list cited domains; tag each earned / owned / other.
+
+Then produce:
+A. SCORECARD (0–5 each, with one-line justification + confidence):
+   Presence rate · Prominence · Share of voice vs competitors ·
+   Message fidelity · Factual accuracy · Source quality (earned-led?) ·
+   Entity clarity · Spokesperson authority
+B. Overall AI Authority Index (0–100) + letter grade, with method note.
+C. Top 5 visibility gaps (queries where invisible / out-ranked).
+D. Prioritised actions, each tied to a specific query, outlet, or fix.
+
+OUTPUT: structured sections + one machine-readable table
+(query | model | appeared | position | sentiment | competitors | sources | accuracy_flags).
+Do not editorialise outside the schema.
+The companion blind-probe instruction is deliberately tiny — you run each buyer question verbatim, with a fixed wrapper ("Answer as you normally would; if you cite sources, list them"), and log the result with model, date and locale. That neutrality is what keeps the test honest.
+Two portability notes that matter in practice: Perplexity and Copilot expose real citations, so source-quality scoring is rich there; ChatGPT/Claude/Gemini without browsing answer from training data, so you must tag those runs low-confidence, training-only and weight them separately. Bake that distinction into the run log or you'll compare apples to oranges.
+3. How to present the findings
+Treat this as a living scorecard, not a report, because the whole point is that visibility changes month to month. The structure I'd use:
+An executive layer — a single AI Authority Index (0–100) with a letter grade and a trend line, plus the three numbers a CMO actually cares about: presence rate across the query set, share of voice vs named competitors, and accuracy (are LLMs even describing you correctly).
+An evidence layer — the per-query log (query, models, appeared y/n, position, snippet, competitors cited, sources), so every score is auditable back to a real model output with a date.
+A benchmark layer — a competitor heatmap (queries × competitors) showing who owns which questions, and a model-by-model breakdown since the engines diverge sharply.
+A source/diagnostic layer — which earned-media outlets are actually driving citations (mapped back to the PR programme so you can prove the PR→AI link), plus a hallucination/correction log. For Simpatico specifically that log would immediately flag the 7.1 NAP inconsistencies and the missing Wikidata/Crunchbase presence as fixable causes of weak entity clarity.
+An action layer — prioritised gaps tied to a specific query, outlet or technical fix.
+On form: a live dashboard that re-runs the probes on a schedule is the ideal home for this (it's the natural product surface for "AIO Fusion"), backed by a deck for the client conversation and a spreadsheet holding the raw evidence log. The longitudinal re-run is what turns it from a snapshot into proof that the PR programme is moving the needle.
+Want me to (a) save the full prompt template as a reusable file, (b) run a live blind-probe on a few of Simpatico's own target queries so you can see a real assessment output, or (c) mock up the dashboard? I'd suggest (a) and (b) together — it'd both give you the asset and validate it on the test case in one go.

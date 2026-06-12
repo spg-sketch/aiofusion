@@ -2343,6 +2343,20 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// Only let http(s) links through so a model-supplied URL can never become a
+// javascript: or data: link. Anything else is dropped to an empty string.
+function safeHttpUrl(v: unknown): string {
+  if (typeof v !== "string") return "";
+  const trimmed = v.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? trimmed : "";
+  } catch {
+    return "";
+  }
+}
+
 // How long the client waits before giving up on a content-AI request. Slightly
 // longer than the server's own stream timeout so the server's friendly message
 // wins when it can, but the user is never left waiting forever.
@@ -5372,6 +5386,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [optimisingField, setOptimisingField] = useState<CreatorFieldKey | null>(null);
   const [creatorChars, setCreatorChars] = useState(0);
   const [creatorError, setCreatorError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generateChars, setGenerateChars] = useState(0);
+  const [generated, setGenerated] = useState(false);
+  const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
+  const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
 
   const articleHeadlineWords = countWords(articleHeadline);
   const standfirstWords = countWords(standfirst);
@@ -5503,6 +5522,84 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     setFieldSnapshots((prev) => { const next = { ...prev }; delete next[key]; return next; });
     setChangeLog((prev) => prev.filter((c) => c.field !== key));
     setOptimisedFields((prev) => { const next = new Set(prev); next.delete(key); return next; });
+  };
+
+  const CREATOR_PROMPT_1_TYPES = ["Press release", "Case study", "Speaker submission", "Award submission", "Event copy", "Directory entry"];
+  const createPromptLabel =
+    contentType === "Article Media Pitch" ? "Prompt 2.2"
+    : CREATOR_PROMPT_1_TYPES.includes(contentType) ? "Prompt 1.1"
+    : "Prompt 2.1";
+
+  const createDraft = async () => {
+    if (generating || optimisingField) return;
+    const theme = articleHeadline.trim() || headline.trim() || transcript.trim();
+    if (!theme) {
+      alert("Add a headline or subject (and optionally a pitch idea or notes) so the AI knows what to write about.");
+      return;
+    }
+    setCreatorError("");
+    setGenerateChars(0);
+    setGenerating(true);
+    const snapshot = { articleHeadline, standfirst, transcript };
+    try {
+      const data = await streamContent(
+        "/api/content/generate",
+        {
+          contentType,
+          projectName,
+          spokesperson: spokesperson === "NA" ? "" : spokesperson,
+          spokesLi,
+          headline: articleHeadline,
+          pitch: headline,
+          sourceNotes: transcript,
+          selectedMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
+          mediaCategories: mediaTarget,
+          projectData: buildProjectDataText(),
+        },
+        setGenerateChars,
+      );
+      setDraftSnapshot(snapshot);
+      if (typeof data.headline === "string" && data.headline.trim()) setArticleHeadline(data.headline.trim());
+      if (typeof data.standfirst === "string") setStandfirst(data.standfirst);
+      if (typeof data.bodyCopy === "string") setTranscript(data.bodyCopy);
+      const log = Array.isArray(data.changeLog)
+        ? (data.changeLog as { kind?: string; text?: string }[])
+            .map((c) => ({
+              kind: (c.kind === "embed" || c.kind === "flag" ? c.kind : "structure") as "embed" | "structure" | "flag",
+              text: String(c.text || ""),
+            }))
+            .filter((c) => c.text.length > 0)
+        : [];
+      setChangeLog(log);
+      setSupportingData(
+        Array.isArray(data.supportingData)
+          ? (data.supportingData as { text?: string; url?: string }[])
+              .filter((d) => d && typeof d.text === "string" && d.text.trim().length > 0)
+              .map((d) => ({ text: String(d.text), url: safeHttpUrl(d.url) }))
+          : [],
+      );
+      setOptimisedFields(new Set());
+      setFieldSnapshots({});
+      setGenerated(true);
+    } catch (err) {
+      setCreatorError(err instanceof Error ? err.message : "The draft could not be generated right now. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const discardDraft = () => {
+    if (!draftSnapshot) return;
+    if (!window.confirm("Discard the AI draft and restore what you had before?")) return;
+    setArticleHeadline(draftSnapshot.articleHeadline);
+    setStandfirst(draftSnapshot.standfirst);
+    setTranscript(draftSnapshot.transcript);
+    setDraftSnapshot(null);
+    setChangeLog([]);
+    setSupportingData([]);
+    setOptimisedFields(new Set());
+    setFieldSnapshots({});
+    setGenerated(false);
   };
 
   const optimisePill = (key: CreatorFieldKey) => (
@@ -5665,6 +5762,49 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
+        <div className="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
+              <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
+            </p>
+            <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
+              Writes a full {contentType.toLowerCase()} from your headline, the brief below and your signed-off Project Data, using {createPromptLabel}. You can then refine any field, or discard it.
+            </p>
+          </div>
+          {generated && draftSnapshot ? (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={createDraft}
+                disabled={generating || optimisingField !== null}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: vars.coral }}
+                title="Generate a fresh draft, replacing the current one"
+              >
+                {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : <><Sparkles size={14} /> Regenerate</>}
+              </button>
+              <button
+                onClick={discardDraft}
+                disabled={generating}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ borderColor: vars.g200, color: "#C94A3E" }}
+                title="Discard the AI draft and restore what you had before"
+              >
+                <Undo2 size={14} /> Discard draft
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={createDraft}
+              disabled={generating || optimisingField !== null}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: vars.coral }}
+              title="Write a full draft from your headline, the brief and your Project Data"
+            >
+              {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : <><Sparkles size={14} /> Create draft</>}
+            </button>
+          )}
+        </div>
+
         <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
@@ -5799,6 +5939,22 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
       </div>
 
+      {generating && (
+        <div className="mt-4">
+          <GenerationProgress
+            stages={[
+              "Reading your Project Data and brief",
+              `Drafting the ${contentType.toLowerCase()}`,
+              "Weaving in your key messages",
+              "Structuring for AI citability",
+              "Polishing the draft",
+            ]}
+            chars={generateChars}
+            accent={vars.coral}
+          />
+        </div>
+      )}
+
       {optimisingField && (
         <div className="mt-4">
           <GenerationProgress
@@ -5901,6 +6057,27 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
                     {c.kind === "embed" ? "Message embedded - " : c.kind === "structure" ? "Structure / phrasing - " : "⚠ Flagged - "}
                   </strong>
                   {c.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {supportingData.length > 0 && (
+        <div className="mt-4 bg-white rounded-2xl border p-4 sm:p-5" style={{ borderColor: vars.g200 }}>
+          <div className="flex items-center gap-2 mb-3">
+            <Target size={14} color={vars.accent} />
+            <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.accent }}>Suggested supporting data</span>
+          </div>
+          <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Third-party data you could add to strengthen the piece. Verify each source before publishing.</p>
+          <ul className="space-y-2 text-[13px] font-light" style={{ color: vars.g600, lineHeight: 1.5 }}>
+            {supportingData.map((d, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ background: vars.accent }} />
+                <span>
+                  {d.text}
+                  {d.url ? <> - <a href={d.url} target="_blank" rel="noreferrer" className="underline break-all" style={{ color: vars.accent }}>{d.url}</a></> : null}
                 </span>
               </li>
             ))}

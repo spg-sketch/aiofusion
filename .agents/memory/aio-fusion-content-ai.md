@@ -5,10 +5,18 @@ description: How the Optimiser/Creator/Media Research LLM features and their Wor
 
 # AIO Fusion content AI features
 
-Three content features call a real Anthropic LLM via the api-server, not simulated data:
+Content features call a real Anthropic LLM via the api-server, not simulated data:
 - Content Optimiser/Editor -> `POST /api/content/optimise`
-- Content Creator (per-field) -> `POST /api/content/creator-field`
+- Content Creator (per-field rewrite) -> `POST /api/content/creator-field`
+- Content Creator (whole first draft from scratch) -> `POST /api/content/generate`
 - Media Research (target media list) -> `POST /api/content/media-list`
+
+**Creator generate vs creator-field:** `creator-field` only rewrites pasted copy and refuses
+empty fields, so the Creator felt like it "just represented the data back". `/content/generate`
+authors a full draft (headline/standfirst/bodyCopy/changeLog/supportingData) from Project Data
++ a headline/subject + selected key messages. It picks a prompt variant by content type
+(press-release family 1.1, article family 2.1, article media pitch 2.2) with per-type
+word-length guidance. The "generation" prompts belong on the Creator, not the Optimiser.
 
 All live in `artifacts/api-server/src/routes/content-ai.ts`, registered in `routes/index.ts`,
 rate-limited by `contentAiLimiter` in `middleware/rate-limit.ts`. Test the api-server at
@@ -53,6 +61,17 @@ code-review blocker.
 **How to apply:** never fabricate methodology/patterns/reshuffles in exports. Only render what
 the endpoint actually returns. The outreach sequence references the real top-ranked outlet
 (`mediaList[0].publication`), not hardcoded outlet names.
+
+## Parsing model JSON (shared extractJson)
+
+`extractJson` in `content-ai.ts` is shared by all `/content/*` endpoints. Long body copy
+makes the model emit **raw newlines inside JSON string literals**, which is invalid JSON and
+made `JSON.parse` fail with the friendly "AI response could not be read" error. `extractJson`
+now has a fallback: if the first parse throws, it runs `sanitiseJsonControlChars()` (a
+string-aware walker that escapes raw control chars only when inside a string literal) and
+re-parses. The fallback only runs after a normal parse fails, so existing behaviour is
+unchanged. URLs the model puts in `supportingData` are passed through `safeHttpUrl()` on the
+client (http/https only) before rendering as links.
 
 ## Escaping rule
 
