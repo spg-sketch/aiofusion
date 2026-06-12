@@ -16,6 +16,8 @@ The two GEO audits use generic helpers `loadSavedScored`/`persistSavedScored` + 
 
 All saved-lists share the ONE `aio:saved-audits-changed` event below; the sidebar re-reads all on that event.
 
+**Auto-save on completion:** audits persist to history automatically the moment a fresh run finishes, not only on the manual Save button. The save helper takes an optional explicit result arg and is called right after `setResult(data)` with that same `data` (never the async state, which is still stale at that point). The manual button still works and is idempotent via the dedup guard. Dedup keys: Earned Media on `result.checkedAt`, Website Technical GEO on `result.url + result.fetchedAt`. When wiring a button straight to the helper, use `onClick={() => save()}` not `onClick={save}` or the click event gets passed in as the result.
+
 **Gotcha (parity bug fixed once already):** a "re-run/re-scan" handler must `setJustSaved(false)` so the just-run audit can be saved again; otherwise the Save button stays disabled after the first save of the session.
 
 **Rule:** any save/delete of saved audits must dispatch `window.dispatchEvent(new Event("aio:saved-audits-changed"))`. `App` listens for that event and bumps a version state to force the sidebar to re-read.

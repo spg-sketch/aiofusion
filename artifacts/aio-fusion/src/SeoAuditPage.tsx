@@ -258,13 +258,17 @@ export default function SeoAuditPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingTechGeoId, savedTechGeo]);
 
-  function saveAudit() {
-    if (!result || justSaved) return;
+  function saveAudit(auditResult: AuditResult | null = result) {
+    if (!auditResult) return;
+    if (savedTechGeo.some((s) => s.result.url === auditResult.url && s.result.fetchedAt === auditResult.fetchedAt)) {
+      setJustSaved(true);
+      return;
+    }
     const entry: SavedTechGeo = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       savedAt: new Date().toISOString(),
-      score: result.scores.overall,
-      result,
+      score: auditResult.scores.overall,
+      result: auditResult,
     };
     const next = [entry, ...savedTechGeo];
     if (!persistSavedTechGeo(activeClient.id, next)) {
@@ -299,6 +303,7 @@ export default function SeoAuditPage({
 
       const data = await resp.json();
       setResult(data);
+      saveAudit(data);
     } catch (err: any) {
       setError(err.message || "Failed to run audit");
     } finally {
@@ -382,7 +387,7 @@ export default function SeoAuditPage({
         {result && !loading && (
           <div className="space-y-5">
             <div className="flex items-center gap-3 flex-wrap">
-              <button onClick={saveAudit} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              <button onClick={() => saveAudit()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
               </button>
               <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>

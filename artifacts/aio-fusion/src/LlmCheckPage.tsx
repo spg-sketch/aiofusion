@@ -425,16 +425,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setJustSaved(false);
   }, [activeClient.id]);
 
-  function saveAuditToHistory() {
-    if (!result) return;
-    if (savedAudits.some((a) => a.result.checkedAt === result.checkedAt)) {
+  function saveAuditToHistory(auditResult: LlmCheckResult | null = result) {
+    if (!auditResult) return;
+    if (savedAudits.some((a) => a.result.checkedAt === auditResult.checkedAt)) {
       setJustSaved(true);
       return;
     }
     const entry: SavedAudit = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       savedAt: new Date().toISOString(),
-      result,
+      result: auditResult,
     };
     const next = [entry, ...savedAudits];
     if (!persistSavedAudits(activeClient.id, next)) {
@@ -515,6 +515,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       setResult(data);
       const updated = recordCycle(activeClient.id, data.visibilityScore);
       setCycleData(updated);
+      saveAuditToHistory(data);
     } catch (err: any) {
       setError(err.message || "Failed to run visibility check");
     } finally {
