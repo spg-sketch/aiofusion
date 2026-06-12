@@ -86,7 +86,7 @@ function createOpenAIClient(): OpenAI | null {
   return new OpenAI({ baseURL, apiKey });
 }
 
-function normaliseResult(raw: any): any {
+export function normaliseResult(raw: any): any {
   const cats = Array.isArray(raw.categories) ? raw.categories : [];
   const catMap = new Map(cats.map((c: any) => [c.name, c]));
 
@@ -119,7 +119,7 @@ function normaliseResult(raw: any): any {
   };
 }
 
-function extractJSON(text: string): any {
+export function extractJSON(text: string): any {
   let cleaned = text.trim();
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) cleaned = fenceMatch[1].trim();
