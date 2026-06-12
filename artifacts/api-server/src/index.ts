@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { ensureDefaultAdmin } from "./lib/platform-auth";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,10 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Make sure the platform is never locked out: seed the default admin login if
+  // no admin account exists yet.
+  ensureDefaultAdmin().catch((err) => {
+    logger.error({ err }, "Failed to ensure default admin account");
+  });
 });

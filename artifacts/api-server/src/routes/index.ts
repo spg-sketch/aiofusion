@@ -7,11 +7,13 @@ import llmCheckRouter from "./llm-check";
 import aiAssistRouter from "./ai-assist";
 import contentAiRouter from "./content-ai";
 import storeRouter from "./store";
+import platformRouter from "./platform";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(platformRouter);
 router.use(diagnosticRouter);
 router.use(seoAuditRouter);
 router.use(llmCheckRouter);

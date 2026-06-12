@@ -1,28 +1,39 @@
 ---
 name: AIO Fusion account-based project isolation
-description: How non-admin project visibility and sub-accounts work in the aio-fusion demo
+description: How auth and per-account project visibility are enforced (server-side) in aio-fusion
 ---
 
-# Account-based project isolation (demo-grade)
+# Account-based project isolation (server-enforced)
 
-Visibility is **client-side display filtering only**. Auth is localStorage
-(`aio.auth.users.v3`), separate from OIDC. Projects sync to a GLOBAL ungated
-`/api/store/projects`; the `owner` round-trips inside the `data` blob. So the
-isolation is cosmetic, not server-enforced - flagged to the user.
+Auth and isolation are enforced on the **server**, not the browser. The browser
+keeps a localStorage cache only for synchronous UI reads; it is not the security
+boundary.
 
-## Model (auth.ts)
-- `User.parent?` set only for sub-accounts (client logins created by a user).
-- `getVisibleUsernames(session)`: returns `null` for admin (= see all), `[]` for
-  no session, else self + recursive descendants via BFS with a visited Set
-  (cycle-safe). All matching is lowercased.
-- `canViewOwner(session, owner)`: admin true always; unowned (`""`/undefined)
-  visible only to admin, so legacy ownerless projects never leak to non-admins
-  (also `migrateAssignOwnerlessToAdmin` assigns them to first admin).
+## Model
+- Logins: username/password verified server-side. Passwords hashed with scrypt;
+  sessions are httpOnly cookies. Endpoints live under `/api/platform/*`
+  (login/logout/me/status/accounts/migrate). The store lives under
+  `/api/store/*` and every route requires a platform session.
+- Visibility: an admin sees all projects (no filter); a normal account sees its
+  own plus every descendant sub-account's projects (BFS over the account
+  hierarchy). Ownership is the `projects.owner` column, stamped server-side from
+  the session on create. Reads filter by owner; writes/deletes 403 (or 404 on
+  intake read) when the project's owner is outside the caller's visible set.
 
-## Rule: deleting a sub-account must reassign its projects to the parent
-**Why:** visibility is derived from *current* ownership graph membership. If you
-delete a sub-account without reassigning, `canViewOwner(parent, deletedUser)`
-becomes false and those projects vanish from the parent - contradicting the
-delete-dialog copy "their projects are kept and stay visible to you".
-**How to apply:** SubAccountsPage.handleDelete reassigns owned projects to
-`session.username` *before* `deleteLocalUser`. Keep these in lockstep.
+## Rule: the migration endpoint must stay admin-only
+**Why:** `/api/platform/migrate` seeds accounts (including admins) and backfills
+owners. If it were unauthenticated, a fresh deploy could be hijacked by seeding
+admin credentials before the real admin runs it. The client triggers it only
+after an admin signs in, before the cache is overwritten (local passwords still
+present). It is one-shot via a `platform_meta` flag and skip-existing, so it
+never overwrites server passwords.
+
+## Rule: deleting a sub-account must reassign its projects to the actor
+**Why:** visibility is derived from *current* ownership. Deleting an owner
+without reassigning would orphan its projects out of the parent's view. Enforced
+server-side in the account-delete route (reassigns `projects.owner` to the actor
+before deleting the account); the client also mirrors this for snappy UI.
+
+## Rule: store conflict-updates must never touch owner or deletedAt
+**Why:** a stale client write must not revive a soft-deleted project or reassign
+ownership. The upsert/intake `onConflictDoUpdate` sets leave both columns alone.

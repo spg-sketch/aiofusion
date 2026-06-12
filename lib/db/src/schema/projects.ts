@@ -20,6 +20,11 @@ export const projectsTable = pgTable("projects", {
   data: jsonb("data").notNull().default({}),
   intake: jsonb("intake"),
   logo: text("logo"),
+  // Lowercased username of the platform account that owns this project. Drives
+  // server-side data isolation: an account only sees its own projects (plus its
+  // sub-accounts'); an admin sees all. Nullable for legacy rows created before
+  // ownership was enforced - those are treated as admin-only until backfilled.
+  owner: varchar("owner"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()

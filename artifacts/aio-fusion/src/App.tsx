@@ -12,14 +12,15 @@ import {
   type Role as LocalRole,
   seedAdminIfEmpty,
   getSession as getLocalSession,
-  clearSession as clearLocalSession,
-  login as localLogin,
   getUsers as getLocalUsers,
-  addUser as addLocalUser,
-  deleteUser as deleteLocalUser,
-  changePassword as changeLocalPassword,
   getSubAccounts as getLocalSubAccounts,
   getVisibleUsernames as getVisibleLocalUsernames,
+  serverLogin,
+  serverLogout,
+  serverAddUser,
+  serverDeleteUser,
+  serverChangePassword,
+  bootstrapAuth,
 } from "./lib/auth";
 import step1Img from "./assets/photos/photo-diagnose.jpg";
 import step2Img from "./assets/photos/photo-strategy.jpg";
@@ -7478,14 +7479,16 @@ function PlatformHomePage({
               onSubmit={(e) => {
                 e.preventDefault();
                 setLoginError(null);
-                const result = localLogin(username, password);
-                if (result.ok) {
-                  setUsername("");
-                  setPassword("");
-                  onLoginSuccess(result.session);
-                } else {
-                  setLoginError(result.error);
-                }
+                void (async () => {
+                  const result = await serverLogin(username, password);
+                  if (result.ok) {
+                    setUsername("");
+                    setPassword("");
+                    onLoginSuccess(result.session);
+                  } else {
+                    setLoginError(result.error);
+                  }
+                })();
               }}
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
             >
@@ -7698,40 +7701,46 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
     e.preventDefault();
     setAddError(null);
     setAddSuccess(null);
-    const result = addLocalUser(newUsername, newPassword, newRole);
-    if (result.ok) {
-      setAddSuccess(`Created ${newRole} '${newUsername.trim()}'.`);
-      setNewUsername("");
-      setNewPassword("");
-      setNewRole("user");
-      refresh();
-    } else {
-      setAddError(result.error);
-    }
+    void (async () => {
+      const result = await serverAddUser(newUsername, newPassword, newRole);
+      if (result.ok) {
+        setAddSuccess(`Created ${newRole} '${newUsername.trim()}'.`);
+        setNewUsername("");
+        setNewPassword("");
+        setNewRole("user");
+        refresh();
+      } else {
+        setAddError(result.error);
+      }
+    })();
   };
 
   const handleDelete = (username: string) => {
     if (!confirm(`Delete user '${username}'? This cannot be undone.`)) return;
-    const result = deleteLocalUser(username);
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-    refresh();
+    void (async () => {
+      const result = await serverDeleteUser(username);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      refresh();
+    })();
   };
 
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(null);
     if (!pwUser) return;
-    const result = changeLocalPassword(pwUser, pwValue);
-    if (!result.ok) {
-      setPwError(result.error);
-      return;
-    }
-    setPwUser(null);
-    setPwValue("");
-    refresh();
+    void (async () => {
+      const result = await serverChangePassword(pwUser, pwValue);
+      if (!result.ok) {
+        setPwError(result.error);
+        return;
+      }
+      setPwUser(null);
+      setPwValue("");
+      refresh();
+    })();
   };
 
   return (
@@ -7955,15 +7964,17 @@ function SubAccountsPage({
     e.preventDefault();
     setAddError(null);
     setAddSuccess(null);
-    const result = addLocalUser(newUsername, newPassword, "user", session.username);
-    if (result.ok) {
-      setAddSuccess(`Created client account '${newUsername.trim()}'.`);
-      setNewUsername("");
-      setNewPassword("");
-      refresh();
-    } else {
-      setAddError(result.error);
-    }
+    void (async () => {
+      const result = await serverAddUser(newUsername, newPassword, "user");
+      if (result.ok) {
+        setAddSuccess(`Created client account '${newUsername.trim()}'.`);
+        setNewUsername("");
+        setNewPassword("");
+        refresh();
+      } else {
+        setAddError(result.error);
+      }
+    })();
   };
 
   const handleDelete = (username: string) => {
@@ -7978,26 +7989,30 @@ function SubAccountsPage({
         onAssignProjectOwner(p.id, session.username);
       }
     });
-    const result = deleteLocalUser(username);
-    if (!result.ok) {
-      alert(result.error);
-      return;
-    }
-    refresh();
+    void (async () => {
+      const result = await serverDeleteUser(username);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      refresh();
+    })();
   };
 
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(null);
     if (!pwUser) return;
-    const result = changeLocalPassword(pwUser, pwValue);
-    if (!result.ok) {
-      setPwError(result.error);
-      return;
-    }
-    setPwUser(null);
-    setPwValue("");
-    refresh();
+    void (async () => {
+      const result = await serverChangePassword(pwUser, pwValue);
+      if (!result.ok) {
+        setPwError(result.error);
+        return;
+      }
+      setPwUser(null);
+      setPwValue("");
+      refresh();
+    })();
   };
 
   const ownerLabel = (owner: string | undefined) => {
@@ -8375,9 +8390,15 @@ function App() {
     migrateLegacyIntakeToProject();
     migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
-    // Then sync with the shared server store so this login sees every project,
-    // on every device. Local-only projects are pushed up, not lost.
-    void resyncProjects();
+    // Reconcile the session with the server (the real authority): this validates
+    // the session cookie, runs the one-time account migration, and refreshes the
+    // cached account list. Then sync the shared store so this login sees every
+    // project it may see, on every device. Local-only projects are pushed up.
+    void (async () => {
+      const s = await bootstrapAuth();
+      setSessionState(s);
+      await resyncProjects();
+    })();
   }, [resyncProjects]);
 
   // Live refresh: re-sync when the tab becomes visible or regains focus, and on
@@ -8528,7 +8549,7 @@ function App() {
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
 
   const handleSignOut = () => {
-    clearLocalSession();
+    void serverLogout();
     setSessionState(null);
     setActiveClient(null);
     setView("landing");

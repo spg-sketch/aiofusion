@@ -192,3 +192,163 @@ export function changePassword(username: string, newPassword: string): { ok: tru
   saveUsers(users);
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Server-backed auth.
+//
+// The functions above keep working against localStorage, but that is now only a
+// cache for synchronous UI reads (the project hub filter, the accounts list).
+// The real security boundary is the server: logins are verified there, sessions
+// are httpOnly cookies, and the project store only returns what a session may
+// see. The functions below talk to that server and keep the local cache in step.
+// ---------------------------------------------------------------------------
+
+const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
+
+type ServerAccount = { username: string; role: Role; parent?: string };
+
+async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
+  try {
+    const resp = await fetch(`${apiBase()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let json: any = null;
+    try {
+      json = await resp.json();
+    } catch {
+      /* no body */
+    }
+    return { ok: resp.ok, status: resp.status, json };
+  } catch {
+    return { ok: false, status: 0, json: null };
+  }
+}
+
+// Replace the cached user list with the accounts the server says we may see.
+// Passwords are never returned by the server, so the cache holds none.
+function cacheAccounts(accounts: ServerAccount[]): void {
+  const users: User[] = accounts.map((a) => ({
+    username: a.username,
+    password: "",
+    role: a.role === "admin" ? "admin" : "user",
+    createdAt: Date.now(),
+    ...(a.parent ? { parent: a.parent } : {}),
+  }));
+  saveUsers(users);
+}
+
+export async function refreshAccountsCache(): Promise<void> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/accounts`, { credentials: "include" });
+    if (!resp.ok) return;
+    const json = (await resp.json()) as { accounts?: ServerAccount[] };
+    if (Array.isArray(json.accounts)) cacheAccounts(json.accounts);
+  } catch {
+    /* keep existing cache */
+  }
+}
+
+// One-time migration of browser-stored accounts and project ownership. Only an
+// admin may run it (the server enforces this too), and only the admin's browser
+// holds the accounts worth carrying over. Must run BEFORE refreshAccountsCache,
+// while the local cache still holds the original accounts and their passwords.
+async function runMigrationIfNeeded(role: Role): Promise<void> {
+  if (role !== "admin") return;
+  try {
+    const statusResp = await fetch(`${apiBase()}/api/platform/status`, { credentials: "include" });
+    if (!statusResp.ok) return;
+    const status = (await statusResp.json()) as { migrated?: boolean };
+    if (status.migrated) return;
+    const localUsers = getUsers().filter((u) => u.password);
+    await postJson("/api/platform/migrate", { users: localUsers });
+  } catch {
+    /* best-effort; the server stays the source of truth */
+  }
+}
+
+// Verify credentials on the server. On success the server sets the session
+// cookie; we mirror the session, run the one-time migration if this is the
+// admin's first sign-in, then refresh the cached account list.
+export async function serverLogin(
+  username: string,
+  password: string,
+): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
+  const u = username.trim();
+  if (!u || !password) return { ok: false, error: "Enter a username and password." };
+  const { ok, json } = await postJson("/api/platform/login", { username: u, password });
+  if (!ok || !json?.account) {
+    return { ok: false, error: json?.error || "Incorrect username or password." };
+  }
+  const session: Session = { username: json.account.username, role: json.account.role };
+  setSession(session);
+  await runMigrationIfNeeded(session.role);
+  await refreshAccountsCache();
+  return { ok: true, session };
+}
+
+export async function serverLogout(): Promise<void> {
+  await postJson("/api/platform/logout");
+  clearSession();
+}
+
+// Reconcile the local session with the server on app load. Validates the
+// session cookie, runs the one-time account migration if an admin is signed in
+// and it has not happened yet, then refreshes the cached account list. Returns
+// the authoritative session (or null). The migration must never run before the
+// server has confirmed an admin session (the endpoint is admin-only).
+export async function bootstrapAuth(): Promise<Session | null> {
+  let session: Session | null = null;
+  try {
+    const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+    if (meResp.ok) {
+      const me = (await meResp.json()) as { account?: ServerAccount | null };
+      if (me.account) {
+        session = { username: me.account.username, role: me.account.role };
+        setSession(session);
+      } else {
+        clearSession();
+      }
+    }
+  } catch {
+    /* offline: fall back to whatever the cache holds */
+    session = getSession();
+  }
+
+  if (session) {
+    await runMigrationIfNeeded(session.role);
+    await refreshAccountsCache();
+  }
+  return session;
+}
+
+export async function serverAddUser(
+  username: string,
+  password: string,
+  role: Role,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts", { username, password, role });
+  if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
+  await refreshAccountsCache();
+  return { ok: true };
+}
+
+export async function serverDeleteUser(
+  username: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/delete", { username });
+  if (!ok) return { ok: false, error: json?.error || "Failed to delete account." };
+  await refreshAccountsCache();
+  return { ok: true };
+}
+
+export async function serverChangePassword(
+  username: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/password", { username, newPassword });
+  if (!ok) return { ok: false, error: json?.error || "Failed to change password." };
+  return { ok: true };
+}
