@@ -104,19 +104,30 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     // The original visibility report renders.
     expect(screen.getByText("Detailed Probe Results")).toBeInTheDocument();
-    expect(screen.getByText("Who AI Recommends Instead of You")).toBeInTheDocument();
+    expect(screen.getByText("Who owns the category instead")).toBeInTheDocument();
 
     // The assessment-only scorecard must be ABSENT for legacy audits.
-    expect(screen.queryByText("AI Authority Scorecard")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
   });
 
-  it("renders the AI Authority Scorecard only when an assessment is present", () => {
+  it("always renders the Executive summary, with fallback text when there is no assessment or ICP", () => {
+    const noAssessNoIcp = { ...LEGACY_RESULT, icp: "" };
+    seedSavedAudit(noAssessNoIcp);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.getByText("Executive summary")).toBeInTheDocument();
+    expect(screen.getByText(/non-branded category queries across ChatGPT and Claude/i)).toBeInTheDocument();
+  });
+
+  it("renders the AI Authority scorecard only when an assessment is present", () => {
     seedSavedAudit(MODERN_RESULT);
     render(
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
-    expect(screen.getByText("AI Authority Scorecard")).toBeInTheDocument();
+    expect(screen.getByText("AI Authority scorecard")).toBeInTheDocument();
     // A dimension justification from the assessment is shown.
     expect(screen.getByText("Appeared in 4 of 10 probes.")).toBeInTheDocument();
   });

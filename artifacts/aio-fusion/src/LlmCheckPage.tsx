@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -8,8 +8,6 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
-  MessageSquare,
-  Bot,
   Zap,
   Users,
   ArrowRight,
@@ -126,7 +124,86 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
+function normalizeName(s: string): string {
+  return String(s).toLowerCase().replace(/[^a-z0-9]/g, "").replace(/(ltd|limited|llp|inc|llc|plc)$/, "");
+}
+
+function isTracked(name: string, trackedNorm: string[]): boolean {
+  const n = normalizeName(name);
+  if (!n) return false;
+  return trackedNorm.some((t) => t && (t === n || (t.length >= 4 && (n.includes(t) || t.includes(n)))));
+}
+
+interface ReportQueryRow {
+  question: string;
+  appeared: boolean;
+  models: string[];
+  competitors: string[];
+}
+
+interface ReportOwnsRow {
+  name: string;
+  mentions: number;
+  examples: string[];
+  tracked: boolean;
+}
+
+interface ReportData {
+  assess: AuthorityAssessment | null;
+  idx: number;
+  grade: string;
+  presencePct: number;
+  sov: number;
+  appearedCount: number;
+  totalQueries: number;
+  queryRows: ReportQueryRow[];
+  owns: ReportOwnsRow[];
+  trackedCount: number;
+}
+
+function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData {
+  const assess = result.assessment || null;
+  const idx = assess ? assess.index : result.visibilityScore;
+  const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+  const presencePct = result.totalProbes > 0 ? Math.round((result.totalMentions / result.totalProbes) * 100) : 0;
+  const competitorMentionTotal = result.probes.reduce((s, p) => s + (p.competitors?.length || 0), 0);
+  const sovDenom = result.totalMentions + competitorMentionTotal;
+  const sov = sovDenom > 0 ? Math.round((result.totalMentions / sovDenom) * 100) : 0;
+
+  const byQuery = new Map<string, { question: string; appeared: boolean; models: Set<string>; competitors: Set<string> }>();
+  for (const p of result.probes) {
+    let g = byQuery.get(p.question);
+    if (!g) { g = { question: p.question, appeared: false, models: new Set(), competitors: new Set() }; byQuery.set(p.question, g); }
+    if (p.mentioned) g.appeared = true;
+    g.models.add(p.model.includes("GPT") ? "ChatGPT" : "Claude");
+    (p.competitors || []).forEach((c) => g!.competitors.add(c));
+  }
+  const queryRows: ReportQueryRow[] = [...byQuery.values()].map((g) => ({
+    question: g.question, appeared: g.appeared, models: [...g.models], competitors: [...g.competitors],
+  }));
+  const appearedCount = queryRows.filter((q) => q.appeared).length;
+  const totalQueries = queryRows.length;
+
+  const compQueries = new Map<string, Set<string>>();
+  for (const p of result.probes) {
+    (p.competitors || []).forEach((c) => {
+      let s = compQueries.get(c);
+      if (!s) { s = new Set(); compQueries.set(c, s); }
+      s.add(p.question);
+    });
+  }
+  const trackedNorm = tracked.map(normalizeName).filter(Boolean);
+  const owns: ReportOwnsRow[] = result.topCompetitors.map((c) => ({
+    name: c.name,
+    mentions: c.mentions,
+    examples: compQueries.has(c.name) ? [...compQueries.get(c.name)!].slice(0, 2) : [],
+    tracked: isTracked(c.name, trackedNorm),
+  }));
+
+  return { assess, idx, grade, presencePct, sov, appearedCount, totalQueries, queryRows, owns, trackedCount: tracked.filter((t) => t.trim()).length };
+}
+
+function ScoreRing({ score, size = 100, unit = "%" }: { score: number; size?: number; unit?: string }) {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
@@ -143,28 +220,7 @@ function ScoreRing({ score, size = 100 }: { score: number; size?: number }) {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-2xl font-bold" style={{ color }}>{score}%</span>
-      </div>
-    </div>
-  );
-}
-
-function ModelCard({ label, icon, probes, mentions, rate }: { label: string; icon: React.ReactNode; probes: number; mentions: number; rate: number }) {
-  const color = rate >= 60 ? vars.green : rate >= 30 ? vars.amber : vars.red;
-  return (
-    <div className="border rounded-xl p-5 flex-1" style={{ borderColor: vars.g200, background: "white" }}>
-      <div className="flex items-center gap-2 mb-3">
-        {icon}
-        <span className="text-[14px] font-semibold" style={{ color: vars.navy }}>{label}</span>
-      </div>
-      <div className="flex items-end gap-2 mb-2">
-        <span className="text-3xl font-bold" style={{ color }}>{rate}%</span>
-        <span className="text-[12px] mb-1" style={{ color: vars.g400 }}>visibility</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-[12px]" style={{ color: vars.g500 }}>
-          Mentioned in <strong style={{ color: vars.navy }}>{mentions}</strong> of <strong style={{ color: vars.navy }}>{probes}</strong> queries
-        </span>
+        <span className="text-2xl font-bold" style={{ color }}>{score}{unit}</span>
       </div>
     </div>
   );
@@ -481,11 +537,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       )
       .join("");
 
+    const trackedNormExport = getCompetitors().map(normalizeName).filter(Boolean);
     const ownsRows = result.topCompetitors
       .map((c) => {
         const qs = compQueries.get(c.name);
         const examples = qs ? [...qs].slice(0, 2).map((x) => escapeHtml(x)).join("; ") : "";
-        return `<tr><td>${escapeHtml(c.name)}</td><td>${c.mentions} of ${result.totalProbes} answers</td><td class="muted">${examples}</td></tr>`;
+        const tracked = isTracked(c.name, trackedNormExport);
+        return `<tr><td>${escapeHtml(c.name)}</td><td>${c.mentions} of ${result.totalProbes} answers<br/><span class="muted">${examples}</span></td><td class="${tracked ? "appeared-yes" : "appeared-no"}">${tracked ? "Yes" : "No"}</td></tr>`;
       })
       .join("");
 
@@ -643,7 +701,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     <div class="card">
       <h2>Who owns the category instead</h2>
       ${result.topCompetitors.length > 0
-        ? `<table><thead><tr><th>Competitor</th><th>Surfaced in</th><th>Example queries</th></tr></thead><tbody>${ownsRows}</tbody></table>`
+        ? `<table><thead><tr><th>Competitor</th><th>Surfaced in</th><th>On tracked list?</th></tr></thead><tbody>${ownsRows}</tbody></table>`
         : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the engines have no clear go-to name in your sector yet, so there is space to claim it.</p>`}
     </div>
     ${assessmentQueryBlock}
@@ -956,6 +1014,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     );
   }
 
+  const rd = deriveReportData(result, getCompetitors());
+  const gapItems = rd.assess && rd.assess.topGaps.length > 0
+    ? rd.assess.topGaps
+    : rd.queryRows.filter((q) => !q.appeared).map((q) => q.question);
+  const gradeStyle = (i: number) =>
+    i >= 60 ? { background: "#ECFDF5", color: "#2F855A" } : i >= 40 ? { background: "#FEFCE8", color: "#A16207" } : { background: "#FEE2E2", color: "#B91C1C" };
+
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="rounded-2xl border overflow-hidden mb-6" style={{ borderColor: vars.g200 }}>
@@ -1021,146 +1086,234 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
-          <div className="flex flex-col items-center flex-shrink-0">
-            <ScoreRing score={result.visibilityScore} size={130} />
-            <span className="text-xs font-semibold mt-1" style={{ color: vars.navy }}>AI Visibility Score</span>
-            {previousScore !== null && (() => {
-              const delta = result.visibilityScore - previousScore;
-              const positive = delta > 0;
-              const same = delta === 0;
-              const Icon = positive ? TrendingUp : same ? ArrowRight : TrendingDown;
-              const color = positive ? vars.green : same ? vars.g500 : vars.red;
-              const bg = positive ? "#ECFDF5" : same ? vars.g100 : "#FEE2E2";
-              return (
-                <span className="mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: bg, color }}>
-                  <Icon size={10} className="inline mr-1" />
-                  {positive ? "+" : ""}{delta} vs previous ({previousScore}%)
-                </span>
-              );
-            })()}
-          </div>
-          <div className="flex-1 w-full">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.g400 }}>By Model</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ModelCard
-                label="ChatGPT (GPT-4o)"
-                icon={<MessageSquare size={16} style={{ color: "#10A37F" }} />}
-                probes={result.byModel.chatgpt.probes}
-                mentions={result.byModel.chatgpt.mentions}
-                rate={result.byModel.chatgpt.rate}
-              />
-              <ModelCard
-                label="Claude (Anthropic)"
-                icon={<Bot size={16} style={{ color: "#D97706" }} />}
-                probes={result.byModel.claude.probes}
-                mentions={result.byModel.claude.mentions}
-                rate={result.byModel.claude.rate}
-              />
+      {/* Hero - AI Authority Index */}
+      <div className="rounded-2xl border p-5 sm:p-7 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="flex items-center gap-5 flex-shrink-0 lg:border-r lg:pr-7" style={{ borderColor: vars.g200 }}>
+            <ScoreRing score={rd.idx} unit="" size={120} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.g400 }}>AI Authority Index</p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-4xl font-bold leading-none" style={{ color: vars.navy }}>{rd.idx}</span>
+                <span className="text-base font-medium" style={{ color: vars.g400 }}>/ 100</span>
+              </div>
+              <span className="inline-block mt-2 text-sm font-bold px-2.5 py-1 rounded-lg" style={gradeStyle(rd.idx)}>Grade {rd.grade}</span>
+              {previousScore !== null && (() => {
+                const delta = result.visibilityScore - previousScore;
+                const positive = delta > 0;
+                const same = delta === 0;
+                const Icon = positive ? TrendingUp : same ? ArrowRight : TrendingDown;
+                const color = positive ? vars.green : same ? vars.g500 : vars.red;
+                const bg = positive ? "#ECFDF5" : same ? vars.g100 : "#FEE2E2";
+                return (
+                  <span className="block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit" style={{ background: bg, color }}>
+                    <Icon size={10} className="inline mr-1" />
+                    {positive ? "+" : ""}{delta} vs previous ({previousScore}%)
+                  </span>
+                );
+              })()}
             </div>
+          </div>
+          <div className="flex-1 grid grid-cols-3 gap-3">
+            {[
+              { v: `${rd.presencePct}%`, l: "Presence" },
+              { v: `${rd.sov}%`, l: "Share of voice" },
+              { v: `${rd.appearedCount} / ${rd.totalQueries}`, l: "Queries appeared" },
+            ].map((s) => (
+              <div key={s.l} className="rounded-xl border p-3 sm:p-4 text-center" style={{ background: vars.g50, borderColor: vars.g200 }}>
+                <p className="text-2xl sm:text-[28px] font-bold leading-none" style={{ color: vars.navy }}>{s.v}</p>
+                <p className="text-[10px] uppercase tracking-[0.08em] mt-1.5" style={{ color: vars.g400 }}>{s.l}</p>
+              </div>
+            ))}
           </div>
         </div>
+        <p className="text-[11px] mt-4 pt-3 border-t" style={{ borderColor: vars.g100, color: vars.g400 }}>
+          Non-branded category queries ({rd.appearedCount} of {rd.totalQueries}) vs named competitors{rd.trackedCount > 0 ? ` · ${rd.trackedCount} tracked competitors` : ""} · ChatGPT {result.byModel.chatgpt.rate}% · Claude {result.byModel.claude.rate}% · Cycle {cycleData.cycle}
+        </p>
       </div>
 
-      {result.assessment && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-            <div className="flex-1">
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
-                <Eye size={14} style={{ color: vars.accent }} />
-                AI Authority Scorecard
-              </h3>
-              {result.assessment.summary && (
-                <p className="text-[12px] leading-relaxed" style={{ color: vars.g500 }}>{result.assessment.summary}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="text-right">
-                <p className="text-3xl font-bold leading-none" style={{ color: vars.navy }}>
-                  {result.assessment.index}<span className="text-base" style={{ color: vars.g400 }}> / 100</span>
-                </p>
-                <p className="text-[10px] uppercase tracking-[0.1em] mt-1" style={{ color: vars.g400 }}>Authority Index</p>
-              </div>
-              <span
-                className="text-lg font-bold px-3 py-1.5 rounded-lg"
-                style={
-                  result.assessment.index >= 60
-                    ? { background: "#ECFDF5", color: "#2F855A" }
-                    : result.assessment.index >= 40
-                    ? { background: "#FEFCE8", color: "#A16207" }
-                    : { background: "#FEE2E2", color: "#B91C1C" }
-                }
-              >
-                {result.assessment.grade}
-              </span>
-            </div>
+      {/* Executive summary */}
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+          <Eye size={14} style={{ color: vars.accent }} />
+          Executive summary
+        </h3>
+        {rd.assess?.summary
+          ? <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{rd.assess.summary}</p>
+          : <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>
+              {result.companyName} appeared in {rd.appearedCount} of {rd.totalQueries} non-branded category queries across ChatGPT and Claude ({rd.presencePct}% presence), with {rd.sov}% share of voice against the rivals the engines named.
+            </p>}
+        {result.icp && (
+          <p className="text-[12px] mt-3" style={{ color: vars.g500 }}>
+            <strong style={{ color: vars.g600 }}>Ideal customer profile:</strong> {result.icp}
+          </p>
+        )}
+      </div>
+
+      {/* Scorecard */}
+      {rd.assess && rd.assess.dimensions.length > 0 && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
+            <CheckCircle2 size={14} style={{ color: vars.accent }} />
+            AI Authority scorecard
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Dimension</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Score</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3" style={{ color: vars.g500 }}>Read</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rd.assess.dimensions.map((d) => {
+                  const outOf5 = Math.round(d.score / 20);
+                  const color = d.score >= 60 ? vars.green : d.score >= 30 ? vars.amber : vars.red;
+                  return (
+                    <tr key={d.name} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                      <td className="py-2.5 pr-3 align-top text-[12px] font-semibold" style={{ color: vars.navy }}>{d.name}</td>
+                      <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                        <span className="text-[12px] font-bold px-2 py-0.5 rounded" style={{ color, background: vars.g50 }}>{outOf5} / 5</span>
+                      </td>
+                      <td className="py-2.5 pl-3 align-top text-[12px]" style={{ color: vars.g500 }}>
+                        {d.justification}
+                        <span className="text-[10px] ml-1.5 inline-block" style={{ color: vars.g400 }}>
+                          ({d.confidence} confidence)
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-            {result.assessment.dimensions.map((d) => {
-              const color = d.score >= 60 ? vars.green : d.score >= 30 ? vars.amber : vars.red;
+          <p className="text-[11px] mt-3" style={{ color: vars.g400 }}>
+            Index weighting: non-branded presence and share of voice 50%, source and message 20%, accuracy and entity 20%, people 10%.
+          </p>
+        </div>
+      )}
+
+      {/* Prioritised actions */}
+      {rd.assess && rd.assess.priorityActions.length > 0 && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
+            <ArrowRight size={14} style={{ color: vars.accent }} />
+            Prioritised actions
+          </h3>
+          <div className="flex flex-col gap-2">
+            {rd.assess.priorityActions.map((a, i) => {
+              const pc = a.priority === "high" ? { bg: "#FEE2E2", c: "#B91C1C" } : a.priority === "low" ? { bg: vars.g100, c: vars.g500 } : { bg: "#FEFCE8", c: "#A16207" };
               return (
-                <div key={d.name} className="p-3 rounded-lg border" style={{ background: vars.g50, borderColor: vars.g200 }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{d.name}</span>
-                    <span className="text-[12px] font-bold px-1.5 py-0.5 rounded" style={{ color, background: "white" }}>{d.score}</span>
-                  </div>
-                  <p className="text-[11px] leading-snug" style={{ color: vars.g500 }}>{d.justification}</p>
-                  <span className="text-[10px] mt-1 inline-block" style={{ color: vars.g400 }}>
-                    {d.confidence === "high" ? "High confidence" : d.confidence === "medium" ? "Medium confidence" : "Low confidence"}
+                <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg border" style={{ borderColor: vars.g200 }}>
+                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: pc.bg, color: pc.c }}>
+                    {(a.priority || "medium").toUpperCase()}
                   </span>
+                  <div>
+                    <p className="text-[12px] font-medium" style={{ color: vars.navy }}>{a.action}</p>
+                    {a.rationale && <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>{a.rationale}</p>}
+                  </div>
                 </div>
               );
             })}
           </div>
-          {result.assessment.priorityActions.length > 0 && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.g400 }}>Prioritised actions</p>
-              <div className="flex flex-col gap-2">
-                {result.assessment.priorityActions.map((a, i) => {
-                  const pc = a.priority === "high" ? { bg: "#FEE2E2", c: "#B91C1C" } : a.priority === "low" ? { bg: vars.g100, c: vars.g500 } : { bg: "#FEFCE8", c: "#A16207" };
-                  return (
-                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg border" style={{ borderColor: vars.g200 }}>
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: pc.bg, color: pc.c }}>
-                        {(a.priority || "medium").toUpperCase()}
-                      </span>
-                      <div>
-                        <p className="text-[12px] font-medium" style={{ color: vars.navy }}>{a.action}</p>
-                        {a.rationale && <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>{a.rationale}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      {/* Top visibility gaps */}
+      {gapItems.length > 0 && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+            <TrendingDown size={14} style={{ color: vars.accent }} />
+            Top visibility gaps
+          </h3>
+          <ul className="list-disc pl-5 space-y-1.5">
+            {gapItems.map((g, i) => (
+              <li key={i} className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>{g}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Who owns the category instead */}
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
         <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
           <Users size={14} style={{ color: vars.accent }} />
-          Who AI Recommends Instead of You
+          Who owns the category instead
         </h3>
         <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
-          The brands that came up again and again when we asked AI about your sector. These are the names winning the visibility you want.
+          The brands the engines recommended when {result.companyName} was absent. Names not on your tracked list are rivals you may not be watching.
         </p>
-        {result.topCompetitors.length > 0 ? (
-          <div className="grid sm:grid-cols-2 gap-2">
-            {result.topCompetitors.map((c) => (
-              <div key={c.name} className="flex items-center justify-between p-3 rounded-lg border" style={{ background: vars.g50, borderColor: vars.g200 }}>
-                <span className="text-[13px] font-medium" style={{ color: vars.navy }}>{c.name}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded whitespace-nowrap" style={{ background: vars.lightBg, color: vars.accent }}>
-                  in {c.mentions} of {result.totalProbes} answers
-                </span>
-              </div>
-            ))}
+        {rd.owns.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Competitor</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Surfaced in</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3 whitespace-nowrap" style={{ color: vars.g500 }}>On tracked list?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rd.owns.map((c) => (
+                  <tr key={c.name} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                    <td className="py-2.5 pr-3 align-top text-[12px] font-medium" style={{ color: vars.navy }}>{c.name}</td>
+                    <td className="py-2.5 px-3 align-top text-[12px]" style={{ color: vars.g500 }}>
+                      {c.mentions} of {result.totalProbes} answers
+                      {c.examples.length > 0 && <span className="block text-[11px] mt-0.5" style={{ color: vars.g400 }}>{c.examples.join("; ")}</span>}
+                    </td>
+                    <td className="py-2.5 pl-3 align-top text-[12px] font-semibold whitespace-nowrap" style={{ color: c.tracked ? vars.green : "#B91C1C" }}>
+                      {c.tracked ? "Yes" : "No"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rd.owns.some((c) => !c.tracked) && (
+              <p className="text-[11px] mt-3" style={{ color: vars.g400 }}>
+                Rivals marked No are not on your tracked competitor set (Project Set-Up 4.8). Consider adding them.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-[13px] p-3 rounded-lg" style={{ background: vars.g50, color: vars.g500 }}>
             No single rival was recommended often enough to stand out across these searches. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.
           </p>
         )}
+      </div>
+
+      {/* Blind-probe evidence log */}
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
+          <Search size={14} style={{ color: vars.accent }} />
+          Blind-probe evidence log
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Query</th>
+                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Appeared</th>
+                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3" style={{ color: vars.g500 }}>Competitors surfaced</th>
+                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3 whitespace-nowrap" style={{ color: vars.g500 }}>Engines</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rd.queryRows.map((q, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                  <td className="py-2.5 pr-3 align-top text-[12px]" style={{ color: vars.navy }}>{q.question}</td>
+                  <td className="py-2.5 px-3 align-top text-[12px] font-semibold whitespace-nowrap" style={{ color: q.appeared ? vars.green : "#B91C1C" }}>
+                    {q.appeared ? "Yes" : "No"}
+                  </td>
+                  <td className="py-2.5 px-3 align-top text-[12px]" style={{ color: vars.g500 }}>
+                    {q.competitors.length > 0 ? q.competitors.join(", ") : <span style={{ color: vars.g400 }}>none surfaced</span>}
+                  </td>
+                  <td className="py-2.5 pl-3 align-top text-[11px] whitespace-nowrap" style={{ color: vars.g400 }}>{q.models.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
@@ -1173,6 +1326,24 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <ProbeRow key={i} probe={probe} companyName={result.companyName} />
           ))}
         </div>
+      </div>
+
+      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+          <Eye size={14} style={{ color: vars.accent }} />
+          Method & caveats
+        </h3>
+        <ul className="list-disc pl-5 space-y-1.5">
+          <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
+            Search-grounded blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.
+          </li>
+          <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
+            Presence is the share of probes in which {result.companyName} appeared. Share of voice weighs those mentions against the rival brands the engines named.
+          </li>
+          <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
+            AI responses are not deterministic, so individual results vary. The trend across repeated cycles is the meaningful signal, not a single run.
+          </li>
+        </ul>
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
