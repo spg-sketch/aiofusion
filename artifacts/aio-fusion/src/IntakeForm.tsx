@@ -888,6 +888,7 @@ export default function IntakePage() {
   };
   const MAX_ADDITIONAL_MESSAGES = 10;
   const MAX_PRODUCTS = 5;
+  const MAX_SPOKESPEOPLE = 10;
   // 1.3 (additional messages) caps at 6; the other dual lists keep the default.
   const maxForDualList = (fieldId: string) => (fieldId === "1.3" ? 6 : MAX_ADDITIONAL_MESSAGES);
   const addDualListItem = (fieldId: string) => {
@@ -1781,13 +1782,17 @@ export default function IntakePage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={() => setSpokespeople([...spokespeople, { name: "", title: "", expertise: [], linkedin: "" }])}
-                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            disabled={spokespeople.length >= MAX_SPOKESPEOPLE}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >
                             + Add spokesperson
                           </button>
                           {spokespeople.length > 0 && (
                             <button onClick={() => setSpokespeople(spokespeople.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove spokesperson</button>
+                          )}
+                          {spokespeople.length >= MAX_SPOKESPEOPLE && (
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_SPOKESPEOPLE} spokespeople reached.</span>
                           )}
                         </div>
                       </div>
