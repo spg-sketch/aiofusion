@@ -1686,6 +1686,25 @@ type DiagnosticResult = {
   provider?: string;
   fetchedUrl?: string;
   pagesFetched?: string[];
+  pageFacts?: {
+    metaTitle: string;
+    hasMetaDescription: boolean;
+    hasCanonical: boolean;
+    openGraphTagCount: number;
+    jsonLdBlockCount: number;
+    jsonLdTypes: string[];
+    microdataCount: number;
+    h1Count: number;
+    h2Count: number;
+    h3Count: number;
+    imagesTotal: number;
+    imagesWithAlt: number;
+    imagesWithoutAlt: number;
+    listCount: number;
+    tableCount: number;
+    hasRobotsTxt: boolean;
+    sitemapUrlCount: number | null;
+  };
   sources?: {
     claude?: { score: number; summary: string };
     openai?: { score: number; summary: string };
@@ -1896,9 +1915,10 @@ Return your analysis as valid JSON only (no markdown, no code fences) with: over
 
 Inputs supplied with this brief:
 - The site's homepage, fetched automatically from the URL, along with its robots.txt and sitemap. Any content the user pastes is added on top (up to ~50,000 characters in total).
+- A set of measured facts counted directly from the page (image and alt-text counts, schema types found, heading counts, sitemap size and so on). These are supplied as ground truth so the figures in the report match what is actually on the page.
 
-Engines used:
-- Anthropic Claude (claude-sonnet-4-5) and OpenAI (gpt-4o) run in parallel; results are merged into a single dual-engine score where both succeed.`;
+Engine used:
+- Anthropic Claude (claude-sonnet-4-5), run at temperature 0 and grounded on the measured facts so the same page gives near-identical results each time. OpenAI (gpt-4o), also at temperature 0 with a fixed seed, is kept as a silent backup only if Claude is unavailable.`;
 
   const handleRunDiagnostic = async () => {
     if (!contentInput.trim() && !urlInput.trim()) {
@@ -1995,7 +2015,7 @@ Engines used:
                 {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Analysing with Claude & ChatGPT...
+                    Analysing with Claude...
                   </>
                 ) : (
                   <>
@@ -2008,10 +2028,10 @@ Engines used:
               <div className="mt-6 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: vars.accent }} />
-                  <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine analysis</span>
+                  <span className="text-sm font-medium" style={{ color: vars.navy }}>Running analysis</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  Your content is being analysed by both Claude and ChatGPT simultaneously. Results from both engines will be merged to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
+                  Your content is being analysed by Claude, alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
                 </p>
               </div>
             )}
@@ -2078,19 +2098,14 @@ Engines used:
           </div>
           {result.sources && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t" style={{ borderColor: vars.g100 }}>
-              {result.sources.claude && (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
-                  Claude: {result.sources.claude.score}/100
-                </span>
-              )}
-              {result.sources.openai && (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
-                  ChatGPT: {result.sources.openai.score}/100
-                </span>
-              )}
               <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold" style={{ background: "rgba(31,116,143,0.06)", color: vars.accent }}>
-                {result.provider === "merged" ? "Dual-engine merged" : `Single engine: ${result.provider}`}
+                {result.provider === "openai" ? "Engine: ChatGPT (backup)" : "Engine: Claude"}
               </span>
+              {result.pageFacts && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-medium border" style={{ borderColor: vars.g200, color: vars.g500 }}>
+                  Figures measured directly from your page
+                </span>
+              )}
               <span className="ml-auto text-[10px]" style={{ color: vars.g400 }}>
                 {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
               </span>
@@ -2136,6 +2151,43 @@ Engines used:
           </div>
         </div>
       </div>
+
+      {result.pageFacts && (() => {
+        const f = result.pageFacts!;
+        const altPct = f.imagesTotal > 0 ? Math.round((f.imagesWithAlt / f.imagesTotal) * 100) : 0;
+        const yesNo = (b: boolean) => (b ? "Yes" : "No");
+        const facts: Array<{ label: string; value: string }> = [
+          { label: "Page title", value: f.metaTitle ? "Present" : "Missing" },
+          { label: "Meta description", value: yesNo(f.hasMetaDescription) },
+          { label: "Canonical URL", value: yesNo(f.hasCanonical) },
+          { label: "Open Graph tags", value: String(f.openGraphTagCount) },
+          { label: "Schema (JSON-LD) blocks", value: f.jsonLdBlockCount === 0 ? "None" : `${f.jsonLdBlockCount}${f.jsonLdTypes.length ? ` (${f.jsonLdTypes.join(", ")})` : ""}` },
+          { label: "Microdata elements", value: String(f.microdataCount) },
+          { label: "Headings (H1 / H2 / H3)", value: `${f.h1Count} / ${f.h2Count} / ${f.h3Count}` },
+          { label: "Images with alt text", value: `${f.imagesWithAlt} of ${f.imagesTotal} (${altPct}%)` },
+          { label: "Lists / tables", value: `${f.listCount} / ${f.tableCount}` },
+          { label: "robots.txt", value: yesNo(f.hasRobotsTxt) },
+          { label: "Sitemap URLs", value: f.sitemapUrlCount === null ? "No sitemap found" : String(f.sitemapUrlCount) },
+        ];
+        return (
+          <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
+            </div>
+            <p className="text-xs font-light mb-4" style={{ color: vars.g500 }}>
+              These figures are counted directly from your live page, not estimated. They are the same every time the page is checked.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {facts.map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <span className="text-xs" style={{ color: vars.g500 }}>{item.label}</span>
+                  <span className="text-xs font-semibold text-right" style={{ color: vars.navy }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="rounded-xl p-4 border" style={{ borderColor: "#C2E5D2", background: "#F0FAF4" }}>

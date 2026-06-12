@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
-import { fetchGeoAuditContext } from "../lib/safe-fetch";
+import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 
@@ -39,6 +39,10 @@ Categories (score / max):
 4. Earned Media Signals (0-20): Evidence of press coverage, backlinks, spokesperson mentions, third-party endorsements, industry reports?
 5. LLM Visibility (0-20): Is the content written in a way LLMs can easily cite? Are there clear, quotable statements of fact? Does it answer common questions directly?
 6. Technical Accessibility (0-15): Are there indicators of page speed, clean HTML structure, proper heading hierarchy, mobile-friendliness, AI crawler access?
+
+Grounding rules (important):
+- A MEASURED FACTS block may be supplied. Those figures were counted directly from the page by a deterministic parser. Treat them as ground truth: quote them exactly (for example image counts, alt-text coverage, schema types found) and never contradict or re-estimate them.
+- Do NOT invent or guess statistics, revenue figures, client numbers, dates, or named entities. Only state numbers that appear in the supplied content or the measured facts. If a figure is not present, do not produce one.
 
 Return your analysis as valid JSON only (no markdown, no code fences) in exactly this format:
 {
@@ -87,7 +91,7 @@ function normaliseResult(raw: any): any {
   const catMap = new Map(cats.map((c: any) => [c.name, c]));
 
   const categories = CATEGORY_NAMES.map((name) => {
-    const cat = catMap.get(name) || {};
+    const cat: any = catMap.get(name) || {};
     const max = CATEGORY_MAXES[name];
     const score = typeof cat.score === "number" ? Math.min(Math.max(0, Math.round(cat.score)), max) : 0;
     return {
@@ -122,18 +126,48 @@ function extractJSON(text: string): any {
   return JSON.parse(cleaned);
 }
 
-async function analyseWithClaude(content: string): Promise<any> {
+// Fixed seed so deterministic-capable engines return repeatable output for the
+// same input.
+const DETERMINISTIC_SEED = 7;
+
+function formatFacts(facts?: GeoAuditFacts | null): string {
+  if (!facts) return "";
+  const altPct = facts.imagesTotal > 0 ? Math.round((facts.imagesWithAlt / facts.imagesTotal) * 100) : 0;
+  const lines = [
+    "MEASURED FACTS (counted directly from the page - treat as ground truth, quote exactly, do not re-estimate):",
+    `- Page title present: ${facts.metaTitle ? "yes" : "no"}`,
+    `- Meta description present: ${facts.hasMetaDescription ? "yes" : "no"}`,
+    `- Canonical URL present: ${facts.hasCanonical ? "yes" : "no"}`,
+    `- Open Graph tags present: ${facts.openGraphTagCount}`,
+    `- JSON-LD structured data blocks: ${facts.jsonLdBlockCount}${facts.jsonLdTypes.length ? ` (types: ${facts.jsonLdTypes.join(", ")})` : ""}`,
+    `- Microdata (itemscope) elements: ${facts.microdataCount}`,
+    `- Headings: ${facts.h1Count} H1, ${facts.h2Count} H2, ${facts.h3Count} H3`,
+    `- Images: ${facts.imagesTotal} total, ${facts.imagesWithAlt} with alt text, ${facts.imagesWithoutAlt} missing alt text (${altPct}% coverage)`,
+    `- Structured lists: ${facts.listCount}, data tables: ${facts.tableCount}`,
+    `- robots.txt found: ${facts.hasRobotsTxt ? "yes" : "no"}`,
+    `- Sitemap URLs listed: ${facts.sitemapUrlCount === null ? "no sitemap found" : facts.sitemapUrlCount}`,
+  ];
+  return lines.join("\n");
+}
+
+function buildUserMessage(content: string, facts?: GeoAuditFacts | null): string {
+  const factsBlock = formatFacts(facts);
+  return `Analyse the following web page content for GEO readiness. Return only valid JSON.${factsBlock ? `\n\n${factsBlock}` : ""}\n\n<content>\n${content}\n</content>`;
+}
+
+async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null): Promise<any> {
   const client = createAnthropicClient();
   if (!client) throw new Error("Anthropic integration not configured");
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 8192,
+    temperature: 0,
     system: GEO_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: `Analyse the following web page content for GEO readiness. Return only valid JSON.\n\n<content>\n${content}\n</content>`,
+        content: buildUserMessage(content, facts),
       },
     ],
   });
@@ -144,13 +178,15 @@ async function analyseWithClaude(content: string): Promise<any> {
   return normaliseResult(extractJSON(textBlock.text));
 }
 
-async function analyseWithOpenAI(content: string): Promise<any> {
+async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null): Promise<any> {
   const client = createOpenAIClient();
   if (!client) throw new Error("OpenAI integration not configured");
 
   const response = await client.chat.completions.create({
     model: "gpt-4o",
     max_completion_tokens: 8192,
+    temperature: 0,
+    seed: DETERMINISTIC_SEED,
     messages: [
       {
         role: "system",
@@ -158,7 +194,7 @@ async function analyseWithOpenAI(content: string): Promise<any> {
       },
       {
         role: "user",
-        content: `Analyse the following web page content for GEO readiness. Return only valid JSON.\n\n<content>\n${content}\n</content>`,
+        content: buildUserMessage(content, facts),
       },
     ],
   });
@@ -167,44 +203,6 @@ async function analyseWithOpenAI(content: string): Promise<any> {
   if (!text) throw new Error("No response from OpenAI");
 
   return normaliseResult(extractJSON(text));
-}
-
-function mergeResults(claudeResult: any, openaiResult: any): any {
-  const categories = CATEGORY_NAMES.map((name) => {
-    const cc = claudeResult.categories.find((c: any) => c.name === name);
-    const oc = openaiResult.categories.find((c: any) => c.name === name);
-    const max = CATEGORY_MAXES[name];
-    const scores = [cc?.score, oc?.score].filter((s) => typeof s === "number") as number[];
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-    const allFindings = [...new Set([...(cc?.findings || []), ...(oc?.findings || [])])];
-    const allRecs = [...new Set([...(cc?.recommendations || []), ...(oc?.recommendations || [])])];
-    return {
-      name,
-      score: avgScore,
-      max,
-      status: avgScore / max >= 0.7 ? "pass" : avgScore / max >= 0.4 ? "warn" : "fail",
-      findings: allFindings.slice(0, 4),
-      recommendations: allRecs.slice(0, 4),
-    };
-  });
-
-  const overallScore = Math.round(categories.reduce((s, c) => s + c.score, 0));
-
-  return {
-    overallScore,
-    categories,
-    strengths: [...new Set([...claudeResult.strengths, ...openaiResult.strengths])].slice(0, 5),
-    warnings: [...new Set([...claudeResult.warnings, ...openaiResult.warnings])].slice(0, 5),
-    criticalGaps: [...new Set([...claudeResult.criticalGaps, ...openaiResult.criticalGaps])].slice(0, 5),
-    priorityActions: [...claudeResult.priorityActions, ...openaiResult.priorityActions]
-      .filter((a: any, i: number, arr: any[]) => arr.findIndex((b: any) => b.action === a.action) === i)
-      .slice(0, 12),
-    summary: claudeResult.summary || openaiResult.summary,
-    sources: {
-      claude: { score: claudeResult.overallScore, summary: claudeResult.summary },
-      openai: { score: openaiResult.overallScore, summary: openaiResult.summary },
-    },
-  };
 }
 
 diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
@@ -223,12 +221,14 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
   let textToAnalyse = "";
   let fetchedUrl: string | undefined;
   let pagesFetched: string[] = [];
+  let pageFacts: GeoAuditFacts | undefined;
 
   if (typeof url === "string" && url.trim()) {
     try {
       const ctx = await fetchGeoAuditContext(url.trim());
       fetchedUrl = ctx.url;
       pagesFetched = ctx.pagesFetched;
+      pageFacts = ctx.facts;
       textToAnalyse += ctx.text;
     } catch (err: any) {
       logger.warn({ err: err?.message, url: url.trim() }, "Diagnostic URL fetch failed");
@@ -252,32 +252,36 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
   }
 
   try {
-    const [claudeResult, openaiResult] = await Promise.allSettled([
-      analyseWithClaude(textToAnalyse),
-      analyseWithOpenAI(textToAnalyse),
-    ]);
-
-    if (claudeResult.status === "rejected" && openaiResult.status === "rejected") {
-      logger.error({ claudeErr: claudeResult.reason?.message, openaiErr: openaiResult.reason?.message }, "Both AI providers failed");
-      res.status(500).json({ error: "Both AI providers failed. Please try again." });
-      return;
-    }
-
-    let result;
-    if (claudeResult.status === "fulfilled" && openaiResult.status === "fulfilled") {
-      result = mergeResults(claudeResult.value, openaiResult.value);
-      result.provider = "merged";
-    } else if (claudeResult.status === "fulfilled") {
-      result = { ...claudeResult.value, provider: "claude", sources: { claude: { score: claudeResult.value.overallScore, summary: claudeResult.value.summary } } };
-      logger.warn({ err: (openaiResult as PromiseRejectedResult).reason?.message }, "OpenAI failed, using Claude only");
-    } else {
-      const openaiVal = (openaiResult as PromiseFulfilledResult<any>).value;
-      result = { ...openaiVal, provider: "openai", sources: { openai: { score: openaiVal.overallScore, summary: openaiVal.summary } } };
-      logger.warn({ err: (claudeResult as PromiseRejectedResult).reason?.message }, "Claude failed, using OpenAI only");
+    // Single deterministic engine (Claude) for repeatable results. OpenAI is a
+    // silent fallback only if Claude is unavailable, so a normal run is always
+    // one engine, temperature 0.
+    let result: any;
+    try {
+      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts);
+      result = {
+        ...claudeValue,
+        provider: "claude",
+        sources: { claude: { score: claudeValue.overallScore, summary: claudeValue.summary } },
+      };
+    } catch (claudeErr: any) {
+      logger.warn({ err: claudeErr?.message }, "Claude failed, falling back to OpenAI");
+      try {
+        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts);
+        result = {
+          ...openaiValue,
+          provider: "openai",
+          sources: { openai: { score: openaiValue.overallScore, summary: openaiValue.summary } },
+        };
+      } catch (openaiErr: any) {
+        logger.error({ claudeErr: claudeErr?.message, openaiErr: openaiErr?.message }, "Both AI providers failed");
+        res.status(500).json({ error: "The analysis engine is unavailable right now. Please try again." });
+        return;
+      }
     }
 
     if (fetchedUrl) result.fetchedUrl = fetchedUrl;
     if (pagesFetched.length) result.pagesFetched = pagesFetched;
+    if (pageFacts) result.pageFacts = pageFacts;
 
     res.json(result);
   } catch (err: any) {

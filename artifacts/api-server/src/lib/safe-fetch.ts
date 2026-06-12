@@ -172,10 +172,31 @@ async function fetchTextResource(url: string, timeoutMs = 8000, maxChars = 10000
   }
 }
 
+export interface GeoAuditFacts {
+  metaTitle: string;
+  hasMetaDescription: boolean;
+  hasCanonical: boolean;
+  openGraphTagCount: number;
+  jsonLdBlockCount: number;
+  jsonLdTypes: string[];
+  microdataCount: number;
+  h1Count: number;
+  h2Count: number;
+  h3Count: number;
+  imagesTotal: number;
+  imagesWithAlt: number;
+  imagesWithoutAlt: number;
+  listCount: number;
+  tableCount: number;
+  hasRobotsTxt: boolean;
+  sitemapUrlCount: number | null;
+}
+
 export interface GeoAuditContext {
   url: string;
   text: string;
   pagesFetched: string[];
+  facts: GeoAuditFacts;
 }
 
 // Fetches a site's homepage plus its robots.txt and sitemap, then assembles a
@@ -202,6 +223,7 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
     }
   });
 
+  const jsonLdBlockCount = $('script[type="application/ld+json"]').length;
   const microdata = $("[itemscope]").length;
   const canonical = $('link[rel="canonical"]').attr("href") || "";
   const ogTags = ["og:title", "og:description", "og:image", "og:type"].filter(
@@ -236,10 +258,12 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
     }
   }
   let sitemapSummary = "Not found or not accessible.";
+  let sitemapUrlCount: number | null = null;
   const sitemapXml = await fetchTextResource(sitemapUrl, 8000, 300000);
   if (sitemapXml) {
     pagesFetched.push(sitemapUrl);
     const locs = [...sitemapXml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((mm) => mm[1]);
+    sitemapUrlCount = locs.length;
     sitemapSummary = `${locs.length} URL(s) listed. Sample: ${locs.slice(0, 15).join(", ") || "none"}`;
   }
 
@@ -267,5 +291,25 @@ export async function fetchGeoAuditContext(rawUrl: string, maxChars = 45000): Pr
   let assembled = parts.join("\n");
   if (assembled.length > maxChars) assembled = assembled.slice(0, maxChars);
 
-  return { url: normalized, text: assembled, pagesFetched };
+  const facts: GeoAuditFacts = {
+    metaTitle,
+    hasMetaDescription: metaDesc.length > 0,
+    hasCanonical: canonical.length > 0,
+    openGraphTagCount: ogTags.length,
+    jsonLdBlockCount,
+    jsonLdTypes,
+    microdataCount: microdata,
+    h1Count: h1.length,
+    h2Count: h2.length,
+    h3Count: h3.length,
+    imagesTotal: imgTotal,
+    imagesWithAlt: imgWithAlt,
+    imagesWithoutAlt: Math.max(0, imgTotal - imgWithAlt),
+    listCount: lists,
+    tableCount: tables,
+    hasRobotsTxt: Boolean(robots),
+    sitemapUrlCount,
+  };
+
+  return { url: normalized, text: assembled, pagesFetched, facts };
 }
