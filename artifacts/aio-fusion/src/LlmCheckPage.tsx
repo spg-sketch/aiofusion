@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -368,10 +368,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [companyName, setCompanyName] = useState(activeClient.name);
   const [icpProfile, setIcpProfile] = useState(getIcpProfile());
   const [icpLocation, setIcpLocation] = useState(getClientLocations());
+  const [buyerQuestionsText, setBuyerQuestionsText] = useState(getBuyerQuestions().join("\n"));
+  const [competitorsText, setCompetitorsText] = useState(getCompetitors().join(", "));
   useEffect(() => {
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
     setIcpLocation(getClientLocations());
+    setBuyerQuestionsText(getBuyerQuestions().join("\n"));
+    setCompetitorsText(getCompetitors().join(", "));
   }, [activeClient.id, activeClient.name]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
@@ -393,6 +397,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setSelectedSectors((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const selectedCount = combinedSectors.filter((s) => selectedSectors.includes(s)).length;
   const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
+  // Buyer questions (Set-Up 5.6) and competitors (4.8) most directly shape the
+  // audit, so they are editable here. Parse the editable text back into arrays.
+  const buyerQuestions = buyerQuestionsText.split("\n").map((q) => q.trim()).filter(Boolean);
+  const competitors = competitorsText.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean);
+  // The remaining authority signals are shown read-only so the user can see what
+  // is feeding the score, with a pointer to where to edit them in Project Set-Up.
+  const spokespeople = getSpokespeople();
+  const evidenceUrls = getEvidenceUrls();
+  const boilerplate = getBoilerplate();
+  const descriptor = getCompanyDescriptor();
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
@@ -469,6 +483,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         .map((k) => k.trim())
         .filter(Boolean);
 
+      // Start from the Project Set-Up data, then apply the user's on-screen edits
+      // to the two highest-impact inputs so what they see is what gets probed.
+      const projectData = getProjectAuthorityData();
+      projectData.buyerQuestions = buyerQuestions;
+      projectData.competitors = competitors;
+
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
       const resp = await fetch(`${apiBase}/api/llm-check`, {
         method: "POST",
@@ -482,7 +502,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icp: icpProfile.trim(),
           location: icpLocation.trim(),
           persona: getClientPersona(),
-          projectData: getProjectAuthorityData(),
+          projectData,
         }),
       });
 
@@ -572,7 +592,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       )
       .join("");
 
-    const trackedNormExport = getCompetitors().map(normalizeName).filter(Boolean);
+    const trackedNormExport = competitors.map(normalizeName).filter(Boolean);
     const ownsRows = result.topCompetitors
       .map((c) => {
         const qs = compQueries.get(c.name);
@@ -803,7 +823,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               )}
               <p className="text-[11px] mt-2.5 flex items-start gap-1" style={{ color: vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
-                Company, ideal customer profile and locations are pulled in automatically from your Project Set-Up. Open "Refine what we probe" to adjust anything.
+                We also pull in your buyer questions ({buyerQuestions.length}), competitors ({competitors.length}) and authority signals (spokespeople, coverage, boilerplate) from your Project Set-Up, along with your company, ideal customer profile and locations. They all shape the result. Open "Refine what we probe" to see and adjust everything.
               </p>
             </div>
             <button
@@ -958,6 +978,75 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   : "Add this in Project Set-Up (section 3.3), or type it here. AI answers are often localised, so this checks how you show up where it matters."}
               </p>
             </div>
+            <div className="mb-6">
+              <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
+                Buyer questions we ask verbatim <span className="font-normal" style={{ color: vars.g400 }}>(one per line)</span>
+              </label>
+              <textarea
+                value={buyerQuestionsText}
+                onChange={(e) => setBuyerQuestionsText(e.target.value)}
+                rows={6}
+                placeholder={"e.g. Which PR agencies are best for B2B technology brands?\nWho are the leading consumer PR firms in London?"}
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-y"
+                style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
+              />
+              <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
+                <Info size={11} className="flex-shrink-0 mt-0.5" />
+                {buyerQuestions.length > 0
+                  ? `These ${buyerQuestions.length} real buyer questions from your Project Set-Up (section 5.6) are the most important input. We fire them at ChatGPT and Claude word for word, ahead of the questions we generate, then check whether you show up.`
+                  : "Add the real questions your buyers type into AI tools in Project Set-Up (section 5.6), or type them here. They are the most important input, fired word for word ahead of the questions we generate."}
+              </p>
+            </div>
+            <div className="mb-6">
+              <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
+                Competitors we measure you against <span className="font-normal" style={{ color: vars.g400 }}>(comma-separated)</span>
+              </label>
+              <textarea
+                value={competitorsText}
+                onChange={(e) => setCompetitorsText(e.target.value)}
+                rows={3}
+                placeholder="e.g. Edelman, Brunswick, FleishmanHillard"
+                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-y"
+                style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
+              />
+              <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: competitors.length === 0 ? "#8A6314" : vars.g400 }}>
+                <Info size={11} className="flex-shrink-0 mt-0.5" />
+                {competitors.length > 0
+                  ? `We use these ${competitors.length} competitors from your Project Set-Up (section 4.8) to work out share of voice, which is who the AI engines name instead of you.`
+                  : "Add your main competitors in Project Set-Up (section 4.8), or type them here. We use them to work out share of voice, which is who the AI engines name instead of you."}
+              </p>
+            </div>
+            <div className="mb-6 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Info size={13} style={{ color: vars.accent }} />
+                <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>Other signals feeding your authority score</span>
+              </div>
+              <p className="text-[11px] mb-3" style={{ color: vars.g400 }}>
+                These come straight from your Project Set-Up and feed the authority scoring. To change them, edit the relevant section in Project Set-Up.
+              </p>
+              <ul className="space-y-2">
+                <li className="flex items-start justify-between gap-3">
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Spokespeople <span style={{ color: vars.g400 }}>(section 1.8)</span></span>
+                  <span className="text-[11px] text-right" style={{ color: spokespeople.length === 0 ? "#8A6314" : vars.g500 }}>
+                    {spokespeople.length > 0 ? spokespeople.map((s) => s.name).filter(Boolean).join(", ") : "None set"}
+                  </span>
+                </li>
+                <li className="flex items-start justify-between gap-3">
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Coverage &amp; evidence links <span style={{ color: vars.g400 }}>(sections 1.4, 4.7, 7.3)</span></span>
+                  <span className="text-[11px] text-right" style={{ color: evidenceUrls.length === 0 ? "#8A6314" : vars.g500 }}>
+                    {evidenceUrls.length > 0 ? `${evidenceUrls.length} link${evidenceUrls.length === 1 ? "" : "s"}` : "None set"}
+                  </span>
+                </li>
+                <li className="flex items-start justify-between gap-3">
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Boilerplate <span style={{ color: vars.g400 }}>(section 4.3)</span></span>
+                  <span className="text-[11px] text-right" style={{ color: boilerplate ? vars.g500 : "#8A6314" }}>{boilerplate ? "Set" : "Not set"}</span>
+                </li>
+                <li className="flex items-start justify-between gap-3">
+                  <span className="text-[12px]" style={{ color: vars.navy }}>Company descriptor <span style={{ color: vars.g400 }}>(section 1.1)</span></span>
+                  <span className="text-[11px] text-right" style={{ color: descriptor ? vars.g500 : "#8A6314" }}>{descriptor ? "Set" : "Not set"}</span>
+                </li>
+              </ul>
+            </div>
             </>)}
             {error && (
               <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "#FBEEEC", color: "#B03D33" }}>
@@ -1048,7 +1137,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     );
   }
 
-  const rd = deriveReportData(result, getCompetitors());
+  const rd = deriveReportData(result, competitors);
   const gapItems = rd.assess && rd.assess.topGaps.length > 0
     ? rd.assess.topGaps
     : rd.queryRows.filter((q) => !q.appeared).map((q) => q.question);
