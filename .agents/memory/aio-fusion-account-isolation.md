@@ -37,3 +37,21 @@ before deleting the account); the client also mirrors this for snappy UI.
 ## Rule: store conflict-updates must never touch owner or deletedAt
 **Why:** a stale client write must not revive a soft-deleted project or reassign
 ownership. The upsert/intake `onConflictDoUpdate` sets leave both columns alone.
+
+## Rule: store writes/deletes must carry an atomic owner predicate
+The pre-check (`getOwner` + `canSee`) gives the friendly 403, but the write
+itself must ALSO be scoped to the caller's visible owners: upsert/intake via
+`onConflictDoUpdate({ setWhere: ownerPredicate(visible) })` and delete via
+`WHERE id = ? AND owner IN visible`. `ownerPredicate` returns `undefined` for
+admins (no restriction).
+**Why:** ownership can change between the pre-check read and the write (TOCTOU),
+which would let a stale/racing request mutate another account's project. The
+predicate closes that window at statement-execution time.
+
+## Rule: never seed a hardcoded admin password in production
+`ensureDefaultAdmin` only seeds the known fallback credential in development. In
+production it requires `PLATFORM_ADMIN_PASSWORD`; if unset it skips seeding and
+warns rather than creating a guessable admin.
+**Why:** a fresh production deploy with a public default password is an
+auth-takeover path. The live DB is already migrated (real admin exists), so the
+gate only affects brand-new deployments.

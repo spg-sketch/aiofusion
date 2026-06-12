@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, projectsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 
@@ -20,6 +20,15 @@ async function visibleOwners(req: Request): Promise<string[] | null> {
 function canSee(owner: string | null | undefined, visible: string[] | null): boolean {
   if (visible === null) return true; // admin
   return visible.includes(normUsername(owner));
+}
+
+// A SQL predicate restricting a write to rows this request may touch. Returns
+// undefined for an admin (no restriction). Applied at write time so the
+// authorization holds atomically even if ownership changes between the prior
+// owner read and the write (closes the check-then-write race).
+function ownerPredicate(visible: string[] | null): SQL | undefined {
+  if (visible === null) return undefined; // admin: any row
+  return inArray(projectsTable.owner, visible);
 }
 
 // Load a project's owner, or undefined if the project does not exist.
@@ -148,6 +157,9 @@ router.post(
             logo: typeof logo === "string" ? logo : null,
             updatedAt: now,
           },
+          // Atomic guard: only update rows the caller may touch, so the
+          // authorization holds even if ownership changed after the check above.
+          setWhere: ownerPredicate(visible),
         });
       res.json({ ok: true });
     } catch {
@@ -191,6 +203,8 @@ router.post(
           target: projectsTable.id,
           // deletedAt and owner left untouched on purpose.
           set: { intake: intake ?? null, updatedAt: now },
+          // Atomic guard: only update rows the caller may touch.
+          setWhere: ownerPredicate(visible),
         });
       res.json({ ok: true });
     } catch {
@@ -221,10 +235,13 @@ router.post(
         res.status(403).json({ error: "You cannot delete this project." });
         return;
       }
+      // Atomic guard: scope the soft-delete to rows the caller may touch, so
+      // the authorization holds even if ownership changed after the check above.
+      const scope = ownerPredicate(visible);
       await db
         .update(projectsTable)
         .set({ deletedAt: new Date() })
-        .where(eq(projectsTable.id, id));
+        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id));
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete project" });

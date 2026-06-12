@@ -60,25 +60,44 @@ export const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,32}$/;
 // Matches the credentials the browser system seeded so the agency can always
 // sign in even before any migration has run.
 export const DEFAULT_ADMIN_USERNAME = "admin";
-// Production can set a strong bootstrap password via env. The fallback keeps the
-// existing browser-system credential working so the agency's login carries over
-// when no override is provided.
-const DEFAULT_ADMIN_PASSWORD =
-  process.env.PLATFORM_ADMIN_PASSWORD || "K9mt-4Rxq-7NzPv2";
+// The credential the browser system seeded. Used only as a development
+// convenience fallback so the local app works out of the box; never used to
+// seed a production admin (see ensureDefaultAdmin).
+const DEV_FALLBACK_ADMIN_PASSWORD = "K9mt-4Rxq-7NzPv2";
 
 // Ensure at least one admin exists so the platform is never locked out. Inserts
-// the default admin only when no admin account is present. Never overwrites an
-// existing account's password.
+// the default admin only when no admin account is present, and never overwrites
+// an existing account's password.
+//
+// In production the bootstrap password MUST come from PLATFORM_ADMIN_PASSWORD:
+// we never seed a publicly known credential there. If it is unset on a fresh
+// production database we skip seeding and log a warning, so the operator sets a
+// strong password rather than inheriting a guessable default. (The live
+// database is already migrated and has its real admin, so this only affects
+// brand-new deployments.) In development we fall back to the known credential
+// for convenience.
 export async function ensureDefaultAdmin(): Promise<void> {
   const accounts = await db
     .select({ role: platformAccountsTable.role })
     .from(platformAccountsTable);
   if (accounts.some((a) => a.role === "admin")) return;
+
+  const isProd = process.env.NODE_ENV === "production";
+  const envPassword = process.env.PLATFORM_ADMIN_PASSWORD;
+  const password = isProd ? envPassword : envPassword || DEV_FALLBACK_ADMIN_PASSWORD;
+  if (!password) {
+    console.warn(
+      "[platform-auth] No admin account and PLATFORM_ADMIN_PASSWORD is not set; " +
+        "skipping default-admin seed. Set PLATFORM_ADMIN_PASSWORD to bootstrap the first admin.",
+    );
+    return;
+  }
+
   await db
     .insert(platformAccountsTable)
     .values({
       username: DEFAULT_ADMIN_USERNAME,
-      passwordHash: hashPassword(DEFAULT_ADMIN_PASSWORD),
+      passwordHash: hashPassword(password),
       role: "admin",
     })
     .onConflictDoNothing({ target: platformAccountsTable.username });
