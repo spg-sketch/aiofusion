@@ -21,7 +21,7 @@ function createAnthropicClient(): Anthropic | null {
   return new Anthropic({ baseURL, apiKey });
 }
 
-interface ProbeResult {
+export interface ProbeResult {
   question: string;
   model: string;
   response: string;
@@ -41,7 +41,7 @@ function normalizeText(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function brandAliases(companyName: string): string[] {
+export function brandAliases(companyName: string): string[] {
   const full = normalizeText(companyName);
   if (!full) return [];
   const tokens = full.split(" ").filter(Boolean);
@@ -59,18 +59,18 @@ function aliasRegex(alias: string): RegExp {
   return new RegExp(`(?<![a-z0-9])${pattern}(?![a-z0-9])`, "i");
 }
 
-function isMentioned(text: string, companyName: string): boolean {
+export function isMentioned(text: string, companyName: string): boolean {
   if (!text) return false;
   return brandAliases(companyName).some((alias) => aliasRegex(alias).test(text));
 }
 
-function normalizeCompetitor(name: string): string {
+export function normalizeCompetitor(name: string): string {
   const norm = normalizeText(name);
   if (!norm) return "";
   return norm.split(" ").filter((t) => t && !LEGAL_SUFFIXES.has(t)).join(" ");
 }
 
-function generateProbeQuestions(
+export function generateProbeQuestions(
   companyName: string,
   sectors: string[],
   keywords: string[],
@@ -152,7 +152,7 @@ function findMentionContext(text: string, companyName: string): string | null {
   return context;
 }
 
-function extractCompetitors(text: string, companyName: string): string[] {
+export function extractCompetitors(text: string, companyName: string): string[] {
   const patterns = [
     /(?:companies|firms|agencies|providers|organizations|organisations)(?:\s+(?:like|such as|including|are))\s+([^.]+)/gi,
     /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–—:])/g,
@@ -172,6 +172,116 @@ function extractCompetitors(text: string, companyName: string): string[] {
   }
 
   return [...names].slice(0, 10);
+}
+
+export interface ProbeSummary {
+  question: string;
+  model: string;
+  mentioned: boolean;
+  mentionRuns: number;
+  runCount: number;
+  mentionContext: string | null;
+  responsePreview: string;
+  competitors: string[];
+}
+
+export interface VisibilityMetrics {
+  chatgptProbes: number;
+  claudeProbes: number;
+  chatgptMentions: number;
+  claudeMentions: number;
+  totalProbes: number;
+  totalMentions: number;
+  visibilityScore: number;
+  presence: number;
+  shareOfVoice: number;
+}
+
+// Count how often each competitor is named across all probe runs. A competitor
+// is counted at most once per run (deduped by normalized name), must appear in
+// at least two runs to make the list, and the result is the top 8 by mentions.
+export function aggregateTopCompetitors(results: ProbeResult[]): { name: string; mentions: number }[] {
+  const competitorHits = new Map<string, { display: string; count: number }>();
+  for (const r of results) {
+    const seen = new Set<string>();
+    for (const c of r.competitors) {
+      const key = normalizeCompetitor(c);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const entry = competitorHits.get(key);
+      if (entry) entry.count += 1;
+      else competitorHits.set(key, { display: c.trim(), count: 1 });
+    }
+  }
+  return [...competitorHits.values()]
+    .filter((e) => e.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+    .map((e) => ({ name: e.display, mentions: e.count }));
+}
+
+// Collapse the repeated runs of each (model, question) pair into one summary
+// row. The brand counts as "mentioned" for a question only when it appeared in
+// at least half the runs (majority vote), guarding against a single fluke run.
+export function groupProbesByQuery(results: ProbeResult[]): ProbeSummary[] {
+  const grouped = new Map<string, ProbeResult[]>();
+  for (const r of results) {
+    const key = `${r.model}||${r.question}`;
+    const arr = grouped.get(key);
+    if (arr) arr.push(r);
+    else grouped.set(key, [r]);
+  }
+  return [...grouped.values()].map((runs) => {
+    const runCount = runs.length;
+    const mentionRuns = runs.filter((r) => r.mentioned).length;
+    const mentioned = mentionRuns * 2 >= runCount;
+    const repr = runs.find((r) => r.mentioned) || runs[0];
+    const competitorMap = new Map<string, string>();
+    for (const r of runs) {
+      for (const c of r.competitors) {
+        const key = c.toLowerCase();
+        if (!competitorMap.has(key)) competitorMap.set(key, c);
+      }
+    }
+    return {
+      question: repr.question,
+      model: repr.model,
+      mentioned,
+      mentionRuns,
+      runCount,
+      mentionContext: repr.mentionContext,
+      responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
+      competitors: [...competitorMap.values()].slice(0, 12),
+    };
+  });
+}
+
+// Compute the headline visibility figures from the raw probe results.
+// Presence and visibility score are both mentions / probes as a percentage;
+// share of voice weighs the brand's mentions against every competitor mention.
+export function computeVisibilityMetrics(results: ProbeResult[]): VisibilityMetrics {
+  const chatgptResults = results.filter((r) => r.model.includes("GPT"));
+  const claudeResults = results.filter((r) => r.model.includes("Claude"));
+  const chatgptMentions = chatgptResults.filter((r) => r.mentioned).length;
+  const claudeMentions = claudeResults.filter((r) => r.mentioned).length;
+  const totalProbes = results.length;
+  const totalMentions = results.filter((r) => r.mentioned).length;
+  const visibilityScore = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
+  const competitorMentionTotal = results.reduce((s, r) => s + r.competitors.length, 0);
+  const sovDenom = totalMentions + competitorMentionTotal;
+  const shareOfVoice = sovDenom > 0 ? Math.round((totalMentions / sovDenom) * 100) : 0;
+  const presence = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
+  return {
+    chatgptProbes: chatgptResults.length,
+    claudeProbes: claudeResults.length,
+    chatgptMentions,
+    claudeMentions,
+    totalProbes,
+    totalMentions,
+    visibilityScore,
+    presence,
+    shareOfVoice,
+  };
 }
 
 async function probeOpenAI(question: string, companyName: string): Promise<ProbeResult | null> {
@@ -564,64 +674,21 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const results = await Promise.all(probePromises);
     const validResults = results.filter((r): r is ProbeResult => r !== null);
 
-    const chatgptResults = validResults.filter((r) => r.model.includes("GPT"));
-    const claudeResults = validResults.filter((r) => r.model.includes("Claude"));
+    const {
+      chatgptProbes,
+      claudeProbes,
+      chatgptMentions,
+      claudeMentions,
+      totalProbes,
+      totalMentions,
+      visibilityScore,
+      presence,
+      shareOfVoice,
+    } = computeVisibilityMetrics(validResults);
 
-    const chatgptMentions = chatgptResults.filter((r) => r.mentioned).length;
-    const claudeMentions = claudeResults.filter((r) => r.mentioned).length;
-    const totalProbes = validResults.length;
-    const totalMentions = validResults.filter((r) => r.mentioned).length;
+    const topCompetitors = aggregateTopCompetitors(validResults);
 
-    const competitorHits = new Map<string, { display: string; count: number }>();
-    for (const r of validResults) {
-      const seen = new Set<string>();
-      for (const c of r.competitors) {
-        const key = normalizeCompetitor(c);
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        const entry = competitorHits.get(key);
-        if (entry) entry.count += 1;
-        else competitorHits.set(key, { display: c.trim(), count: 1 });
-      }
-    }
-    const topCompetitors = [...competitorHits.values()]
-      .filter((e) => e.count >= 2)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8)
-      .map((e) => ({ name: e.display, mentions: e.count }));
-
-    const visibilityScore = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
-
-    const grouped = new Map<string, ProbeResult[]>();
-    for (const r of validResults) {
-      const key = `${r.model}||${r.question}`;
-      const arr = grouped.get(key);
-      if (arr) arr.push(r);
-      else grouped.set(key, [r]);
-    }
-    const probes = [...grouped.values()].map((runs) => {
-      const runCount = runs.length;
-      const mentionRuns = runs.filter((r) => r.mentioned).length;
-      const mentioned = mentionRuns * 2 >= runCount;
-      const repr = runs.find((r) => r.mentioned) || runs[0];
-      const competitorMap = new Map<string, string>();
-      for (const r of runs) {
-        for (const c of r.competitors) {
-          const key = c.toLowerCase();
-          if (!competitorMap.has(key)) competitorMap.set(key, c);
-        }
-      }
-      return {
-        question: repr.question,
-        model: repr.model,
-        mentioned,
-        mentionRuns,
-        runCount,
-        mentionContext: repr.mentionContext,
-        responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
-        competitors: [...competitorMap.values()].slice(0, 12),
-      };
-    });
+    const probes = groupProbesByQuery(validResults);
 
     // Stage two: build one evidence row per unique query (both engines' first
     // representative answer) and ask Claude to score authority against the
@@ -650,11 +717,6 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       claude: e.claude,
     }));
 
-    const competitorMentionTotal = validResults.reduce((s, r) => s + r.competitors.length, 0);
-    const sovDenom = totalMentions + competitorMentionTotal;
-    const shareOfVoice = sovDenom > 0 ? Math.round((totalMentions / sovDenom) * 100) : 0;
-    const presence = totalProbes > 0 ? Math.round((totalMentions / totalProbes) * 100) : 0;
-
     const assessment = await scoreAuthority(companyName, authorityData, evidence, {
       presence,
       shareOfVoice,
@@ -672,8 +734,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       totalProbes,
       totalMentions,
       byModel: {
-        chatgpt: { probes: chatgptResults.length, mentions: chatgptMentions, rate: chatgptResults.length > 0 ? Math.round((chatgptMentions / chatgptResults.length) * 100) : 0 },
-        claude: { probes: claudeResults.length, mentions: claudeMentions, rate: claudeResults.length > 0 ? Math.round((claudeMentions / claudeResults.length) * 100) : 0 },
+        chatgpt: { probes: chatgptProbes, mentions: chatgptMentions, rate: chatgptProbes > 0 ? Math.round((chatgptMentions / chatgptProbes) * 100) : 0 },
+        claude: { probes: claudeProbes, mentions: claudeMentions, rate: claudeProbes > 0 ? Math.round((claudeMentions / claudeProbes) * 100) : 0 },
       },
       topCompetitors,
       probes,
