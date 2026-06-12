@@ -134,11 +134,45 @@ function isTracked(name: string, trackedNorm: string[]): boolean {
   return trackedNorm.some((t) => t && (t === n || (t.length >= 4 && (n.includes(t) || t.includes(n)))));
 }
 
+// Display labels and a fixed worst-first order for the scorecard, so the table
+// reads like the reference report regardless of the order the model returns the
+// dimensions in. Names not in this map keep their own label and sort last.
+const SCORECARD_DISPLAY: Record<string, { label: string; order: number }> = {
+  "presence": { label: "Non-branded presence", order: 0 },
+  "prominence": { label: "Prominence / position", order: 1 },
+  "share of voice": { label: "Share of voice", order: 2 },
+  "spokesperson authority": { label: "Spokesperson authority", order: 3 },
+  "source quality": { label: "Source quality (earned-led)", order: 4 },
+  "message fidelity": { label: "Message fidelity", order: 5 },
+  "factual accuracy": { label: "Factual accuracy", order: 6 },
+  "entity clarity": { label: "Entity clarity", order: 7 },
+};
+
+function orderScorecard(
+  dims: AssessmentDimension[],
+): Array<AssessmentDimension & { displayName: string; order: number }> {
+  return dims
+    .map((d) => {
+      const disp = SCORECARD_DISPLAY[d.name.trim().toLowerCase()];
+      return { ...d, displayName: disp ? disp.label : d.name, order: disp ? disp.order : 99 };
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+// A short, honest note for the evidence log built from data we already collect:
+// whether the brand surfaced, or which rivals the engines named instead.
+function queryNote(appeared: boolean, competitors: string[], companyName: string): string {
+  if (appeared) return `${companyName} surfaced in the engines' answer.`;
+  if (competitors.length > 0) return `Engines named ${competitors.slice(0, 2).join(" and ")} instead.`;
+  return "No company clearly recommended.";
+}
+
 interface ReportQueryRow {
   question: string;
   appeared: boolean;
   models: string[];
   competitors: string[];
+  note: string;
 }
 
 interface ReportOwnsRow {
@@ -180,6 +214,7 @@ function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData
   }
   const queryRows: ReportQueryRow[] = [...byQuery.values()].map((g) => ({
     question: g.question, appeared: g.appeared, models: [...g.models], competitors: [...g.competitors],
+    note: queryNote(g.appeared, [...g.competitors], result.companyName),
   }));
   const appearedCount = queryRows.filter((q) => q.appeared).length;
   const totalQueries = queryRows.length;
@@ -533,7 +568,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     const evidenceRows = queryRows
       .map(
         (q) =>
-          `<tr><td>${escapeHtml(q.question)}</td><td class="${q.appeared ? "appeared-yes" : "appeared-no"}">${q.appeared ? "Yes" : "No"}</td><td>${[...q.competitors].map((c) => escapeHtml(c)).join(", ") || `<span class="muted">none surfaced</span>`}</td><td class="muted">${[...q.models].join(", ")}</td></tr>`,
+          `<tr><td>${escapeHtml(q.question)}</td><td class="${q.appeared ? "appeared-yes" : "appeared-no"}">${q.appeared ? "Yes" : "No"}</td><td>${[...q.competitors].map((c) => escapeHtml(c)).join(", ") || `<span class="muted">none surfaced</span>`}</td><td class="muted">${escapeHtml(queryNote(q.appeared, [...q.competitors], result.companyName))}</td></tr>`,
       )
       .join("");
 
@@ -556,16 +591,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
     const summaryHtml = assess && assess.summary ? escapeHtml(assess.summary) : execSummary;
 
-    const confLabel = (c: string) => (c === "high" ? "High confidence" : c === "medium" ? "Medium confidence" : "Low confidence");
     const scorecardBlock = assess
       ? `<div class="card">
       <h2>AI Authority scorecard</h2>
       <table>
-        <thead><tr><th>Dimension</th><th>Score</th><th>What the evidence shows</th><th>Confidence</th></tr></thead>
-        <tbody>${assess.dimensions
+        <thead><tr><th>Dimension</th><th>Score / 5</th><th>Read</th></tr></thead>
+        <tbody>${orderScorecard(assess.dimensions)
           .map(
             (d) =>
-              `<tr><td><strong>${escapeHtml(d.name)}</strong></td><td><span class="score-pill ${d.score >= 60 ? "good" : d.score >= 30 ? "mid" : "low"}">${d.score}</span></td><td>${escapeHtml(d.justification)}</td><td class="conf conf-${d.confidence}">${confLabel(d.confidence)}</td></tr>`,
+              `<tr><td><strong>${escapeHtml(d.displayName)}</strong></td><td><span class="score-pill ${d.score >= 60 ? "good" : d.score >= 30 ? "mid" : "low"}">${Math.round(d.score / 20)} / 5</span></td><td>${escapeHtml(d.justification)}</td></tr>`,
           )
           .join("")}</tbody>
       </table>
@@ -671,7 +705,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   </div></div>
   <div class="wrap">
     <h1>AI Authority &amp; Earned-Media Visibility Assessment</h1>
-    <p class="sub">${escapeHtml(result.companyName)} &middot; ${escapeHtml(checked)} &middot; Blind probes across ChatGPT and Claude${sectorsUsed.length > 0 ? ` &middot; ${escapeHtml(sectorsUsed.join(", "))}` : ""}</p>
+    <p class="sub">${escapeHtml(result.companyName)} &middot; ${escapeHtml(checked)} &middot; Blind probes across ChatGPT and Claude${sectorsUsed.length > 0 ? ` &middot; ${escapeHtml(sectorsUsed.join(", "))}` : ""}${trackedNormExport.length > 0 ? ` &middot; ${trackedNormExport.length} tracked competitors` : ""}</p>
     <div class="card">
       <div class="index-row">
         <div>
@@ -708,7 +742,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     <div class="card">
       <h2>Blind-probe evidence log</h2>
       <table>
-        <thead><tr><th>Query</th><th>Appeared</th><th>Competitors surfaced</th><th>Models</th></tr></thead>
+        <thead><tr><th>Query</th><th>Appeared</th><th>Competitors surfaced</th><th>Sources / notes</th></tr></thead>
         <tbody>${evidenceRows}</tbody>
       </table>
     </div>
@@ -1162,25 +1196,22 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               <thead>
                 <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
                   <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Dimension</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Score</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Score / 5</th>
                   <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3" style={{ color: vars.g500 }}>Read</th>
                 </tr>
               </thead>
               <tbody>
-                {rd.assess.dimensions.map((d) => {
+                {orderScorecard(rd.assess.dimensions).map((d) => {
                   const outOf5 = Math.round(d.score / 20);
                   const color = d.score >= 60 ? vars.green : d.score >= 30 ? vars.amber : vars.red;
                   return (
                     <tr key={d.name} style={{ borderBottom: `1px solid ${vars.g100}` }}>
-                      <td className="py-2.5 pr-3 align-top text-[12px] font-semibold" style={{ color: vars.navy }}>{d.name}</td>
+                      <td className="py-2.5 pr-3 align-top text-[12px] font-semibold" style={{ color: vars.navy }}>{d.displayName}</td>
                       <td className="py-2.5 px-3 align-top whitespace-nowrap">
                         <span className="text-[12px] font-bold px-2 py-0.5 rounded" style={{ color, background: vars.g50 }}>{outOf5} / 5</span>
                       </td>
                       <td className="py-2.5 pl-3 align-top text-[12px]" style={{ color: vars.g500 }}>
                         {d.justification}
-                        <span className="text-[10px] ml-1.5 inline-block" style={{ color: vars.g400 }}>
-                          ({d.confidence} confidence)
-                        </span>
                       </td>
                     </tr>
                   );
@@ -1295,7 +1326,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Query</th>
                 <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Appeared</th>
                 <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3" style={{ color: vars.g500 }}>Competitors surfaced</th>
-                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3 whitespace-nowrap" style={{ color: vars.g500 }}>Engines</th>
+                <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3" style={{ color: vars.g500 }}>Sources / notes</th>
               </tr>
             </thead>
             <tbody>
@@ -1308,7 +1339,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   <td className="py-2.5 px-3 align-top text-[12px]" style={{ color: vars.g500 }}>
                     {q.competitors.length > 0 ? q.competitors.join(", ") : <span style={{ color: vars.g400 }}>none surfaced</span>}
                   </td>
-                  <td className="py-2.5 pl-3 align-top text-[11px] whitespace-nowrap" style={{ color: vars.g400 }}>{q.models.join(", ")}</td>
+                  <td className="py-2.5 pl-3 align-top text-[11px]" style={{ color: vars.g400 }}>{q.note}</td>
                 </tr>
               ))}
             </tbody>
@@ -1335,7 +1366,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </h3>
         <ul className="list-disc pl-5 space-y-1.5">
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
-            Search-grounded blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.
+            Blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.
           </li>
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
             Presence is the share of probes in which {result.companyName} appeared. Share of voice weighs those mentions against the rival brands the engines named.
