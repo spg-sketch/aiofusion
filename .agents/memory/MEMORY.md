@@ -5,3 +5,4 @@
 - [AIO Fusion two-stage authority assessment](aio-fusion-authority-assessment.md) — Earned Media audit = blind probes + Claude scoring; `assessment` is optional/fail-soft, keep all UI/report blocks presence-gated and the no-hallucination prompt intent.
 - [AIO Fusion content AI features](aio-fusion-content-ai.md) — Optimiser/Creator/Media Research call real LLM via /api/content/*; media-list returns only items, never fabricate methodology; escapeHtml all model output in exports.
 - [AIO Fusion LLM Check audit report](aio-fusion-llm-check-audit.md) — topCompetitors is server-truncated (top 8, count>=2); use full probes[].competitors for aggregate metrics like share of voice; report omits unmeasured /5 scorecard dims.
+- [AIO Fusion testing + typecheck](aio-fusion-testing-and-typecheck.md) — vitest runs api-server (node) + aio-fusion (jsdom); mock Anthropic via vi.hoisted; some typecheck errors (diagnostic.ts, replit-auth-web) are pre-existing.

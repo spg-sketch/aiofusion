@@ -321,7 +321,7 @@ function gradeFor(idx: number): string {
 
 // Pull the first balanced JSON object out of a model response, tolerating
 // stray prose or markdown code fences around it.
-function extractJson(text: string): string | null {
+export function extractJson(text: string): string | null {
   if (!text) return null;
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = fenced ? fenced[1] : text;
@@ -348,7 +348,7 @@ function extractJson(text: string): string | null {
   return null;
 }
 
-function parseAssessment(text: string): AuthorityAssessment | null {
+export function parseAssessment(text: string): AuthorityAssessment | null {
   const json = extractJson(text);
   if (!json) return null;
   let parsed: any;
@@ -420,7 +420,7 @@ function parseAssessment(text: string): AuthorityAssessment | null {
   };
 }
 
-async function scoreAuthority(
+export async function scoreAuthority(
   companyName: string,
   projectData: ProjectAuthorityData,
   evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
