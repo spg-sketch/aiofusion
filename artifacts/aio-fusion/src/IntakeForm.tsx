@@ -887,10 +887,13 @@ export default function IntakePage() {
     });
   };
   const MAX_ADDITIONAL_MESSAGES = 10;
+  const MAX_PRODUCTS = 5;
+  // 1.3 (additional messages) caps at 6; the other dual lists keep the default.
+  const maxForDualList = (fieldId: string) => (fieldId === "1.3" ? 6 : MAX_ADDITIONAL_MESSAGES);
   const addDualListItem = (fieldId: string) => {
     setDualLists((prev) => {
       const current = prev[fieldId] || [];
-      if (current.length >= MAX_ADDITIONAL_MESSAGES) return prev;
+      if (current.length >= maxForDualList(fieldId)) return prev;
       return { ...prev, [fieldId]: [...current, { short: "", long: "" }] };
     });
   };
@@ -1932,15 +1935,15 @@ export default function IntakePage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={() => addDualListItem(field.id)}
-                            disabled={list.length >= MAX_ADDITIONAL_MESSAGES}
+                            disabled={list.length >= maxForDualList(field.id)}
                             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >{field.addLabel || "+ Add message"}</button>
                           {list.length > 0 && (
                             <button onClick={() => removeDualListItem(field.id, list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove {noun}</button>
                           )}
-                          {list.length >= MAX_ADDITIONAL_MESSAGES && (
-                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_ADDITIONAL_MESSAGES} {nounPlural} reached.</span>
+                          {list.length >= maxForDualList(field.id) && (
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {maxForDualList(field.id)} {nounPlural} reached.</span>
                           )}
                         </div>
                       </div>
@@ -1991,11 +1994,15 @@ export default function IntakePage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={() => setProducts([...products, { name: "", description: "", audience: "" }])}
-                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            disabled={products.length >= MAX_PRODUCTS}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >+ Add product / service</button>
                           {products.length > 0 && (
                             <button onClick={() => setProducts(products.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove product / service</button>
+                          )}
+                          {products.length >= MAX_PRODUCTS && (
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_PRODUCTS} products or services reached.</span>
                           )}
                         </div>
                       </div>
@@ -2039,11 +2046,15 @@ export default function IntakePage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={() => setProductQueries([...productQueries, { area: "", phrases: "" }])}
-                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
+                            disabled={productQueries.length >= MAX_PRODUCTS}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ borderColor: vars.g200, color: vars.accent }}
                           >+ Add product / service area</button>
                           {productQueries.length > 0 && (
                             <button onClick={() => setProductQueries(productQueries.slice(0, -1))} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove product / service area</button>
+                          )}
+                          {productQueries.length >= MAX_PRODUCTS && (
+                            <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>Maximum of {MAX_PRODUCTS} product or service areas reached.</span>
                           )}
                         </div>
                       </div>
