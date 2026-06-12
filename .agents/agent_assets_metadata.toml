@@ -119,3 +119,9 @@ id = "8ERP0rwrhqzuUxYlXlHoR"
 uri = "file://AIO_Fusion_Investor_Spec.md"
 type = "text"
 title = "AIO Fusion - Product Specification & Investor Brief"
+
+[[outputs]]
+id = "POE8BU8mnecBpFNafgWBa"
+uri = "file://backups/aio-fusion-db-20260612-151628.sql.gz"
+type = "unspecified"
+title = "AIO Fusion database backup (12 Jun 2026)"
