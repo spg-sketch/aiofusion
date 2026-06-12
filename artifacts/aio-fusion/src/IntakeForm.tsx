@@ -1336,38 +1336,81 @@ export default function IntakePage() {
     const body = `<div class="guide">
       <div class="sec">
         <h2>What this Set-Up is for</h2>
-        <p>The Set-Up captures everything AIO Fusion needs to represent your business accurately to AI answer engines. The more complete and precise your answers, the better the Optimiser, Content Creator and Media Research tools perform. Treat it like briefing a new team member who will speak on your behalf.</p>
+        <p>The Set-Up captures everything AIO Fusion needs to represent your business accurately to AI answer engines such as ChatGPT, Claude, Gemini and Google's AI Overviews. These engines build their picture of your business from your website, your press coverage and other public sources. This form is how you tell us what that picture should be.</p>
+        <p>The more complete and precise your answers, the better every tool performs, because they all draw on what you enter here. Treat it like briefing a new team member who will speak on your behalf: the clearer the brief, the better they represent you.</p>
+        <p>You do not need to complete everything in one sitting, and you do not need to answer every question. Start with what you know, save as you go, and come back to fill the gaps. Even a partly completed Set-Up improves your results.</p>
       </div>
       <div class="sec">
         <h2>How it is organised</h2>
-        <p>There are two tracks, each with its own progress bar:</p>
+        <p>The Set-Up is split into two tracks, each with its own progress bar so you can see how far along you are:</p>
         <ul>
-          <li><strong>PR Set-Up (Sections 1 to 3)</strong> covers your business messaging: boilerplate, message hierarchy, evidence, spokespeople and media categories.</li>
-          <li><strong>AIO Set-Up (Sections 4 to 7)</strong> covers your business profile: products, audiences, technical and structured-data details.</li>
+          <li><strong>PR Set-Up (Sections 1 to 3)</strong> covers your business messaging: your boilerplate, message hierarchy, supporting evidence, spokespeople, the questions your customers ask, and who your audiences are.</li>
+          <li><strong>AIO Set-Up (Sections 4 to 7)</strong> covers your business profile and technical signals: core identity, products and services, optimisation priorities, structured data and cross-channel consistency.</li>
         </ul>
-        <p>Use the buttons at the top to switch tracks, and the section list on the left to move around. You do not have to finish in order.</p>
+        <p>Use the buttons at the top to switch between tracks, and the section list on the left to jump around. You do not have to work in order. Each section opens with a short note explaining why it matters.</p>
+      </div>
+      <div class="sec">
+        <h2>What each section covers</h2>
+        <h3>PR Set-Up</h3>
+        <ul>
+          <li><strong>Section 1 - Earned Media: Message Framework.</strong> Your standard company description (boilerplate), your core and supporting messages, proof points, spokespeople and the trade media categories you operate in. Earned media is one of the strongest signals AI models trust, so this section feeds almost every other tool.</li>
+          <li><strong>Section 2 - FAQ &amp; Customer Questions.</strong> The real questions people ask before they buy, answered in a clear, AI-ready way, plus a short framing of your core products and services so your messaging and website stay aligned.</li>
+          <li><strong>Section 3 - Audience &amp; Intent Mapping.</strong> Who you are talking to, the language they use, the problems they are trying to solve and the outcomes they want. AI engines match content to intent, not just keywords, so this matters.</li>
+        </ul>
+        <h3>AIO Set-Up</h3>
+        <ul>
+          <li><strong>Section 4 - Business &amp; Brand Fundamentals.</strong> Your core identity: legal name, trading names, sub-brands and what you do. These details underpin every piece of optimised content.</li>
+          <li><strong>Section 5 - GEO vs AEO Priority Assessment.</strong> A few signals about your business model that help decide whether to lead with being cited by AI systems (GEO) or appearing in direct-answer features (AEO).</li>
+          <li><strong>Section 6 - Schema Markup &amp; Technical Signals.</strong> The structured data and technical settings that let AI read your site accurately, including organisation details, robots.txt and AI crawler access.</li>
+          <li><strong>Section 7 - Consistency Check.</strong> A check that your name, address, phone number and core descriptions match everywhere they appear. Inconsistency confuses AI and weakens your authority.</li>
+        </ul>
+      </div>
+      <div class="sec">
+        <h2>How your answers are used</h2>
+        <p>Nothing here is published automatically. Your answers become the shared source of truth that the platform's tools draw on:</p>
+        <ul>
+          <li><strong>Optimiser</strong> rewrites and sharpens your content using your approved messaging and audience language.</li>
+          <li><strong>Content Creator</strong> drafts new content that stays on-message because it is built from these inputs.</li>
+          <li><strong>Media Research</strong> targets the right outlets using your spokespeople and media categories.</li>
+          <li><strong>Visibility Audit</strong> checks how often AI engines surface your business on real, non-branded category questions, and who they recommend instead.</li>
+        </ul>
+        <p>This is why precision pays off: a vague answer here produces vague output everywhere it is used.</p>
       </div>
       <div class="sec">
         <h2>Filling it in</h2>
         <ol>
-          <li>Work through each section, answering the questions in plain language. Hints under each question tell you what good looks like.</li>
-          <li>For repeatable items (such as spokespeople, messages, products) use the "Add" buttons to add as many entries as you need.</li>
-          <li>Where you see "Ask AI to complete this", you can add your company website at the top of the form first, then let the tool draft an answer from your site for you to review and edit. The website is used only as a reference so the draft reflects your real business, not generic text.</li>
-          <li>Use "Mark section complete" when you are happy with a section. This updates your progress bar. You can re-open a section at any time.</li>
-          <li>Use "Save for later" at any point. Your answers are stored so you can come back and carry on.</li>
+          <li>Work through each section, answering in plain language. The hint under each question explains what a good answer looks like, with examples.</li>
+          <li>For repeatable items, use the "Add" buttons to create as many entries as you need. Some lists have a sensible cap: spokespeople up to 10, additional messages up to 6, and products or services and product or service areas up to 5 each. When you reach a limit the "Add" button greys out, but you can always remove an entry to make room.</li>
+          <li>Where you see "Ask AI to complete this", add your company website at the top of the form first, then let the tool draft an answer from your site for you to review and edit. The website is used only as a reference, so the draft reflects your real business rather than generic text. Always read and adjust the draft before relying on it.</li>
+          <li>Use "Mark section complete" when you are happy with a section. This updates your progress bar. You can re-open and edit a completed section at any time.</li>
+          <li>Use "Save for later" at any point. Your answers are stored against this project, so you can close the form and carry on later, including from another device when you are signed in.</li>
         </ol>
       </div>
       <div class="sec">
         <h2>Gathering answers offline</h2>
-        <p>Each section has a "Download these questions" button. This gives you a printable sheet of that section's questions with space to write, which is handy for collecting input from colleagues before typing the final answers into the platform.</p>
+        <p>Each section has a "Download these questions" button. This gives you a printable sheet of that section's questions, each with its hint and space to write. It is handy for collecting input from colleagues, your leadership team or subject experts before typing the final answers into the platform. You can also download a full copy of your completed project data at any time for your own records or sign-off.</p>
       </div>
       <div class="sec">
         <h2>Tips for strong answers</h2>
         <ul>
-          <li>Be specific. Name real products, audiences, sectors and phrases your customers actually use.</li>
-          <li>Reuse your agreed FAQs and approved company messaging so everything stays consistent.</li>
-          <li>Avoid jargon and internal shorthand. Write as you would explain your business to an interested outsider.</li>
-          <li>If a question does not apply, leave it blank rather than forcing an answer.</li>
+          <li>Be specific. Name real products, audiences, sectors and the exact phrases your customers use, not generic industry terms.</li>
+          <li>Reuse your agreed FAQs, approved boilerplate and signed-off messaging so everything stays consistent across your website, your earned media and these answers. Consistency is what builds authority with AI models.</li>
+          <li>Write for an interested outsider. Avoid internal jargon, acronyms and shorthand that only colleagues would understand.</li>
+          <li>Lead with the most important point. AI tends to weight what comes first, so put your strongest message at the start of an answer.</li>
+          <li>Use evidence where you can. Concrete proof points, numbers and named examples carry more weight than claims.</li>
+          <li>If a question does not apply, leave it blank rather than forcing an answer. A blank is better than something inaccurate.</li>
+          <li>Revisit periodically. As your business, messaging or coverage changes, update the Set-Up so the tools stay accurate.</li>
+        </ul>
+      </div>
+      <div class="sec">
+        <h2>A few key terms</h2>
+        <ul>
+          <li><strong>GEO (Generative Engine Optimisation)</strong> - being cited and recommended by AI systems such as ChatGPT, Claude and Gemini.</li>
+          <li><strong>AEO (Answer Engine Optimisation)</strong> - appearing in direct-answer features such as Google's AI Overviews and voice assistants.</li>
+          <li><strong>Earned media</strong> - independent coverage you earn rather than pay for, such as articles and mentions in credible outlets. It is one of the highest-authority signals for AI.</li>
+          <li><strong>Boilerplate</strong> - your standard, approved "about the company" paragraph used in press and across the web.</li>
+          <li><strong>Schema markup</strong> - machine-readable tags that tell AI exactly what your content means, reducing guesswork and error.</li>
+          <li><strong>NAP</strong> - Name, Address and Phone, kept identical across every channel so AI recognises you as one consistent entity.</li>
         </ul>
       </div>
     </div>`;
