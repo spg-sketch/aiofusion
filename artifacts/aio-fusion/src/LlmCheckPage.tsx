@@ -21,6 +21,7 @@ import {
   Building2,
   Clock,
   Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 const vars = {
@@ -305,6 +306,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
+  const [showRefine, setShowRefine] = useState(false);
+  const setupIncomplete = auditSectors.length === 0 || probeName.length === 0;
+  useEffect(() => {
+    if (setupIncomplete) setShowRefine(true);
+  }, [setupIncomplete]);
 
   useEffect(() => {
     setCycleData(loadCycle(activeClient.id));
@@ -683,12 +689,42 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="max-w-lg mx-auto">
-            <div className="flex items-center gap-2 mb-6">
-              <Search size={18} style={{ color: vars.g400 }} />
-              <span className="text-sm font-medium" style={{ color: vars.g500 }}>
-                Confirm the brand and add any extra key phrases to probe
-              </span>
+            <div className="mb-5 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Search size={16} style={{ color: vars.accent }} />
+                <span className="text-sm font-medium" style={{ color: vars.navy }}>
+                  We'll probe <strong>{probeName || activeClient.name}</strong> using your Project Set-Up data
+                </span>
+              </div>
+              {combinedSectors.length > 0 ? (
+                auditSectors.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {auditSectors.map((s) => (
+                      <span key={s} className="text-[12px] px-2.5 py-1 rounded-full border" style={{ background: vars.lightBg, color: vars.accent, borderColor: vars.accent }}>{s}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[12px]" style={{ color: vars.red }}>No sectors selected. Open "Refine what we probe" below to choose at least one.</p>
+                )
+              ) : (
+                <p className="text-[12px]" style={{ color: "#8A6314" }}>No sectors found in your Project Set-Up. Open "Refine what we probe" below to set them, or add them in Project Set-Up (1.9 and 1.10).</p>
+              )}
+              <p className="text-[11px] mt-2.5 flex items-start gap-1" style={{ color: vars.g400 }}>
+                <Info size={11} className="flex-shrink-0 mt-0.5" />
+                Company, ideal customer profile and locations are pulled in automatically from your Project Set-Up. Open "Refine what we probe" to adjust anything.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowRefine((v) => !v)}
+              className="flex items-center gap-1.5 text-[12px] font-medium mb-5 transition-colors hover:opacity-80"
+              style={{ color: vars.accent }}
+            >
+              <SlidersHorizontal size={13} />
+              {showRefine ? "Hide refine options" : "Refine what we probe"}
+              <ChevronDown size={13} style={{ transform: showRefine ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+            </button>
+            {showRefine && (<>
             <div className="mb-4">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Company</label>
               <input
@@ -830,6 +866,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   : "Add this in Project Set-Up (section 3.3), or type it here. AI answers are often localised, so this checks how you show up where it matters."}
               </p>
             </div>
+            </>)}
             {error && (
               <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "#FBEEEC", color: "#B03D33" }}>
                 {error}
