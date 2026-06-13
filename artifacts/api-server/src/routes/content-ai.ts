@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
+import { deepStripEmDashes } from "../lib/text-sanitise";
 
 const contentAiRouter = Router();
 
@@ -136,7 +137,10 @@ function initSse(res: Response): void {
 }
 
 function sse(res: Response, event: string, data: unknown): void {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  // The model is asked not to use em dashes but is not reliable, so strip them
+  // deterministically from every final result payload before it leaves the server.
+  const payload = event === "result" ? deepStripEmDashes(data) : data;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
 type TimeoutError = Error & { isTimeout?: boolean };

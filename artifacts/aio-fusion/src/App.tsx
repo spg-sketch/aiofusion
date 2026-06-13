@@ -1,6 +1,7 @@
 import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId } from "./IntakeForm";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
+import { stripEmDashes } from "./lib/utils";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
@@ -265,24 +266,40 @@ function assignProjectOwner(id: string, owner: string): Client | null {
   return updated;
 }
 
-// One-time migration: projects created before ownership was tracked have no
-// owner. Assign them all to the first admin account so they appear under that
-// admin in User Management. Runs once, guarded by a flag.
-const OWNER_MIGRATION_FLAG = "aio.projects.owner.migrated.v1";
-function migrateAssignOwnerlessToAdmin(): void {
+// Self-heal projects that have no owner. Projects created before ownership was
+// tracked (and legacy rows whose owner column is still NULL on the server) have
+// no owner, so they are attributed to nobody in User Management and no agency or
+// client can ever see them. Assign each to the master account so it shows under
+// that account again.
+//
+// This deliberately runs on EVERY load rather than once behind a flag: an
+// ownerless project can arrive at any time from the shared store sync (a legacy
+// row the server returns to the master because NULL owner is treated as
+// admin-only), long after a one-time migration would have run. A per-project,
+// idempotent heal is the only thing that stops such a project silently
+// "disappearing again". Only the master's browser caches an admin-role account,
+// so only the master ever claims here, and the matching server-side coalesce
+// only fills a NULL owner (it never reassigns a real one), so the claim is safe.
+async function migrateAssignOwnerlessToAdmin(): Promise<void> {
   try {
-    if (localStorage.getItem(OWNER_MIGRATION_FLAG) === "1") return;
-    const projects = loadStoredProjects();
-    const hasOwnerless = projects.some((p) => !p.owner);
-    if (!hasOwnerless) {
-      localStorage.setItem(OWNER_MIGRATION_FLAG, "1");
-      return;
-    }
+    const ownerless = loadStoredProjects().filter((p) => !p.owner);
+    if (!ownerless.length) return;
     const admin = getLocalUsers().find((u) => u.role === "admin");
-    if (!admin) return; // try again next load once an admin exists
-    const next = projects.map((p) => (p.owner ? p : { ...p, owner: admin.username }));
-    saveStoredProjects(next);
-    localStorage.setItem(OWNER_MIGRATION_FLAG, "1");
+    if (!admin) return; // only the master may claim ownerless projects
+    for (const p of ownerless) {
+      const claimed = { ...p, owner: admin.username } as Client;
+      // Persist the claim locally only once the shared store confirms it. A
+      // transient push failure then leaves the project ownerless so it retries
+      // on the next sync, rather than going NULL-owned on the server forever.
+      const ok = await pushProjectMeta(claimed as unknown as Record<string, unknown> & { id: string });
+      if (!ok) continue;
+      const current = loadStoredProjects();
+      const idx = current.findIndex((x) => x.id === p.id);
+      if (idx !== -1 && !current[idx].owner) {
+        current[idx] = { ...current[idx], owner: admin.username };
+        saveStoredProjects(current);
+      }
+    }
   } catch { /* noop */ }
 }
 
@@ -4473,13 +4490,18 @@ type ArchiveItem = {
 };
 
 function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
+  // Strip any em dashes left in previously saved drafts so retrieved content is clean.
   if (arc.headline !== undefined || arc.standfirst !== undefined || arc.bodyCopy !== undefined) {
-    return { headline: arc.headline || "", standfirst: arc.standfirst || "", bodyCopy: arc.bodyCopy || arc.body || "" };
+    return {
+      headline: stripEmDashes(arc.headline || ""),
+      standfirst: stripEmDashes(arc.standfirst || ""),
+      bodyCopy: stripEmDashes(arc.bodyCopy || arc.body || ""),
+    };
   }
   const parts = (arc.body || "").split(/\n\n+/);
-  if (parts.length >= 3) return { headline: parts[0], standfirst: parts[1], bodyCopy: parts.slice(2).join("\n\n") };
-  if (parts.length === 2) return { headline: parts[0], standfirst: "", bodyCopy: parts[1] };
-  return { headline: "", standfirst: "", bodyCopy: arc.body || "" };
+  if (parts.length >= 3) return { headline: stripEmDashes(parts[0]), standfirst: stripEmDashes(parts[1]), bodyCopy: stripEmDashes(parts.slice(2).join("\n\n")) };
+  if (parts.length === 2) return { headline: stripEmDashes(parts[0]), standfirst: "", bodyCopy: stripEmDashes(parts[1]) };
+  return { headline: "", standfirst: "", bodyCopy: stripEmDashes(arc.body || "") };
 }
 
 const ARCHIVE_KEY = "aio.archive.v1";
@@ -7570,6 +7592,35 @@ function UsersAdminPage({
   const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
     allProjects.filter((p) => (p.owner || "").toLowerCase() === username.toLowerCase());
+  // Order the flat account list as a tree so each client sits directly beneath
+  // the agency it reports to (and agencies beneath the master), with a depth so
+  // the list can indent nested accounts. Falls back to flat for any account
+  // whose parent is missing, and a cycle guard makes sure every account shows.
+  const orderedUsers = useMemo(() => {
+    const childrenByParent = new Map<string, LocalUser[]>();
+    for (const u of users) {
+      const p = (u.parent || "").toLowerCase();
+      const list = childrenByParent.get(p) || [];
+      list.push(u);
+      childrenByParent.set(p, list);
+    }
+    const known = new Set(users.map((u) => u.username.toLowerCase()));
+    const out: { user: LocalUser; depth: number }[] = [];
+    const seen = new Set<string>();
+    const visit = (u: LocalUser, depth: number) => {
+      const key = u.username.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ user: u, depth });
+      for (const c of childrenByParent.get(key) || []) visit(c, depth + 1);
+    };
+    for (const u of users) {
+      const p = (u.parent || "").toLowerCase();
+      if (!p || !known.has(p)) visit(u, 0);
+    }
+    for (const u of users) if (!seen.has(u.username.toLowerCase())) visit(u, 0);
+    return out;
+  }, [users]);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -7757,13 +7808,21 @@ function UsersAdminPage({
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>All users ({users.length})</h2>
           </div>
           <ul className="divide-y" style={{ borderColor: vars.g200 }}>
-            {users.map((u) => {
+            {orderedUsers.map(({ user: u, depth }) => {
               const isMe = u.username.toLowerCase() === session.username.toLowerCase();
               const editingPw = pwUser === u.username;
               const editingName = nameUser === u.username;
               const hasDisplayName = !!(u.displayName && u.displayName.trim());
               return (
-                <li key={u.username} className="px-6 py-4">
+                <li
+                  key={u.username}
+                  className="px-6 py-4"
+                  style={
+                    depth > 0
+                      ? { paddingLeft: 24 + depth * 28, borderLeft: `3px solid ${accentSoft}`, background: "rgba(200,73,122,0.025)" }
+                      : undefined
+                  }
+                >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
@@ -8356,14 +8415,18 @@ function App() {
   const resyncProjects = useCallback(async () => {
     const result = await syncProjectsOnLoad();
     if (result) {
-      setStoredProjects(result.projects as unknown as Client[]);
+      // Claim any ownerless project the sync just pulled down (e.g. a legacy
+      // NULL-owned row) before showing the list, so it is attributed to the
+      // master instead of silently vanishing.
+      await migrateAssignOwnerlessToAdmin();
+      setStoredProjects(loadStoredProjects() as unknown as Client[]);
       setClientLogos(result.logos);
     }
   }, []);
 
   useEffect(() => {
     migrateLegacyIntakeToProject();
-    migrateAssignOwnerlessToAdmin();
+    void migrateAssignOwnerlessToAdmin();
     setStoredProjects(loadStoredProjects());
     // Reconcile the session with the server (the real authority): this validates
     // the session cookie, runs the one-time account migration, and refreshes the

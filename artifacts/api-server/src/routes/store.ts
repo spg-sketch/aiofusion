@@ -149,12 +149,17 @@ router.post(
         })
         .onConflictDoUpdate({
           target: projectsTable.id,
-          // deletedAt and owner are intentionally NOT touched here. A stale write
-          // must never revive a deleted project or reassign ownership.
+          // deletedAt is never touched (a stale write must not revive a deleted
+          // project). owner is never reassigned either, but a legacy NULL owner
+          // (an unclaimed row from before ownership was enforced) is claimed by
+          // the caller via coalesce. The setWhere guard below means only a caller
+          // who can already see the row reaches this, so this never steals a
+          // project from another account.
           set: {
             name: typeof name === "string" ? name : "",
             data: data ?? {},
             logo: typeof logo === "string" ? logo : null,
+            owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
             updatedAt: now,
           },
           // Atomic guard: only update rows the caller may touch, so the
@@ -201,8 +206,13 @@ router.post(
         })
         .onConflictDoUpdate({
           target: projectsTable.id,
-          // deletedAt and owner left untouched on purpose.
-          set: { intake: intake ?? null, updatedAt: now },
+          // deletedAt is never touched and a real owner is never reassigned, but a
+          // legacy NULL owner is claimed by the caller (same reasoning as upsert).
+          set: {
+            intake: intake ?? null,
+            owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
+            updatedAt: now,
+          },
           // Atomic guard: only update rows the caller may touch.
           setWhere: ownerPredicate(visible),
         });

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { aiAssistLimiter } from "../middleware/rate-limit";
 import { fetchSiteContent } from "../lib/safe-fetch";
+import { stripEmDashes } from "../lib/text-sanitise";
 
 const aiAssistRouter = Router();
 
@@ -116,7 +117,7 @@ aiAssistRouter.post(
       }
 
       if (fieldId === "1.1") {
-        const descriptor = typeof parsed.descriptor === "string" ? parsed.descriptor.trim() : "";
+        const descriptor = typeof parsed.descriptor === "string" ? stripEmDashes(parsed.descriptor.trim()) : "";
         if (!descriptor) {
           res.json({ fieldId, notFound: true, source: site.url });
           return;
@@ -126,8 +127,8 @@ aiAssistRouter.post(
       }
 
       // fieldId === "1.2"
-      const short = typeof parsed.short === "string" ? parsed.short.trim() : "";
-      const long = typeof parsed.long === "string" ? parsed.long.trim() : "";
+      const short = typeof parsed.short === "string" ? stripEmDashes(parsed.short.trim()) : "";
+      const long = typeof parsed.long === "string" ? stripEmDashes(parsed.long.trim()) : "";
       if (!short && !long) {
         res.json({ fieldId, notFound: true, source: site.url });
         return;
@@ -284,8 +285,8 @@ aiAssistRouter.post(
       }
 
       if (fieldId === "1.2") {
-        const short = typeof parsed.short === "string" ? parsed.short.trim() : "";
-        const long = typeof parsed.long === "string" ? parsed.long.trim() : "";
+        const short = typeof parsed.short === "string" ? stripEmDashes(parsed.short.trim()) : "";
+        const long = typeof parsed.long === "string" ? stripEmDashes(parsed.long.trim()) : "";
         if (!short && !long) {
           res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
           return;
@@ -298,8 +299,8 @@ aiAssistRouter.post(
         const items = Array.isArray(parsed.items)
           ? parsed.items
               .map((it: { short?: unknown; long?: unknown }) => ({
-                short: typeof it?.short === "string" ? it.short.trim() : "",
-                long: typeof it?.long === "string" ? it.long.trim() : "",
+                short: typeof it?.short === "string" ? stripEmDashes(it.short.trim()) : "",
+                long: typeof it?.long === "string" ? stripEmDashes(it.long.trim()) : "",
               }))
               .filter((it: { short: string; long: string }) => it.short || it.long)
           : [];
@@ -312,7 +313,7 @@ aiAssistRouter.post(
       }
 
       // string fields: 1.1, 1.6, 2.4
-      const optimised = typeof parsed.optimised === "string" ? parsed.optimised.trim() : "";
+      const optimised = typeof parsed.optimised === "string" ? stripEmDashes(parsed.optimised.trim()) : "";
       if (!optimised) {
         res.status(502).json({ error: "The AI did not return a usable result. Please try again." });
         return;

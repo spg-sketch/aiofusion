@@ -110,9 +110,9 @@ async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: 
   }
 }
 
-export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<void> {
+export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<boolean> {
   try {
-    await fetch(`${apiBase()}/api/store/projects/upsert`, {
+    const res = await fetch(`${apiBase()}/api/store/projects/upsert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -123,8 +123,9 @@ export async function pushProjectMeta(project: StoredProject, logo?: string | nu
         logo: logo ?? null,
       }),
     });
+    return res.ok;
   } catch {
-    /* noop - will retry on next change/sync */
+    return false; // will retry on next change/sync
   }
 }
 
