@@ -5,7 +5,7 @@ import {
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, like } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -14,6 +14,8 @@ import {
   getAccount,
   getVisibleUsernames,
   canManage,
+  normalizeRole,
+  canCreateSubAccounts,
   ensureDefaultAdmin,
   createPlatformSession,
   deletePlatformSession,
@@ -28,12 +30,68 @@ const router: IRouter = Router();
 
 const MIGRATED_FLAG = "accounts_migrated";
 
-function publicAccount(row: { username: string; role: string; parent: string | null }) {
+function publicAccount(
+  row: { username: string; role: string; parent: string | null },
+  displayName?: string,
+) {
   return {
     username: row.username,
-    role: row.role === "admin" ? "admin" : "user",
+    role: normalizeRole(row.role),
     parent: row.parent ?? undefined,
+    ...(displayName ? { displayName } : {}),
   };
+}
+
+// Friendly display names live in the generic platform_meta key/value table
+// (one row per account, keyed `account:profile:<username>`) so no schema change
+// is needed. The value is JSON, currently just { displayName }.
+const PROFILE_PREFIX = "account:profile:";
+const profileKey = (username: string) => `${PROFILE_PREFIX}${normUsername(username)}`;
+
+function parseDisplayName(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const obj = JSON.parse(value) as { displayName?: unknown };
+    const dn = typeof obj?.displayName === "string" ? obj.displayName.trim() : "";
+    return dn || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Map of lowercased username -> display name for every account that has one.
+async function getDisplayNames(): Promise<Map<string, string>> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${PROFILE_PREFIX}%`));
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    const dn = parseDisplayName(r.value);
+    if (dn) map.set(r.key.slice(PROFILE_PREFIX.length), dn);
+  }
+  return map;
+}
+
+// Set (or, when blank, clear) an account's display name.
+async function setDisplayName(username: string, displayName: string): Promise<void> {
+  const key = profileKey(username);
+  const dn = displayName.trim().slice(0, 64);
+  if (!dn) {
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+    return;
+  }
+  const value = JSON.stringify({ displayName: dn });
+  await db
+    .insert(platformMetaTable)
+    .values({ key, value })
+    .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+async function deleteProfile(username: string): Promise<void> {
+  await db
+    .delete(platformMetaTable)
+    .where(eq(platformMetaTable.key, profileKey(username)));
 }
 
 // --- Session lifecycle ------------------------------------------------------
@@ -112,7 +170,12 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
-      res.json({ accounts: filtered.map(publicAccount) });
+      const names = await getDisplayNames();
+      res.json({
+        accounts: filtered.map((r) =>
+          publicAccount(r, names.get(normUsername(r.username))),
+        ),
+      });
     } catch {
       res.status(500).json({ error: "Failed to load accounts" });
     }
@@ -129,7 +192,13 @@ router.post(
       const actor = req.account!;
       const username = normUsername(req.body?.username);
       const password = typeof req.body?.password === "string" ? req.body.password : "";
-      const role: Role = req.body?.role === "admin" ? "admin" : "user";
+      const requestedRole = normalizeRole(req.body?.role);
+      // The master (admin) may create an agency, a direct client, or another
+      // admin. Everyone else can only ever create a leaf client account, so we
+      // coerce the requested role rather than trusting it.
+      const role: Role = actor.role === "admin" ? requestedRole : "client";
+      const displayName =
+        typeof req.body?.displayName === "string" ? req.body.displayName : "";
 
       if (!username) {
         res.status(400).json({ error: "Username is required." });
@@ -145,8 +214,9 @@ router.post(
         res.status(400).json({ error: "Password must be at least 4 characters." });
         return;
       }
-      if (role === "admin" && actor.role !== "admin") {
-        res.status(403).json({ error: "Only an admin can create an admin account." });
+      // A direct client is a leaf account and may not create sub-accounts.
+      if (!canCreateSubAccounts(actor.role)) {
+        res.status(403).json({ error: "Your account cannot create other accounts." });
         return;
       }
       const existing = await getAccount(username);
@@ -160,6 +230,7 @@ router.post(
         role,
         parent: normUsername(actor.username),
       });
+      if (displayName.trim()) await setDisplayName(username, displayName);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to create account" });
@@ -207,6 +278,40 @@ router.post(
   },
 );
 
+// Set (or clear) an account's friendly display name. The master may set any
+// account's; an account may set its own or its descendants'. A blank name
+// clears it (the account then shows by username).
+router.post(
+  "/platform/accounts/profile",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(req.body?.username);
+      const displayName =
+        typeof req.body?.displayName === "string" ? req.body.displayName : "";
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const isSelf = target === normUsername(actor.username);
+      if (!isSelf && !(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot change this account." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      await setDisplayName(target, displayName);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to update account" });
+    }
+  },
+);
+
 // Delete an account. Admins may delete anyone (except the last admin); a normal
 // account may delete its descendants. An account cannot delete itself here.
 router.post(
@@ -249,6 +354,7 @@ router.post(
       await db
         .delete(platformAccountsTable)
         .where(eq(platformAccountsTable.username, target));
+      await deleteProfile(target);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete account" });

@@ -20,6 +20,10 @@ import {
   serverAddUser,
   serverDeleteUser,
   serverChangePassword,
+  serverAssignOwner,
+  serverSetDisplayName,
+  refreshAccountsCache,
+  canCreateSubAccounts,
   bootstrapAuth,
 } from "./lib/auth";
 import step1Img from "./assets/photos/photo-diagnose.jpg";
@@ -7405,9 +7409,9 @@ function PlatformHomePage({
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Signed in as</p>
                   <h2 className="text-[18px] font-bold leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                    {session.username}
+                    {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
                     <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : accentSoft, color: session.role === "admin" ? paper : accent }}>
-                      {session.role}
+                      {roleLabel(session.role)}
                     </span>
                   </h2>
                 </div>
@@ -7426,9 +7430,9 @@ function PlatformHomePage({
                     className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
                     style={{ color: ink, border: `1.5px solid ${ink}30` }}
                   >
-                    <Users size={14} /> Manage Users
+                    <Users size={14} /> Manage Accounts
                   </button>
-                ) : (
+                ) : canCreateSubAccounts(session.role) ? (
                   <button
                     onClick={onManageSubAccounts}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -7436,7 +7440,7 @@ function PlatformHomePage({
                   >
                     <Users size={14} /> Client accounts
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={onSignOut}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -7534,37 +7538,65 @@ function PlatformHomePage({
   );
 }
 
-function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: () => void }) {
+// Friendly label for a role. The master account is shown as "Master", legacy
+// "user" accounts behave as agencies.
+function roleLabel(role: LocalRole | undefined): string {
+  if (role === "admin") return "Master";
+  if (role === "client") return "Client";
+  return "Agency";
+}
+
+// What an account is shown as: its display name when set, otherwise its login.
+function accountLabel(u: { username: string; displayName?: string }): string {
+  return (u.displayName && u.displayName.trim()) || u.username;
+}
+
+function UsersAdminPage({
+  session,
+  onBack,
+  onAssignProjectOwner,
+}: {
+  session: LocalSession;
+  onBack: () => void;
+  onAssignProjectOwner: (id: string, owner: string) => void;
+}) {
   const paper = "#FBF6EC";
   const ink = "#102B36";
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
+  const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
-  const allProjects = loadStoredProjects();
+  // Re-read projects on every tick so owner reassignments show immediately.
+  const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
     allProjects.filter((p) => (p.owner || "").toLowerCase() === username.toLowerCase());
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<LocalRole>("user");
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [newRole, setNewRole] = useState<LocalRole>("agency");
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [pwUser, setPwUser] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+  const [nameUser, setNameUser] = useState<string | null>(null);
+  const [nameValue, setNameValue] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
 
-  const refresh = () => setUsers(getLocalUsers());
+  const refresh = () => { setUsers(getLocalUsers()); setTick((t) => t + 1); };
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
     setAddSuccess(null);
     void (async () => {
-      const result = await serverAddUser(newUsername, newPassword, newRole);
+      const result = await serverAddUser(newUsername, newPassword, newRole, newDisplayName);
       if (result.ok) {
-        setAddSuccess(`Created ${newRole} '${newUsername.trim()}'.`);
+        setAddSuccess(`Created ${roleLabel(newRole)} account '${newDisplayName.trim() || newUsername.trim()}'.`);
         setNewUsername("");
         setNewPassword("");
-        setNewRole("user");
+        setNewDisplayName("");
+        setNewRole("agency");
         refresh();
       } else {
         setAddError(result.error);
@@ -7600,6 +7632,28 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
     })();
   };
 
+  const handleSaveName = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNameError(null);
+    if (!nameUser) return;
+    void (async () => {
+      const result = await serverSetDisplayName(nameUser, nameValue);
+      if (!result.ok) {
+        setNameError(result.error);
+        return;
+      }
+      setNameUser(null);
+      setNameValue("");
+      refresh();
+    })();
+  };
+
+  // Reassign a project to any account, then refresh so the new owner shows.
+  const handleAssign = (id: string, owner: string) => {
+    onAssignProjectOwner(id, owner);
+    refresh();
+  };
+
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
@@ -7625,16 +7679,27 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
             Manage platform users
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            Add, remove and reset passwords for everyone with access to the platform. Admins can manage users; users have access to projects only.
+            Create the accounts that run on the platform. An Agency Reseller can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only. Use the controls below to set a friendly name and to move any project to the account that should own it.
           </p>
         </div>
 
-        {/* ADD USER */}
+        {/* ADD ACCOUNT */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new user</h2>
+          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
-            <div className="md:col-span-4">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username</label>
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
+              <input
+                type="text"
+                value={newDisplayName}
+                onChange={(e) => setNewDisplayName(e.target.value)}
+                placeholder="e.g. Simpatico PR Ltd"
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
               <input
                 type="text"
                 value={newUsername}
@@ -7655,19 +7720,20 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Role</label>
+            <div className="md:col-span-4">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as LocalRole)}
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
+                <option value="agency">Agency Reseller</option>
+                <option value="client">Direct Client</option>
+                <option value="admin">Master Admin</option>
               </select>
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-4">
               <button
                 type="submit"
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
@@ -7694,6 +7760,8 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
             {users.map((u) => {
               const isMe = u.username.toLowerCase() === session.username.toLowerCase();
               const editingPw = pwUser === u.username;
+              const editingName = nameUser === u.username;
+              const hasDisplayName = !!(u.displayName && u.displayName.trim());
               return (
                 <li key={u.username} className="px-6 py-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -7703,15 +7771,30 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
                       </div>
                       <div>
                         <p className="text-[14px] font-bold" style={{ color: ink }}>
-                          {u.username}
+                          {accountLabel(u)}
                           {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
                         </p>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
-                          {u.role}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
+                            {roleLabel(u.role)}
+                          </span>
+                          {hasDisplayName && (
+                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
+                          )}
+                          {u.parent && (
+                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setNameUser(editingName ? null : u.username); setNameValue(u.displayName || ""); setNameError(null); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                      >
+                        <FileEdit size={12} /> {editingName ? "Cancel" : "Name"}
+                      </button>
                       <button
                         onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -7740,18 +7823,53 @@ function UsersAdminPage({ session, onBack }: { session: LocalSession; onBack: ()
                         {owned.length === 0 ? (
                           <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col gap-2">
                             {owned.map((p) => (
-                              <span key={p.id} className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
-                                {p.name}
-                              </span>
+                              <div key={p.id} className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
+                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
+                                  {p.name}
+                                </span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
+                                <select
+                                  value={(p.owner || "").toLowerCase()}
+                                  onChange={(e) => handleAssign(p.id, e.target.value)}
+                                  className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
+                                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                                >
+                                  {users.map((o) => (
+                                    <option key={o.username} value={o.username.toLowerCase()}>
+                                      {accountLabel(o)} ({roleLabel(o.role)})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             ))}
                           </div>
                         )}
                       </div>
                     );
                   })()}
+                  {editingName && (
+                    <form onSubmit={handleSaveName} className="mt-3 flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={nameValue}
+                        onChange={(e) => setNameValue(e.target.value)}
+                        placeholder="Display name (leave blank to clear)"
+                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                        style={{ background: accent }}
+                      >
+                        Save
+                      </button>
+                      {nameError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{nameError}</span>}
+                    </form>
+                  )}
                   {editingPw && (
                     <form onSubmit={handleSavePassword} className="mt-3 flex flex-wrap items-center gap-2">
                       <input
@@ -7822,7 +7940,7 @@ function SubAccountsPage({
     setAddError(null);
     setAddSuccess(null);
     void (async () => {
-      const result = await serverAddUser(newUsername, newPassword, "user");
+      const result = await serverAddUser(newUsername, newPassword, "client");
       if (result.ok) {
         setAddSuccess(`Created client account '${newUsername.trim()}'.`);
         setNewUsername("");
@@ -8319,10 +8437,22 @@ function App() {
   }, [storedProjects, session]);
 
   const handleAssignProjectOwner = (id: string, owner: string) => {
-    const updated = assignProjectOwner(id, owner);
-    if (!updated) return;
-    setStoredProjects(loadStoredProjects());
-    void pushProjectMeta(updated as unknown as Record<string, unknown> & { id: string }, clientLogos[id] ?? null);
+    // Persist server-side first (the upsert push deliberately never changes
+    // owner). Only mirror the change locally once the server confirms it, so a
+    // denied or failed reassignment never leaves the UI showing a move that did
+    // not actually happen. On failure, resync from the server and surface why.
+    void (async () => {
+      const result = await serverAssignOwner(id, owner);
+      if (!result.ok) {
+        await refreshAccountsCache();
+        setStoredProjects(loadStoredProjects());
+        window.alert(result.error);
+        return;
+      }
+      assignProjectOwner(id, owner);
+      setStoredProjects(loadStoredProjects());
+      await refreshAccountsCache();
+    })();
   };
 
   useEffect(() => { removeDemoSeedData(); }, []);
@@ -8492,10 +8622,11 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} />;
+    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} />;
   }
   if (view === "sub-accounts") {
-    if (!session) {
+    // Direct clients are leaf accounts and cannot manage sub-accounts.
+    if (!session || !canCreateSubAccounts(session.role)) {
       return null;
     }
     return <SubAccountsPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} />;

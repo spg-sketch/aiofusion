@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, projectsTable } from "@workspace/db";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
 
 const router: IRouter = Router();
 
@@ -209,6 +209,69 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save intake" });
+    }
+  },
+);
+
+// Reassign a project to a different account (e.g. the master handing a project
+// to an agency, or an agency handing one to a client). This is the only path
+// that changes ownership - the upsert route deliberately never does. The caller
+// must be able to see both the current owner and the new owner: an admin can
+// move any project to any account; a non-admin can only move projects within
+// its own visibility subtree (its accounts plus descendants).
+router.post(
+  "/store/projects/owner",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { id, owner } = req.body ?? {};
+      if (!id || typeof id !== "string") {
+        res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      const target = normUsername(owner);
+      if (!target) {
+        res.status(400).json({ error: "Missing new owner" });
+        return;
+      }
+      const visible = await visibleOwners(req);
+      const existingOwner = await getOwner(id);
+      if (existingOwner === undefined) {
+        res.status(404).json({ error: "Project not found." });
+        return;
+      }
+      if (!canSee(existingOwner, visible)) {
+        res.status(403).json({ error: "You cannot reassign this project." });
+        return;
+      }
+      // The new owner must exist and be within the caller's visibility set
+      // (admins may assign to anyone).
+      if (visible !== null && !visible.includes(target)) {
+        res.status(403).json({ error: "You cannot assign to that account." });
+        return;
+      }
+      if (!(await getAccount(target))) {
+        res.status(404).json({ error: "That account does not exist." });
+        return;
+      }
+      // Atomic guard: scope the update to rows the caller may touch, so the
+      // authorization holds even if ownership changed after the check above.
+      // `returning` tells us whether a row actually matched: if ownership shifted
+      // out of the caller's scope between the check and the write, no row is
+      // updated and we report the conflict instead of a false success.
+      const scope = ownerPredicate(visible);
+      const updated = await db
+        .update(projectsTable)
+        .set({ owner: target, updatedAt: new Date() })
+        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
+        .returning({ id: projectsTable.id });
+      if (updated.length === 0) {
+        res.status(409).json({ error: "You cannot reassign this project." });
+        return;
+      }
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to reassign project" });
     }
   },
 );

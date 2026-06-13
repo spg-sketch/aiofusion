@@ -21,7 +21,40 @@ import {
   USERNAME_RE,
   getVisibleUsernames,
   canManage,
+  normalizeRole,
+  canCreateSubAccounts,
 } from "./platform-auth";
+
+describe("normalizeRole (role overload + legacy handling)", () => {
+  it("passes through the known roles unchanged", () => {
+    expect(normalizeRole("admin")).toBe("admin");
+    expect(normalizeRole("agency")).toBe("agency");
+    expect(normalizeRole("client")).toBe("client");
+  });
+
+  it("treats the legacy 'user' value as the default agency-like role", () => {
+    expect(normalizeRole("user")).toBe("user");
+  });
+
+  it("falls back to 'user' for unknown or non-string values", () => {
+    expect(normalizeRole("superadmin")).toBe("user");
+    expect(normalizeRole(undefined)).toBe("user");
+    expect(normalizeRole(null)).toBe("user");
+    expect(normalizeRole(42)).toBe("user");
+  });
+});
+
+describe("canCreateSubAccounts (creation gating)", () => {
+  it("lets the master and agencies (incl. legacy users) create sub-accounts", () => {
+    expect(canCreateSubAccounts("admin")).toBe(true);
+    expect(canCreateSubAccounts("agency")).toBe(true);
+    expect(canCreateSubAccounts("user")).toBe(true);
+  });
+
+  it("blocks a direct client (leaf account) from creating sub-accounts", () => {
+    expect(canCreateSubAccounts("client")).toBe(false);
+  });
+});
 
 describe("password hashing", () => {
   it("verifies a correct password against its own hash", () => {

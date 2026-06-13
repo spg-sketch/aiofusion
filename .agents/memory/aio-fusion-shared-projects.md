@@ -9,16 +9,23 @@ Projects, their Set-Up (intake) answers and logos are mirrored to a Postgres
 `projects` table via api-server `/api/store/*` routes, with localStorage kept as
 a fast cache. Frontend sync lives in `artifacts/aio-fusion/src/lib/projectSync.ts`.
 
-## Deliberate design decision: store is global / ungated
-**The store routes are intentionally NOT auth-gated.** Every signed-in user shares
-all projects ("one login sees everything, everywhere").
-**Why:** the frontend uses its OWN localStorage prototype auth (`aio.auth.*`),
-not the backend Replit Auth; this is a shared demo workspace for Simpatico PR.
-The other service routes (diagnostic, seo-audit) are ungated the same way.
-**How to apply:** do NOT add per-user partitioning or auth to `/api/store/*`
-unless the product genuinely moves off the localStorage prototype auth. A code
-review will flag this as "broken access control" — it is a conscious tradeoff,
-not a bug.
+## Store is now per-account gated (3-tier account model)
+**The `/api/store/*` routes are auth-gated via platform sessions and isolated by
+account subtree.** An admin (master "AIO Fusion") sees all; an agency sees itself
+plus descendant clients; a leaf client sees only its own. Roles overload the
+existing `role` varchar: `admin | agency | client` (+ legacy `user` = agency),
+with no DB schema change. `getVisibleUsernames`/`canManage`/`canCreateSubAccounts`
+in api-server `platform-auth.ts` define the rules; store routes scope every
+read AND write to the caller's visible owner set.
+**Why:** the product moved off "one login sees everything" to real reseller
+hierarchy (agencies manage their own clients). Display names live in
+`platform_meta` kv under `account:profile:<username>` (also no schema change).
+**How to apply:** owner-reassignment (`POST /store/projects/owner`) and
+soft-delete must use `ownerPredicate(visible)` as an atomic write scope; the
+owner endpoint additionally uses `.returning()` and reports 409 when 0 rows match
+(closes the TOCTOU false-success). The client owner handler awaits the server
+FIRST and only mirrors locally on success. Creation gating: non-admins are
+coerced to `client`; leaf clients are blocked (`canCreateSubAccounts`).
 
 ## Two conflict guards that must stay (both are data-loss preventers)
 1. **Never clear `deletedAt` on upsert/intake conflict updates** (store.ts). Only

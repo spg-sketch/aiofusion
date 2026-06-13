@@ -1,9 +1,27 @@
-export type Role = "admin" | "user";
+export type Role = "admin" | "agency" | "client" | "user";
+
+// Normalise any stored/incoming role to a known value. Legacy "user" accounts
+// (created before the agency/client split) behave like an agency.
+export function normalizeRole(role: unknown): Role {
+  if (role === "admin") return "admin";
+  if (role === "agency") return "agency";
+  if (role === "client") return "client";
+  return "user";
+}
+
+// The master and agency resellers may create sub-accounts; a direct client may
+// not.
+export function canCreateSubAccounts(role: Role | undefined): boolean {
+  return role !== "client";
+}
 
 export type User = {
   username: string;
   password: string;
   role: Role;
+  // Optional friendly label shown in the UI (e.g. "AIO Fusion"). The username
+  // stays the canonical login handle.
+  displayName?: string;
   createdAt: number;
   // Username of the account that created this one. Set only for sub-accounts
   // (e.g. a client login created by an agency user). Undefined for top-level
@@ -33,7 +51,7 @@ function isValidUser(x: unknown): x is User {
     typeof u.username === "string" &&
     u.username.length > 0 &&
     typeof u.password === "string" &&
-    (u.role === "admin" || u.role === "user") &&
+    (u.role === "admin" || u.role === "agency" || u.role === "client" || u.role === "user") &&
     typeof u.createdAt === "number" &&
     (u.parent === undefined || typeof u.parent === "string")
   );
@@ -72,7 +90,14 @@ export function getSession(): Session | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.username === "string" && (parsed.role === "admin" || parsed.role === "user")) {
+    if (
+      parsed &&
+      typeof parsed.username === "string" &&
+      (parsed.role === "admin" ||
+        parsed.role === "agency" ||
+        parsed.role === "client" ||
+        parsed.role === "user")
+    ) {
       return parsed as Session;
     }
     return null;
@@ -205,7 +230,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -233,8 +258,9 @@ function cacheAccounts(accounts: ServerAccount[]): void {
   const users: User[] = accounts.map((a) => ({
     username: a.username,
     password: "",
-    role: a.role === "admin" ? "admin" : "user",
+    role: normalizeRole(a.role),
     createdAt: Date.now(),
+    ...(a.displayName ? { displayName: a.displayName } : {}),
     ...(a.parent ? { parent: a.parent } : {}),
   }));
   saveUsers(users);
@@ -328,10 +354,41 @@ export async function serverAddUser(
   username: string,
   password: string,
   role: Role,
+  displayName?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { ok, json } = await postJson("/api/platform/accounts", { username, password, role });
+  const { ok, json } = await postJson("/api/platform/accounts", {
+    username,
+    password,
+    role,
+    ...(displayName ? { displayName } : {}),
+  });
   if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
   await refreshAccountsCache();
+  return { ok: true };
+}
+
+// Set (or clear, when blank) an account's friendly display name.
+export async function serverSetDisplayName(
+  username: string,
+  displayName: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/profile", {
+    username,
+    displayName,
+  });
+  if (!ok) return { ok: false, error: json?.error || "Failed to update account." };
+  await refreshAccountsCache();
+  return { ok: true };
+}
+
+// Reassign a project to another account. This persists on the server (the only
+// path that changes ownership) and respects the caller's visibility rules.
+export async function serverAssignOwner(
+  id: string,
+  owner: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/store/projects/owner", { id, owner });
+  if (!ok) return { ok: false, error: json?.error || "Failed to reassign project." };
   return { ok: true };
 }
 

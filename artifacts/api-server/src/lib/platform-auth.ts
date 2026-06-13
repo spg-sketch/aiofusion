@@ -12,11 +12,27 @@ import { eq } from "drizzle-orm";
 export const PLATFORM_COOKIE = "aio_sid";
 export const PLATFORM_SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-export type Role = "admin" | "user";
+export type Role = "admin" | "agency" | "client" | "user";
 
 export interface PlatformAccount {
   username: string;
   role: Role;
+}
+
+// Normalise an arbitrary stored/incoming role string to a known Role. The
+// legacy "user" value predates the agency/client split and is kept working: it
+// behaves like an agency (a top-level account that can create sub-clients).
+export function normalizeRole(role: unknown): Role {
+  if (role === "admin") return "admin";
+  if (role === "agency") return "agency";
+  if (role === "client") return "client";
+  return "user";
+}
+
+// Whether an account of this role may create sub-accounts. The master (admin)
+// and agency resellers may; a direct client (a leaf account) may not.
+export function canCreateSubAccounts(role: Role): boolean {
+  return role !== "client";
 }
 
 // --- Password hashing (scrypt, no external dependency) ---------------------
@@ -120,7 +136,7 @@ export async function getAccount(username: string): Promise<
   return {
     username: row.username,
     passwordHash: row.passwordHash,
-    role: row.role === "admin" ? "admin" : "user",
+    role: normalizeRole(row.role),
     parent: row.parent,
   };
 }
