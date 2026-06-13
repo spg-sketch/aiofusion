@@ -28,7 +28,7 @@ import {
 function probe(overrides: Partial<ProbeResult> = {}): ProbeResult {
   return {
     question: "q",
-    model: "GPT-4o (ChatGPT)",
+    model: "GPT-5 (ChatGPT)",
     response: "",
     mentioned: false,
     mentionContext: null,
@@ -505,8 +505,8 @@ describe("aggregateTopCompetitors", () => {
 describe("groupProbesByQuery", () => {
   it("groups runs by model and question", () => {
     const results = [
-      probe({ model: "GPT-4o (ChatGPT)", question: "q1" }),
-      probe({ model: "GPT-4o (ChatGPT)", question: "q1" }),
+      probe({ model: "GPT-5 (ChatGPT)", question: "q1" }),
+      probe({ model: "GPT-5 (ChatGPT)", question: "q1" }),
       probe({ model: "Claude (Anthropic)", question: "q1" }),
     ];
     const grouped = groupProbesByQuery(results);
@@ -587,8 +587,8 @@ describe("computeVisibilityMetrics", () => {
 
   it("splits probe and mention counts by engine", () => {
     const results = [
-      probe({ model: "GPT-4o (ChatGPT)", mentioned: true }),
-      probe({ model: "GPT-4o (ChatGPT)", mentioned: false }),
+      probe({ model: "GPT-5 (ChatGPT)", mentioned: true }),
+      probe({ model: "GPT-5 (ChatGPT)", mentioned: false }),
       probe({ model: "Claude (Anthropic)", mentioned: true }),
       probe({ model: "Claude (Anthropic)", mentioned: true }),
     ];

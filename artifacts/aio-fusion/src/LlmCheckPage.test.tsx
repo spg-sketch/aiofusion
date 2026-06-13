@@ -23,7 +23,7 @@ const LEGACY_RESULT = {
   probes: [
     {
       question: "What do you know about Acme Ltd?",
-      model: "GPT-4o (ChatGPT)",
+      model: "GPT-5 (ChatGPT)",
       mentioned: true,
       mentionContext: "...Acme Ltd is a consultancy...",
       responsePreview: "Acme Ltd is a consultancy.",

@@ -1934,7 +1934,7 @@ Inputs supplied with this brief:
 - A set of measured facts counted directly from the page (image and alt-text counts, schema types found, heading counts, sitemap size and so on). These are supplied as ground truth so the figures in the report match what is actually on the page.
 
 Engine used:
-- Anthropic Claude (claude-sonnet-4-5), run at temperature 0 and grounded on the measured facts so the same page gives near-identical results each time. OpenAI (gpt-4o), also at temperature 0 with a fixed seed, is kept as a silent backup only if Claude is unavailable.`;
+- Anthropic Claude (claude-sonnet-4-5), run at temperature 0 and grounded on the measured facts so the same page gives near-identical results each time. OpenAI (gpt-5), also at temperature 0 with a fixed seed, is kept as a silent backup only if Claude is unavailable.`;
 
   const handleRunDiagnostic = async () => {
     if (!contentInput.trim() && !urlInput.trim()) {

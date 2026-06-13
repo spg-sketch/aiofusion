@@ -183,9 +183,10 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null):
   if (!client) throw new Error("OpenAI integration not configured");
 
   const response = await client.chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-5",
     max_completion_tokens: 8192,
-    temperature: 0,
+    // gpt-5 only supports the default temperature (1); seed is still honoured
+    // for best-effort determinism on this silent fallback path.
     seed: DETERMINISTIC_SEED,
     messages: [
       {

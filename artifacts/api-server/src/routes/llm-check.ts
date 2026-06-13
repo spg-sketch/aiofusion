@@ -290,7 +290,7 @@ async function probeOpenAI(question: string, companyName: string): Promise<Probe
 
   try {
     const response = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       max_completion_tokens: 1500,
       messages: [
         {
@@ -306,7 +306,7 @@ async function probeOpenAI(question: string, companyName: string): Promise<Probe
 
     return {
       question,
-      model: "GPT-4o (ChatGPT)",
+      model: "GPT-5 (ChatGPT)",
       response: text,
       mentioned,
       mentionContext: findMentionContext(text, companyName),
