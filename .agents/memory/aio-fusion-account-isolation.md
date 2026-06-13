@@ -48,6 +48,32 @@ admins (no restriction).
 which would let a stale/racing request mutate another account's project. The
 predicate closes that window at statement-execution time.
 
+## Gotcha: a NULL-owner (orphaned) project + a stale local session hides it
+There is **no API path to set/reassign a project's owner from NULL**: upsert/intake
+preserve owner on conflict, `/api/platform/migrate` is one-shot (meta flag), and
+account-delete only reassigns by *matching* an existing owner string (a NULL owner
+matches nothing, and usernames must be 2-32 chars so you cannot create an account
+named ""). The prod DB is read-only via `executeSql` (read replica). So an orphaned
+prod project can only be re-owned by a code change + republish.
+**Symptom seen in the wild:** an orphaned (NULL-owner) project is visible to admins
+both server-side (`canSee(owner, null)===true`) and client-side (admin = no filter),
+yet a user reported it missing while their `admin`-owned projects showed. Root cause
+was a **stale local session whose role was not "admin"**: `getVisibleUsernames`
+returned `{admin,...}` (owner-filter) instead of `null`, so it showed owner=admin
+projects and hid the NULL-owner one. **Fix: re-login / hard refresh** -
+`bootstrapAuth` re-reads role from `/api/platform/me` and resets the session to
+admin, restoring the no-filter view.
+
+## How to edit production project data (no DB write access)
+Drive the **live app API** at `https://www.aiofusion.ai` with curl + a cookie jar:
+POST `/api/platform/login` then `/api/store/projects/upsert`. The admin account's
+password **equals the `PLATFORM_ADMIN_PASSWORD` secret** (also present in the dev
+env), so pass it via the env var, never echo it. Upsert **overwrites `data`**, so
+always GET the project first and resend its existing `data`/`logo` (only change the
+field you mean to). To rename cleanly, set BOTH the `name` column and `data.name`
+(display uses `pickName(data.name, colName, ...)`, which ignores the "New Project"
+placeholder).
+
 ## Rule: never seed a hardcoded admin password in production
 `ensureDefaultAdmin` only seeds the known fallback credential in development. In
 production it requires `PLATFORM_ADMIN_PASSWORD`; if unset it skips seeding and
