@@ -47,3 +47,10 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local backup downloads — the durable copies live in object storage, so new
+# dumps written here stay local only. The already-tracked
+# aio-fusion-db-20260612-* files remain in git as evidence of the original
+# empty-dump failure (git keeps tracked files even when ignored).
+/backups/*.sql
+/backups/*.sql.gz
