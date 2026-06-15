@@ -129,6 +129,26 @@ it by project id MUST still prove ownership: when no project row exists to check
 against, only an admin may read the orphaned history (else it leaks across
 accounts).
 
+## Whole-DB backups: run, prove, and schedule
+`@workspace/scripts` has `backup` (dump+verify+upload to object storage under
+`<PRIVATE_OBJECT_DIR>/db-backups/`, keeps last `BACKUP_RETENTION`=14, prunes only
+after a good verify) and `restore:list|download|verify`. The backup is trusted
+only if the dump's `projects` row count equals the live count and live is
+non-empty; a bad dump is quarantined `.failed` and good backups are left intact.
+**Restore drill** needs a SCRATCH `TARGET_DATABASE_URL` (the script refuses if it
+equals `DATABASE_URL`). Make one on the SAME server with
+`psql "$DATABASE_URL" -c 'CREATE DATABASE "<scratch>"'`, derive the target URL by
+swapping the path (`new URL(DATABASE_URL).pathname`), run `restore:verify`, then
+terminate backends + `DROP DATABASE`. Never print the URL (creds).
+**Why:** a 2026-06-12 one-off dump captured ZERO projects, so there was nothing to
+restore from when data was lost; verification + a real restore drill is the only
+proof backups work.
+**How to apply:** the daily run is NOT automatic until the user creates a Replit
+Scheduled Deployment whose command is `pnpm --filter @workspace/scripts run backup`
+(prod gets object-storage + DATABASE_URL env automatically). Object storage is
+already provisioned (`PRIVATE_OBJECT_DIR` set). Per-project append-only snapshots
+(above) already protect live edits regardless.
+
 ## Testing the api-server
 `$REPLIT_DEV_DOMAIN/api/...` routes to the WEB app (Vite), NOT api-server, so it
 returns empty. Test api-server directly at `http://localhost:8080` (its PORT), or
