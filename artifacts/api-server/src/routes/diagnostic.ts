@@ -150,12 +150,43 @@ function formatFacts(facts?: GeoAuditFacts | null): string {
   return lines.join("\n");
 }
 
-function buildUserMessage(content: string, facts?: GeoAuditFacts | null): string {
-  const factsBlock = formatFacts(facts);
-  return `Analyse the following web page content for GEO readiness. Return only valid JSON.${factsBlock ? `\n\n${factsBlock}` : ""}\n\n<content>\n${content}\n</content>`;
+// The company the user explicitly confirmed an ambiguous brand name refers to,
+// threaded in from the entity-clarity step. Lets every audit anchor to the same
+// company the Earned Media (LLM Check) audit uses, instead of leaving the engine
+// to guess from the page content. Absent when the user has made no choice, so
+// the audit behaviour is then unchanged.
+export interface ConfirmedEntity {
+  name: string;
+  description?: string;
 }
 
-async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null): Promise<any> {
+export function sanitizeConfirmedEntity(raw: unknown): ConfirmedEntity | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const name = typeof r.name === "string" ? r.name.trim().slice(0, 200) : "";
+  if (!name) return null;
+  const description = typeof r.description === "string" ? r.description.trim().slice(0, 300) : "";
+  return description ? { name, description } : { name };
+}
+
+// A short anchoring instruction naming the confirmed company, mirroring the
+// confirmed-entity anchor in the LLM Check audit's buildIdentityProbe. It tells
+// the engine which company the page belongs to so an ambiguous / acronym brand
+// is not analysed as an unrelated namesake. Returns "" when no identity has been
+// confirmed, leaving the prompt (and so the result) unchanged.
+export function buildIdentityAnchor(confirmedEntity?: ConfirmedEntity | null): string {
+  if (!confirmedEntity?.name) return "";
+  const desc = confirmedEntity.description?.split(/[.\n]/)[0].trim().slice(0, 160);
+  return `This page belongs to ${confirmedEntity.name}${desc ? `, ${desc}` : ""}. Analyse it as the web presence of this specific company, not other organisations with a similar name. Do not introduce facts about that company beyond what the content and measured facts below show.`;
+}
+
+function buildUserMessage(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null): string {
+  const factsBlock = formatFacts(facts);
+  const anchor = buildIdentityAnchor(confirmedEntity);
+  return `Analyse the following web page content for GEO readiness. Return only valid JSON.${anchor ? `\n\n${anchor}` : ""}${factsBlock ? `\n\n${factsBlock}` : ""}\n\n<content>\n${content}\n</content>`;
+}
+
+async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null): Promise<any> {
   const client = createAnthropicClient();
   if (!client) throw new Error("Anthropic integration not configured");
 
@@ -167,7 +198,7 @@ async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null):
     messages: [
       {
         role: "user",
-        content: buildUserMessage(content, facts),
+        content: buildUserMessage(content, facts, confirmedEntity),
       },
     ],
   });
@@ -178,7 +209,7 @@ async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null):
   return normaliseResult(extractJSON(textBlock.text));
 }
 
-async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null): Promise<any> {
+async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null): Promise<any> {
   const client = createOpenAIClient();
   if (!client) throw new Error("OpenAI integration not configured");
 
@@ -195,7 +226,7 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null):
       },
       {
         role: "user",
-        content: buildUserMessage(content, facts),
+        content: buildUserMessage(content, facts, confirmedEntity),
       },
     ],
   });
@@ -208,6 +239,7 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null):
 
 diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
   const { content, url } = req.body;
+  const confirmedEntity = sanitizeConfirmedEntity(req.body?.confirmedEntity);
 
   if (!content && !url) {
     res.status(400).json({ error: "Either content or url is required" });
@@ -258,7 +290,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     // one engine, temperature 0.
     let result: any;
     try {
-      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts);
+      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts, confirmedEntity);
       result = {
         ...claudeValue,
         provider: "claude",
@@ -267,7 +299,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     } catch (claudeErr: any) {
       logger.warn({ err: claudeErr?.message }, "Claude failed, falling back to OpenAI");
       try {
-        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts);
+        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts, confirmedEntity);
         result = {
           ...openaiValue,
           provider: "openai",

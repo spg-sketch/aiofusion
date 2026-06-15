@@ -32,7 +32,7 @@ vi.mock("../middleware/concurrency-guard", () => ({
   diagnosticConcurrencyGuard: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-import diagnosticRouter, { normaliseResult, extractJSON } from "./diagnostic";
+import diagnosticRouter, { normaliseResult, extractJSON, sanitizeConfirmedEntity, buildIdentityAnchor } from "./diagnostic";
 
 const CATEGORY_NAMES = [
   "Schema & Structured Data",
@@ -257,6 +257,56 @@ describe("normaliseResult", () => {
   });
 });
 
+describe("sanitizeConfirmedEntity", () => {
+  it("returns null for non-object / empty input", () => {
+    expect(sanitizeConfirmedEntity(null)).toBeNull();
+    expect(sanitizeConfirmedEntity(undefined)).toBeNull();
+    expect(sanitizeConfirmedEntity("SMG")).toBeNull();
+    expect(sanitizeConfirmedEntity({})).toBeNull();
+  });
+
+  it("returns null when name is missing or blank", () => {
+    expect(sanitizeConfirmedEntity({ description: "a broadcaster" })).toBeNull();
+    expect(sanitizeConfirmedEntity({ name: "   " })).toBeNull();
+  });
+
+  it("keeps a name-only entity (no description key when absent)", () => {
+    expect(sanitizeConfirmedEntity({ name: "  Shopper Media Group  " })).toEqual({ name: "Shopper Media Group" });
+  });
+
+  it("trims and keeps the description when present", () => {
+    expect(sanitizeConfirmedEntity({ name: "SMG", description: "  a UK retail media agency  " })).toEqual({
+      name: "SMG",
+      description: "a UK retail media agency",
+    });
+  });
+
+  it("caps name at 200 and description at 300 characters", () => {
+    const out = sanitizeConfirmedEntity({ name: "n".repeat(250), description: "d".repeat(400) });
+    expect(out?.name).toHaveLength(200);
+    expect(out?.description).toHaveLength(300);
+  });
+});
+
+describe("buildIdentityAnchor", () => {
+  it("returns an empty string when no identity is confirmed", () => {
+    expect(buildIdentityAnchor(null)).toBe("");
+    expect(buildIdentityAnchor(undefined)).toBe("");
+  });
+
+  it("names the confirmed company and warns against namesakes", () => {
+    const anchor = buildIdentityAnchor({ name: "Shopper Media Group" });
+    expect(anchor).toContain("Shopper Media Group");
+    expect(anchor).toMatch(/similar name/i);
+  });
+
+  it("folds in the first sentence of the description", () => {
+    const anchor = buildIdentityAnchor({ name: "SMG", description: "a UK retail media agency. Founded 2010." });
+    expect(anchor).toContain("a UK retail media agency");
+    expect(anchor).not.toContain("Founded 2010");
+  });
+});
+
 describe("POST /api/diagnostic", () => {
   let server: Server;
   let baseUrl: string;
@@ -330,6 +380,28 @@ describe("POST /api/diagnostic", () => {
     expect(json.categories).toHaveLength(6);
     expect(json.sources.claude.score).toBe(64);
     expect(messagesCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the confirmed identity anchor into the model prompt", async () => {
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(validRaw())));
+    const { status } = await post({
+      content: "Some page content to analyse.",
+      confirmedEntity: { name: "Shopper Media Group", description: "a UK retail media agency" },
+    });
+    expect(status).toBe(200);
+    const userMessage = messagesCreate.mock.calls[0][0].messages[0].content as string;
+    expect(userMessage).toContain("Shopper Media Group");
+    expect(userMessage).toContain("a UK retail media agency");
+    expect(userMessage).toMatch(/similar name/i);
+  });
+
+  it("leaves the prompt unchanged when no identity is confirmed", async () => {
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(validRaw())));
+    const { status } = await post({ content: "Some page content to analyse." });
+    expect(status).toBe(200);
+    const userMessage = messagesCreate.mock.calls[0][0].messages[0].content as string;
+    expect(userMessage).not.toMatch(/this page belongs to/i);
+    expect(userMessage).not.toMatch(/similar name/i);
   });
 
   it("normalises a model response that wraps JSON in a code fence", async () => {

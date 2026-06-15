@@ -59,6 +59,17 @@ name/description. When it is null, behaviour is unchanged (deterministic
 fallback). Keep all of this presence-gated; a missing choice must never alter the
 baseline verdict.
 
+The same `confirmedEntity` is also threaded into the **content-based diagnostic
+audit** (`diagnostic.ts`): the client (`App.tsx` handleRunDiagnostic) sends
+`getConfirmedEntity() || undefined`, the route sanitises it
+(`sanitizeConfirmedEntity`) and `buildIdentityAnchor` prepends a one-line "this
+page belongs to X, analyse it as this company not a namesake" instruction to the
+model user message (both Claude + OpenAI fallback). The anchor also says not to
+introduce facts beyond the page/measured-facts, preserving the grounding rule.
+Empty string when unconfirmed, so the prompt and result are byte-identical to the
+old behaviour. Thread any new audit type the same way to keep entity resolution
+consistent product-wide.
+
 ## Web-grounding decision
 Live `web_search` is deliberately NOT enabled. **Why:** the shared Anthropic
 proxy lacks a reliable web_search tool; live retrieval breaks audit determinism

@@ -1,4 +1,4 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId } from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity } from "./IntakeForm";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { stripEmDashes } from "./lib/utils";
@@ -1973,6 +1973,11 @@ Engine used:
         body: JSON.stringify({
           content: contentInput.trim() || undefined,
           url: urlInput.trim() || undefined,
+          // Anchor the audit to the company the user confirmed for this brand
+          // (from the Earned Media entity-clarity step), so an ambiguous name is
+          // measured as the same company across every audit. Omitted when no
+          // identity has been confirmed, leaving the result unchanged.
+          confirmedEntity: getConfirmedEntity() || undefined,
         }),
       });
       if (!resp.ok) {
