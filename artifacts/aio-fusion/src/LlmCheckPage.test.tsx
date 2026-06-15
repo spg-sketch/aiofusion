@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import LlmCheckPage, { loadSavedAudits, type SavedAudit } from "./LlmCheckPage";
 
 const CLIENT = { id: "client-1", name: "Acme Ltd", sector: "Consulting" };
@@ -104,6 +104,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("loadSavedAudits returns persisted audits and tolerates corrupt storage", () => {
@@ -288,5 +289,94 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     expect(written).toContain("Entity clarity");
     expect(written).toContain("Sinclair Media Group");
     expect(written).toContain("Scott Management Group");
+  });
+
+  it("pushes the confirmed company to the shared store so it follows the user across devices", async () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+
+    // Spy on every network call. The sync-on-open effect issues a GET for the
+    // shared intake (nothing on the server yet); confirming must issue a POST
+    // that mirrors the updated intake blob to the shared store.
+    const fetchMock = vi.fn(async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = (init?.method || "GET").toUpperCase();
+      if (method === "GET" && /\/api\/store\/projects\/[^/]+\/intake$/.test(url)) {
+        return { ok: true, json: async () => ({ intake: null, updatedAt: null }) } as unknown as Response;
+      }
+      return { ok: true, json: async () => ({}) } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /our company, not the others listed/i }));
+
+    // The choice is mirrored to the shared store, not just to localStorage, so it
+    // follows the user to other devices and teammates on the same account.
+    await waitFor(() => {
+      const push = fetchMock.mock.calls.find(([url, init]) => {
+        const u = String(url);
+        const method = ((init as { method?: string } | undefined)?.method || "GET").toUpperCase();
+        return method === "POST" && u.endsWith("/api/store/projects/intake");
+      });
+      expect(push).toBeTruthy();
+      const body = JSON.parse((push![1] as { body: string }).body);
+      expect(body.intake.confirmedEntity).toEqual({ name: "SMG", description: "" });
+    });
+  });
+
+  it("reflects a server-confirmed company on open even when this browser never stored it", async () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+    // Make the open client the active project so the synced intake lands on the
+    // key the page reads the confirmed identity back from.
+    localStorage.setItem("aio.activeProjectId", CLIENT.id);
+
+    // This browser has never confirmed an identity locally...
+    expect(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`)).toBeNull();
+
+    // ...but the shared store holds one confirmed on another device / by a
+    // teammate. The sync-on-open effect must pull it down and surface it here.
+    const fetchMock = vi.fn(async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      const method = (init?.method || "GET").toUpperCase();
+      if (method === "GET" && /\/api\/store\/projects\/[^/]+\/intake$/.test(url)) {
+        return {
+          ok: true,
+          json: async () => ({
+            intake: { confirmedEntity: { name: "SMG", description: "" } },
+            updatedAt: "2026-06-10T00:00:00.000Z",
+          }),
+        } as unknown as Response;
+      }
+      return { ok: true, json: async () => ({}) } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    // It ran the project sync (GET) for the open client...
+    await waitFor(() => {
+      const pulled = fetchMock.mock.calls.some(([url, init]) => {
+        const u = String(url);
+        const method = ((init as { method?: string } | undefined)?.method || "GET").toUpperCase();
+        return method === "GET" && u.endsWith(`/api/store/projects/${CLIENT.id}/intake`);
+      });
+      expect(pulled).toBe(true);
+    });
+
+    // ...and now reflects the server-side confirmed identity even though it was
+    // never in this browser's localStorage to begin with.
+    const confirmedLine = await screen.findByText(/Confirmed:/i);
+    expect(confirmedLine.textContent).toMatch(/is SMG/);
+
+    // The pulled identity was cached locally for subsequent synchronous reads.
+    await waitFor(() => {
+      const cached = JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}");
+      expect(cached.confirmedEntity).toEqual({ name: "SMG", description: "" });
+    });
   });
 });
