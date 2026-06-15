@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "backup": "tsx ./src/backup-db.ts",
+    "restore:list": "tsx ./src/restore-db.ts --list",
+    "restore:download": "tsx ./src/restore-db.ts --download",
+    "restore:verify": "tsx ./src/restore-db.ts --verify-restore",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "tsx": "catalog:"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.21.0"
   }
 }
