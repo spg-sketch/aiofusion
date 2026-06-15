@@ -27,7 +27,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
-import { markIntakeSaved } from "./lib/projectSync";
+import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
 import { stripEmDashes } from "./lib/utils";
 
 const vars = {
@@ -210,12 +210,18 @@ function migrateLegacyDualLists(
 const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
 
 // Resolve the localStorage key for the currently active project's intake data.
-// The legacy/default project keeps the bare key for backward compatibility, so
-// existing saved work is never lost.
+// Every project, including the legacy "default" one, now uses its own namespaced
+// key so two projects can never collide on the bare key across devices.
 function currentIntakeKey(): string {
   try {
     const id = localStorage.getItem(ACTIVE_PROJECT_KEY);
-    if (id && id !== "default") return `aio.intake.v2::${id}`;
+    if (id) {
+      // The legacy "default" project moved off the bare key onto its own
+      // namespaced key. Migrate (copy) it across before resolving the key so the
+      // form always reads the answers, never an empty namespaced slot.
+      if (id === "default") ensureDefaultIntakeMigrated();
+      return `aio.intake.v2::${id}`;
+    }
   } catch { /* noop */ }
   return "aio.intake.v2";
 }

@@ -68,6 +68,43 @@ non-placeholder) name across data/column/local sources before ever using the
 placeholder; (3) self-heal by pushing the repaired record up once when the
 server row is empty/placeholder, gated so it converges and never loops.
 
+## Blank Set-Up must never overwrite a populated one (two-layer guard)
+A blank/empty Set-Up (intake) must never replace a populated one, on either side.
+Emptiness detection is shared server-side in `api-server/src/lib/intake-guards.ts`
+(`intakeIsEmpty` = no real formData answers AND empty category lists/duals).
+- **Server:** the `/store/projects/intake` (and `upsert`) conflict update only
+  writes the incoming intake when it is non-empty; when empty it
+  `coalesce(existing.intake, incoming::jsonb)` so a populated row is kept and an
+  empty one is only adopted when there was nothing before.
+- **Client (`syncIntakeForProject`):** if remote is empty and local is populated,
+  push local UP (this is what HEALS a wiped server copy); if local is empty and
+  remote populated, adopt remote; otherwise fall back to the timestamp logic.
+  `pushIntake` itself also refuses to send a blank copy.
+**Why:** a stale device sending a blank Draft wiped Bluhalo's completed Set-Up in
+prod (server unconditionally overwrote, and "default" shared the bare key).
+**How to apply:** keep emptiness checks on BOTH sides; a server-only guard still
+lets a blank local cache adopt-then-repush nothing, and a client-only guard is
+bypassed by any direct POST.
+
+## Legacy "default" project intake key is now namespaced
+Every project, including the legacy `id="default"`, now stores intake under
+`aio.intake.v2::<id>` (default included). `ensureDefaultIntakeMigrated()` copies
+the old bare `aio.intake.v2` onto `aio.intake.v2::default` NON-destructively (only
+when the namespaced slot is absent), and is called at the start of
+`syncIntakeForProject`, `syncProjectsOnLoad`, and `IntakeForm.currentIntakeKey()`.
+**Why:** "default" sharing the bare key let two different people's "default"
+projects collide across devices, contributing to the wipe.
+**How to apply:** never read the bare key directly for "default"; resolve via the
+namespaced key after migration. Migration must stay non-destructive (keep the bare
+key) so the old answers remain recoverable.
+
+## Smoke-testing server guards needs a workflow restart
+The api-server dev workflow did NOT hot-reload route changes during this work;
+a live curl smoke test showed the OLD (unguarded) behaviour until the
+`artifacts/api-server: API Server` workflow was restarted, after which the guard
+worked. **How to apply:** restart the api-server workflow before curl-smoke-testing
+any server route change, or you will validate stale code.
+
 ## Live refresh, not just on-load
 The hub re-syncs on `visibilitychange`, window `focus`, and a 60s interval (all
 no-op when offline) so a project created on another device appears without a

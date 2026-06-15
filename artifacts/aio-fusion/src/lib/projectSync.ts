@@ -40,10 +40,56 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-// Resolve the localStorage key for a project's intake blob. The legacy/default
-// project keeps the bare key for backward compatibility.
+// Resolve the localStorage key for a project's intake blob. Every project now
+// uses its own namespaced key, including the legacy "default" project, so it can
+// no longer share (and collide on) the bare "aio.intake.v2" key across devices.
 function intakeKey(id: string): string {
-  return id && id !== "default" ? `aio.intake.v2::${id}` : "aio.intake.v2";
+  return id ? `aio.intake.v2::${id}` : "aio.intake.v2";
+}
+
+// One-time copy of the legacy bare-key intake into the namespaced "default" key.
+// The "default" project used to read/write the bare "aio.intake.v2" key, which a
+// blank copy on another device could collide with and wipe. We move it onto its
+// own key, but never delete the bare key and never overwrite an existing
+// namespaced copy, so this can only ever preserve data, never lose it.
+export function ensureDefaultIntakeMigrated(): void {
+  try {
+    if (localStorage.getItem("aio.intake.v2::default") != null) return;
+    const bare = localStorage.getItem("aio.intake.v2");
+    if (bare != null) localStorage.setItem("aio.intake.v2::default", bare);
+  } catch {
+    /* noop */
+  }
+}
+
+// True when an intake blob carries no real answers (e.g. a blank Draft). Mirrors
+// the server-side guard: an intake counts as populated if any Set-Up answer,
+// category list or dual-field entry has a value. Used so a blank Draft is never
+// pushed up over, nor pulled down over, a populated Set-Up.
+function intakeIsEmpty(intake: unknown): boolean {
+  if (intake == null || typeof intake !== "object") return true;
+  const obj = intake as Record<string, unknown>;
+  const fd = obj.formData;
+  if (fd && typeof fd === "object") {
+    for (const v of Object.values(fd as Record<string, unknown>)) {
+      if (typeof v === "string") {
+        if (v.trim() !== "") return false;
+      } else if (Array.isArray(v)) {
+        if (v.length > 0) return false;
+      } else if (v != null && v !== false) {
+        return false;
+      }
+    }
+  }
+  for (const key of ["businessCategories", "mediaCategories", "audienceCategories"]) {
+    const arr = obj[key];
+    if (Array.isArray(arr) && arr.length > 0) return false;
+  }
+  const duals = obj.duals;
+  if (duals && typeof duals === "object" && Object.keys(duals as object).length > 0) {
+    return false;
+  }
+  return true;
 }
 
 function getIntakeTimes(): Record<string, number> {
@@ -143,6 +189,10 @@ export async function deleteRemoteProject(id: string): Promise<void> {
 }
 
 async function pushIntake(id: string, intake: unknown, name?: string): Promise<void> {
+  // Never push a blank Set-Up up: it must not be able to overwrite a populated
+  // copy held on the server (the server guards this too, but we avoid even
+  // sending it). A new project with no answers yet simply has nothing to save.
+  if (intakeIsEmpty(intake)) return;
   try {
     await fetch(`${apiBase()}/api/store/projects/intake`, {
       method: "POST",
@@ -250,6 +300,9 @@ export async function syncProjectsOnLoad(): Promise<
 // newer local copy up. Returns true if the local copy was replaced.
 export async function syncIntakeForProject(id: string): Promise<boolean> {
   if (!id) return false;
+  // Make sure the legacy "default" project is on its own namespaced key before
+  // we read it, so we never miss its answers or compare the wrong copy.
+  ensureDefaultIntakeMigrated();
   const remote = await fetchRemoteIntake(id);
   const key = intakeKey(id);
   let localRaw: string | null = null;
@@ -258,13 +311,41 @@ export async function syncIntakeForProject(id: string): Promise<boolean> {
   } catch {
     /* noop */
   }
+  let localParsed: unknown = null;
+  try {
+    localParsed = localRaw ? JSON.parse(localRaw) : null;
+  } catch {
+    localParsed = null;
+  }
+  const localEmpty = intakeIsEmpty(localParsed);
+
   const times = getIntakeTimes();
   const hasLocalTime = Object.prototype.hasOwnProperty.call(times, id);
   const localTime = times[id] ?? 0;
 
   if (remote && remote.intake != null) {
+    const remoteEmpty = intakeIsEmpty(remote.intake);
     const remoteTime = remote.updatedAt ? Date.parse(remote.updatedAt) : 0;
 
+    // A blank shared copy must NEVER overwrite populated local answers. Instead
+    // push the populated local copy up so the shared copy is healed. This is
+    // what restores a project whose server copy was wiped: the device that still
+    // holds the real answers pushes them back up.
+    if (remoteEmpty && !localEmpty) {
+      void pushIntake(id, localParsed);
+      setIntakeTime(id, Date.now());
+      return false;
+    }
+
+    // A blank local copy must NEVER be pushed up over populated shared answers.
+    // Adopt the shared copy instead.
+    if (localEmpty && !remoteEmpty) {
+      writeJson(key, remote.intake);
+      setIntakeTime(id, remoteTime || Date.now());
+      return true;
+    }
+
+    // Both populated (or both blank): resolve by timestamp as before.
     if (!localRaw) {
       // Nothing local to lose: adopt the shared copy.
       writeJson(key, remote.intake);
@@ -277,11 +358,7 @@ export async function syncIntakeForProject(id: string): Promise<boolean> {
       // this feature, or never confirmed-synced). We cannot know their age, so
       // we must NEVER silently overwrite them with the server copy. Keep local,
       // push it up so it becomes the shared copy, then start tracking its time.
-      try {
-        void pushIntake(id, JSON.parse(localRaw));
-      } catch {
-        /* noop */
-      }
+      void pushIntake(id, localParsed);
       setIntakeTime(id, Date.now());
       return false;
     }
@@ -292,23 +369,16 @@ export async function syncIntakeForProject(id: string): Promise<boolean> {
       return true;
     }
     if (localTime > remoteTime) {
-      try {
-        void pushIntake(id, JSON.parse(localRaw));
-      } catch {
-        /* noop */
-      }
+      void pushIntake(id, localParsed);
     }
     return false;
   }
 
   // Server has no intake yet but we do: push our copy up so it is shared and
-  // start tracking its time so future syncs can compare properly.
-  if (localRaw) {
-    try {
-      void pushIntake(id, JSON.parse(localRaw));
-    } catch {
-      /* noop */
-    }
+  // start tracking its time so future syncs can compare properly. (pushIntake
+  // ignores a blank copy, so an empty Draft is never sent.)
+  if (localRaw && !localEmpty) {
+    void pushIntake(id, localParsed);
     setIntakeTime(id, Date.now());
   }
   return false;

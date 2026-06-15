@@ -3,8 +3,13 @@ import { db, projectsTable } from "@workspace/db";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
+import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
 
 const router: IRouter = Router();
+
+// Build a jsonb SQL literal from an arbitrary value, used by the "blank never
+// overwrites populated" guards below.
+const asJsonb = (value: unknown): SQL => sql`${JSON.stringify(value ?? null)}::jsonb`;
 
 // Shared project store, now gated per platform account. Every route requires a
 // signed-in platform session and only ever touches projects that session is
@@ -136,13 +141,16 @@ router.post(
       }
       const now = new Date();
       const owner = normUsername(req.account!.username);
+      const incomingName = typeof name === "string" ? name.trim() : "";
+      const incomingDataEmpty = dataIsEmpty(data);
+      const incomingLogo = typeof logo === "string" && logo ? logo : null;
       await db
         .insert(projectsTable)
         .values({
           id,
           name: typeof name === "string" ? name : "",
           data: data ?? {},
-          logo: typeof logo === "string" ? logo : null,
+          logo: incomingLogo,
           owner,
           updatedAt: now,
           deletedAt: null,
@@ -155,10 +163,17 @@ router.post(
           // the caller via coalesce. The setWhere guard below means only a caller
           // who can already see the row reaches this, so this never steals a
           // project from another account.
+          //
+          // A blank incoming value never overwrites a populated stored one: an
+          // empty name keeps the existing name, an empty data record keeps the
+          // existing data, and a missing logo keeps the existing logo. This
+          // stops a stale/empty device from wiping a completed project.
           set: {
-            name: typeof name === "string" ? name : "",
-            data: data ?? {},
-            logo: typeof logo === "string" ? logo : null,
+            name: incomingName ? incomingName : sql`${projectsTable.name}`,
+            data: incomingDataEmpty
+              ? sql`coalesce(${projectsTable.data}, ${asJsonb(data)})`
+              : data,
+            logo: incomingLogo ? incomingLogo : sql`${projectsTable.logo}`,
             owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
             updatedAt: now,
           },
@@ -193,6 +208,7 @@ router.post(
       }
       const now = new Date();
       const owner = normUsername(req.account!.username);
+      const incomingIntakeEmpty = intakeIsEmpty(intake);
       await db
         .insert(projectsTable)
         .values({
@@ -208,8 +224,16 @@ router.post(
           target: projectsTable.id,
           // deletedAt is never touched and a real owner is never reassigned, but a
           // legacy NULL owner is claimed by the caller (same reasoning as upsert).
+          //
+          // A blank/empty incoming Set-Up never overwrites a populated stored
+          // one: when the payload carries no real answers we coalesce so the
+          // existing intake is kept (and only adopted when there was nothing
+          // there before). This is the core guard against a Draft from a stale
+          // device wiping a completed Set-Up.
           set: {
-            intake: intake ?? null,
+            intake: incomingIntakeEmpty
+              ? sql`coalesce(${projectsTable.intake}, ${asJsonb(intake)})`
+              : intake,
             owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
             updatedAt: now,
           },
