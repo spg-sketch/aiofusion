@@ -2554,6 +2554,13 @@ export function getConfirmedEntity(): ConfirmedEntity {
 // Persist (or clear, with null) the user's confirmed identity into the active
 // project's intake blob, merging so no other field is touched. Used by the LLM
 // Check page; the next audit reads it via getProjectAuthorityData.
+//
+// The confirmed identity travels inside the intake blob, so as well as writing
+// localStorage we mirror the updated blob to the shared server store. Without
+// this the choice only existed in the browser that made it: another device, or
+// a teammate on the same account, would never see it and the audit could pick
+// the wrong namesake again. markIntakeSaved keeps the existing intake guards
+// (it skips a blank Set-Up so we never wipe a populated server copy).
 export function setConfirmedEntity(entity: ConfirmedEntity): void {
   try {
     const key = currentIntakeKey();
@@ -2563,6 +2570,11 @@ export function setConfirmedEntity(entity: ConfirmedEntity): void {
     if (normalised) parsed.confirmedEntity = normalised;
     else delete parsed.confirmedEntity;
     localStorage.setItem(key, JSON.stringify(parsed));
+    try {
+      const id = getActiveProjectId() || "default";
+      const name = typeof parsed?.formData?.["4.1"] === "string" ? parsed.formData["4.1"] : "";
+      markIntakeSaved(id, parsed, name);
+    } catch { /* noop */ }
   } catch { /* noop */ }
 }
 

@@ -188,11 +188,24 @@ export async function deleteRemoteProject(id: string): Promise<void> {
   }
 }
 
+// True when an intake blob carries a confirmed company identity (the choice made
+// for an ambiguous brand name). This lives inside the intake blob but is not a
+// "real Set-Up answer", so intakeIsEmpty ignores it.
+function intakeHasConfirmedEntity(intake: unknown): boolean {
+  if (intake == null || typeof intake !== "object") return false;
+  const ce = (intake as Record<string, unknown>).confirmedEntity;
+  return ce != null && typeof ce === "object";
+}
+
 async function pushIntake(id: string, intake: unknown, name?: string): Promise<void> {
   // Never push a blank Set-Up up: it must not be able to overwrite a populated
   // copy held on the server (the server guards this too, but we avoid even
   // sending it). A new project with no answers yet simply has nothing to save.
-  if (intakeIsEmpty(intake)) return;
+  // Exception: a confirmed company identity must still be sent even when the rest
+  // of the Set-Up is sparse, so the choice persists cross-device. The server
+  // merges just that key onto the existing intake, so this can never wipe
+  // populated answers.
+  if (intakeIsEmpty(intake) && !intakeHasConfirmedEntity(intake)) return;
   try {
     await fetch(`${apiBase()}/api/store/projects/intake`, {
       method: "POST",

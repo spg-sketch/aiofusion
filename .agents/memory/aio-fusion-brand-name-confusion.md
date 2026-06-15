@@ -50,6 +50,20 @@ theirs ("yes, that's us" / "no, it's X"). Stored as
 survives draft saves) and threaded server-side via `ProjectAuthorityData` →
 `BrandIdentity.confirmedEntity`.
 
+**Cross-device persistence:** the choice rides inside the intake blob, so it is
+shared via the same `/api/store/*` intake sync as every other Set-Up field — no
+dedicated column/route. Push happens on confirm; pull happens on project
+open/switch. **Why:** the confirmation must survive across devices/teammates or
+the audit re-picks the wrong namesake. **How to apply / the trap:**
+`confirmedEntity` is NOT counted by the blank-intake guard (`intakeIsEmpty`,
+client + server `intake-guards.ts`), and you must NOT make it counted — doing so
+lets a confirm-only payload take the "replace" path and wipe a populated Set-Up.
+Instead, a confirm-only payload is allowed past the client push-skip AND the
+server intake conflict-update MERGES just the `confirmedEntity` key onto the
+existing intake (jsonb `||`, right side wins) rather than replacing. That keeps
+both true at once: a confirm always persists even on sparse Set-Up, and a sparse
+payload can never erase populated answers.
+
 **Why:** the deterministic heuristic can still pick the wrong namesake; an
 explicit human choice should win. **How to apply:** when `confirmedEntity` is
 set, `entityMatchesBrand` uses **replace** semantics — ONLY the confirmed entity

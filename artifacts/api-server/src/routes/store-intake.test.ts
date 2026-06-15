@@ -181,4 +181,63 @@ describe("POST /api/store/projects/intake (blank never overwrites populated, DB-
 
     expect(await storedIntake(id)).toEqual(POPULATED_INTAKE);
   });
+
+  it("merges a confirmed identity onto a populated Set-Up without wiping it", async () => {
+    // Confirming which company an ambiguous brand name refers to produces an
+    // otherwise-sparse payload (confirmedEntity but no real Set-Up answers).
+    // It must save the choice while leaving every populated answer intact.
+    const id = "p-confirm-merge";
+    await seedPopulated(id);
+
+    const confirmedEntity = { name: "Acme Aerospace Ltd", description: "The UK rocket maker" };
+    const { status, json } = await postIntake({
+      id,
+      intake: { ...BLANK_INTAKE, confirmedEntity },
+    });
+
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(await storedIntake(id)).toEqual({ ...POPULATED_INTAKE, confirmedEntity });
+  });
+
+  it("persists a confirmed identity for a project that has no Set-Up yet", async () => {
+    // The genuinely-empty case: an audit run from project name/sector fallback.
+    // The confirmation is the only content, and it must still be saved so it
+    // loads back on another device / for a teammate. For a brand-new project the
+    // insert branch stores the incoming blob verbatim, so the confirmation is
+    // preserved (alongside the empty Set-Up scaffolding).
+    const id = "p-confirm-only";
+    const confirmedEntity = { name: "Globex Industries", description: "" };
+    const incoming = { ...BLANK_INTAKE, confirmedEntity };
+    const { status } = await postIntake({ id, intake: incoming });
+
+    expect(status).toBe(200);
+    const stored = (await storedIntake(id)) as Record<string, unknown>;
+    expect(stored.confirmedEntity).toEqual(confirmedEntity);
+  });
+
+  it("updates a previously confirmed identity without touching other answers", async () => {
+    // Changing the confirmed company ("no, it's actually X") must overwrite only
+    // that key on the stored intake.
+    const id = "p-confirm-change";
+    const first = { name: "Acme Aerospace Ltd", description: "" };
+    await db.insert(projectsTable).values({
+      id,
+      name: "Acme Corp",
+      data: { name: "Acme Corp" },
+      intake: { ...POPULATED_INTAKE, confirmedEntity: first },
+      owner: "admin",
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+
+    const second = { name: "Acme Robotics Inc", description: "Different namesake" };
+    const { status } = await postIntake({
+      id,
+      intake: { ...BLANK_INTAKE, confirmedEntity: second },
+    });
+
+    expect(status).toBe(200);
+    expect(await storedIntake(id)).toEqual({ ...POPULATED_INTAKE, confirmedEntity: second });
+  });
 });

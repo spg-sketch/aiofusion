@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, type ConfirmedEntity } from "./IntakeForm";
+import { syncIntakeForProject } from "./lib/projectSync";
 import {
   Eye,
   Search,
@@ -448,6 +449,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setJustSaved(false);
     setConfirmedEntityState(getConfirmedEntity());
     setEditingIdentity(false);
+  }, [activeClient.id]);
+
+  // Pull this project's shared Set-Up from the server, then refresh the confirmed
+  // identity from the (possibly newer) local cache. This is what lets a choice
+  // confirmed on another device, or by a teammate on the same account, show up
+  // here instead of only in the browser that made it.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await syncIntakeForProject(activeClient.id);
+      if (!cancelled) setConfirmedEntityState(getConfirmedEntity());
+    })();
+    return () => { cancelled = true; };
   }, [activeClient.id]);
 
   function saveAuditToHistory(auditResult: LlmCheckResult | null = result) {

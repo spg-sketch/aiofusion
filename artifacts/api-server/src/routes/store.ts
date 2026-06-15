@@ -279,6 +279,16 @@ router.post(
       const now = new Date();
       const owner = normUsername(req.account!.username);
       const incomingIntakeEmpty = intakeIsEmpty(intake);
+      // The confirmed company identity (for an ambiguous brand name) rides inside
+      // the intake blob, but it is not counted as a "real Set-Up answer" by
+      // intakeIsEmpty. So an audit run from sparse Set-Up can produce a payload
+      // that is "empty" yet carries a deliberate confirmation we must persist.
+      const incomingConfirmedEntity =
+        intake && typeof intake === "object"
+          ? (intake as Record<string, unknown>).confirmedEntity
+          : undefined;
+      const hasIncomingConfirmedEntity =
+        incomingConfirmedEntity != null && typeof incomingConfirmedEntity === "object";
       const saved = await db
         .insert(projectsTable)
         .values({
@@ -301,8 +311,15 @@ router.post(
           // there before). This is the core guard against a Draft from a stale
           // device wiping a completed Set-Up.
           set: {
+            // A blank/empty incoming Set-Up never overwrites a populated stored
+            // one. But when that "empty" payload carries a confirmed identity, we
+            // merge just that one key onto the existing intake (jsonb `||` is a
+            // shallow merge, right side wins) so the choice is saved cross-device
+            // without a sparse payload wiping any populated answers underneath.
             intake: incomingIntakeEmpty
-              ? sql`coalesce(${projectsTable.intake}, ${asJsonb(intake)})`
+              ? hasIncomingConfirmedEntity
+                ? sql`coalesce(${projectsTable.intake}, '{}'::jsonb) || ${asJsonb({ confirmedEntity: incomingConfirmedEntity })}`
+                : sql`coalesce(${projectsTable.intake}, ${asJsonb(intake)})`
               : intake,
             owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
             updatedAt: now,
