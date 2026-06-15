@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, type ConfirmedEntity } from "./IntakeForm";
 import {
   Eye,
   Search,
@@ -423,6 +423,18 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
+  // The identity the user has confirmed is theirs for an ambiguous brand name.
+  // Read from the project on mount/switch; persisted via setConfirmedEntity so
+  // the next audit run anchors to it.
+  const [confirmedEntity, setConfirmedEntityState] = useState<ConfirmedEntity>(() => getConfirmedEntity());
+  // Whether the confirmation control is open for editing (re-opened by "Change").
+  const [editingIdentity, setEditingIdentity] = useState(false);
+
+  function saveConfirmedEntity(entity: ConfirmedEntity) {
+    setConfirmedEntity(entity);
+    setConfirmedEntityState(entity);
+    setEditingIdentity(false);
+  }
   const setupIncomplete = auditSectors.length === 0 || probeName.length === 0;
   useEffect(() => {
     if (setupIncomplete) setShowRefine(true);
@@ -434,6 +446,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setResult(null);
     setError("");
     setJustSaved(false);
+    setConfirmedEntityState(getConfirmedEntity());
+    setEditingIdentity(false);
   }, [activeClient.id]);
 
   function saveAuditToHistory(auditResult: LlmCheckResult | null = result) {
@@ -667,7 +681,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <tbody>${ec.competingEntities
             .map((e) => `<tr><td><strong>${escapeHtml(e.name)}</strong></td><td class="muted">${escapeHtml(e.description) || "&mdash;"}</td></tr>`)
             .join("")}</tbody>
-      </table>
+      </table>${confirmedEntity
+            ? `<p class="meta-line" style="margin-top:12px;"><strong>Confirmed identity:</strong> "${escapeHtml(ec.brandName)}" is ${escapeHtml(confirmedEntity.name)}. Future audits measure this company specifically.</p>`
+            : ""}
     </div>`
         : "";
 
@@ -1339,6 +1355,82 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Confirmation step: let the user lock in which company is theirs so the
+              next audit measures the right one. */}
+          <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${vars.g100}` }}>
+            {confirmedEntity && !editingIdentity ? (
+              <div className="flex items-start gap-2 flex-wrap">
+                <CheckCircle2 size={16} style={{ color: vars.green, marginTop: 1, flexShrink: 0 }} />
+                <div className="flex-1 min-w-[200px]">
+                  <p className="text-[13px] font-semibold" style={{ color: vars.g600 }}>
+                    Confirmed: &ldquo;{result.entityClarity.brandName}&rdquo; is {confirmedEntity.name}
+                  </p>
+                  <p className="text-[12px] mt-0.5" style={{ color: vars.g500 }}>
+                    Your next audit will measure this company specifically. Re-run the check to apply it.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditingIdentity(true)}
+                  className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border self-start"
+                  style={{ color: vars.accent, borderColor: vars.g200, background: "white" }}
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-[13px] font-semibold mb-1" style={{ color: vars.g600 }}>
+                  Which company is &ldquo;{result.entityClarity.brandName}&rdquo;?
+                </p>
+                <p className="text-[12px] mb-3" style={{ color: vars.g500 }}>
+                  Confirm or correct the identity so the next audit measures the right organisation.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() =>
+                      saveConfirmedEntity({
+                        name: getLegalName() || result.companyName,
+                        description: descriptor ? descriptor.split(/[.\n]/)[0].trim().slice(0, 300) : "",
+                      })
+                    }
+                    className="text-left text-[12px] px-3 py-2 rounded-lg border transition-all hover:brightness-95"
+                    style={{ borderColor: vars.g200, color: vars.g600, background: vars.g50 }}
+                  >
+                    <strong>Yes, that&rsquo;s us</strong> — {getLegalName() || result.companyName} is our company, not the others listed.
+                  </button>
+                  {result.entityClarity.competingEntities.map((e, i) => (
+                    <button
+                      key={i}
+                      onClick={() => saveConfirmedEntity({ name: e.name, description: e.description })}
+                      className="text-left text-[12px] px-3 py-2 rounded-lg border transition-all hover:brightness-95"
+                      style={{ borderColor: vars.g200, color: vars.g600, background: "white" }}
+                    >
+                      <strong>No, we are {e.name}</strong>{e.description ? ` — ${e.description}` : ""}
+                    </button>
+                  ))}
+                </div>
+                {confirmedEntity && (
+                  <div className="flex gap-3 mt-3">
+                    <button
+                      onClick={() => setEditingIdentity(false)}
+                      className="text-[12px] font-semibold"
+                      style={{ color: vars.g500 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => saveConfirmedEntity(null)}
+                      className="text-[12px] font-semibold"
+                      style={{ color: vars.red }}
+                    >
+                      Remove confirmation
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

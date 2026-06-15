@@ -826,6 +826,13 @@ export default function IntakePage() {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).aiWebsite || ""; } catch { /* noop */ }
     return "";
   });
+  // The entity the user confirmed is theirs in the Earned Media entity-clarity
+  // step. Set from the LLM Check page, not edited here; round-tripped through
+  // state so saving Set-Up never wipes the user's confirmed identity.
+  const [confirmedEntity] = useState<ConfirmedEntity>(() => {
+    try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return normaliseConfirmedEntity(JSON.parse(raw).confirmedEntity); } catch { /* noop */ }
+    return null;
+  });
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string>("");
   const [aiNotice, setAiNotice] = useState<string>("");
@@ -856,10 +863,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite, confirmedEntity]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -1431,7 +1438,7 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
-    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite };
+    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
     } catch { /* noop */ }
@@ -2467,7 +2474,22 @@ export type IntakeData = {
   intakeStatus: IntakeStatus;
   acceptedAt: string | null;
   aiWebsite: string;
+  confirmedEntity: ConfirmedEntity;
 };
+
+// The company the user confirmed is theirs when the brand name is shared with
+// other organisations (the Earned Media entity-clarity step). Null when the user
+// has made no choice, which keeps the audit's deterministic resolution.
+export type ConfirmedEntity = { name: string; description: string } | null;
+
+export function normaliseConfirmedEntity(raw: unknown): ConfirmedEntity {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const name = typeof r.name === "string" ? r.name.trim().slice(0, 200) : "";
+  if (!name) return null;
+  const description = typeof r.description === "string" ? r.description.trim().slice(0, 300) : "";
+  return { name, description };
+}
 
 export function loadIntakeData(): IntakeData | null {
   try {
@@ -2519,8 +2541,29 @@ export function loadIntakeData(): IntakeData | null {
       intakeStatus: parsed.intakeStatus || "Draft",
       acceptedAt: parsed.acceptedAt || null,
       aiWebsite: typeof parsed.aiWebsite === "string" ? parsed.aiWebsite : "",
+      confirmedEntity: normaliseConfirmedEntity(parsed.confirmedEntity),
     };
   } catch { return null; }
+}
+
+// The entity the user confirmed is theirs from the entity-clarity step, or null.
+export function getConfirmedEntity(): ConfirmedEntity {
+  return loadIntakeData()?.confirmedEntity || null;
+}
+
+// Persist (or clear, with null) the user's confirmed identity into the active
+// project's intake blob, merging so no other field is touched. Used by the LLM
+// Check page; the next audit reads it via getProjectAuthorityData.
+export function setConfirmedEntity(entity: ConfirmedEntity): void {
+  try {
+    const key = currentIntakeKey();
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const normalised = normaliseConfirmedEntity(entity);
+    if (normalised) parsed.confirmedEntity = normalised;
+    else delete parsed.confirmedEntity;
+    localStorage.setItem(key, JSON.stringify(parsed));
+  } catch { /* noop */ }
 }
 
 export function getKeyMessages(): { short: string; long: string; tag: string }[] {
@@ -2776,6 +2819,7 @@ export type ProjectAuthorityData = {
   buyerQuestions: string[];
   expertiseTopics: string[];
   spokespeople: Spokesperson[];
+  confirmedEntity: ConfirmedEntity;
 };
 
 // Bundle of the intake data the Earned Media authority report scores against.
@@ -2790,5 +2834,6 @@ export function getProjectAuthorityData(): ProjectAuthorityData {
     buyerQuestions: getBuyerQuestions(),
     expertiseTopics: getExpertiseTopics(),
     spokespeople: getSpokespeople(),
+    confirmedEntity: getConfirmedEntity(),
   };
 }

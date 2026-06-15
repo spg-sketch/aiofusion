@@ -25,6 +25,7 @@ import {
   parseEntityList,
   deriveEntityClarity,
   assessEntityClarity,
+  buildIdentityProbe,
   type ProbeResult,
   type BrandIdentity,
 } from "./llm-check";
@@ -577,6 +578,51 @@ describe("deriveEntityClarity", () => {
     expect(ec.brandIsDominant).toBe(false);
     expect(ec.competingEntities.length).toBe(2);
     expect(ec.note.toLowerCase()).toContain("did not surface");
+  });
+
+  it("treats the user-confirmed entity as the brand, overriding the heuristic", () => {
+    // The heuristic would not recognise the brand here (no website/legal/sector
+    // match), but the user has confirmed which listed entity is theirs.
+    const confirmed: BrandIdentity = {
+      name: "SMG",
+      confirmedEntity: { name: "Smith Manufacturing Group", description: "an industrial supplier" },
+    };
+    const ec = deriveEntityClarity("SMG", confirmed, [
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Smith Manufacturing Group", description: "an industrial supplier" },
+    ]);
+    expect(ec.brandRecognised).toBe(true);
+    expect(ec.competingEntities.map((e) => e.name)).toEqual(["Sinclair Media Group"]);
+  });
+
+  it("makes the confirmed entity dominant when it is listed first", () => {
+    const confirmed: BrandIdentity = {
+      name: "SMG",
+      confirmedEntity: { name: "Sinclair Media Group" },
+    };
+    const ec = deriveEntityClarity("SMG", confirmed, [
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Sports Media Group", description: "the sportsmediagroup.co.uk agency" },
+    ]);
+    expect(ec.brandRecognised).toBe(true);
+    expect(ec.brandIsDominant).toBe(true);
+    expect(ec.competingEntities.map((e) => e.name)).toEqual(["Sports Media Group"]);
+  });
+});
+
+describe("buildIdentityProbe with a confirmed entity", () => {
+  it("anchors the probe to the user-confirmed company even for a plain name", () => {
+    const q = buildIdentityProbe({
+      name: "Apex",
+      confirmedEntity: { name: "Apex Logistics Ltd", description: "a freight forwarder in Leeds" },
+    });
+    expect(q).toContain("Apex Logistics Ltd");
+    expect(q).toContain("freight forwarder");
+    expect(q).toContain("not other organisations with a similar name");
+  });
+
+  it("leaves a plain name unanchored when there is no confirmed entity", () => {
+    expect(buildIdentityProbe({ name: "Apex" })).toBe("What do you know about Apex?");
   });
 });
 

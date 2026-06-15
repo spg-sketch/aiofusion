@@ -50,6 +50,12 @@ export interface BrandIdentity {
   website?: string;
   descriptor?: string;
   sectors?: string[];
+  // The entity the user explicitly confirmed is theirs from the entity-clarity
+  // step (e.g. picked the right "SMG" from the namesakes). When set, it is the
+  // authoritative answer to "which company is this", overriding the heuristic
+  // match. Absent when the user has made no choice, so the deterministic
+  // fallback behaviour is unchanged.
+  confirmedEntity?: { name: string; description?: string } | null;
 }
 
 function asIdentity(brand: BrandIdentity | string): BrandIdentity {
@@ -179,8 +185,12 @@ export function buildIdentityProbe(identity: BrandIdentity): string {
   const hasLegal = !!(identity.legalName && normalizeText(identity.legalName) !== normalizeText(name));
   const ambiguous = isAmbiguousName(name);
   const sector = (identity.sectors || []).map((s) => s.trim()).filter(Boolean)[0];
+  const confirmedName = identity.confirmedEntity?.name?.trim();
+  // A user-confirmed identity is a strong reason to anchor even when the name
+  // looks plain, so the probe targets the exact company the user picked.
+  const hasConfirmed = !!(confirmedName && normalizeText(confirmedName) !== normalizeText(name));
 
-  if (!hasLegal && !identity.website && !ambiguous) {
+  if (!hasLegal && !identity.website && !ambiguous && !hasConfirmed) {
     return `What do you know about ${name}?`;
   }
 
@@ -189,6 +199,10 @@ export function buildIdentityProbe(identity: BrandIdentity): string {
   q += `?`;
 
   const anchor: string[] = [];
+  if (hasConfirmed) {
+    const desc = identity.confirmedEntity?.description?.split(/[.\n]/)[0].trim().slice(0, 160);
+    anchor.push(`This refers specifically to ${confirmedName}${desc ? `, ${desc}` : ""}.`);
+  }
   if (identity.website) anchor.push(`Its website is ${identity.website}.`);
   if (ambiguous && sector) anchor.push(`It operates in ${sector}.`);
   if (ambiguous && identity.descriptor) {
@@ -496,6 +510,7 @@ interface ProjectAuthorityData {
   buyerQuestions?: string[];
   expertiseTopics?: string[];
   spokespeople?: { name?: string; title?: string; expertise?: string[]; linkedin?: string }[];
+  confirmedEntity?: { name: string; description?: string } | null;
 }
 
 interface AssessmentDimension {
@@ -569,6 +584,14 @@ function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
           }))
           .filter((s) => s.name)
       : [],
+    confirmedEntity: (() => {
+      const ce = d.confirmedEntity;
+      if (!ce || typeof ce !== "object") return null;
+      const name = typeof (ce as Record<string, unknown>).name === "string" ? ((ce as Record<string, unknown>).name as string).trim().slice(0, 200) : "";
+      if (!name) return null;
+      const description = typeof (ce as Record<string, unknown>).description === "string" ? ((ce as Record<string, unknown>).description as string).trim().slice(0, 300) : "";
+      return { name, description };
+    })(),
   };
 }
 
@@ -805,7 +828,25 @@ export function parseEntityList(text: string): { name: string; description: stri
   return out;
 }
 
+// Whether a listed entity's name is the one the user explicitly confirmed is
+// theirs. Compares on the suffix-stripped, normalized form so "Sports Media
+// Group" and "Sports Media" resolve to the same brand.
+function matchesConfirmedEntity(entityName: string, confirmedName: string): boolean {
+  const a = normalizeCompetitor(entityName);
+  const b = normalizeCompetitor(confirmedName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return aliasRegex(b).test(a) || aliasRegex(a).test(b);
+}
+
 function entityMatchesBrand(entity: { name: string; description: string }, identity: BrandIdentity): boolean {
+  // The user's confirmation is authoritative: when they have picked which
+  // namesake is their company, only that entity counts as the brand, so the
+  // verdict reflects their choice rather than the website/sector heuristic.
+  const confirmed = identity.confirmedEntity?.name?.trim();
+  if (confirmed) {
+    return matchesConfirmedEntity(entity.name, confirmed);
+  }
   const text = `${entity.name} ${entity.description}`;
   if (isCorroborated(text, identity)) return true;
   for (const s of identity.sectors || []) {
@@ -930,6 +971,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     website: authorityData.website,
     descriptor: authorityData.descriptor,
     sectors: sectorList,
+    confirmedEntity: authorityData.confirmedEntity,
   };
 
   try {

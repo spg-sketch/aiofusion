@@ -42,6 +42,23 @@ rendered both in-page and in the HTML export (presence-gated on `isAmbiguous`).
 Website flows via `getWebsite()` (reads top-level `aiWebsite`, falls back to a
 URL in homepage field 6.2) → `ProjectAuthorityData.website` → `sanitizeProjectData`.
 
+## User-confirmed identity (override)
+When `entityClarity.isAmbiguous`, the user can confirm which listed entity is
+theirs ("yes, that's us" / "no, it's X"). Stored as
+`confirmedEntity {name, description?}` inside the per-project intake blob
+(`getConfirmedEntity`/`setConfirmedEntity` in `IntakeForm.tsx`, merge-write so it
+survives draft saves) and threaded server-side via `ProjectAuthorityData` →
+`BrandIdentity.confirmedEntity`.
+
+**Why:** the deterministic heuristic can still pick the wrong namesake; an
+explicit human choice should win. **How to apply:** when `confirmedEntity` is
+set, `entityMatchesBrand` uses **replace** semantics — ONLY the confirmed entity
+counts as the brand (not website/legal/sector matches) — so `deriveEntityClarity`
+reflects the user's choice, and `buildIdentityProbe` anchors to the confirmed
+name/description. When it is null, behaviour is unchanged (deterministic
+fallback). Keep all of this presence-gated; a missing choice must never alter the
+baseline verdict.
+
 ## Web-grounding decision
 Live `web_search` is deliberately NOT enabled. **Why:** the shared Anthropic
 proxy lacks a reliable web_search tool; live retrieval breaks audit determinism

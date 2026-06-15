@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import LlmCheckPage, { loadSavedAudits, type SavedAudit } from "./LlmCheckPage";
 
 const CLIENT = { id: "client-1", name: "Acme Ltd", sector: "Consulting" };
@@ -230,6 +230,37 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     );
 
     expect(screen.queryByText(/Entity clarity:/i)).not.toBeInTheDocument();
+  });
+
+  it("lets the user confirm their own company and persists it for the next audit", () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    // The confirmation prompt is shown for an ambiguous brand.
+    expect(screen.getByText(/Which company is/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /our company, not the others listed/i }));
+
+    // It is persisted into the active project's intake blob.
+    const intake = JSON.parse(localStorage.getItem("aio.intake.v2") || "{}");
+    expect(intake.confirmedEntity).toEqual({ name: "SMG", description: "" });
+
+    // The UI now reflects the confirmed identity.
+    expect(screen.getByText(/Confirmed:/i)).toBeInTheDocument();
+  });
+
+  it("lets the user override to one of the listed namesakes", () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /No, we are Sinclair Media Group/i }));
+
+    const intake = JSON.parse(localStorage.getItem("aio.intake.v2") || "{}");
+    expect(intake.confirmedEntity).toEqual({ name: "Sinclair Media Group", description: "a US broadcaster" });
   });
 
   it("openReport includes the entity-clarity section for an ambiguous audit", () => {
