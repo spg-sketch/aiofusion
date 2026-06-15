@@ -19,4 +19,5 @@
 
 export * from "./auth";
 export * from "./projects";
+export * from "./project-snapshots";
 export * from "./platform";

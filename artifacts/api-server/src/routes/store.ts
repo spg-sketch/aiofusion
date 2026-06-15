@@ -1,15 +1,82 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, projectsTable } from "@workspace/db";
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { db, projectsTable, projectSnapshotsTable } from "@workspace/db";
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
 import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
+import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 
 const router: IRouter = Router();
 
 // Build a jsonb SQL literal from an arbitrary value, used by the "blank never
 // overwrites populated" guards below.
 const asJsonb = (value: unknown): SQL => sql`${JSON.stringify(value ?? null)}::jsonb`;
+
+// The columns that make up a project's restorable content + identity, selected
+// when reading a row to back up or restore.
+const projectRowColumns = {
+  id: projectsTable.id,
+  name: projectsTable.name,
+  data: projectsTable.data,
+  intake: projectsTable.intake,
+  logo: projectsTable.logo,
+  owner: projectsTable.owner,
+} as const;
+
+type ProjectRowSlim = {
+  id: string;
+  name: string;
+  data: unknown;
+  intake: unknown;
+  logo: string | null;
+  owner: string | null;
+};
+
+// Append a backup of a project's current state to the history, unless the latest
+// snapshot already holds identical content. Append-only: nothing here is ever
+// overwritten, so a project can always be rolled back to an earlier version.
+//
+// Returns true when the state is safely captured (either freshly inserted, or an
+// identical copy already exists), and false when a backup could not be written.
+// It never throws: additive saves treat a false as best-effort (the user's work
+// is not blocked by a backup hiccup), while destructive operations (delete,
+// restore) refuse to proceed unless this returns true.
+async function snapshotProject(row: ProjectRowSlim, reason: string): Promise<boolean> {
+  try {
+    const latest = await db
+      .select({
+        name: projectSnapshotsTable.name,
+        data: projectSnapshotsTable.data,
+        intake: projectSnapshotsTable.intake,
+        logo: projectSnapshotsTable.logo,
+      })
+      .from(projectSnapshotsTable)
+      .where(eq(projectSnapshotsTable.projectId, row.id))
+      .orderBy(desc(projectSnapshotsTable.createdAt), desc(projectSnapshotsTable.id))
+      .limit(1);
+    const current: ProjectContent = {
+      name: row.name,
+      data: row.data,
+      intake: row.intake,
+      logo: row.logo,
+    };
+    // Identical content already backed up: the state is safely captured.
+    if (!shouldSnapshot(latest[0] ?? null, current)) return true;
+    await db.insert(projectSnapshotsTable).values({
+      projectId: row.id,
+      name: row.name ?? "",
+      data: (row.data ?? {}) as object,
+      intake: row.intake ?? null,
+      logo: row.logo ?? null,
+      owner: row.owner ?? null,
+      reason,
+    });
+    return true;
+  } catch (err) {
+    console.error("[store] snapshotProject failed", { id: row.id, reason, err });
+    return false;
+  }
+}
 
 // Shared project store, now gated per platform account. Every route requires a
 // signed-in platform session and only ever touches projects that session is
@@ -144,7 +211,7 @@ router.post(
       const incomingName = typeof name === "string" ? name.trim() : "";
       const incomingDataEmpty = dataIsEmpty(data);
       const incomingLogo = typeof logo === "string" && logo ? logo : null;
-      await db
+      const saved = await db
         .insert(projectsTable)
         .values({
           id,
@@ -180,7 +247,10 @@ router.post(
           // Atomic guard: only update rows the caller may touch, so the
           // authorization holds even if ownership changed after the check above.
           setWhere: ownerPredicate(visible),
-        });
+        })
+        .returning(projectRowColumns);
+      // Back up the resulting state so this version can always be restored.
+      if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "upsert");
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save project" });
@@ -209,7 +279,7 @@ router.post(
       const now = new Date();
       const owner = normUsername(req.account!.username);
       const incomingIntakeEmpty = intakeIsEmpty(intake);
-      await db
+      const saved = await db
         .insert(projectsTable)
         .values({
           id,
@@ -239,7 +309,10 @@ router.post(
           },
           // Atomic guard: only update rows the caller may touch.
           setWhere: ownerPredicate(visible),
-        });
+        })
+        .returning(projectRowColumns);
+      // Back up the resulting Set-Up so this version can always be restored.
+      if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "intake");
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save intake" });
@@ -335,6 +408,22 @@ router.post(
       // Atomic guard: scope the soft-delete to rows the caller may touch, so
       // the authorization holds even if ownership changed after the check above.
       const scope = ownerPredicate(visible);
+      // Back up the project's current state before it is removed, so a deletion
+      // is recoverable from the history too. This is a destructive operation, so
+      // if the backup cannot be written we refuse to delete rather than risk an
+      // unrecoverable removal.
+      const current = await db
+        .select(projectRowColumns)
+        .from(projectsTable)
+        .where(eq(projectsTable.id, id))
+        .limit(1);
+      if (current[0]) {
+        const backedUp = await snapshotProject(current[0] as ProjectRowSlim, "pre-delete");
+        if (!backedUp) {
+          res.status(503).json({ error: "Could not back up before deleting. Please try again." });
+          return;
+        }
+      }
       await db
         .update(projectsTable)
         .set({ deletedAt: new Date() })
@@ -342,6 +431,141 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete project" });
+    }
+  },
+);
+
+// List the backup history for a project the account may see. Returns lightweight
+// metadata only (not the full blobs) so a human can pick which version to
+// restore; the restore route reads the chosen snapshot's full content.
+router.get(
+  "/store/projects/:id/snapshots",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      const visible = await visibleOwners(req);
+      const existingOwner = await getOwner(id);
+      // Allow listing history for an already-deleted project too (getOwner finds
+      // soft-deleted rows), so a wiped/removed project can still be recovered.
+      if (existingOwner === undefined) {
+        // No project row backs this id. Snapshots have no foreign key and can
+        // outlive their project, so without a row to check ownership against we
+        // cannot prove a non-admin owns this history. Only an admin (visible ===
+        // null) may view orphaned history; everyone else is told it is gone.
+        if (visible !== null) {
+          res.status(404).json({ error: "Project not found." });
+          return;
+        }
+      } else if (!canSee(existingOwner, visible)) {
+        res.status(403).json({ error: "You cannot view this project's history." });
+        return;
+      }
+      const rows = await db
+        .select({
+          id: projectSnapshotsTable.id,
+          reason: projectSnapshotsTable.reason,
+          createdAt: projectSnapshotsTable.createdAt,
+          // A human-friendly label: the saved name, falling back to the company
+          // answer (Set-Up field 4.1) for intake-only rows.
+          name: sql<string>`coalesce(nullif(${projectSnapshotsTable.name}, ''), ${projectSnapshotsTable.intake}->'formData'->>'4.1', '')`,
+          hasIntake: sql<boolean>`(${projectSnapshotsTable.intake} is not null and ${projectSnapshotsTable.intake} <> 'null'::jsonb)`,
+        })
+        .from(projectSnapshotsTable)
+        .where(eq(projectSnapshotsTable.projectId, id))
+        .orderBy(desc(projectSnapshotsTable.createdAt), desc(projectSnapshotsTable.id));
+      res.json({ snapshots: rows });
+    } catch {
+      res.status(500).json({ error: "Failed to load history" });
+    }
+  },
+);
+
+// Restore a project to an earlier backup. The current state is backed up first
+// (so a restore is itself reversible), then the chosen snapshot's content is
+// written back over the project. Ownership is never changed and the project is
+// un-deleted, so this also recovers a removed project.
+router.post(
+  "/store/projects/restore",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const { id, snapshotId } = req.body ?? {};
+      if (!id || typeof id !== "string") {
+        res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      const snapId = Number(snapshotId);
+      if (!Number.isInteger(snapId) || snapId <= 0) {
+        res.status(400).json({ error: "Missing snapshot id" });
+        return;
+      }
+      const visible = await visibleOwners(req);
+      const existingOwner = await getOwner(id);
+      if (existingOwner === undefined) {
+        res.status(404).json({ error: "Project not found." });
+        return;
+      }
+      if (!canSee(existingOwner, visible)) {
+        res.status(403).json({ error: "You cannot restore this project." });
+        return;
+      }
+      const snapRows = await db
+        .select({
+          projectId: projectSnapshotsTable.projectId,
+          name: projectSnapshotsTable.name,
+          data: projectSnapshotsTable.data,
+          intake: projectSnapshotsTable.intake,
+          logo: projectSnapshotsTable.logo,
+        })
+        .from(projectSnapshotsTable)
+        .where(eq(projectSnapshotsTable.id, snapId))
+        .limit(1);
+      const snap = snapRows[0];
+      if (!snap || snap.projectId !== id) {
+        res.status(404).json({ error: "Backup not found for this project." });
+        return;
+      }
+      // Back up the live state first so the restore can itself be undone. This
+      // overwrites the live state, so if the backup cannot be written we refuse
+      // to restore rather than lose the current version.
+      const current = await db
+        .select(projectRowColumns)
+        .from(projectsTable)
+        .where(eq(projectsTable.id, id))
+        .limit(1);
+      if (current[0]) {
+        const backedUp = await snapshotProject(current[0] as ProjectRowSlim, "pre-restore");
+        if (!backedUp) {
+          res.status(503).json({ error: "Could not back up the current version. Please try again." });
+          return;
+        }
+      }
+
+      const scope = ownerPredicate(visible);
+      const updated = await db
+        .update(projectsTable)
+        .set({
+          name: snap.name ?? "",
+          data: (snap.data ?? {}) as object,
+          intake: snap.intake ?? null,
+          logo: snap.logo ?? null,
+          deletedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(scope ? and(eq(projectsTable.id, id), scope) : eq(projectsTable.id, id))
+        .returning({ id: projectsTable.id });
+      if (updated.length === 0) {
+        res.status(409).json({ error: "You cannot restore this project." });
+        return;
+      }
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to restore project" });
     }
   },
 );

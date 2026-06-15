@@ -110,9 +110,30 @@ The hub re-syncs on `visibilitychange`, window `focus`, and a 60s interval (all
 no-op when offline) so a project created on another device appears without a
 manual reload. Sync still also runs once on mount.
 
+## Permanent backups: append-only snapshots + reversible restore
+Every distinct version of a project (name/data/intake/logo) is copied into a
+separate append-only history table so client Set-Up data can always be recovered,
+even after deletion. Restore writes a chosen version back and is itself reversible
+(the live state is backed up first).
+**Why:** guards stop a blank from overwriting a populated record, but they cannot
+bring back a version that was already replaced; concrete backups can.
+**How to apply:** (1) the history table has NO foreign key to projects, so deletes
+never cascade the backups away (and a backup can outlive its project). (2) Dedupe
+each save against the LATEST snapshot only (stable-stringify compare) so identical
+re-saves do not grow history while every genuine change is kept. (3) Split the
+fail policy by operation: ADDITIVE saves (upsert/intake) are fail-open (a backup
+hiccup must not block the user saving), but DESTRUCTIVE ops (delete, restore)
+abort with 503 if the pre-op backup cannot be written, so nothing is lost
+unrecoverably. (4) Because the history table has no FK, any route that lists/reads
+it by project id MUST still prove ownership: when no project row exists to check
+against, only an admin may read the orphaned history (else it leaks across
+accounts).
+
 ## Testing the api-server
 `$REPLIT_DEV_DOMAIN/api/...` routes to the WEB app (Vite), NOT api-server, so it
 returns empty. Test api-server directly at `http://localhost:8080` (its PORT), or
-through the preview proxy. The api-server builds with esbuild (build.mjs) bundling
-`@workspace/db` from source, so `projectsTable` resolves at runtime even though
-`tsc --noEmit` reports pre-existing type-resolution errors for db tables.
+through the preview proxy. The api-server runtime bundles `@workspace/db` from
+source, but `tsc --noEmit` resolves db TYPES from `lib/db/dist/*.d.ts` (project
+references, `emitDeclarationOnly`). So after adding a NEW export to `@workspace/db`
+(e.g. a new table), api-server typecheck reports "no exported member" until you
+regenerate the declarations: `pnpm --filter @workspace/db exec tsc -b`.
