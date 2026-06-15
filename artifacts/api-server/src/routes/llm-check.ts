@@ -441,9 +441,14 @@ async function probeOpenAI(question: string, identity: BrandIdentity): Promise<P
   if (!client) return null;
 
   try {
+    // GPT-5 is a reasoning model, so max_completion_tokens covers BOTH the
+    // hidden reasoning tokens and the visible answer. A small budget (e.g.
+    // 1500) is frequently exhausted by reasoning alone, leaving the answer
+    // empty or truncated and silently dropping brand mentions / competitors.
+    // Give it a generous budget so thorough answers fit.
     const response = await client.chat.completions.create({
       model: "gpt-5",
-      max_completion_tokens: 1500,
+      max_completion_tokens: 8000,
       messages: [
         {
           role: "system",
@@ -454,6 +459,12 @@ async function probeOpenAI(question: string, identity: BrandIdentity): Promise<P
     });
 
     const text = response.choices[0]?.message?.content || "";
+    if (response.choices[0]?.finish_reason === "length") {
+      logger.warn(
+        { question, model: "gpt-5", textLength: text.length },
+        "OpenAI probe hit the output token limit; answer may be truncated",
+      );
+    }
     const mentioned = isMentioned(text, identity);
 
     return {
@@ -475,15 +486,23 @@ async function probeClaude(question: string, identity: BrandIdentity): Promise<P
   if (!client) return null;
 
   try {
+    // Give thorough, comprehensive answers (which can list many competitors)
+    // room to finish so the brand mention or competitor list isn't cut off.
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 1500,
+      max_tokens: 4000,
       system: "You are a knowledgeable business advisor. Answer questions directly and thoroughly, naming specific companies where relevant. Be factual and comprehensive.",
       messages: [{ role: "user", content: question }],
     });
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    if (response.stop_reason === "max_tokens") {
+      logger.warn(
+        { question, model: "claude-sonnet-4-5", textLength: text.length },
+        "Claude probe hit the output token limit; answer may be truncated",
+      );
+    }
     const mentioned = isMentioned(text, identity);
 
     return {
