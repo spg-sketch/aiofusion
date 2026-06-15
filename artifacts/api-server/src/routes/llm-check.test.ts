@@ -21,7 +21,12 @@ import {
   aggregateTopCompetitors,
   groupProbesByQuery,
   computeVisibilityMetrics,
+  domainLabel,
+  parseEntityList,
+  deriveEntityClarity,
+  assessEntityClarity,
   type ProbeResult,
+  type BrandIdentity,
 } from "./llm-check";
 
 // Build a probe result with sensible defaults so tests only specify what matters.
@@ -443,6 +448,174 @@ describe("generateProbeQuestions", () => {
     expect(kwQuestion).toBeDefined();
     expect(kwQuestion).toContain("fast, cheap, green");
     expect(kwQuestion).not.toContain("loud");
+  });
+
+  it("keeps the plain direct probe when no identity is supplied", () => {
+    const qs = generateProbeQuestions("SMG", ["sports media"], [], "", "", "");
+    expect(qs[0]).toBe("What do you know about SMG?");
+  });
+
+  it("anchors the direct probe to the website and sector for an ambiguous identity", () => {
+    const identity: BrandIdentity = {
+      name: "SMG",
+      legalName: "Sports Media Group Ltd",
+      website: "https://sportsmediagroup.co.uk",
+      descriptor: "A sports marketing agency",
+      sectors: ["sports media"],
+    };
+    const qs = generateProbeQuestions("SMG", ["sports media"], [], "", "", "", identity);
+    expect(qs[0]).not.toBe("What do you know about SMG?");
+    expect(qs[0]).toContain("sportsmediagroup.co.uk");
+    // Anchoring should reference the legal name so the engine resolves the right entity.
+    expect(qs[0]).toContain("Sports Media Group Ltd");
+  });
+});
+
+describe("domainLabel", () => {
+  it("returns an empty string for missing input", () => {
+    expect(domainLabel(undefined)).toBe("");
+    expect(domainLabel("")).toBe("");
+  });
+
+  it("extracts the distinctive label, dropping scheme, www and TLD", () => {
+    expect(domainLabel("https://www.sportsmediagroup.co.uk/about")).toBe("sportsmediagroup");
+    expect(domainLabel("acme-widgets.com")).toBe("acme-widgets");
+  });
+});
+
+describe("isMentioned with a BrandIdentity (namesake hardening)", () => {
+  const identity: BrandIdentity = {
+    name: "SMG",
+    legalName: "Sports Media Group",
+    website: "https://sportsmediagroup.co.uk",
+    descriptor: "sports marketing agency",
+    sectors: ["sports media"],
+  };
+
+  it("does not credit a bare acronym surfaced in an unrelated context", () => {
+    // An answer about a different SMG (e.g. a holding company) must not count.
+    expect(isMentioned("SMG is a large investment holding company in Asia.", identity)).toBe(false);
+  });
+
+  it("credits the acronym when corroborated by the domain label", () => {
+    expect(isMentioned("SMG (sportsmediagroup.co.uk) runs sponsorship campaigns.", identity)).toBe(true);
+  });
+
+  it("credits the acronym when corroborated by the full legal name", () => {
+    expect(isMentioned("Sports Media Group, known as SMG, is a strong pick.", identity)).toBe(true);
+  });
+
+  it("does not treat the sector alone as corroboration", () => {
+    // Generic sector answers always mention the sector, so it must not credit a bare SMG.
+    expect(isMentioned("The sports media space is competitive; SMG operates there too.", identity)).toBe(false);
+  });
+
+  it("still credits an unambiguous multi-word brand without corroboration", () => {
+    const acme: BrandIdentity = { name: "Acme Widgets", legalName: "Acme Widgets Ltd" };
+    expect(isMentioned("I recommend Acme Widgets for this.", acme)).toBe(true);
+  });
+});
+
+describe("parseEntityList", () => {
+  it("parses 'Name - description' lines, tolerating bullets and numbering", () => {
+    const text = "1. Sinclair Media Group - a US broadcaster\n- Scott Media Group - a UK PR firm\n* **SMG Holdings** - an Asian conglomerate";
+    const list = parseEntityList(text);
+    expect(list).toEqual([
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Scott Media Group", description: "a UK PR firm" },
+      { name: "SMG Holdings", description: "an Asian conglomerate" },
+    ]);
+  });
+
+  it("keeps a name with no description and skips blank lines", () => {
+    const list = parseEntityList("\nGlobex\n\n");
+    expect(list).toEqual([{ name: "Globex", description: "" }]);
+  });
+
+  it("caps the list at eight entries", () => {
+    const text = Array.from({ length: 12 }, (_, i) => `Org${i} - desc`).join("\n");
+    expect(parseEntityList(text).length).toBe(8);
+  });
+});
+
+describe("deriveEntityClarity", () => {
+  const identity: BrandIdentity = {
+    name: "SMG",
+    legalName: "Sports Media Group",
+    website: "https://sportsmediagroup.co.uk",
+    sectors: ["sports media"],
+  };
+
+  it("reports unambiguous when only the brand is listed", () => {
+    const ec = deriveEntityClarity("SMG", identity, [
+      { name: "Sports Media Group", description: "sportsmediagroup.co.uk sponsorship agency" },
+    ]);
+    expect(ec.isAmbiguous).toBe(false);
+    expect(ec.brandRecognised).toBe(true);
+    expect(ec.competingEntities).toEqual([]);
+  });
+
+  it("flags 'present but confused' when the brand is recognised but not dominant", () => {
+    const ec = deriveEntityClarity("SMG", identity, [
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Sports Media Group", description: "the sportsmediagroup.co.uk agency" },
+    ]);
+    expect(ec.isAmbiguous).toBe(true);
+    expect(ec.brandRecognised).toBe(true);
+    expect(ec.brandIsDominant).toBe(false);
+    expect(ec.competingEntities.map((e) => e.name)).toEqual(["Sinclair Media Group"]);
+    expect(ec.note.toLowerCase()).toContain("identity confusion");
+  });
+
+  it("flags 'not present' when the brand never matches a listed entity", () => {
+    const ec = deriveEntityClarity("SMG", identity, [
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Smith Manufacturing Group", description: "an industrial supplier" },
+    ]);
+    expect(ec.isAmbiguous).toBe(true);
+    expect(ec.brandRecognised).toBe(false);
+    expect(ec.brandIsDominant).toBe(false);
+    expect(ec.competingEntities.length).toBe(2);
+    expect(ec.note.toLowerCase()).toContain("did not surface");
+  });
+});
+
+describe("assessEntityClarity", () => {
+  const identity: BrandIdentity = {
+    name: "SMG",
+    legalName: "Sports Media Group",
+    website: "https://sportsmediagroup.co.uk",
+    sectors: ["sports media"],
+  };
+
+  beforeEach(() => {
+    messagesCreate.mockReset();
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns a structured verdict from the model's namesake list", async () => {
+    messagesCreate.mockResolvedValue({
+      content: [{ type: "text", text: "Sinclair Media Group - a US broadcaster\nSports Media Group - the sportsmediagroup.co.uk agency" }],
+    });
+    const ec = await assessEntityClarity(identity);
+    expect(ec).not.toBeNull();
+    expect(ec!.isAmbiguous).toBe(true);
+    expect(ec!.brandRecognised).toBe(true);
+    expect(ec!.competingEntities.map((e) => e.name)).toContain("Sinclair Media Group");
+  });
+
+  it("fails soft (returns null) when the model yields nothing usable", async () => {
+    messagesCreate.mockResolvedValue({ content: [{ type: "text", text: "" }] });
+    expect(await assessEntityClarity(identity)).toBeNull();
+  });
+
+  it("fails soft (returns null) when the model call throws", async () => {
+    messagesCreate.mockRejectedValue(new Error("network"));
+    expect(await assessEntityClarity(identity)).toBeNull();
   });
 });
 

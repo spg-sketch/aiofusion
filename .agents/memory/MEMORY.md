@@ -13,3 +13,4 @@
 - [AIO Fusion LLM Check audit report](aio-fusion-llm-check-audit.md) — topCompetitors is server-truncated (top 8, count>=2); use full probes[].competitors for aggregate metrics like share of voice; report omits unmeasured /5 scorecard dims.
 - [AIO Fusion testing + typecheck](aio-fusion-testing-and-typecheck.md) — vitest runs api-server (node) + aio-fusion (jsdom); mock Anthropic via vi.hoisted; some typecheck errors (diagnostic.ts, replit-auth-web) are pre-existing.
 - [AIO Fusion ownerless project self-heal](aio-fusion-ownerless-project-heal.md) — NULL-owner projects "disappear"; heal must run after sync, per-project, master-only, persist owner only after push confirms.
+- [AIO Fusion brand-name confusion](aio-fusion-brand-name-confusion.md) — acronym mentions need domain/full-legal-name corroboration; never use suffix-stripped legal name (group/holdings→sector) for detection; entity-clarity + no web grounding.

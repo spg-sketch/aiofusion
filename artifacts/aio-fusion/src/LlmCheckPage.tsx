@@ -20,6 +20,7 @@ import {
   Clock,
   Trash2,
   SlidersHorizontal,
+  AlertTriangle,
 } from "lucide-react";
 
 const vars = {
@@ -73,6 +74,15 @@ interface AuthorityAssessment {
   queryTable: { query: string; appeared: boolean; notes: string }[];
 }
 
+interface EntityClarity {
+  brandName: string;
+  isAmbiguous: boolean;
+  brandRecognised: boolean;
+  brandIsDominant: boolean;
+  competingEntities: { name: string; description: string }[];
+  note: string;
+}
+
 interface LlmCheckResult {
   companyName: string;
   sector: string;
@@ -89,6 +99,7 @@ interface LlmCheckResult {
   topCompetitors: { name: string; mentions: number }[];
   probes: ProbeItem[];
   assessment?: AuthorityAssessment | null;
+  entityClarity?: EntityClarity | null;
 }
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
@@ -640,6 +651,26 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     </div>`
         : "";
 
+    const ec = result.entityClarity || null;
+    const entityClarityBlock =
+      ec && ec.isAmbiguous
+        ? `<div class="card">
+      <h2>Entity clarity: who else is called "${escapeHtml(ec.brandName)}"</h2>
+      <p class="lead">${escapeHtml(ec.note)}</p>
+      <p class="meta-line" style="margin-top:10px;"><strong>Status:</strong> ${ec.brandRecognised
+            ? (ec.brandIsDominant
+                ? "The brand is the most prominent holder of this name, but it is shared."
+                : "The brand is recognised under this name but is not the most prominent holder - present but confused.")
+            : "The brand did not surface for the bare name unprompted - the engines associate the name with other organisations (not absent, but confused)."}</p>
+      <table style="margin-top:12px;">
+        <thead><tr><th>Other organisations known as "${escapeHtml(ec.brandName)}"</th><th>What they are</th></tr></thead>
+        <tbody>${ec.competingEntities
+            .map((e) => `<tr><td><strong>${escapeHtml(e.name)}</strong></td><td class="muted">${escapeHtml(e.description) || "&mdash;"}</td></tr>`)
+            .join("")}</tbody>
+      </table>
+    </div>`
+        : "";
+
     const assessmentQueryBlock =
       assess && assess.queryTable.length > 0
         ? `<div class="card">
@@ -747,6 +778,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       <p class="lead">${summaryHtml}</p>
       ${result.icp ? `<p class="meta-line" style="margin-top:12px;"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
     </div>
+    ${entityClarityBlock}
     ${scorecardBlock}
     ${actionsBlock}
     <div class="card">
@@ -1273,6 +1305,43 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </p>
         )}
       </div>
+
+      {/* Entity clarity */}
+      {result.entityClarity && result.entityClarity.isAmbiguous && (
+        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+            <AlertTriangle size={14} style={{ color: vars.accent }} />
+            Entity clarity: who else is called &ldquo;{result.entityClarity.brandName}&rdquo;
+          </h3>
+          <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{result.entityClarity.note}</p>
+          <p className="text-[12px] mt-3" style={{ color: vars.g500 }}>
+            <strong style={{ color: vars.g600 }}>Status:</strong>{" "}
+            {result.entityClarity.brandRecognised
+              ? (result.entityClarity.brandIsDominant
+                  ? "The brand is the most prominent holder of this name, but it is shared."
+                  : "The brand is recognised under this name but is not the most prominent holder — present but confused.")
+              : "The brand did not surface for the bare name unprompted — the engines associate the name with other organisations (not absent, but confused)."}
+          </p>
+          <div className="overflow-x-auto mt-4">
+            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Other organisations known as &ldquo;{result.entityClarity.brandName}&rdquo;</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3" style={{ color: vars.g500 }}>What they are</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.entityClarity.competingEntities.map((e, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                    <td className="text-[12px] py-2 pr-3 font-semibold align-top" style={{ color: vars.g600 }}>{e.name}</td>
+                    <td className="text-[12px] py-2 pl-3" style={{ color: vars.g500 }}>{e.description || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Scorecard */}
       {rd.assess && rd.assess.dimensions.length > 0 && (

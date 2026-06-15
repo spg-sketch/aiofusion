@@ -41,6 +41,21 @@ function normalizeText(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// Brand identity bundle used to disambiguate short / acronym names (e.g. "SMG")
+// from unrelated namesakes. The website domain and full legal name are the most
+// reliable signals, so detection and the identity probe are anchored to them.
+export interface BrandIdentity {
+  name: string;
+  legalName?: string;
+  website?: string;
+  descriptor?: string;
+  sectors?: string[];
+}
+
+function asIdentity(brand: BrandIdentity | string): BrandIdentity {
+  return typeof brand === "string" ? { name: brand } : brand;
+}
+
 export function brandAliases(companyName: string): string[] {
   const full = normalizeText(companyName);
   if (!full) return [];
@@ -59,15 +74,131 @@ function aliasRegex(alias: string): RegExp {
   return new RegExp(`(?<![a-z0-9])${pattern}(?![a-z0-9])`, "i");
 }
 
-export function isMentioned(text: string, companyName: string): boolean {
+// A "weak" alias is a single short token (<= 4 chars, e.g. an acronym like
+// "SMG" or "BT"). On its own it is too ambiguous to credit, because unrelated
+// companies share it, so it must be corroborated by a brand-specific signal.
+function isWeakAlias(alias: string): boolean {
+  const tokens = alias.split(" ").filter(Boolean);
+  return tokens.length === 1 && tokens[0].length <= 4;
+}
+
+// Whether a brand name is an acronym or very short, and therefore prone to
+// being confused with namesakes. Drives the extra anchoring on the identity
+// probe and the corroboration requirement in detection.
+export function isAmbiguousName(name: string): boolean {
+  const trimmed = name.trim();
+  if (/^[A-Za-z0-9]{2,6}$/.test(trimmed) && trimmed === trimmed.toUpperCase()) return true;
+  const core = brandAliases(name)[0] || "";
+  const tokens = core.split(" ").filter(Boolean);
+  return tokens.length === 1 && tokens[0].length <= 5;
+}
+
+// The distinctive label of a website's domain, e.g.
+// "https://www.shoppermediagroup.com/about" -> "shoppermediagroup". Used as a
+// brand-specific corroboration signal that generic answers will not contain.
+export function domainLabel(website?: string): string {
+  if (!website) return "";
+  let s = website.trim().toLowerCase();
+  s = s.replace(/^[a-z]+:\/\//, "").replace(/^www\./, "");
+  s = s.split(/[/?#]/)[0];
+  const parts = s.split(".").filter(Boolean);
+  return parts[0] || "";
+}
+
+// Brand-specific phrases that, if present in a response, confirm a weak/acronym
+// match really is the brand: the domain label and the multi-word legal name.
+function corroborationSignals(identity: BrandIdentity): string[] {
+  const sigs: string[] = [];
+  const dl = domainLabel(identity.website);
+  if (dl && dl.length >= 4) sigs.push(dl);
+  if (identity.legalName) {
+    // Use the FULL legal name only (including any "Group"/"Holdings"-style
+    // suffix token). Stripping legal suffixes can collapse a name like
+    // "Sports Media Group" to "sports media", which is just the sector and
+    // would falsely corroborate any generic sector answer.
+    const full = normalizeText(identity.legalName);
+    if (full.includes(" ")) sigs.push(full);
+  }
+  return [...new Set(sigs)].filter(Boolean);
+}
+
+function isCorroborated(text: string, identity: BrandIdentity): boolean {
+  const compact = normalizeText(text).replace(/\s+/g, "");
+  for (const sig of corroborationSignals(identity)) {
+    if (sig.includes(" ")) {
+      if (aliasRegex(sig).test(text)) return true;
+    } else if (aliasRegex(sig).test(text) || compact.includes(sig)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// All aliases used for detection: the probe name plus the FULL multi-word legal
+// name. The legal name is used whole (not suffix-stripped), because stripping a
+// "Group"/"Holdings"-style suffix can collapse it to a generic sector phrase
+// (e.g. "Sports Media Group" -> "sports media") that matches unrelated answers.
+function detectionAliases(identity: BrandIdentity): string[] {
+  const nameAliases = brandAliases(identity.name);
+  const legalAliases: string[] = [];
+  if (identity.legalName) {
+    const full = normalizeText(identity.legalName);
+    if (full.includes(" ")) legalAliases.push(full);
+  }
+  return [...new Set([...nameAliases, ...legalAliases])];
+}
+
+export function isMentioned(text: string, brand: BrandIdentity | string): boolean {
   if (!text) return false;
-  return brandAliases(companyName).some((alias) => aliasRegex(alias).test(text));
+  const identity = asIdentity(brand);
+  const hasContext = corroborationSignals(identity).length > 0;
+  for (const alias of detectionAliases(identity)) {
+    if (!aliasRegex(alias).test(text)) continue;
+    // A strong (multi-word or distinctive) alias is a confident match.
+    if (!isWeakAlias(alias)) return true;
+    // A weak acronym match only counts when we have no disambiguation context
+    // (legacy behaviour) or when a brand-specific signal corroborates it, so an
+    // unrelated namesake sharing the acronym is not credited as the brand.
+    if (!hasContext || isCorroborated(text, identity)) return true;
+  }
+  return false;
 }
 
 export function normalizeCompetitor(name: string): string {
   const norm = normalizeText(name);
   if (!norm) return "";
   return norm.split(" ").filter((t) => t && !LEGAL_SUFFIXES.has(t)).join(" ");
+}
+
+// The direct/identity probe is the one query that names the brand. For acronym
+// or very short names it is anchored to the brand's website, full legal name,
+// descriptor and sector so the engine resolves the correct company instead of a
+// generic namesake. Plain names get the original, unanchored question.
+export function buildIdentityProbe(identity: BrandIdentity): string {
+  const { name } = identity;
+  const hasLegal = !!(identity.legalName && normalizeText(identity.legalName) !== normalizeText(name));
+  const ambiguous = isAmbiguousName(name);
+  const sector = (identity.sectors || []).map((s) => s.trim()).filter(Boolean)[0];
+
+  if (!hasLegal && !identity.website && !ambiguous) {
+    return `What do you know about ${name}?`;
+  }
+
+  let q = `What do you know about ${name}`;
+  if (hasLegal) q += ` (${identity.legalName})`;
+  q += `?`;
+
+  const anchor: string[] = [];
+  if (identity.website) anchor.push(`Its website is ${identity.website}.`);
+  if (ambiguous && sector) anchor.push(`It operates in ${sector}.`);
+  if (ambiguous && identity.descriptor) {
+    const oneLine = identity.descriptor.split(/[.\n]/)[0].trim().slice(0, 160);
+    if (oneLine) anchor.push(`${oneLine}.`);
+  }
+  if (anchor.length > 0) {
+    q += ` ${anchor.join(" ")} Please answer specifically about this company, not other organisations with a similar name.`;
+  }
+  return q;
 }
 
 export function generateProbeQuestions(
@@ -77,6 +208,7 @@ export function generateProbeQuestions(
   icp: string,
   location: string,
   persona: string,
+  identity?: BrandIdentity,
 ): string[] {
   const questions: string[] = [];
 
@@ -96,7 +228,7 @@ export function generateProbeQuestions(
   const inLocation = hasLocation ? ` in ${location}` : "";
   const place = hasLocation ? location : "the UK";
 
-  questions.push(`What do you know about ${companyName}?`);
+  questions.push(identity ? buildIdentityProbe({ ...identity, name: companyName }) : `What do you know about ${companyName}?`);
 
   const single = list.length === 1;
   for (const sector of list) {
@@ -131,11 +263,11 @@ export function generateProbeQuestions(
   return questions;
 }
 
-function findMentionContext(text: string, companyName: string): string | null {
+function findMentionContext(text: string, brand: BrandIdentity | string): string | null {
   if (!text) return null;
   let idx = -1;
   let matchLen = 0;
-  for (const alias of brandAliases(companyName)) {
+  for (const alias of detectionAliases(asIdentity(brand))) {
     const m = aliasRegex(alias).exec(text);
     if (m && (idx === -1 || m.index < idx)) {
       idx = m.index;
@@ -152,7 +284,13 @@ function findMentionContext(text: string, companyName: string): string | null {
   return context;
 }
 
-export function extractCompetitors(text: string, companyName: string): string[] {
+export function extractCompetitors(text: string, brand: BrandIdentity | string): string[] {
+  const identity = asIdentity(brand);
+  const exclude = new Set(
+    [identity.name, identity.legalName]
+      .filter((x): x is string => !!x)
+      .map((x) => x.toLowerCase().trim()),
+  );
   const patterns = [
     /(?:companies|firms|agencies|providers|organizations|organisations)(?:\s+(?:like|such as|including|are))\s+([^.]+)/gi,
     /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–—:])/g,
@@ -164,7 +302,7 @@ export function extractCompetitors(text: string, companyName: string): string[] 
     let match;
     while ((match = pattern.exec(text)) !== null) {
       const found = match[1]?.trim();
-      if (found && found.length > 2 && found.length < 60 && found.toLowerCase() !== companyName.toLowerCase()) {
+      if (found && found.length > 2 && found.length < 60 && !exclude.has(found.toLowerCase())) {
         const cleaned = found.replace(/^\d+\.\s*/, "").replace(/\*+/g, "").trim();
         if (cleaned.length > 2) names.add(cleaned);
       }
@@ -284,7 +422,7 @@ export function computeVisibilityMetrics(results: ProbeResult[]): VisibilityMetr
   };
 }
 
-async function probeOpenAI(question: string, companyName: string): Promise<ProbeResult | null> {
+async function probeOpenAI(question: string, identity: BrandIdentity): Promise<ProbeResult | null> {
   const client = createOpenAIClient();
   if (!client) return null;
 
@@ -302,15 +440,15 @@ async function probeOpenAI(question: string, companyName: string): Promise<Probe
     });
 
     const text = response.choices[0]?.message?.content || "";
-    const mentioned = isMentioned(text, companyName);
+    const mentioned = isMentioned(text, identity);
 
     return {
       question,
       model: "GPT-5 (ChatGPT)",
       response: text,
       mentioned,
-      mentionContext: findMentionContext(text, companyName),
-      competitors: extractCompetitors(text, companyName),
+      mentionContext: findMentionContext(text, identity),
+      competitors: extractCompetitors(text, identity),
     };
   } catch (err: any) {
     logger.error({ err, question }, "OpenAI probe failed");
@@ -318,7 +456,7 @@ async function probeOpenAI(question: string, companyName: string): Promise<Probe
   }
 }
 
-async function probeClaude(question: string, companyName: string): Promise<ProbeResult | null> {
+async function probeClaude(question: string, identity: BrandIdentity): Promise<ProbeResult | null> {
   const client = createAnthropicClient();
   if (!client) return null;
 
@@ -332,15 +470,15 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
-    const mentioned = isMentioned(text, companyName);
+    const mentioned = isMentioned(text, identity);
 
     return {
       question,
       model: "Claude (Anthropic)",
       response: text,
       mentioned,
-      mentionContext: findMentionContext(text, companyName),
-      competitors: extractCompetitors(text, companyName),
+      mentionContext: findMentionContext(text, identity),
+      competitors: extractCompetitors(text, identity),
     };
   } catch (err: any) {
     logger.error({ err, question }, "Claude probe failed");
@@ -351,6 +489,7 @@ async function probeClaude(question: string, companyName: string): Promise<Probe
 interface ProjectAuthorityData {
   descriptor?: string;
   legalName?: string;
+  website?: string;
   boilerplate?: string;
   competitors?: string[];
   evidenceUrls?: string[];
@@ -376,6 +515,19 @@ interface AuthorityAssessment {
   queryTable: { query: string; appeared: boolean; notes: string }[];
 }
 
+// Whether the brand's name cleanly identifies it, or is shared with other
+// well-known organisations (namesakes) that AI engines surface for the bare
+// name. Used by the report's entity-clarity section to separate "not present"
+// from "present but confused with another entity".
+export interface EntityClarity {
+  brandName: string;
+  isAmbiguous: boolean;
+  brandRecognised: boolean;
+  brandIsDominant: boolean;
+  competingEntities: { name: string; description: string }[];
+  note: string;
+}
+
 const DIMENSION_NAMES = [
   "Presence",
   "Prominence",
@@ -397,6 +549,7 @@ function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
   return {
     descriptor: str(d.descriptor, 2000),
     legalName: str(d.legalName, 200),
+    website: str(d.website, 300),
     boilerplate: str(d.boilerplate, 600),
     competitors: strArr(d.competitors, 20, 120),
     evidenceUrls: strArr(d.evidenceUrls, 30, 300),
@@ -535,6 +688,7 @@ export async function scoreAuthority(
   projectData: ProjectAuthorityData,
   evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
   metrics: { presence: number; shareOfVoice: number; visibilityScore: number; topCompetitors: { name: string; mentions: number }[] },
+  entityClarity?: EntityClarity | null,
 ): Promise<AuthorityAssessment | null> {
   const client = createAnthropicClient();
   if (!client) return null;
@@ -566,6 +720,7 @@ CRITICAL RULES:
 - Do NOT invent facts, citations, outlets, quotes, competitors or spokespeople. Use only what is provided.
 - If the evidence does not support a dimension, score it low and write "No evidence in this run." as the justification with confidence "low". This is expected for message fidelity, factual accuracy, source quality and spokesperson authority when the brand rarely appeared or supplied no URLs or spokespeople.
 - Ground every justification in the actual evidence. Presence, prominence and share of voice come from the probe results. Source quality and spokesperson authority come from the supplied URLs and spokespeople only.
+- If ENTITY CLARITY below shows the brand name is shared with other well-known organisations, reflect that in the Entity clarity dimension, and in the summary explain that a low presence partly reflects identity confusion (the engines surface the namesakes for the bare name) rather than the brand being absent. Do not name namesakes that are not listed there.
 
 Return STRICT JSON only - no prose before or after, no markdown fences. Exactly this shape:
 {
@@ -598,6 +753,20 @@ ${JSON.stringify(
 PRECOMPUTED METRICS (from the probes, for reference - you may refine the index):
 ${JSON.stringify(metrics, null, 1)}
 
+ENTITY CLARITY (how clearly the brand name resolves to this company for AI engines):
+${entityClarity
+    ? JSON.stringify(
+        {
+          isAmbiguous: entityClarity.isAmbiguous,
+          brandIsDominant: entityClarity.brandIsDominant,
+          brandRecognised: entityClarity.brandRecognised,
+          competingEntities: entityClarity.competingEntities.map((e) => e.name),
+        },
+        null,
+        1,
+      )
+    : "not assessed"}
+
 PROBE EVIDENCE (one entry per query):
 ${JSON.stringify(evidence, null, 1)}`;
 
@@ -614,6 +783,104 @@ ${JSON.stringify(evidence, null, 1)}`;
     return parseAssessment(text);
   } catch (err: any) {
     logger.error({ err, companyName }, "Authority scoring (stage 2) failed");
+    return null;
+  }
+}
+
+// Parse a model's "Name - description" list of namesake organisations into
+// structured entries, tolerating bullets, numbering and markdown emphasis.
+export function parseEntityList(text: string): { name: string; description: string }[] {
+  const out: { name: string; description: string }[] = [];
+  for (const rawLine of (text || "").split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line) continue;
+    line = line.replace(/^[-*\u2022\d.)\s]+/, "").trim();
+    if (!line) continue;
+    const m = line.match(/^(.+?)\s*[-\u2013\u2014:]\s*(.+)$/);
+    const name = (m ? m[1] : line).replace(/\*+/g, "").trim().slice(0, 120);
+    const description = (m ? m[2] : "").replace(/\*+/g, "").trim().slice(0, 240);
+    if (name.length >= 2) out.push({ name, description });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function entityMatchesBrand(entity: { name: string; description: string }, identity: BrandIdentity): boolean {
+  const text = `${entity.name} ${entity.description}`;
+  if (isCorroborated(text, identity)) return true;
+  for (const s of identity.sectors || []) {
+    const norm = normalizeText(s);
+    if (norm && aliasRegex(norm).test(text)) return true;
+  }
+  return false;
+}
+
+// Turn the listed namesakes into the entity-clarity verdict: which one (if any)
+// is the brand, whether the brand is the dominant holder of the name, and the
+// remaining competing entities, plus a plain-English note on the score impact.
+export function deriveEntityClarity(
+  name: string,
+  identity: BrandIdentity,
+  entities: { name: string; description: string }[],
+): EntityClarity {
+  const matched = entities.map((e) => ({ e, isBrand: entityMatchesBrand(e, identity) }));
+  const brandRecognised = matched.some((m) => m.isBrand);
+  const brandIsDominant = matched.length > 0 && matched[0].isBrand;
+  const competingEntities = matched.filter((m) => !m.isBrand).map((m) => m.e).slice(0, 6);
+  const isAmbiguous = competingEntities.length > 0;
+
+  let note: string;
+  if (!isAmbiguous) {
+    note = `The name "${name}" resolves cleanly to the brand, so identity confusion is unlikely to suppress the score.`;
+  } else if (!brandRecognised) {
+    note = `The bare name "${name}" is dominated by other well-known organisations and the brand did not surface for it unprompted, so a low presence score reflects identity confusion rather than absence of coverage. The identity probe was anchored to the brand's website to measure the correct company.`;
+  } else if (!brandIsDominant) {
+    note = `The name "${name}" is shared with other well-known organisations that the engines surface first, so the brand competes for its own name and a depressed score partly reflects this identity confusion. The identity probe was anchored to the brand's website to measure the correct company.`;
+  } else {
+    note = `The brand is the most prominent holder of the name "${name}", but other organisations share it and may dilute non-branded results.`;
+  }
+  return { brandName: name, isAmbiguous, brandRecognised, brandIsDominant, competingEntities, note };
+}
+
+// Stage: resolve how clearly the brand name identifies the company. One blind
+// LLM call lists the well-known organisations known by the bare name; the brand
+// is then matched against that list by website/legal-name/sector. Fail-soft:
+// returns null if no client or the model returns nothing usable.
+//
+// Live web grounding decision (task: fix audit brand-name confusion):
+// We deliberately do NOT enable live web_search tools here or in the probes.
+// Reasons: (1) the shared Anthropic integration proxy does not expose a reliable
+// web_search tool, so we cannot depend on it; (2) live retrieval makes results
+// non-deterministic and slower, which undermines the audit's repeatability (see
+// the diagnostic-determinism note); (3) the root cause of acronym confusion is
+// fixed deterministically by anchoring identity to the project website/legal
+// name and corroborating mentions, which needs no live browsing. If a dependable
+// web-search tool becomes available, revisit this as an optional enrichment.
+export async function assessEntityClarity(identity: BrandIdentity): Promise<EntityClarity | null> {
+  const client = createAnthropicClient();
+  if (!client) return null;
+
+  const prompt = `A PR team needs to know how clearly the name "${identity.name}" identifies a single company to AI answer engines.
+
+List the well-known companies or organisations commonly referred to as "${identity.name}", most well-known first.${identity.website ? ` Include the company at ${identity.website} if you know it.` : ""} For each, output one line exactly as:
+Full name - one short description
+
+Rules: plain text only, one organisation per line, no preamble, no numbering, British spelling, no em dashes, no emojis. If only one organisation is well known by this name, list just that one. Do not invent organisations.`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 600,
+      system: "You are a precise entity-resolution assistant. You list only real organisations and never invent names.",
+      messages: [{ role: "user", content: prompt }],
+    });
+    const textBlock = response.content.find((b) => b.type === "text");
+    const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    const entities = parseEntityList(text);
+    if (entities.length === 0) return null;
+    return deriveEntityClarity(identity.name, identity, entities);
+  } catch (err: any) {
+    logger.error({ err, name: identity.name }, "Entity clarity assessment failed");
     return null;
   }
 }
@@ -655,8 +922,22 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     "Starting LLM visibility check",
   );
 
+  // Identity bundle used to (a) anchor the direct probe to the right company and
+  // (b) harden mention detection against unrelated namesakes (e.g. "SMG").
+  const identity: BrandIdentity = {
+    name: companyName,
+    legalName: authorityData.legalName,
+    website: authorityData.website,
+    descriptor: authorityData.descriptor,
+    sectors: sectorList,
+  };
+
   try {
-    const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile);
+    // Resolve how clearly the brand name identifies the company. Runs concurrently
+    // with the probes; independent of their results and fail-soft.
+    const entityClarityPromise = assessEntityClarity(identity);
+
+    const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile, identity);
     // Seed the probe set with the buyer's verbatim questions so the measurement
     // uses real queries, not only generated ones. De-duplicate while preserving
     // the buyer questions first, and cap the total so the run stays bounded.
@@ -666,8 +947,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(probeOpenAI(q, companyName));
-        probePromises.push(probeClaude(q, companyName));
+        probePromises.push(probeOpenAI(q, identity));
+        probePromises.push(probeClaude(q, identity));
       }
     }
 
@@ -717,12 +998,20 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       claude: e.claude,
     }));
 
-    const assessment = await scoreAuthority(companyName, authorityData, evidence, {
-      presence,
-      shareOfVoice,
-      visibilityScore,
-      topCompetitors,
-    });
+    const entityClarity = await entityClarityPromise;
+
+    const assessment = await scoreAuthority(
+      companyName,
+      authorityData,
+      evidence,
+      {
+        presence,
+        shareOfVoice,
+        visibilityScore,
+        topCompetitors,
+      },
+      entityClarity,
+    );
 
     const summary = {
       companyName,
@@ -740,6 +1029,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       topCompetitors,
       probes,
       assessment,
+      entityClarity,
     };
 
     res.json(summary);

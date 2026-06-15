@@ -68,6 +68,24 @@ const MODERN_RESULT = {
   },
 };
 
+// An audit for an acronym brand whose name is shared with other organisations,
+// carrying the entity-clarity verdict the server now returns.
+const AMBIGUOUS_RESULT = {
+  ...MODERN_RESULT,
+  companyName: "SMG",
+  entityClarity: {
+    brandName: "SMG",
+    isAmbiguous: true,
+    brandRecognised: true,
+    brandIsDominant: false,
+    competingEntities: [
+      { name: "Sinclair Media Group", description: "a US broadcaster" },
+      { name: "Scott Management Group", description: "a property firm" },
+    ],
+    note: "The name \"SMG\" is shared with other well-known organisations, so the brand competes for its own name and a depressed score partly reflects this identity confusion.",
+  },
+};
+
 function seedSavedAudit(result: object): SavedAudit {
   const audit: SavedAudit = {
     id: "audit-1",
@@ -189,5 +207,55 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     expect(written).toContain("AI Authority scorecard");
     expect(written).toContain("Prioritised actions");
+  });
+
+  it("renders the entity-clarity section in-page when the name is ambiguous", () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.getByText(/Entity clarity:/i)).toBeInTheDocument();
+    // It names the competing namesakes...
+    expect(screen.getByText("Sinclair Media Group")).toBeInTheDocument();
+    expect(screen.getByText("Scott Management Group")).toBeInTheDocument();
+    // ...and explains the score impact (present but confused).
+    expect(screen.getByText(/present but confused/i)).toBeInTheDocument();
+  });
+
+  it("omits the entity-clarity section when there is no entity-clarity data", () => {
+    seedSavedAudit(MODERN_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.queryByText(/Entity clarity:/i)).not.toBeInTheDocument();
+  });
+
+  it("openReport includes the entity-clarity section for an ambiguous audit", () => {
+    seedSavedAudit(AMBIGUOUS_RESULT);
+
+    let written = "";
+    const fakeWindow = {
+      document: {
+        write: (html: string) => {
+          written += html;
+        },
+        close: () => {},
+      },
+      focus: () => {},
+      print: () => {},
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(fakeWindow);
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    screen.getByText(/Open report \/ Save as PDF/i).click();
+
+    expect(written).toContain("Entity clarity");
+    expect(written).toContain("Sinclair Media Group");
+    expect(written).toContain("Scott Management Group");
   });
 });

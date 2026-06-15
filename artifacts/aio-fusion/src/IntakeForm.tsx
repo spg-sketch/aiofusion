@@ -2466,6 +2466,7 @@ export type IntakeData = {
   mediaCategories: string[];
   intakeStatus: IntakeStatus;
   acceptedAt: string | null;
+  aiWebsite: string;
 };
 
 export function loadIntakeData(): IntakeData | null {
@@ -2517,6 +2518,7 @@ export function loadIntakeData(): IntakeData | null {
       mediaCategories: Array.from(new Set([...(parsed.businessCategories || parsed.mediaCategories || []), ...(parsed.audienceCategories || [])])),
       intakeStatus: parsed.intakeStatus || "Draft",
       acceptedAt: parsed.acceptedAt || null,
+      aiWebsite: typeof parsed.aiWebsite === "string" ? parsed.aiWebsite : "",
     };
   } catch { return null; }
 }
@@ -2749,9 +2751,25 @@ export function getExpertiseTopics(): string[] {
   return fieldLines(["5.7"]);
 }
 
+// The company website. Stored top-level as aiWebsite (the website used for
+// AI-assisted drafting). Falls back to the first URL in the homepage descriptor
+// (6.2) so the audit can anchor identity even before the AI-assist field is set.
+export function getWebsite(): string {
+  const data = loadIntakeData();
+  const direct = (data?.aiWebsite || "").trim();
+  if (direct) return direct;
+  const homepage = data?.formData?.["6.2"];
+  if (typeof homepage === "string") {
+    const m = homepage.match(/https?:\/\/[^\s)]+|(?:[\w-]+\.)+[a-z]{2,}(?:\/\S*)?/i);
+    if (m) return m[0].trim();
+  }
+  return "";
+}
+
 export type ProjectAuthorityData = {
   descriptor: string;
   legalName: string;
+  website: string;
   boilerplate: string;
   competitors: string[];
   evidenceUrls: string[];
@@ -2765,6 +2783,7 @@ export function getProjectAuthorityData(): ProjectAuthorityData {
   return {
     descriptor: getCompanyDescriptor(),
     legalName: getLegalName(),
+    website: getWebsite(),
     boilerplate: getBoilerplate(),
     competitors: getCompetitors(),
     evidenceUrls: getEvidenceUrls(),
