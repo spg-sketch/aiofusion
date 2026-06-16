@@ -628,8 +628,8 @@ const navSections: NavSection[] = [
     color: "#D4922A",
     items: [
       { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
-      { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
+      { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
       { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
       { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
       { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
