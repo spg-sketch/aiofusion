@@ -2133,7 +2133,7 @@ Engine used:
               <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
               </button>
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+              <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
                 <Download size={14} /> Print / PDF
               </button>
             </div>
@@ -2349,7 +2349,7 @@ Engine used:
           <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
             {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+          <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
             <Download size={14} /> Print / PDF
           </button>
         </div>
@@ -2986,7 +2986,7 @@ OUTPUT INSTRUCTIONS:
             {/* Row 1 - Title + type */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <Labelled label="Project name" hint="Pulls in messaging from Project Set-Up parts 4 and 6">
+                <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker">
                   <div className="flex items-center gap-2">
                     <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
                       className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
@@ -3042,8 +3042,9 @@ OUTPUT INSTRUCTIONS:
                   </button>
                   {showMsgPicker && (
                     <div className="absolute left-0 right-0 mt-1 z-20 rounded-lg border bg-white shadow-lg max-h-[340px] overflow-y-auto" style={{ borderColor: vars.g200 }}>
-                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] border-b sticky top-0" style={{ background: vars.g50, borderColor: vars.g100, color: vars.g500 }}>
-                        Key messages · Project Set-Up 1.2 &amp; 1.3
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] border-b sticky top-0 flex items-center justify-between" style={{ background: vars.g50, borderColor: vars.g100, color: vars.g500 }}>
+                        <span>Key messages · Project Set-Up 1.2 &amp; 1.3</span>
+                        <button type="button" onClick={() => setShowMsgPicker(false)} className="px-2 py-0.5 rounded text-[10px] font-semibold hover:bg-white border" style={{ borderColor: vars.g200, color: vars.navy }}>Done ✓</button>
                       </div>
                       {keyMessagePicks.map((m, i) => {
                         const on = selectedMessages.includes(m.value);
@@ -3151,7 +3152,6 @@ OUTPUT INSTRUCTIONS:
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); document.execCommand('italic'); }} className="px-2 py-1 rounded text-xs italic hover:bg-white" style={{ color: vars.navy }} title="Italic">I</button>
                   <span className="w-px h-4 mx-1" style={{ background: vars.g200 }} />
                   <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Link URL'); if (url) document.execCommand('createLink', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Link"><LinkIcon size={12} /> Link</button>
-                  <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = prompt('Image URL'); if (url) document.execCommand('insertImage', false, url); }} className="px-2 py-1 rounded text-xs hover:bg-white flex items-center gap-1" style={{ color: vars.navy }} title="Image"><ImageIcon size={12} /> Image</button>
                   <span className="ml-auto text-[10px] font-light" style={{ color: vars.g400 }}>{countWords(bodyCopy)} words</span>
                 </div>
                 <textarea value={bodyCopy} onChange={(e) => setBodyCopy(e.target.value)} rows={10} className="w-full p-4 outline-none resize-vertical" style={{ color: optimised ? "#B03D33" : vars.navy, border: "none", fontSize: editorFontSize, lineHeight: 1.55 }}
@@ -3209,14 +3209,14 @@ OUTPUT INSTRUCTIONS:
                   <X size={14} /> Reject Optimised
                 </button>
               )}
-              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                <Archive size={14} /> Archive
+              <button onClick={downloadDraft} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border bg-white" style={{ borderColor: vars.navy, color: vars.navy }}>
+                <Download size={14} /> Download
               </button>
               <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
                 <Send size={14} /> Share draft
               </button>
-              <button onClick={downloadDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                <Download size={14} /> Download
+              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                <Archive size={14} /> Archive
               </button>
               {canResearch && (
                 <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.gold, color: "#7A5E25", background: "rgba(201,160,78,0.06)" }}>
@@ -3649,7 +3649,12 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             {p ? (
                               <>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer hover:opacity-80" style={{ background: slotBg, borderColor: "white", color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</td>
+                                <td className="px-2 py-1.5 border" style={{ background: slotBg, borderColor: "white" }}>
+                                  <div className="flex items-center gap-1">
+                                    <span onClick={() => sendToOptimiser(p.id)} className="cursor-pointer hover:underline flex-1 min-w-0 truncate" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold opacity-40 hover:opacity-100 transition-opacity" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
+                                  </div>
+                                </td>
                                 <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 220 }}>{p.keyMessage || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
@@ -5105,7 +5110,7 @@ function GeoContentPage({
             <button onClick={saveContentGeo} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
               {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
             </button>
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
+            <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
               <Download size={14} /> Print / PDF
             </button>
             <button onClick={() => alert("Recommendations pushed to PR Set-Up sections 2.5–2.7 (mock)")} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium" style={{ background: "white", color: vars.accent, border: `1px solid ${vars.accent}` }}>
@@ -5303,7 +5308,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const articleHeadlineOver = articleHeadlineWords > 20;
   const standfirstOver = standfirstWords > 50;
   const headlineOver = headlineWords > 150;
-  const transcriptOver = transcriptWords > 3000;
+  const transcriptOver = transcriptWords > 8000;
 
   const onPickSpokesperson = (name: string) => {
     setSpokesperson(name);
@@ -5320,7 +5325,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       spokesperson,
       status: contentStatus === "Final" ? "Final" : "Draft",
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
-      body: transcript || "(No transcript supplied - generated from headline only)",
+      body: [articleHeadline, standfirst, transcript].filter(Boolean).join("\n\n") || "(No content supplied)",
+      headline: articleHeadline,
+      standfirst: standfirst,
+      bodyCopy: transcript,
       createdAt: new Date().toISOString(),
     };
     saveArchive([item, ...items]);
@@ -5553,7 +5561,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       spokesperson: spokesperson === "NA" ? "" : spokesperson,
       status: "Draft",
       tags: [contentType.toLowerCase().replace(/\s+/g, "-"), "creator"],
-      body: `${standfirst}\n\n${transcript}`,
+      body: [standfirst, transcript].filter(Boolean).join("\n\n"),
+      headline: articleHeadline,
+      standfirst: standfirst,
+      bodyCopy: transcript,
       createdAt: new Date().toISOString(),
     }, ...items]);
     try { localStorage.setItem("aio.research.preload", id); } catch { /* noop */ }
@@ -5656,7 +5667,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
       <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5" style={{ borderColor: vars.g200 }}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Labelled label="Project name" hint="Pulls in messaging from Project Set-Up parts 4 and 6.">
+          <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker.">
             <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="e.g. Q2 thought leadership programme" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
           </Labelled>
           <Labelled label="Content type" hint="Press release, article, case study, blog, social post.">
@@ -5666,46 +5677,25 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           </Labelled>
         </div>
 
-        <div className="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
-              <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
-            </p>
-            <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
-              Writes a full {contentType.toLowerCase()} from your headline, the brief below and your signed-off Project Data, using {createPromptLabel}. You can then refine any field, or discard it.
-            </p>
-          </div>
-          {generated && draftSnapshot ? (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button
-                onClick={createDraft}
-                disabled={generating || optimisingField !== null}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: vars.coral }}
-                title="Generate a fresh draft, replacing the current one"
-              >
-                {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : <><Sparkles size={14} /> Regenerate</>}
-              </button>
+        <div className="rounded-xl border p-4" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
+          <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
+            <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
+          </p>
+          <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+            Fill in the fields below, then click <strong>Create Draft</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
+          </p>
+          {generated && draftSnapshot && (
+            <div className="mt-3">
               <button
                 onClick={discardDraft}
                 disabled={generating}
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ borderColor: vars.g200, color: "#C94A3E" }}
                 title="Discard the AI draft and restore what you had before"
               >
                 <Undo2 size={14} /> Discard draft
               </button>
             </div>
-          ) : (
-            <button
-              onClick={createDraft}
-              disabled={generating || optimisingField !== null}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: vars.coral }}
-              title="Write a full draft from your headline, the brief and your Project Data"
-            >
-              {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : <><Sparkles size={14} /> Create draft</>}
-            </button>
           )}
         </div>
 
@@ -5761,9 +5751,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
         </Labelled>
 
-        <Labelled label="Transcript or notes" hint={`Up to 3,000 words of raw material to work from. (${transcriptWords} / 3,000)`} action={optimisePill("transcript")}>
+        <Labelled label="Transcript or notes" hint={`Up to 8,000 words - paste full transcripts, interviews or raw notes here. (${transcriptWords} / 8,000)`} action={optimisePill("transcript")}>
           <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8} placeholder="Paste the interview transcript, podcast notes, customer call extracts or other raw material…" className="w-full px-3 py-2.5 rounded-lg border leading-relaxed" style={{ borderColor: transcriptOver ? vars.red : (isOpt("transcript") ? optimisedColor : vars.g200), fontSize: `${editorFontSize}px`, lineHeight: 1.6, color: bodyColor }} />
-          {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 3,000-word limit by {transcriptWords - 3000} words.</p>}
+          {transcriptOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 8,000-word limit by {transcriptWords - 8000} words.</p>}
         </Labelled>
 
         <Labelled label="Action Notes" hint="Up to 150 words of internal notes - pushed through to the Notes column on the Comms Planner." action={optimisePill("actionNotes")}>
@@ -5889,28 +5879,19 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={acceptAndArchive}
-            disabled={!hasAnyContent}
+            onClick={createDraft}
+            disabled={generating || optimisingField !== null}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: vars.coral }}
-            title="Sign off this piece and save it to the Archive"
+            title="Write a full draft from your headline, the brief and your Project Data"
           >
-            <FileCheck2 size={14} /> Accept &amp; Archive
-          </button>
-          <button
-            onClick={shareDraftFromCreator}
-            disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ borderColor: vars.g200, color: vars.navy }}
-            title="Open your email client with the current draft ready to send for review"
-          >
-            <Send size={14} /> Share draft
+            {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
           </button>
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ borderColor: vars.g200, color: vars.navy }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.navy, color: vars.navy }}
             title="Download the current draft as a Word document"
           >
             <Download size={14} /> Download
@@ -5923,6 +5904,24 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece with a change log explaining where each key message was embedded - as Word or PDF"}
           >
             <FileText size={14} /> Download Notes
+          </button>
+          <button
+            onClick={shareDraftFromCreator}
+            disabled={!hasAnyContent}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.g200, color: vars.navy }}
+            title="Open your email client with the current draft ready to send for review"
+          >
+            <Send size={14} /> Share draft
+          </button>
+          <button
+            onClick={acceptAndArchive}
+            disabled={!hasAnyContent}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.g200, color: vars.navy }}
+            title="Sign off this piece and save it to the Archive"
+          >
+            <Archive size={14} /> Archive
           </button>
           <button
             onClick={sendToMediaResearchFromCreator}
@@ -6074,12 +6073,12 @@ For each publication, return:
 3. One-sentence description of the title (format, frequency, subjects and industry covered)
 4. One-sentence description of its readership (job titles, seniority, sector)
 5. Audience reach - give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
-6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat - typically 4–8 per major outlet), each as: name | job title | email | confidence flag | role-currency check
+6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat - typically 4–8 per major outlet), each as: name | job title | email | confidence flag
    Confidence flag rules:
    [V] Verified - email is found in a public source (publication website, masthead, signed byline footer, Muck Rack/RocketReach/Cision/Prowly listing, or government register).
    [P] Pattern-inferred - journalist is confirmed in role within the last month and their email matches the publisher's house pattern, which must itself be confirmed against at least two other verified addresses at the same publication. State the pattern in the methodology tab.
    [U] Unverified - anything else. List with a warning, or omit if the contact would mislead.
-   Role-currency check: for each named contact, confirm via a recent byline (≤ 60 days), LinkedIn current title, or staff bio page that they are still in the stated role. Drop anyone you can't confirm.
+   Before including any journalist, verify they are still in the stated role via a recent byline (within 60 days), their current LinkedIn title, or a staff bio page. Drop anyone you cannot confirm as currently active - a missing contact is better than a wrong one.
 7. Authority score (0–100) - relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) - not a generic DA score. Briefly justify scores above 90 and below 60.
 8. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
 
@@ -6125,9 +6124,9 @@ function MediaResearchPage() {
           content: {
             title: selected.title,
             contentType: selected.contentType,
-            headline: selected.title,
-            standfirst: "",
-            bodyCopy: selected.body || "",
+            headline: selected.headline || selected.title,
+            standfirst: selected.standfirst || "",
+            bodyCopy: selected.bodyCopy || selected.body || "",
           },
           mediaCategories: projectCats,
           keyMessages: messages.map((m) => m.long || m.short).filter(Boolean),
@@ -6163,7 +6162,7 @@ function MediaResearchPage() {
       <p><b>Beat journalists (${m.journalists.length}):</b></p>
       ${m.journalists.length === 0
         ? `<p style="color:#a04040;"><i>${escapeHtml(m.noBeatContactNote || "No current beat contact identified.")}</i></p>`
-        : `<ul>${m.journalists.map((j) => `<li><b>${escapeHtml(j.name)}</b> - ${escapeHtml(j.title)} - <a href="mailto:${escapeHtml(j.email)}">${escapeHtml(j.email)}</a> - ${confidenceLabel(j.confidence)}<br/><i style="color:#666;">Role-currency: ${escapeHtml(j.roleCurrency)}</i></li>`).join("")}</ul>`
+        : `<ul>${m.journalists.map((j) => `<li><b>${escapeHtml(j.name)}</b> - ${escapeHtml(j.title)} - <a href="mailto:${escapeHtml(j.email)}">${escapeHtml(j.email)}</a> - ${confidenceLabel(j.confidence)}</li>`).join("")}</ul>`
       }
       ${m.authorityNote ? `<p><b>Authority note:</b> ${escapeHtml(m.authorityNote)}</p>` : ""}
       <p><b>Suggested pitch angle:</b> ${escapeHtml(m.pitchAngle)}</p>
@@ -6205,7 +6204,7 @@ function MediaResearchPage() {
     const journalistCell = (m: MediaListItem) =>
       m.journalists.length === 0
         ? escapeHtml(m.noBeatContactNote || "No current beat contact identified.")
-        : m.journalists.map((j) => `${escapeHtml(j.name)} | ${escapeHtml(j.title)} | ${escapeHtml(j.email)} | ${confidenceLabel(j.confidence)} | ${escapeHtml(j.roleCurrency)}`).join("&#10;");
+        : m.journalists.map((j) => `${escapeHtml(j.name)} | ${escapeHtml(j.title)} | ${escapeHtml(j.email)} | ${confidenceLabel(j.confidence)}`).join("&#10;");
     const rows = mediaList.map((m) => `
       <tr>
         <td>${m.rank}</td>
@@ -6229,7 +6228,7 @@ function MediaResearchPage() {
 <h2>Target Media List - ${escapeHtml(selected.title)}</h2>
 <table border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
-    <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence | role-currency)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
+    <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
@@ -6422,7 +6421,6 @@ function MediaResearchPage() {
                                 <span style={{ color: vars.g500 }}>- {j.title}</span>
                                 <a href={`mailto:${j.email}`} className="text-[12px] underline" style={{ color: vars.accent }}>{j.email}</a>
                               </div>
-                              <p className="text-[11px] italic mt-0.5 ml-1" style={{ color: vars.g400 }}>Role-currency: {j.roleCurrency}</p>
                             </li>
                           ))}
                         </ul>

@@ -390,7 +390,7 @@ export default function SeoAuditPage({
               <button onClick={() => saveAudit()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
               </button>
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
+              <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
                 <Download size={14} /> Print / PDF
               </button>
             </div>
