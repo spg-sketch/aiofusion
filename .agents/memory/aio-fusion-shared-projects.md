@@ -129,6 +129,22 @@ it by project id MUST still prove ownership: when no project row exists to check
 against, only an admin may read the orphaned history (else it leaks across
 accounts).
 
+## Dev and prod are SEPARATE databases (critical for backups/recovery)
+The development DB and the production DB (what aiofusion.ai uses) are different:
+dev had 9 projects, prod had 4 (Bluhalo/default, Savi UK, SMG, Simpatico PR) at
+2026-06-15. So a manual `backup` run in the dev container backs up DEV data, NOT
+the live client data. Only a run in the PRODUCTION environment (the Scheduled
+Deployment) protects real client data. Likewise per-project append-only snapshots
+only protect prod once the api-server prod build with that code is deployed AND a
+save happens there (prod `project_snapshots` was empty at go-live because the
+feature shipped to prod after the data was last saved).
+**Why:** we told the user a verified backup + restore drill proved their data was
+safe, but that was the dev DB; the live data was not yet covered.
+**How to apply:** query live data with `executeSql({environment:"production"})`
+(read-only replica). To recover a client's lost Set-Up when no prod snapshot
+exists, the only server-side source is their browser localStorage
+(`aio.intake.v2::<projectId>`); push it back up via the populated-local heal path.
+
 ## Whole-DB backups: run, prove, and schedule
 `@workspace/scripts` has `backup` (dump+verify+upload to object storage under
 `<PRIVATE_OBJECT_DIR>/db-backups/`, keeps last `BACKUP_RETENTION`=14, prunes only
