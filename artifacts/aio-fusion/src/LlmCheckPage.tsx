@@ -392,7 +392,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     const llmFlat = getLlmQueriesFlat();
     return llmFlat || getBuyerQuestions().join("\n");
   });
-  const [competitorsText, setCompetitorsText] = useState(getCompetitors().join(", "));
+  const [competitorsText, setCompetitorsText] = useState(getCompetitors().join("\n"));
   useEffect(() => {
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
@@ -402,7 +402,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     const q = getLlmSearchQueries();
     const hasStructured = q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
     setCustomKeywords(hasStructured ? "" : getPreferredKeywords().join(", "));
-    setCompetitorsText(getCompetitors().join(", "));
+    setCompetitorsText(getCompetitors().join("\n"));
   }, [activeClient.id, activeClient.name]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
@@ -1075,7 +1075,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </div>
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                Competitors we measure you against <span className="font-normal" style={{ color: vars.g400 }}>(comma-separated)</span>
+                Competitors we measure you against <span className="font-normal" style={{ color: vars.g400 }}>(one per line)</span>
               </label>
               <textarea
                 value={competitorsText}

@@ -73,7 +73,7 @@ type FieldDef = {
   id: string;
   label: string;
   hint?: string;
-  type: "text" | "textarea" | "checkbox" | "heading" | "dual" | "dual-list" | "llm-queries";
+  type: "text" | "textarea" | "checkbox" | "heading" | "dual" | "dual-list" | "llm-queries" | "string-list";
   options?: string[];
   single?: boolean;
   shortPlaceholder?: string;
@@ -436,7 +436,7 @@ const sections: SectionDef[] = [
         id: "3.3",
         label: "Locations where you work with clients - cities, countries and regions",
         hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
-        type: "textarea",
+        type: "string-list",
         optional: true,
       },
       {
@@ -514,7 +514,7 @@ const sections: SectionDef[] = [
         id: "4.8",
         label: "Primary competitors",
         hint: "Helps calibrate entity differentiation in AI model training contexts.",
-        type: "textarea",
+        type: "string-list",
       },
     ],
   },
@@ -807,6 +807,29 @@ export default function IntakePage() {
     } catch { /* noop */ }
     return [];
   });
+  const [stringLists, setStringLists] = useState<Record<string, string[]>>(() => {
+    try {
+      const raw = localStorage.getItem(currentIntakeKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // If stringLists was already saved, use it directly.
+        if (parsed.stringLists && typeof parsed.stringLists === "object") {
+          return parsed.stringLists as Record<string, string[]>;
+        }
+        // One-time migration: split legacy textarea strings into individual rows.
+        const migrated: Record<string, string[]> = {};
+        const fd = parsed.formData || {};
+        for (const id of ["3.3", "4.8"]) {
+          const legacy = fd[id];
+          if (typeof legacy === "string" && legacy.trim()) {
+            migrated[id] = legacy.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+          }
+        }
+        return migrated;
+      }
+    } catch { /* noop */ }
+    return {};
+  });
   const [llmQueries, setLlmQueries] = useState<LlmQueries>(() => {
     try {
       const raw = localStorage.getItem(currentIntakeKey());
@@ -875,10 +898,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite, confirmedEntity]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite, confirmedEntity]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -1010,6 +1033,9 @@ export default function IntakePage() {
       if (f.type === "dual-list") {
         const v = dualLists[f.id]; return !!(v && v.length && v.some((it) => it.short || it.long));
       }
+      if (f.type === "string-list") {
+        const v = stringLists[f.id]; return !!(v && v.length > 0 && v.some((s) => s.trim()));
+      }
       const val = formData[f.id];
       return Array.isArray(val) ? val.length > 0 : !!(val && val.trim().length > 0);
     });
@@ -1039,6 +1065,9 @@ export default function IntakePage() {
           if (f.type === "dual-list") {
             const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
           }
+          if (f.type === "string-list") {
+            const v = stringLists[f.id]; if (v && v.length > 0 && v.some((s) => s.trim())) filled += 1; return;
+          }
           if (f.type === "checkbox") {
             const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
           }
@@ -1049,7 +1078,7 @@ export default function IntakePage() {
       return total ? Math.round((filled / total) * 100) : 0;
     };
     return { pr: calc("pr"), web: calc("web") };
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories]);
 
   // Full-form completion across BOTH PR and AIO tracks (independent of which
   // track is currently visible). Used to gate "Optimise Project Messages".
@@ -1073,6 +1102,9 @@ export default function IntakePage() {
         if (f.type === "dual-list") {
           const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
         }
+        if (f.type === "string-list") {
+          const v = stringLists[f.id]; if (v && v.length > 0 && v.some((s) => s.trim())) filled += 1; return;
+        }
         if (f.type === "checkbox") {
           const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
         }
@@ -1081,7 +1113,7 @@ export default function IntakePage() {
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -1104,6 +1136,8 @@ export default function IntakePage() {
     if (dv && ((dv.short || "").trim() !== "" || (dv.long || "").trim() !== "")) return true;
     const dl = dualLists[id];
     if (dl && dl.some((it) => (it.short || "").trim() !== "" || (it.long || "").trim() !== "")) return true;
+    const sl = stringLists[id];
+    if (sl && sl.some((s) => s.trim() !== "")) return true;
     return false;
   };
 
@@ -1216,7 +1250,7 @@ export default function IntakePage() {
           primaryMessage: `${duals["1.2"]?.short || ""} ${duals["1.2"]?.long || ""}`.trim(),
           services: products.map((p) => p.name || p.description).filter(Boolean).join(", "),
           targetClients: icpText,
-          geography: (formData["3.3"] as string) || "",
+          geography: (stringLists["3.3"] || []).filter(Boolean).join(", ") || (formData["3.3"] as string) || "",
           mediaCategories: businessCategories.slice(0, 5).join(", "),
           competitors: getCompetitors().slice(0, 10).join(", "),
           websiteUrl: aiWebsite.trim(),
@@ -1492,7 +1526,7 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
-    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
+    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
     } catch { /* noop */ }
@@ -2071,6 +2105,49 @@ export default function IntakePage() {
                     );
                   }
 
+                  if (field.type === "string-list") {
+                    const list = stringLists[field.id] || [];
+                    const MAX_STRING_LIST = 20;
+                    const updateItem = (i: number, val: string) =>
+                      setStringLists((prev) => ({ ...prev, [field.id]: (prev[field.id] || []).map((s, j) => j === i ? val : s) }));
+                    const removeItem = (i: number) =>
+                      setStringLists((prev) => ({ ...prev, [field.id]: (prev[field.id] || []).filter((_, j) => j !== i) }));
+                    const addItem = () =>
+                      setStringLists((prev) => ({ ...prev, [field.id]: [...(prev[field.id] || []), ""] }));
+                    return (
+                      <div key={field.id}>
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={fieldHasContent(field.id)} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} />
+                        <div className="space-y-2 mb-2">
+                          {list.length === 0 && (
+                            <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No entries yet. Add one below.</p>
+                          )}
+                          {list.map((val, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                value={val}
+                                onChange={(e) => updateItem(i, e.target.value)}
+                                className="flex-1 px-3 py-2.5 rounded-lg border text-[14px] bg-white"
+                                style={{ borderColor: vars.g200, color: vars.navy }}
+                              />
+                              <button onClick={() => removeItem(i)} title="Remove" style={{ color: vars.g400 }}><X size={14} /></button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={addItem}
+                            disabled={list.length >= MAX_STRING_LIST}
+                            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{ borderColor: vars.g200, color: vars.accent }}
+                          >+ Add entry</button>
+                          {list.length > 0 && (
+                            <button onClick={() => removeItem(list.length - 1)} className="flex items-center gap-1 text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.g500 }}><X size={13} /> Remove last</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (field.id === "2.6") {
                     return (
                       <div key={field.id}>
@@ -2615,6 +2692,7 @@ export type IntakeData = {
   formData: Record<string, string | string[]>;
   duals: Record<string, DualValue>;
   dualLists: Record<string, DualListValue>;
+  stringLists: Record<string, string[]>;
   spokespeople: Spokesperson[];
   products: Product[];
   productQueries: ProductQuery[];
@@ -2651,6 +2729,20 @@ export function loadIntakeData(): IntakeData | null {
       formData: parsed.formData || {},
       duals: parsed.duals || {},
       dualLists: migrateLegacyDualLists(parsed.dualLists || {}, parsed.formData || {}),
+      stringLists: (() => {
+        if (parsed.stringLists && typeof parsed.stringLists === "object") {
+          return parsed.stringLists as Record<string, string[]>;
+        }
+        const migrated: Record<string, string[]> = {};
+        const fd = parsed.formData || {};
+        for (const id of ["3.3", "4.8"]) {
+          const legacy = fd[id];
+          if (typeof legacy === "string" && legacy.trim()) {
+            migrated[id] = legacy.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+          }
+        }
+        return migrated;
+      })(),
       spokespeople: (parsed.spokespeople || []).map((s: Partial<Spokesperson>) => ({
         name: s.name || "",
         title: s.title || "",
@@ -2836,7 +2928,10 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
     const label = value.length > 90 ? `${value.slice(0, 90)}…` : value;
     out.push({ label, value, section: "3", fieldId: "3.2", fieldLabel: `Ideal client profile ${i + 1}` });
   });
-  pushLines(data.formData["3.3"], "3", "3.3", "Client locations");
+  (data.stringLists?.["3.3"] || (typeof data.formData["3.3"] === "string" ? data.formData["3.3"]!.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean) : [])).forEach((loc, i) => {
+    if (!loc.trim()) return;
+    out.push({ label: loc.trim(), value: loc.trim(), section: "3", fieldId: "3.3", fieldLabel: `Client location ${i + 1}` });
+  });
   (data.dualLists["3.5"] || []).forEach((p, i) => {
     if (!(p.short || p.long)) return;
     const value = [p.short, p.long].filter(Boolean).join(" - ");
@@ -2903,6 +2998,8 @@ export function getClientPersona(): string {
 
 export function getClientLocations(): string {
   const data = loadIntakeData();
+  const sl = data?.stringLists?.["3.3"];
+  if (Array.isArray(sl) && sl.length > 0) return sl.filter(Boolean).join(", ");
   const raw = data?.formData?.["3.3"];
   return typeof raw === "string" ? raw.trim() : "";
 }
@@ -2965,8 +3062,12 @@ export function getBoilerplate(): string {
   return fieldText("4.3");
 }
 
-// Primary competitors (4.8) - line or comma separated.
+// Primary competitors (4.8) - individual rows stored in stringLists, with
+// fallback to the legacy comma/newline-separated formData string.
 export function getCompetitors(): string[] {
+  const data = loadIntakeData();
+  const sl = data?.stringLists?.["4.8"];
+  if (Array.isArray(sl) && sl.length > 0) return sl.map((s) => s.trim()).filter(Boolean);
   return fieldLines(["4.8"], true);
 }
 

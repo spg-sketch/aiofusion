@@ -36,7 +36,19 @@ getIcpProfile/getClientPersona): they must gate their formData fallback on the
 key being undefined, never on the joined value being empty, or a cleared
 field still returns the stale legacy text.
 
-## Shortcut: reuse the existing `dual-list` type instead of new state
+## Shortcut 2: simple string arrays — use `"string-list"` field type
+For questions that need a plain list of individual text entries (no short/long pair),
+use `type: "string-list"`. Storage lives in `stringLists: Record<string, string[]>`
+(top-level in the blob alongside `dualLists`). Migration from legacy textarea strings
+is handled in the state initialiser and in `loadIntakeData` using `/[\n,]+/` split.
+The generic renderer handles add/remove. All three completion counters handle it via
+`f.type === "string-list"` branches, and `fieldHasContent` checks `stringLists[id]`.
+`"string-list"` is not in `OPTIMISABLE_FIELD_TYPES`, so no optimise-exclude wiring
+is needed. Fields 3.3 (locations) and 4.8 (competitors) use this type.
+**Why:** simpler than dual-list when you only need one value per row; avoids a full
+bespoke state array like products/productQueries while still being individually editable.
+
+## Shortcut 1: reuse the existing `dual-list` type instead of new state
 If a question only needs short+long (or one long box) per entry, convert it to
 the existing `dual-list` field type rather than adding a new state array. This
 skips almost all the wiring above (the three completion counters, persistence,
