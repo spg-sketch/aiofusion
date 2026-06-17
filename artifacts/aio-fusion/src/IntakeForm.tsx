@@ -1211,7 +1211,7 @@ export default function IntakePage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          companyName: (formData["4.1"] as string) || (formData["1.1"] as string) || "",
+          companyName: (formData["4.1"] as string) || confirmedEntity?.name || "",
           descriptor: (formData["1.1"] as string) || "",
           primaryMessage: `${duals["1.2"]?.short || ""} ${duals["1.2"]?.long || ""}`.trim(),
           services: products.map((p) => p.name || p.description).filter(Boolean).join(", "),

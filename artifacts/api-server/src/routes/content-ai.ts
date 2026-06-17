@@ -737,7 +737,10 @@ contentAiRouter.post(
       `- Make queries specific to this company's actual sector and services, not generic.\n` +
       `- Include location-specific queries where geography was provided.\n` +
       `- Do not include the company name in discovery or shortlist queries (those are blind searches).\n` +
-      `- Include the company name in comparison queries.\n\n` +
+      (companyName.trim()
+        ? `- Include the company name in comparison queries.\n`
+        : `- No company name was provided. Do NOT invent or guess a company name. Write comparison queries as generic due-diligence questions a buyer would ask when evaluating any provider of this type (e.g. how to check credentials, what to ask in a pitch, how to compare agencies).\n`) +
+      `\n` +
       `Return JSON only, no commentary:\n` +
       `{"discovery": ["query1", "query2", ...7 items], "shortlist": ["query1", ...7 items], "comparison": ["query1", ...6 items]}`;
 
