@@ -25,6 +25,8 @@ import {
   Info,
   Save,
   Undo2,
+  Loader2,
+  Wand2,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
@@ -65,11 +67,13 @@ type Product = { name: string; description: string; audience: string };
 
 type ProductQuery = { area: string; phrases: string };
 
+type LlmQueries = { v: 1; discovery: string[]; shortlist: string[]; comparison: string[] };
+
 type FieldDef = {
   id: string;
   label: string;
   hint?: string;
-  type: "text" | "textarea" | "checkbox" | "heading" | "dual" | "dual-list";
+  type: "text" | "textarea" | "checkbox" | "heading" | "dual" | "dual-list" | "llm-queries";
   options?: string[];
   single?: boolean;
   shortPlaceholder?: string;
@@ -309,9 +313,9 @@ const sections: SectionDef[] = [
       { id: "h-sp", label: "Semantic Phrase Guide & Topics", type: "heading" },
       {
         id: "1.6",
-        label: "Preferred SEO terms, phrases and category descriptors",
-        hint: "Enter a list of short phrases or sentences. Include category labels, technology descriptors, industry terms.",
-        type: "textarea",
+        label: "LLM search queries — how prospective clients find you",
+        hint: "Generate your top 20 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit.",
+        type: "llm-queries",
       },
       {
         id: "1.7",
@@ -434,12 +438,6 @@ const sections: SectionDef[] = [
         hint: "List the cities, countries and regions where your clients are based. AI searches are often localised, so this helps the Visibility Audit check how you show up in the places that matter to you. Example: London and the South East, UK-wide, Ireland, and EMEA.",
         type: "textarea",
         optional: true,
-      },
-      {
-        id: "3.4",
-        label: "What phrases / language do clients / customers use when searching for your solutions?",
-        hint: "Include informal, colloquial, and category-level terms - not just your preferred terminology entered above. These populate your semantic phrase guide.",
-        type: "textarea",
       },
       {
         id: "3.5",
@@ -809,6 +807,20 @@ export default function IntakePage() {
     } catch { /* noop */ }
     return [];
   });
+  const [llmQueries, setLlmQueries] = useState<LlmQueries>(() => {
+    try {
+      const raw = localStorage.getItem(currentIntakeKey());
+      if (raw) {
+        const q = JSON.parse(raw).llmQueries;
+        if (q && q.v === 1 && Array.isArray(q.discovery)) {
+          return { v: 1, discovery: q.discovery as string[], shortlist: (q.shortlist as string[]) || [], comparison: (q.comparison as string[]) || [] };
+        }
+      }
+    } catch { /* noop */ }
+    return { v: 1, discovery: [], shortlist: [], comparison: [] };
+  });
+  const [llmQueriesGenerating, setLlmQueriesGenerating] = useState(false);
+  const [llmQueriesError, setLlmQueriesError] = useState("");
   const [businessCategories, setBusinessCategories] = useState<string[]>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) { const p = JSON.parse(raw); return p.businessCategories || p.mediaCategories || []; } } catch { /* noop */ }
     return [];
@@ -863,10 +875,10 @@ export default function IntakePage() {
     try {
       localStorage.setItem(
         currentIntakeKey(),
-        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity }),
+        JSON.stringify({ formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity }),
       );
     } catch { /* noop */ }
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite, confirmedEntity]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields, aiWebsite, confirmedEntity]);
 
   useEffect(() => { setActiveSection(0); }, [track]);
 
@@ -1017,6 +1029,7 @@ export default function IntakePage() {
           total += 1;
           if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
           if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
+          if (f.id === "1.6") { if (llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0) filled += 1; return; }
           if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
           if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
           if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
@@ -1036,7 +1049,7 @@ export default function IntakePage() {
       return total ? Math.round((filled / total) * 100) : 0;
     };
     return { pr: calc("pr"), web: calc("web") };
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories]);
 
   // Full-form completion across BOTH PR and AIO tracks (independent of which
   // track is currently visible). Used to gate "Optimise Project Messages".
@@ -1048,6 +1061,7 @@ export default function IntakePage() {
         if (f.optional) return;
         if (!fieldApplies(f, formData)) return;
         total += 1;
+        if (f.id === "1.6") { if (llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0) filled += 1; return; }
         if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
         if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
         if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
@@ -1067,7 +1081,7 @@ export default function IntakePage() {
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
-  }, [formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories]);
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
     !categorySearch || c.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -1184,6 +1198,44 @@ export default function IntakePage() {
     });
     setOptimisedFields((prev) => { const next = new Set(prev); next.delete(id); return next; });
     if (optimisedFields.size <= 1 && intakeStatus === "Optimised") setIntakeStatus("Draft");
+  };
+
+  const generateLlmQueries = async () => {
+    setLlmQueriesError("");
+    setLlmQueriesGenerating(true);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const icpText = (dualLists["3.2"] || []).map((it) => [it.short, it.long].filter(Boolean).join(": ")).filter(Boolean).join("; ");
+      const resp = await fetch(`${apiBase}/api/content/llm-queries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          companyName: (formData["4.1"] as string) || (formData["1.1"] as string) || "",
+          descriptor: (formData["1.1"] as string) || "",
+          primaryMessage: `${duals["1.2"]?.short || ""} ${duals["1.2"]?.long || ""}`.trim(),
+          services: products.map((p) => p.name || p.description).filter(Boolean).join(", "),
+          targetClients: icpText,
+          geography: (formData["3.3"] as string) || "",
+          mediaCategories: businessCategories.slice(0, 5).join(", "),
+        }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({ error: "Could not generate queries." }));
+        throw new Error(d.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      setLlmQueries({
+        v: 1,
+        discovery: Array.isArray(data.discovery) ? (data.discovery as string[]) : [],
+        shortlist: Array.isArray(data.shortlist) ? (data.shortlist as string[]) : [],
+        comparison: Array.isArray(data.comparison) ? (data.comparison as string[]) : [],
+      });
+    } catch (err: unknown) {
+      setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+    } finally {
+      setLlmQueriesGenerating(false);
+    }
   };
 
   const acceptProjectData = () => {
@@ -1438,7 +1490,7 @@ export default function IntakePage() {
 
   const [justSaved, setJustSaved] = useState(false);
   const saveDraft = () => {
-    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
+    const blob = { formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, businessCategories, audienceCategories, mediaCategories: Array.from(new Set([...businessCategories, ...audienceCategories])), intakeStatus, acceptedAt, preOptimiseSnapshot, optimisedFields: Array.from(optimisedFields), aiWebsite, confirmedEntity };
     try {
       localStorage.setItem(currentIntakeKey(), JSON.stringify(blob));
     } catch { /* noop */ }
@@ -2128,6 +2180,102 @@ export default function IntakePage() {
                     );
                   }
 
+                  if (field.type === "llm-queries") {
+                    type QueryCategory = "discovery" | "shortlist" | "comparison";
+                    const groups: { key: QueryCategory; label: string; sublabel: string }[] = [
+                      { key: "discovery", label: "Discovery", sublabel: "They are researching the problem space" },
+                      { key: "shortlist", label: "Shortlist", sublabel: "They are looking for a provider" },
+                      { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives" },
+                    ];
+                    const hasQueries = llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
+                    const legacyText = typeof formData[field.id] === "string" ? (formData[field.id] as string).trim() : "";
+                    return (
+                      <div key={field.id}>
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={hasQueries} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} />
+
+                        <div className="mb-4 flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={generateLlmQueries}
+                            disabled={llmQueriesGenerating}
+                            className="self-start flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                            style={{ background: vars.accent }}
+                          >
+                            {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                            {llmQueriesGenerating ? "Generating..." : hasQueries ? "Regenerate queries" : "Generate top 20 queries"}
+                          </button>
+                          {llmQueriesError && (
+                            <p className="text-[12px]" style={{ color: "#DC2626" }}>{llmQueriesError}</p>
+                          )}
+                          {!hasQueries && !llmQueriesGenerating && (
+                            <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
+                              Or type your own queries in the groups below. Fill in Company Set-Up (section 4) and your primary message first for the best results.
+                            </p>
+                          )}
+                          {legacyText && !hasQueries && (
+                            <div className="rounded-lg border p-3" style={{ borderColor: vars.g200, background: vars.cream }}>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] mb-1" style={{ color: vars.g400 }}>Legacy SEO terms (replaced)</p>
+                              <p className="text-[12px] font-light italic" style={{ color: vars.g500 }}>{legacyText}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-5">
+                          {groups.map(({ key, label, sublabel }) => {
+                            const items = llmQueries[key];
+                            return (
+                              <div key={key} className="rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.12)", background: "white" }}>
+                                <div className="flex items-baseline gap-2 mb-3">
+                                  <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.accent }}>{label}</span>
+                                  <span className="text-[11px] font-light" style={{ color: vars.g400 }}>{sublabel}</span>
+                                </div>
+                                <div className="space-y-2 mb-2">
+                                  {items.length === 0 && (
+                                    <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No queries yet.</p>
+                                  )}
+                                  {items.map((q, i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                      <input
+                                        value={q}
+                                        onChange={(e) => {
+                                          const next = items.map((x, j) => (j === i ? e.target.value : x));
+                                          setLlmQueries((prev) => ({ ...prev, [key]: next }));
+                                        }}
+                                        className="flex-1 px-3 py-2 rounded-lg border text-[13px] font-light outline-none focus:border-[#C8497A] transition-colors"
+                                        style={{ borderColor: "rgba(16,43,54,0.15)", color: "#102B36" }}
+                                        placeholder="Type a query, e.g. How do I find the best..."
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const next = items.filter((_, j) => j !== i);
+                                          setLlmQueries((prev) => ({ ...prev, [key]: next }));
+                                        }}
+                                        className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-70"
+                                        style={{ color: vars.g400 }}
+                                        title="Remove query"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setLlmQueries((prev) => ({ ...prev, [key]: [...prev[key], ""] }))}
+                                  className="text-[12px] font-semibold flex items-center gap-1 mt-1 transition-opacity hover:opacity-70"
+                                  style={{ color: vars.accent }}
+                                >
+                                  <Plus size={12} /> Add query
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   if (field.type === "checkbox" && field.options) {
                     const selected = (formData[field.id] as string[]) || [];
                     return (
@@ -2475,6 +2623,7 @@ export type IntakeData = {
   acceptedAt: string | null;
   aiWebsite: string;
   confirmedEntity: ConfirmedEntity;
+  llmQueries?: LlmQueries;
 };
 
 // The company the user confirmed is theirs when the brand name is shared with
@@ -2534,6 +2683,13 @@ export function loadIntakeData(): IntakeData | null {
           return [{ area: "", phrases: legacy }];
         }
         return [];
+      })(),
+      llmQueries: (() => {
+        const q = parsed.llmQueries;
+        if (q && q.v === 1 && Array.isArray(q.discovery)) {
+          return { v: 1 as const, discovery: q.discovery as string[], shortlist: (q.shortlist as string[]) || [], comparison: (q.comparison as string[]) || [] };
+        }
+        return undefined;
       })(),
       businessCategories: parsed.businessCategories || parsed.mediaCategories || [],
       audienceCategories: parsed.audienceCategories || [],
@@ -2626,7 +2782,22 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
     }
   });
   pushLines(data.formData["1.4"], "1", "1.4", "Online evidence");
-  pushLines(data.formData["1.6"], "1", "1.6", "Preferred terms");
+  // 1.6 is now structured LLM search queries
+  if (data.llmQueries?.v === 1) {
+    const llmGroups: { label: string; items: string[] }[] = [
+      { label: "Discovery query", items: data.llmQueries.discovery },
+      { label: "Shortlist query", items: data.llmQueries.shortlist },
+      { label: "Comparison query", items: data.llmQueries.comparison },
+    ];
+    for (const group of llmGroups) {
+      group.items.forEach((q) => {
+        if (!q.trim()) return;
+        out.push({ label: q.length > 90 ? `${q.slice(0, 90)}\u2026` : q, value: q, section: "1", fieldId: "1.6", fieldLabel: group.label });
+      });
+    }
+  } else {
+    pushLines(data.formData["1.6"], "1", "1.6", "LLM search query");
+  }
   pushLines(data.formData["1.7"], "1", "1.7", "Topics & themes");
 
   // Section 2
@@ -2664,7 +2835,6 @@ export function getProjectDataMessages(): ProjectDataMessage[] {
     out.push({ label, value, section: "3", fieldId: "3.2", fieldLabel: `Ideal client profile ${i + 1}` });
   });
   pushLines(data.formData["3.3"], "3", "3.3", "Client locations");
-  pushLines(data.formData["3.4"], "3", "3.4", "Audience language");
   (data.dualLists["3.5"] || []).forEach((p, i) => {
     if (!(p.short || p.long)) return;
     const value = [p.short, p.long].filter(Boolean).join(" - ");
@@ -2737,6 +2907,14 @@ export function getClientLocations(): string {
 
 export function getPreferredKeywords(): string[] {
   const data = loadIntakeData();
+  // 1.6 is now a structured LLM queries field. Return all queries flat so any
+  // downstream consumer that was using keyword hints still gets useful strings.
+  // When structured queries exist, they take priority over any legacy plain text.
+  const q = data?.llmQueries;
+  if (q && q.v === 1 && (q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0)) {
+    return Array.from(new Set([...q.discovery, ...q.shortlist, ...q.comparison].filter(Boolean)));
+  }
+  // Legacy: if still a plain string (pre-migration), return lines for backward compat.
   const raw = data?.formData?.["1.6"];
   if (typeof raw !== "string" || !raw.trim()) return [];
   return Array.from(
@@ -2799,6 +2977,17 @@ export function getEvidenceUrls(): string[] {
 // Verbatim buyer questions (5.6) - real questions to seed the blind probes.
 export function getBuyerQuestions(): string[] {
   return fieldLines(["5.6"]);
+}
+
+// Structured LLM search queries from 1.6 — the primary probes for the Earned
+// Media Visibility Audit. Returns an empty set when no queries have been generated.
+export function getLlmSearchQueries(): LlmQueries {
+  const data = loadIntakeData();
+  const q = data?.llmQueries;
+  if (q && q.v === 1 && Array.isArray(q.discovery)) {
+    return { v: 1, discovery: q.discovery, shortlist: q.shortlist || [], comparison: q.comparison || [] };
+  }
+  return { v: 1, discovery: [], shortlist: [], comparison: [] };
 }
 
 // Topics where the brand has specialist expertise or data (5.7) - scoring context.

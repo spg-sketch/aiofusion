@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, type ConfirmedEntity } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import {
   Eye,
@@ -375,18 +375,33 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
+  const getLlmQueriesFlat = (): string => {
+    const q = getLlmSearchQueries();
+    return [...q.discovery, ...q.shortlist, ...q.comparison].filter(Boolean).join("\n");
+  };
   const prefilledKeywords = getPreferredKeywords();
-  const [customKeywords, setCustomKeywords] = useState(prefilledKeywords.join(", "));
+  const [customKeywords, setCustomKeywords] = useState(() => {
+    const q = getLlmSearchQueries();
+    const hasStructured = q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
+    return hasStructured ? "" : prefilledKeywords.join(", ");
+  });
   const [companyName, setCompanyName] = useState(activeClient.name);
   const [icpProfile, setIcpProfile] = useState(getIcpProfile());
   const [icpLocation, setIcpLocation] = useState(getClientLocations());
-  const [buyerQuestionsText, setBuyerQuestionsText] = useState(getBuyerQuestions().join("\n"));
+  const [buyerQuestionsText, setBuyerQuestionsText] = useState(() => {
+    const llmFlat = getLlmQueriesFlat();
+    return llmFlat || getBuyerQuestions().join("\n");
+  });
   const [competitorsText, setCompetitorsText] = useState(getCompetitors().join(", "));
   useEffect(() => {
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
     setIcpLocation(getClientLocations());
-    setBuyerQuestionsText(getBuyerQuestions().join("\n"));
+    const llmFlat = getLlmQueriesFlat();
+    setBuyerQuestionsText(llmFlat || getBuyerQuestions().join("\n"));
+    const q = getLlmSearchQueries();
+    const hasStructured = q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
+    setCustomKeywords(hasStructured ? "" : getPreferredKeywords().join(", "));
     setCompetitorsText(getCompetitors().join(", "));
   }, [activeClient.id, activeClient.name]);
   const probeName = companyName.trim();
@@ -983,7 +998,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             )}
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                Additional key phrases <span className="font-normal" style={{ color: vars.g400 }}>(optional, comma-separated)</span>
+                Additional queries <span className="font-normal" style={{ color: vars.g400 }}>(optional, comma-separated)</span>
               </label>
               <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
                 <Zap size={16} style={{ color: vars.g400 }} />
@@ -991,16 +1006,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   type="text"
                   value={customKeywords}
                   onChange={(e) => setCustomKeywords(e.target.value)}
-                  placeholder="e.g. benchmarking, agency intelligence"
+                  placeholder="e.g. Who specialises in B2B fintech PR in London?"
                   className="flex-1 text-sm bg-transparent outline-none"
                   style={{ color: vars.navy }}
                 />
               </div>
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
                 <Info size={11} />
-                {prefilledKeywords.length > 0
-                  ? "Pulled in from your Project Set-Up (section 1.6). Edit or add to these before running."
-                  : "Adds extra prompts so we can probe niche queries you want to be cited for."}
+                Add any extra queries beyond the LLM search queries in section 1.6 — useful for testing one-off or niche phrases.
               </p>
             </div>
             <div className="mb-6">
@@ -1043,7 +1056,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </div>
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                Buyer questions we ask verbatim <span className="font-normal" style={{ color: vars.g400 }}>(one per line)</span>
+                LLM search queries — how they find you <span className="font-normal" style={{ color: vars.g400 }}>(one per line)</span>
               </label>
               <textarea
                 value={buyerQuestionsText}
@@ -1056,8 +1069,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
                 {buyerQuestions.length > 0
-                  ? `These ${buyerQuestions.length} real buyer questions from your Project Set-Up (section 5.6) are the most important input. We fire them at ChatGPT and Claude word for word, ahead of the questions we generate, then check whether you show up.`
-                  : "Add the real questions your buyers type into AI tools in Project Set-Up (section 5.6), or type them here. They are the most important input, fired word for word ahead of the questions we generate."}
+                  ? `These ${buyerQuestions.length} queries from your Project Set-Up (section 1.6) are fired at ChatGPT and Claude word for word. We then check whether you appear in the answer.`
+                  : "Generate your LLM search queries in Project Set-Up (section 1.6), or type them here. They are fired verbatim at ChatGPT and Claude so we can check whether you appear."}
               </p>
             </div>
             <div className="mb-6">

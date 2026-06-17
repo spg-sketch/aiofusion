@@ -688,4 +688,96 @@ contentAiRouter.post(
   },
 );
 
+// ── Endpoint 5: LLM Search Query Builder ────────────────────────────────────
+// Generates ~20 buyer-intent LLM search queries grouped into three buying-
+// journey stages from the company context already in the caller's Project Set-Up.
+contentAiRouter.post(
+  "/content/llm-queries",
+  contentAiLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const companyName = asString(body.companyName, 200);
+    const descriptor = asString(body.descriptor, 2000);
+    const primaryMessage = asString(body.primaryMessage, 200);
+    const services = asString(body.services, 500);
+    const targetClients = asString(body.targetClients, 800);
+    const geography = asString(body.geography, 200);
+    const mediaCategories = asString(body.mediaCategories, 300);
+
+    if (!companyName.trim() && !descriptor.trim()) {
+      res.status(400).json({ error: "Add your company name and descriptor in Project Set-Up before generating queries." });
+      return;
+    }
+
+    const client = createAnthropicClient();
+    if (!client) {
+      res.status(503).json({ error: "AI is not configured. Please try again later." });
+      return;
+    }
+
+    const contextParts: string[] = [];
+    if (companyName.trim()) contextParts.push(`Company name: ${companyName.trim()}`);
+    if (descriptor.trim()) contextParts.push(`Company descriptor: ${descriptor.trim()}`);
+    if (primaryMessage.trim()) contextParts.push(`Primary message: ${primaryMessage.trim()}`);
+    if (services.trim()) contextParts.push(`Services or products: ${services.trim()}`);
+    if (targetClients.trim()) contextParts.push(`Target clients: ${targetClients.trim()}`);
+    if (geography.trim()) contextParts.push(`Geography served: ${geography.trim()}`);
+    if (mediaCategories.trim()) contextParts.push(`Sectors: ${mediaCategories.trim()}`);
+
+    const prompt =
+      `You are a GEO (generative engine optimisation) expert. Generate the top 20 LLM search queries that a prospective B2B client would type into an AI like ChatGPT, Claude or Perplexity when looking for a company like the one described below.\n\n` +
+      `${BRITISH_RULE}\n\n` +
+      `Company context:\n${contextParts.join("\n")}\n\n` +
+      `Generate exactly 20 queries split across three buying-journey stages:\n` +
+      `- discovery (7 queries): the prospect is researching the problem space or category. They may not yet know this type of company exists. Write complete questions they would ask an AI.\n` +
+      `- shortlist (7 queries): the prospect knows what they want and is actively looking for the best provider. These are "best X in Y" or "who provides X for Y" type questions.\n` +
+      `- comparison (6 queries): the prospect has heard of the company or shortlisted it and is doing due diligence. Include the company name, competitor comparisons, and trust or review questions.\n\n` +
+      `Strict rules:\n` +
+      `- Write each query exactly as a real person would type it into an AI - natural language complete sentences or questions, never keyword fragments.\n` +
+      `- Make queries specific to this company's actual sector and services, not generic.\n` +
+      `- Include location-specific queries where geography was provided.\n` +
+      `- Do not include the company name in discovery or shortlist queries (those are blind searches).\n` +
+      `- Include the company name in comparison queries.\n\n` +
+      `Return JSON only, no commentary:\n` +
+      `{"discovery": ["query1", "query2", ...7 items], "shortlist": ["query1", ...7 items], "comparison": ["query1", ...6 items]}`;
+
+    try {
+      const message = await Promise.race([
+        client.messages.create({
+          model: MODEL,
+          max_tokens: 2048,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), STREAM_TIMEOUT_MS),
+        ),
+      ]);
+      const raw =
+        (message as { content?: { type?: string; text?: string }[] }).content?.[0]?.type === "text"
+          ? (message as { content: { type: string; text: string }[] }).content[0].text
+          : "";
+      const parsed = extractJson(raw);
+      if (!parsed) {
+        res.status(500).json({ error: "The AI response could not be read. Please try again." });
+        return;
+      }
+      const normaliseList = (v: unknown): string[] =>
+        (Array.isArray(v) ? v : [])
+          .filter((x: unknown): x is string => typeof x === "string" && (x as string).trim().length > 0)
+          .map((x: string) => x.trim())
+          .slice(0, 10);
+      res.json({
+        discovery: normaliseList(parsed.discovery),
+        shortlist: normaliseList(parsed.shortlist),
+        comparison: normaliseList(parsed.comparison),
+      });
+    } catch (err) {
+      logger.error({ err }, "content-ai: llm-queries call failed");
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Queries could not be generated right now. Please try again." });
+      }
+    }
+  },
+);
+
 export default contentAiRouter;
