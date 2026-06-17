@@ -1218,6 +1218,8 @@ export default function IntakePage() {
           targetClients: icpText,
           geography: (formData["3.3"] as string) || "",
           mediaCategories: businessCategories.slice(0, 5).join(", "),
+          competitors: getCompetitors().slice(0, 10).join(", "),
+          websiteUrl: aiWebsite.trim(),
         }),
       });
       if (!resp.ok) {
