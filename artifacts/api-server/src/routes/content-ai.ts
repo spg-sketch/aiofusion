@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
-import { fetchSiteContent } from "../lib/safe-fetch";
+import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
 
 const contentAiRouter = Router();
 
@@ -718,16 +718,25 @@ contentAiRouter.post(
       return;
     }
 
-    // Try to fetch homepage content — fail silently if the site is unreachable or JS-only
+    // Try to fetch homepage + up to 2 sub-pages (About / Services / Work) — fail silently
     let siteSnippet = "";
     if (websiteUrl.trim()) {
       try {
-        const site = await fetchSiteContent(websiteUrl.trim(), 3000);
+        const { homepage, subpages } = await fetchSiteContentWithSubpages(
+          websiteUrl.trim(),
+          3000,  // homepage cap
+          1500,  // per sub-page cap
+          2,     // max sub-pages
+        );
+        const SITE_CONTEXT_BUDGET = 5000;
         const parts: string[] = [];
-        if (site.title) parts.push(`Title: ${site.title}`);
-        if (site.description) parts.push(`Meta description: ${site.description}`);
-        if (site.text) parts.push(`Visible page text: ${site.text}`);
-        if (parts.length > 0) siteSnippet = parts.join("\n");
+        if (homepage.title) parts.push(`Title: ${homepage.title}`);
+        if (homepage.description) parts.push(`Meta description: ${homepage.description}`);
+        if (homepage.text) parts.push(`Homepage text: ${homepage.text}`);
+        for (const sp of subpages) {
+          if (sp.text) parts.push(`\n[${sp.label}] page text: ${sp.text}`);
+        }
+        if (parts.length > 0) siteSnippet = parts.join("\n").slice(0, SITE_CONTEXT_BUDGET);
       } catch (err) {
         logger.info({ err, websiteUrl }, "content-ai: llm-queries website fetch skipped (non-fatal)");
       }

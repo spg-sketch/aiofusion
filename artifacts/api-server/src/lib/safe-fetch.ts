@@ -153,6 +153,89 @@ export async function fetchSiteContent(url: string, maxChars = 8000): Promise<Si
   return { url: normalized, title, description, text: text.slice(0, maxChars) };
 }
 
+const SUB_PAGE_PATTERNS = [
+  /\babout\b/i,
+  /\bservices?\b/i,
+  /\bwork\b/i,
+  /\bsolutions?\b/i,
+  /\bwhat[-_]we[-_]do\b/i,
+  /\bofferings?\b/i,
+  /\bexpertise\b/i,
+  /\bcapabilit/i,
+  /\bour[-_]work\b/i,
+];
+
+function scoreSubPageHref(href: string): number {
+  for (let i = 0; i < SUB_PAGE_PATTERNS.length; i++) {
+    if (SUB_PAGE_PATTERNS[i].test(href)) return SUB_PAGE_PATTERNS.length - i;
+  }
+  return 0;
+}
+
+function discoverSubPageUrls(html: string, baseUrl: string, max: number): string[] {
+  const origin = new URL(baseUrl).origin;
+  const $ = cheerio.load(html);
+  const seen = new Set<string>();
+  const candidates: Array<{ href: string; score: number }> = [];
+
+  $("a[href]").each((_, el) => {
+    const raw = $(el).attr("href") || "";
+    if (!raw || raw.startsWith("#") || raw.startsWith("mailto:") || raw.startsWith("tel:")) return;
+    let resolved: string;
+    try {
+      resolved = new URL(raw, baseUrl).href;
+    } catch {
+      return;
+    }
+    const parsedResolved = new URL(resolved);
+    if (parsedResolved.origin !== origin) return;
+    const normalized = parsedResolved.origin + parsedResolved.pathname.replace(/\/$/, "") || "/";
+    const baseNorm = new URL(baseUrl).origin + (new URL(baseUrl).pathname.replace(/\/$/, "") || "/");
+    if (normalized === baseNorm) return;
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    const score = scoreSubPageHref(parsedResolved.pathname + " " + ($(el).text() || ""));
+    if (score > 0) candidates.push({ href: resolved, score });
+  });
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.slice(0, max).map((c) => c.href);
+}
+
+export interface SiteContentWithSubpages {
+  homepage: SiteContent;
+  subpages: Array<{ url: string; label: string; text: string }>;
+}
+
+export async function fetchSiteContentWithSubpages(
+  url: string,
+  homepageMaxChars = 3000,
+  subpageMaxChars = 1500,
+  maxSubpages = 2,
+): Promise<SiteContentWithSubpages> {
+  const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  const html = await fetchHtml(normalized);
+  const { title, description, text } = htmlToText(html);
+  const homepage: SiteContent = { url: normalized, title, description, text: text.slice(0, homepageMaxChars) };
+
+  const subPageUrls = discoverSubPageUrls(html, normalized, maxSubpages);
+  const subpages: Array<{ url: string; label: string; text: string }> = [];
+
+  for (const subUrl of subPageUrls) {
+    try {
+      const subHtml = await fetchHtml(subUrl);
+      const { text: subText } = htmlToText(subHtml);
+      const parsed = new URL(subUrl);
+      const label = parsed.pathname.replace(/^\//, "").replace(/[-_]/g, " ").replace(/\//g, " › ") || subUrl;
+      subpages.push({ url: subUrl, label, text: subText.slice(0, subpageMaxChars) });
+    } catch {
+      // sub-page failures are non-fatal; homepage-only is the fallback
+    }
+  }
+
+  return { homepage, subpages };
+}
+
 async function fetchTextResource(url: string, timeoutMs = 8000, maxChars = 100000): Promise<string | null> {
   try {
     const { res, agent } = await fetchWithSsrfSafeRedirects(
