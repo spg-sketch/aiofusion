@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, type ConfirmedEntity } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import {
   Eye,
@@ -22,6 +22,10 @@ import {
   Trash2,
   SlidersHorizontal,
   AlertTriangle,
+  Plus,
+  X,
+  Loader2,
+  Wand2,
 } from "lucide-react";
 
 const vars = {
@@ -375,10 +379,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LlmCheckResult | null>(null);
-  const getLlmQueriesFlat = (): string => {
-    const q = getLlmSearchQueries();
-    return [...q.discovery, ...q.shortlist, ...q.comparison].filter(Boolean).join("\n");
-  };
   const prefilledKeywords = getPreferredKeywords();
   const [customKeywords, setCustomKeywords] = useState(() => {
     const q = getLlmSearchQueries();
@@ -388,19 +388,25 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [companyName, setCompanyName] = useState(activeClient.name);
   const [icpProfile, setIcpProfile] = useState(getIcpProfile());
   const [icpLocation, setIcpLocation] = useState(getClientLocations());
-  const [buyerQuestionsText, setBuyerQuestionsText] = useState(() => {
-    const llmFlat = getLlmQueriesFlat();
-    return llmFlat || getBuyerQuestions().join("\n");
+  const [llmQueries, setLlmQueries] = useState<{ discovery: string[]; shortlist: string[]; comparison: string[] }>(() => {
+    const q = getLlmSearchQueries();
+    if (q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0) {
+      return { discovery: q.discovery, shortlist: q.shortlist, comparison: q.comparison };
+    }
+    return { discovery: getBuyerQuestions(), shortlist: [], comparison: [] };
   });
+  const [llmQueriesGenerating, setLlmQueriesGenerating] = useState(false);
+  const [llmQueriesError, setLlmQueriesError] = useState("");
   const [competitorsText, setCompetitorsText] = useState(getCompetitors().join("\n"));
   useEffect(() => {
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
     setIcpLocation(getClientLocations());
-    const llmFlat = getLlmQueriesFlat();
-    setBuyerQuestionsText(llmFlat || getBuyerQuestions().join("\n"));
     const q = getLlmSearchQueries();
     const hasStructured = q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
+    setLlmQueries(hasStructured
+      ? { discovery: q.discovery, shortlist: q.shortlist, comparison: q.comparison }
+      : { discovery: getBuyerQuestions(), shortlist: [], comparison: [] });
     setCustomKeywords(hasStructured ? "" : getPreferredKeywords().join(", "));
     setCompetitorsText(getCompetitors().join("\n"));
   }, [activeClient.id, activeClient.name]);
@@ -424,9 +430,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setSelectedSectors((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   const selectedCount = combinedSectors.filter((s) => selectedSectors.includes(s)).length;
   const auditSectors = combinedSectors.filter((s) => selectedSectors.includes(s)).slice(0, 3);
-  // Buyer questions (Set-Up 5.6) and competitors (4.8) most directly shape the
-  // audit, so they are editable here. Parse the editable text back into arrays.
-  const buyerQuestions = buyerQuestionsText.split("\n").map((q) => q.trim()).filter(Boolean);
+  // LLM search queries (1.6) and competitors (4.8) most directly shape the
+  // audit, so they are editable here.
+  const buyerQuestions = [...llmQueries.discovery, ...llmQueries.shortlist, ...llmQueries.comparison]
+    .map((q) => q.trim()).filter(Boolean);
   const competitors = competitorsText.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean);
   // The remaining authority signals are shown read-only so the user can see what
   // is feeding the score, with a pointer to where to edit them in Project Set-Up.
@@ -524,6 +531,42 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     onConsumePending?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAuditId, savedAudits]);
+
+  async function generateQueriesOnPage() {
+    setLlmQueriesError("");
+    setLlmQueriesGenerating(true);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const resp = await fetch(`${apiBase}/api/content/llm-queries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          descriptor: getCompanyDescriptor(),
+          primaryMessage: getBoilerplate(),
+          services: "",
+          targetClients: getIcpProfile(),
+          geography: getClientLocations(),
+          mediaCategories: getBusinessSectors().slice(0, 5).join(", "),
+          competitors: getCompetitors().slice(0, 10).join(", "),
+          websiteUrl: getWebsite(),
+        }),
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({ error: "Could not generate queries." }));
+        throw new Error(d.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      setLlmQueries({
+        discovery: Array.isArray(data.discovery) ? (data.discovery as string[]) : [],
+        shortlist: Array.isArray(data.shortlist) ? (data.shortlist as string[]) : [],
+        comparison: Array.isArray(data.comparison) ? (data.comparison as string[]) : [],
+      });
+    } catch (err) {
+      setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+    } finally {
+      setLlmQueriesGenerating(false);
+    }
+  }
 
   async function runCheck() {
     setLoading(true);
@@ -1056,21 +1099,91 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </div>
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                LLM search queries — how they find you <span className="font-normal" style={{ color: vars.g400 }}>(one per line)</span>
+                LLM search queries — how they find you
               </label>
-              <textarea
-                value={buyerQuestionsText}
-                onChange={(e) => setBuyerQuestionsText(e.target.value)}
-                rows={6}
-                placeholder={"e.g. Which PR agencies are best for B2B technology brands?\nWho are the leading consumer PR firms in London?"}
-                className="w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none resize-y"
-                style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
-              />
-              <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
+              <div className="mb-3 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={generateQueriesOnPage}
+                  disabled={llmQueriesGenerating}
+                  className="self-start flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{ background: vars.accent }}
+                >
+                  {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                  {llmQueriesGenerating ? "Generating..." : buyerQuestions.length > 0 ? "Regenerate queries" : "Generate top 20 queries"}
+                </button>
+                {llmQueriesError && (
+                  <p className="text-[12px]" style={{ color: vars.red }}>{llmQueriesError}</p>
+                )}
+                {buyerQuestions.length === 0 && !llmQueriesGenerating && (
+                  <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
+                    Or type your own queries in the groups below. Fill in Company Set-Up (section 4) and your primary message first for the best results.
+                  </p>
+                )}
+              </div>
+              {(() => {
+                const groups: { key: "discovery" | "shortlist" | "comparison"; label: string; sublabel: string }[] = [
+                  { key: "discovery", label: "Discovery", sublabel: "They are researching the problem space" },
+                  { key: "shortlist", label: "Shortlist", sublabel: "They are looking for a provider" },
+                  { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives" },
+                ];
+                return (
+                  <div className="space-y-3">
+                    {groups.map(({ key, label, sublabel }) => {
+                      const items = llmQueries[key];
+                      return (
+                        <div key={key} className="rounded-xl border p-3" style={{ borderColor: vars.g200, background: "white" }}>
+                          <div className="flex items-baseline gap-2 mb-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.accent }}>{label}</span>
+                            <span className="text-[11px] font-light" style={{ color: vars.g400 }}>{sublabel}</span>
+                          </div>
+                          <div className="space-y-1.5 mb-2">
+                            {items.length === 0 && (
+                              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No queries yet.</p>
+                            )}
+                            {items.map((q, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <input
+                                  value={q}
+                                  onChange={(e) => {
+                                    const next = items.map((x, j) => (j === i ? e.target.value : x));
+                                    setLlmQueries((prev) => ({ ...prev, [key]: next }));
+                                  }}
+                                  className="flex-1 px-3 py-2 rounded-lg border text-[13px] font-light outline-none"
+                                  style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
+                                  placeholder="Type a query..."
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setLlmQueries((prev) => ({ ...prev, [key]: items.filter((_, j) => j !== i) }))}
+                                  className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-70"
+                                  style={{ color: vars.g400 }}
+                                  title="Remove query"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLlmQueries((prev) => ({ ...prev, [key]: [...prev[key], ""] }))}
+                            className="text-[12px] font-semibold flex items-center gap-1 transition-opacity hover:opacity-70"
+                            style={{ color: vars.accent }}
+                          >
+                            <Plus size={12} /> Add query
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <p className="text-[11px] mt-2 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
                 {buyerQuestions.length > 0
-                  ? `These ${buyerQuestions.length} queries from your Project Set-Up (section 1.6) are fired at ChatGPT and Claude word for word. We then check whether you appear in the answer.`
-                  : "Generate your LLM search queries in Project Set-Up (section 1.6), or type them here. They are fired verbatim at ChatGPT and Claude so we can check whether you appear."}
+                  ? `These ${buyerQuestions.length} queries are fired at ChatGPT and Claude word for word. We then check whether you appear in the answer.`
+                  : "Generate queries above, or type your own. They are fired verbatim at ChatGPT and Claude so we can check whether you appear."}
               </p>
             </div>
             <div className="mb-6">
