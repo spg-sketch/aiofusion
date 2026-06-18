@@ -6064,29 +6064,27 @@ type MediaListItem = {
 
 const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
 Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
-You are given permission to web-search and verify named contacts before answering.
-Use web search for every named contact before writing the row. Do not rely on training-data knowledge of who works where.
+You do not have live web access in this run. Use your training knowledge to identify relevant publications and beat journalists.
 
 For each publication, return:
 1. Publication name and homepage URL
 2. Category using the media categories selected in section 1.9. of the Project Data document and 1–N relevancy rank within category
 3. One-sentence description of the title (format, frequency, subjects and industry covered)
 4. One-sentence description of its readership (job titles, seniority, sector)
-5. Audience reach - give a public-source figure where possible (monthly UU, print circ, subscribers) and label as approximate; flag if unverified
-6. All current beat journalists likely to cover this story (no cap; include everyone genuinely on-beat - typically 4–8 per major outlet), each as: name | job title | email | confidence flag
+5. Audience reach - give an approximate figure based on your training knowledge where available (monthly UU, print circ, subscribers) and label as approximate and unverified
+6. Beat journalists likely to cover this story (typically 2–5 per outlet), each as: name | job title | email | confidence flag
    Confidence flag rules:
-   [V] Verified - email is found in a public source (publication website, masthead, signed byline footer, Muck Rack/RocketReach/Cision/Prowly listing, or government register).
-   [P] Pattern-inferred - journalist is confirmed in role within the last month and their email matches the publisher's house pattern, which must itself be confirmed against at least two other verified addresses at the same publication. State the pattern in the methodology tab.
-   [U] Unverified - anything else. List with a warning, or omit if the contact would mislead.
-   Before including any journalist, verify they are still in the stated role via a recent byline (within 60 days), their current LinkedIn title, or a staff bio page. Drop anyone you cannot confirm as currently active - a missing contact is better than a wrong one.
-7. Authority score (0–100) - relevance-weighted to my primary target audience (cross checking with information and instructions in Project Data doc) - not a generic DA score. Briefly justify scores above 90 and below 60.
+   [V] Verified - email confirmed in a public source from your training data (publication masthead, signed byline footer, Muck Rack/Cision listing).
+   [P] Pattern-inferred - journalist confirmed in role in your training data and email matches the publisher's known house pattern.
+   [U] Unverified - journalist name and role are known from training data but email cannot be confirmed; include with this flag so the user can verify independently.
+   If you have no training-knowledge of a relevant beat journalist for an outlet, leave journalists empty rather than fabricating a name.
+7. Authority score (0–100) - relevance-weighted to the primary target audience (cross-checking with Project Data) - not a generic DA score. Briefly justify scores above 90 and below 60.
 8. Suggested pitch angle in one sentence (exclusive vs. embargoed release vs. wire pickup)
 
 Hard rules:
-- Do not invent journalists, titles, or emails. If you can't verify, write "no current beat contact identified" - that's an acceptable answer.
-- Prefer dropping a stale contact over including it. Stale contacts cost trust; missing ones don't.
-- In a methodology tab, list every confirmed house email pattern with the evidence used to confirm it (which staff email proves the pattern).
-- Flag known reshuffles in the last 24 months for major outlets (e.g. who moved on/up).
+- Never fabricate journalist names, titles or emails. If you have no training knowledge of a beat contact, omit rather than invent.
+- It is always better to include a known journalist with confidence [U] than to leave the row empty because verification is not possible in this run.
+- Flag any known major reshuffles at outlets in the last 24 months in your training data.
 
 Deliverable:
 - A sortable Excel with one row per publication and a multi-line journalists cell; methodology tab; first-wave outreach sequence.

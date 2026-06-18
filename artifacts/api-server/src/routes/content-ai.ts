@@ -263,7 +263,7 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt);
+      const raw = await streamModelText(res, client, prompt, 16384);
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
