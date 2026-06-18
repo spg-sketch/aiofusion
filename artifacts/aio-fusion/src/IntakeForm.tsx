@@ -314,7 +314,7 @@ const sections: SectionDef[] = [
       {
         id: "1.6",
         label: "LLM search queries — how prospective clients find you",
-        hint: "Generate your top 20 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit.",
+        hint: "Generate your top 12 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit.",
         type: "llm-queries",
       },
       {
@@ -2281,7 +2281,7 @@ export default function IntakePage() {
                             style={{ background: vars.accent }}
                           >
                             {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-                            {llmQueriesGenerating ? "Generating..." : hasQueries ? "Regenerate queries" : "Generate top 20 queries"}
+                            {llmQueriesGenerating ? "Generating..." : hasQueries ? "Regenerate queries" : "Generate top 12 queries"}
                           </button>
                           {llmQueriesError && (
                             <p className="text-[12px]" style={{ color: "#DC2626" }}>{llmQueriesError}</p>

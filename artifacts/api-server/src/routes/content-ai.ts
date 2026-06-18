@@ -690,7 +690,7 @@ contentAiRouter.post(
 );
 
 // ── Endpoint 5: LLM Search Query Builder ────────────────────────────────────
-// Generates ~20 buyer-intent LLM search queries grouped into three buying-
+// Generates ~12 buyer-intent LLM search queries grouped into three buying-
 // journey stages from the company context already in the caller's Project Set-Up.
 contentAiRouter.post(
   "/content/llm-queries",
@@ -757,15 +757,15 @@ contentAiRouter.post(
       : "";
 
     const prompt =
-      `You are a GEO (generative engine optimisation) expert. Generate the top 20 LLM search queries that a prospective B2B client would type into an AI like ChatGPT, Claude or Perplexity when looking for a company like the one described below.\n\n` +
+      `You are a GEO (generative engine optimisation) expert. Generate the top 12 LLM search queries that a prospective B2B client would type into an AI like ChatGPT, Claude or Perplexity when looking for a company like the one described below.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `IMPORTANT: The structured fields below (company name, descriptor, primary message, services, target clients, geography, sectors) capture the client's intended strategic positioning. They take precedence over website content when they conflict. Use the website content to fill factual gaps and add grounding where the structured fields are sparse or absent.\n\n` +
       `Structured company context:\n${contextParts.join("\n")}\n` +
       websiteSection +
-      `\nGenerate exactly 20 queries split across three buying-journey stages:\n` +
-      `- discovery (7 queries): the prospect is researching the problem space or category. They may not yet know this type of company exists. Write complete questions they would ask an AI.\n` +
-      `- shortlist (7 queries): the prospect knows what they want and is actively looking for the best provider. These are "best X in Y" or "who provides X for Y" type questions.\n` +
-      `- comparison (6 queries): the prospect has heard of the company or shortlisted it and is doing due diligence. Include the company name, competitor comparisons, and trust or review questions. Where known competitors are listed, use them in comparison queries.\n\n` +
+      `\nGenerate exactly 12 queries split across three buying-journey stages:\n` +
+      `- discovery (4 queries): the prospect is researching the problem space or category. They may not yet know this type of company exists. Write complete questions they would ask an AI.\n` +
+      `- shortlist (4 queries): the prospect knows what they want and is actively looking for the best provider. These are "best X in Y" or "who provides X for Y" type questions.\n` +
+      `- comparison (4 queries): the prospect has heard of the company or shortlisted it and is doing due diligence. Include the company name, competitor comparisons, and trust or review questions. Where known competitors are listed, use them in comparison queries.\n\n` +
       `Strict rules:\n` +
       `- Write each query exactly as a real person would type it into an AI - natural language complete sentences or questions, never keyword fragments.\n` +
       `- Make queries specific to this company's actual sector and services, not generic.\n` +

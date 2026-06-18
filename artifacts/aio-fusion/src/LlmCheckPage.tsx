@@ -1110,7 +1110,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   style={{ background: vars.accent }}
                 >
                   {llmQueriesGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-                  {llmQueriesGenerating ? "Generating..." : buyerQuestions.length > 0 ? "Regenerate queries" : "Generate top 20 queries"}
+                  {llmQueriesGenerating ? "Generating..." : buyerQuestions.length > 0 ? "Regenerate queries" : "Generate top 12 queries"}
                 </button>
                 {llmQueriesError && (
                   <p className="text-[12px]" style={{ color: vars.red }}>{llmQueriesError}</p>
