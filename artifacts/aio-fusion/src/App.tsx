@@ -7581,15 +7581,18 @@ function UsersAdminPage({
   session,
   onBack,
   onAssignProjectOwner,
+  onProjectCreated,
 }: {
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => void;
+  onProjectCreated?: () => void;
 }) {
   const paper = "#FBF6EC";
   const ink = "#102B36";
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
+  const green = vars.green;
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
   // Re-read projects on every tick so owner reassignments show immediately.
@@ -7637,6 +7640,77 @@ function UsersAdminPage({
   const [nameUser, setNameUser] = useState<string | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+
+  // ── Generate-from-URL state ───────────────────────────────────────────
+  const [genUrl, setGenUrl] = useState("");
+  const [genCompany, setGenCompany] = useState("");
+  const [genRunning, setGenRunning] = useState(false);
+  const [genStep, setGenStep] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genResult, setGenResult] = useState<{ projectId: string; companyName: string } | null>(null);
+
+  const handleGenerate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedUrl = genUrl.trim();
+    if (!trimmedUrl) return;
+    setGenRunning(true);
+    setGenStep("Connecting...");
+    setGenError(null);
+    setGenResult(null);
+    void (async () => {
+      try {
+        const resp = await fetch(`${apiBase()}/api/admin/generate-from-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: trimmedUrl, companyName: genCompany.trim() }),
+        });
+        const contentType = resp.headers.get("content-type") || "";
+        if (!contentType.includes("text/event-stream")) {
+          const data = await resp.json().catch(() => null) as Record<string, unknown> | null;
+          throw new Error((data && typeof data.error === "string" ? data.error : null) || "Request failed. Please try again.");
+        }
+        if (!resp.body) throw new Error("Could not read response stream.");
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep: number;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const chunk = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            let event = "message";
+            let dataStr = "";
+            for (const line of chunk.split("\n")) {
+              if (line.startsWith("event:")) event = line.slice(6).trim();
+              else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+            }
+            if (!dataStr) continue;
+            let parsed: Record<string, unknown>;
+            try { parsed = JSON.parse(dataStr) as Record<string, unknown>; } catch { continue; }
+            if (event === "progress") {
+              setGenStep(typeof parsed.message === "string" ? parsed.message : null);
+            } else if (event === "result") {
+              const projectId = typeof parsed.projectId === "string" ? parsed.projectId : "";
+              const companyName = typeof parsed.companyName === "string" ? parsed.companyName : "Project";
+              setGenResult({ projectId, companyName });
+              setGenStep(null);
+              onProjectCreated?.();
+            } else if (event === "error") {
+              throw new Error(typeof parsed.error === "string" ? parsed.error : "Something went wrong. Please try again.");
+            }
+          }
+        }
+      } catch (err) {
+        setGenError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+        setGenStep(null);
+      } finally {
+        setGenRunning(false);
+      }
+    })();
+  };
 
   const refresh = () => { setUsers(getLocalUsers()); setTick((t) => t + 1); };
 
@@ -7736,6 +7810,98 @@ function UsersAdminPage({
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             Create the accounts that run on the platform. An Agency Reseller can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only. Use the controls below to set a friendly name and to move any project to the account that should own it.
           </p>
+        </div>
+
+        {/* GENERATE FROM URL */}
+        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <div className="flex items-start gap-3 mb-5">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: accentSoft }}>
+              <Globe size={16} color={accent} />
+            </div>
+            <div>
+              <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Generate test project from URL</h2>
+              <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+                Enter a company website and Claude will scrape the site, generate a fully-populated Project Set-Up, and save it as a new project ready for auditing.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website URL</label>
+              <input
+                type="text"
+                value={genUrl}
+                onChange={(e) => setGenUrl(e.target.value)}
+                placeholder="e.g. ogilvy.com or https://ogilvy.com"
+                disabled={genRunning}
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-4">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name <span className="font-normal normal-case tracking-normal" style={{ color: vars.g500 }}>(optional hint)</span></label>
+              <input
+                type="text"
+                value={genCompany}
+                onChange={(e) => setGenCompany(e.target.value)}
+                placeholder="e.g. Ogilvy"
+                disabled={genRunning}
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={genRunning || !genUrl.trim()}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: accent }}
+              >
+                {genRunning ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {genRunning ? "Working..." : "Generate"}
+              </button>
+            </div>
+          </form>
+
+          {/* Progress */}
+          {genRunning && genStep && (
+            <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: accentSoft }}>
+              <Loader2 size={14} color={accent} className="animate-spin shrink-0" />
+              <span className="text-[13px] font-medium" style={{ color: accent }}>{genStep}</span>
+            </div>
+          )}
+
+          {/* Error */}
+          {genError && (
+            <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded-xl" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
+              <AlertTriangle size={14} color={vars.red} className="shrink-0 mt-0.5" />
+              <span className="text-[13px] font-medium" style={{ color: vars.red }}>{genError}</span>
+            </div>
+          )}
+
+          {/* Success */}
+          {genResult && (
+            <div className="mt-4 px-4 py-4 rounded-xl" style={{ background: "#F0FDF4", border: "1px solid #86EFAC" }}>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={16} color={green} className="shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-bold" style={{ color: vars.navy }}>
+                    Project created: {genResult.companyName}
+                  </p>
+                  <p className="text-[12px] mt-0.5" style={{ color: vars.g600 }}>
+                    ID: {genResult.projectId} — go back to the platform and it will appear in your project list after a sync.
+                  </p>
+                </div>
+                <button
+                  onClick={() => { onBack(); }}
+                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 text-white"
+                  style={{ background: green }}
+                >
+                  <ArrowLeft size={12} /> Go to platform
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ADD ACCOUNT */}
@@ -8689,7 +8855,7 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} />;
+    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} />;
   }
   if (view === "sub-accounts") {
     // Direct clients are leaf accounts and cannot manage sub-accounts.

@@ -8,6 +8,7 @@ import aiAssistRouter from "./ai-assist";
 import contentAiRouter from "./content-ai";
 import storeRouter from "./store";
 import platformRouter from "./platform";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(llmCheckRouter);
 router.use(aiAssistRouter);
 router.use(contentAiRouter);
 router.use(storeRouter);
+router.use(adminRouter);
 
 export default router;
