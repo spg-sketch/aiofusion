@@ -1002,7 +1002,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // Seed the probe set with the buyer's verbatim questions so the measurement
     // uses real queries, not only generated ones. De-duplicate while preserving
     // the buyer questions first, and cap the total so the run stays bounded.
-    const buyerQuestions = (authorityData.buyerQuestions || []).slice(0, 8);
+    const buyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
     const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, 18);
 
     const probePromises: Promise<ProbeResult | null>[] = [];
