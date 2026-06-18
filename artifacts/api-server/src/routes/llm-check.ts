@@ -215,6 +215,51 @@ export function buildIdentityProbe(identity: BrandIdentity): string {
   return q;
 }
 
+export type BusinessType = "" | "service" | "product" | "consumer";
+
+// Vocabulary set that shapes probe questions to match the business model being
+// audited. Professional services (default) uses firm/agency language; product
+// companies use platform/vendor language; consumer brands use brand language.
+// This ensures the questions the AI sees are realistic for the category, so
+// the competitor set it surfaces is actually comparable.
+function buildProbeVocab(type: BusinessType) {
+  if (type === "product") {
+    return {
+      offeringSuffix: "solutions",
+      entityPlural: "platforms or vendors",
+      boutiqueAdj: "independent",
+      comparatorEntity: "platforms",
+      largeRivals: "large enterprise vendors",
+      keywordEntity: "platforms or tools",
+      supportNoun: "solutions",
+      buyerWord: "business",
+    };
+  }
+  if (type === "consumer") {
+    return {
+      offeringSuffix: "",
+      entityPlural: "brands",
+      boutiqueAdj: "independent",
+      comparatorEntity: "brands",
+      largeRivals: "large global brands",
+      keywordEntity: "brands",
+      supportNoun: "options",
+      buyerWord: "consumer",
+    };
+  }
+  // default: professional services / agency
+  return {
+    offeringSuffix: "services",
+    entityPlural: "agencies or providers",
+    boutiqueAdj: "boutique",
+    comparatorEntity: "agencies or providers",
+    largeRivals: "large global firms",
+    keywordEntity: "companies",
+    supportNoun: "support",
+    buyerWord: "business",
+  };
+}
+
 export function generateProbeQuestions(
   companyName: string,
   sectors: string[],
@@ -223,8 +268,14 @@ export function generateProbeQuestions(
   location: string,
   persona: string,
   identity?: BrandIdentity,
+  businessType: BusinessType = "",
 ): string[] {
   const questions: string[] = [];
+  const v = buildProbeVocab(businessType);
+  // Sector suffix ("services", "solutions", etc.) appended where the sector
+  // name alone is not a complete phrase. Consumer type omits it since sector
+  // names like "fitness" or "fashion" stand on their own.
+  const sectorSuffix = v.offeringSuffix ? ` ${v.offeringSuffix}` : "";
 
   const uniqueSectors = [...new Set(sectors.map((s) => s.trim()).filter(Boolean))].slice(0, 3);
   const list = uniqueSectors.length > 0 ? uniqueSectors : ["the industry"];
@@ -232,7 +283,7 @@ export function generateProbeQuestions(
   const hasIcp = icp.trim().length > 0;
   const hasLocation = location.trim().length > 0;
   const hasPersona = persona.trim().length > 0;
-  // ICP-aware clauses steer the AI toward specialist/boutique providers that
+  // ICP-aware clauses steer the AI toward specialist/niche providers that
   // serve a specific size and type of customer, rather than surfacing the big
   // household-name firms a generic "leading companies" question always returns.
   const forIcp = hasIcp ? ` for ${icp}` : "";
@@ -247,18 +298,18 @@ export function generateProbeQuestions(
   const single = list.length === 1;
   for (const sector of list) {
     if (hasIcp) {
-      questions.push(`Which companies provide ${sector} services${forIcp}?`);
-      questions.push(`If ${icp} needed ${sector} support${inLocation}, which specialist or boutique firms would you recommend, and why?`);
+      questions.push(`Which companies provide ${sector}${sectorSuffix}${forIcp}?`);
+      questions.push(`If ${icp} needed ${sector} ${v.supportNoun}${inLocation}, which specialist or ${v.boutiqueAdj} ${v.entityPlural} would you recommend, and why?`);
       if (single) {
-        questions.push(`Who are the top specialist ${sector} firms${servingIcp} in ${place}?`);
-        questions.push(`Compare the best boutique ${sector} providers${forIcp}, rather than the large global firms.`);
+        questions.push(`Who are the top specialist ${sector} ${v.entityPlural}${servingIcp} in ${place}?`);
+        questions.push(`Compare the best ${v.boutiqueAdj} ${sector} ${v.comparatorEntity}${forIcp}, rather than the ${v.largeRivals}.`);
       }
     } else {
       questions.push(`What are the leading companies in the ${sector} space${inLocation}?`);
-      questions.push(`If a business needed ${sector} services${inLocation}, which companies would you recommend and why?`);
+      questions.push(`If a ${v.buyerWord} needed ${sector} ${v.supportNoun}${inLocation}, which companies would you recommend and why?`);
       if (single) {
         questions.push(`Who are the top ${sector} companies in ${place}?`);
-        questions.push(`Compare the best ${sector} agencies or providers available today.`);
+        questions.push(`Compare the best ${sector} ${v.comparatorEntity} available today.`);
       }
     }
   }
@@ -267,11 +318,11 @@ export function generateProbeQuestions(
   // sector, so the buyer's role nuances the results without over-narrowing
   // every question.
   if (hasPersona) {
-    questions.push(`Which specialist ${list[0]} firms would you recommend to ${persona}${inLocation}?`);
+    questions.push(`Which specialist ${list[0]}${sectorSuffix} ${v.entityPlural} would you recommend to ${persona}${inLocation}?`);
   }
 
   if (keywords.length > 0) {
-    questions.push(`Which companies are known for ${keywords.slice(0, 3).join(", ")}${forIcp}?`);
+    questions.push(`Which ${v.keywordEntity} are known for ${keywords.slice(0, 3).join(", ")}${forIcp}?`);
   }
 
   return questions;
@@ -946,7 +997,8 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
 }
 
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, sectors, keywords, icp, location, persona, projectData } = req.body;
+  const { companyName, sector, sectors, keywords, icp, location, persona, projectData, businessType: rawBusinessType } = req.body;
+  const businessType: BusinessType = (rawBusinessType === "service" || rawBusinessType === "product" || rawBusinessType === "consumer") ? rawBusinessType : "";
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
@@ -998,7 +1050,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // with the probes; independent of their results and fail-soft.
     const entityClarityPromise = assessEntityClarity(identity);
 
-    const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile, identity);
+    const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile, identity, businessType);
     // Seed the probe set with the buyer's verbatim questions so the measurement
     // uses real queries, not only generated ones. De-duplicate while preserving
     // the buyer questions first, and cap the total so the run stays bounded.
@@ -1079,6 +1131,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       sector: sectorList[0],
       sectors: sectorList,
       icp: icpProfile,
+      businessType,
       checkedAt: new Date().toISOString(),
       visibilityScore,
       totalProbes,
