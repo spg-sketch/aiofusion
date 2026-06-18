@@ -401,7 +401,7 @@ describe("generateProbeQuestions", () => {
   it("uses ICP-aware phrasing when an ICP is supplied", () => {
     const qs = generateProbeQuestions("Acme", ["widgets"], [], "SaaS startups", "", "");
     expect(qs.some((q) => q.includes("for SaaS startups"))).toBe(true);
-    expect(qs.some((q) => q.includes("specialist or boutique firms"))).toBe(true);
+    expect(qs.some((q) => q.includes("specialist or boutique agencies or providers"))).toBe(true);
   });
 
   it("folds location into the qualifiers and falls back to 'the UK'", () => {
