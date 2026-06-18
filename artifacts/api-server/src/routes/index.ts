@@ -15,6 +15,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(platformRouter);
+router.use(adminRouter);
 router.use(diagnosticRouter);
 router.use(seoAuditRouter);
 router.use(llmCheckRouter);

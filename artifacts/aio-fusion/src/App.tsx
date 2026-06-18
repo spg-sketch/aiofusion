@@ -486,6 +486,246 @@ function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCr
   );
 }
 
+const GENERATE_FROM_URL_TIMEOUT_MS = 130_000;
+
+type GenerateStep = "idle" | "scraping" | "generating" | "saving" | "scoring" | "done" | "error";
+
+const GENERATE_STEPS: { key: GenerateStep; label: string }[] = [
+  { key: "scraping", label: "Scraping site" },
+  { key: "generating", label: "Generating intake" },
+  { key: "saving", label: "Saving project" },
+  { key: "scoring", label: "Running GEO score" },
+  { key: "done", label: "Complete" },
+];
+
+function GenerateFromUrlModal({
+  onCancel,
+  onComplete,
+}: {
+  onCancel: () => void;
+  onComplete: (projectId: string, projectName: string) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [step, setStep] = useState<GenerateStep>("idle");
+  const [stepLabel, setStepLabel] = useState("");
+  const [elapsed, setElapsed] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const startRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const accentSoft = "#FBE3ED";
+
+  const isRunning = step !== "idle" && step !== "done" && step !== "error";
+  const canSubmit = url.trim().length > 0 && !isRunning;
+
+  function stopTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+
+  async function handleGenerate() {
+    if (!canSubmit) return;
+    setErrorMsg(null);
+    setStep("scraping");
+    setStepLabel("Scraping site");
+    setElapsed(0);
+    startRef.current = Date.now();
+    timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 250);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GENERATE_FROM_URL_TIMEOUT_MS);
+
+    try {
+      const base = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const resp = await fetch(`${base}/api/admin/generate-from-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ url: url.trim(), companyName: companyName.trim() || undefined }),
+        signal: controller.signal,
+      });
+
+      const contentType = resp.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const data = await resp.json().catch(() => null);
+        throw new Error((data && (data as { error?: string }).error) || "Request failed. Please try again.");
+      }
+      if (!resp.body) throw new Error("Response stream could not be read.");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let resultProjectId: string | null = null;
+      let resultProjectName: string | null = null;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          let event = "message";
+          let dataStr = "";
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          let parsed: Record<string, unknown>;
+          try { parsed = JSON.parse(dataStr); } catch { continue; }
+
+          if (event === "step") {
+            const label = typeof parsed.label === "string" ? parsed.label : "";
+            setStepLabel(label);
+            if (label.toLowerCase().includes("scraping")) setStep("scraping");
+            else if (label.toLowerCase().includes("generating")) setStep("generating");
+            else if (label.toLowerCase().includes("saving")) setStep("saving");
+            else if (label.toLowerCase().includes("scoring") || label.toLowerCase().includes("geo")) setStep("scoring");
+          } else if (event === "result") {
+            resultProjectId = typeof parsed.projectId === "string" ? parsed.projectId : null;
+            resultProjectName = typeof parsed.projectName === "string" ? parsed.projectName : "New Project";
+            setStep("done");
+          } else if (event === "error") {
+            throw new Error(typeof parsed.error === "string" ? parsed.error : "Something went wrong. Please try again.");
+          }
+        }
+      }
+
+      if (!resultProjectId) throw new Error("The project was not created. Please try again.");
+      stopTimer();
+      onComplete(resultProjectId, resultProjectName!);
+    } catch (err: unknown) {
+      stopTimer();
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setErrorMsg("This is taking longer than expected and timed out. Please try again.");
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      }
+      setStep("error");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const stepIdx = GENERATE_STEPS.findIndex((s) =>
+    stepLabel ? stepLabel.toLowerCase().includes(s.label.split(" ")[0].toLowerCase()) : s.key === step
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-['Inter',sans-serif]"
+      style={{ background: "rgba(16,43,54,0.45)" }}
+      onClick={() => { if (!isRunning) onCancel(); }}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl p-7 sm:p-8"
+        style={{ background: "white", border: `1px solid #E4DDD0` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em] mb-4"
+          style={{ background: accentSoft, border: `1px solid ${accent}40`, color: accent }}
+        >
+          <Zap size={12} /> Admin Tool
+        </div>
+        <h2 className="text-2xl mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          Generate project from URL
+        </h2>
+        <p className="text-[14px] font-light mb-5 leading-relaxed" style={{ color: "#6B7280" }}>
+          Enter a company website URL. AIO Fusion will scrape the site, populate all Set-Up fields using Claude, and run an initial GEO score - all in one step.
+        </p>
+
+        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
+          Website URL <span style={{ color: accent }}>*</span>
+        </label>
+        <input
+          autoFocus
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) void handleGenerate(); }}
+          placeholder="https://example.com"
+          disabled={isRunning}
+          className="w-full rounded-xl px-4 py-3 text-[15px] outline-none mb-4"
+          style={{ border: `1px solid #E4DDD0`, color: ink, background: isRunning ? "#F9F5EF" : "white" }}
+        />
+
+        <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-1.5" style={{ color: "#6B7280" }}>
+          Company name <span className="font-medium normal-case tracking-normal" style={{ color: "#9CA3AF" }}>(optional hint)</span>
+        </label>
+        <input
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) void handleGenerate(); }}
+          placeholder="Detected automatically from the site"
+          disabled={isRunning}
+          className="w-full rounded-xl px-4 py-3 text-[15px] outline-none mb-5"
+          style={{ border: `1px solid #E4DDD0`, color: ink, background: isRunning ? "#F9F5EF" : "white" }}
+        />
+
+        {isRunning && (
+          <div className="mb-5 rounded-xl border p-4" style={{ borderColor: `${accent}40`, background: `${accent}08` }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Loader2 size={15} className="animate-spin flex-shrink-0" style={{ color: accent }} />
+                <span className="text-[13px] font-semibold" style={{ color: accent }}>
+                  {stepLabel || "Working"}…
+                </span>
+              </div>
+              <span className="text-[11px] tabular-nums" style={{ color: "#9CA3AF" }}>{elapsed}s</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {GENERATE_STEPS.slice(0, -1).map((s, i) => (
+                <div key={s.key} className="flex items-center gap-1 flex-1">
+                  <div
+                    className="h-1.5 flex-1 rounded-full transition-all"
+                    style={{ background: i <= stepIdx ? accent : `${accent}28` }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex items-start gap-2 p-2 rounded-lg" style={{ background: `${accent}10` }}>
+              <Info size={12} className="flex-shrink-0 mt-0.5" style={{ color: accent }} />
+              <p className="text-[11px] leading-relaxed" style={{ color: accent }}>
+                This takes 30–90 seconds. Scraping, generating all Set-Up fields, and scoring the site.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="mb-5 rounded-xl border p-4 flex items-start gap-3" style={{ borderColor: "#F87171", background: "#FEF2F2" }}>
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5 text-red-500" />
+            <p className="text-[13px]" style={{ color: "#B91C1C" }}>{errorMsg}</p>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={isRunning}
+            className="px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] transition-colors"
+            style={{ color: "#9CA3AF", cursor: isRunning ? "not-allowed" : "pointer" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleGenerate()}
+            disabled={!canSubmit}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all"
+            style={{ background: accent, opacity: canSubmit ? 1 : 0.45, cursor: canSubmit ? "pointer" : "not-allowed" }}
+          >
+            {isRunning ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+            {isRunning ? "Generating…" : "Generate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MiniDonut({ score, color, size = 56 }: { score: number; color: string; size?: number }) {
   const r = (size - 8) / 2;
   const circ = 2 * Math.PI * r;
@@ -976,6 +1216,8 @@ function ClientSelectorPage({
   onArchivedProjects,
   onGuidance,
   onDeleteProject,
+  session,
+  onGenerateFromUrl,
 }: {
   projects: Client[];
   onSelectClient: (client: Client) => void;
@@ -986,8 +1228,11 @@ function ClientSelectorPage({
   onArchivedProjects: () => void;
   onGuidance: () => void;
   onDeleteProject: (id: string) => void;
+  session?: { username: string; role: string } | null;
+  onGenerateFromUrl?: () => void;
 }) {
   const displayClients = projects;
+  const isAdmin = session?.role === "admin";
 
   const paper = "#FBF6EC";
   const ink = "#102B36";
@@ -1049,7 +1294,7 @@ function ClientSelectorPage({
         </div>
 
         {/* Three primary actions - visible in both empty and populated states */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8 sm:mb-10">
+        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
           <button
             onClick={onCreateProject}
             className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
@@ -1065,6 +1310,23 @@ function ClientSelectorPage({
             </div>
             <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
           </button>
+          {isAdmin && onGenerateFromUrl && (
+            <button
+              onClick={onGenerateFromUrl}
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              style={{ background: "#102B36", color: "white" }}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.12)" }}>
+                <Zap size={20} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">Admin tool</p>
+                <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Generate from URL</p>
+                <p className="text-[12px] font-light mt-0.5 opacity-70">Auto-populate + score in one click.</p>
+              </div>
+              <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+            </button>
+          )}
           <button
             onClick={onArchivedProjects}
             className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
@@ -1137,6 +1399,10 @@ function ClientSelectorPage({
             const livePlans = loadPlannerProjects(client.id).length;
             const liveContent = loadArchive(client.id).length;
             const scoreColor = liveScore >= 70 ? "#3D9B6B" : liveScore >= 50 ? "#D4922A" : "#C94A3E";
+            const geoSnapshotScore = (client as any).geoSnapshot?.score as number | undefined;
+            const geoScoreColor = geoSnapshotScore !== undefined
+              ? geoSnapshotScore >= 70 ? "#3D9B6B" : geoSnapshotScore >= 50 ? "#D4922A" : "#C94A3E"
+              : undefined;
             const logoUrl = clientLogos[client.id];
             const handleLogoUpload = (e: React.MouseEvent) => {
               e.stopPropagation();
@@ -1269,6 +1535,17 @@ function ClientSelectorPage({
                       </div>
                     </div>
                   </div>
+                  {geoSnapshotScore !== undefined && (
+                    <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl" style={{ background: `${geoScoreColor}12`, border: `1px solid ${geoScoreColor}30` }}>
+                      <Zap size={11} style={{ color: geoScoreColor, flexShrink: 0 }} />
+                      <span className="text-[11px] font-semibold" style={{ color: geoScoreColor }}>
+                        GEO Score: {geoSnapshotScore}
+                      </span>
+                      <span className="text-[10px] font-light ml-auto" style={{ color: vars.g400 }}>
+                        initial scan
+                      </span>
+                    </div>
+                  )}
                   <div
                     className="flex items-center justify-between pt-4 border-t"
                     style={{ borderColor: vars.g100 }}
@@ -8577,6 +8854,7 @@ function App() {
   const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
   const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
+  const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
   // Pull the shared project list and refresh the hub. Used on first load and
@@ -8982,8 +9260,27 @@ function App() {
           setView("insights");
         }}
         onDeleteProject={handleDeleteProject}
+        session={session}
+        onGenerateFromUrl={session?.role === "admin" ? () => setShowGenerateFromUrl(true) : undefined}
       />
       {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
+      {showGenerateFromUrl && (
+        <GenerateFromUrlModal
+          onCancel={() => setShowGenerateFromUrl(false)}
+          onComplete={async (projectId, _projectName) => {
+            setShowGenerateFromUrl(false);
+            await resyncProjects();
+            // Navigate directly into the new project
+            const target = storedProjects.find((p) => p.id === projectId);
+            if (target) {
+              setActiveProjectId(target.id);
+              await syncIntakeForProject(target.id);
+              setActiveClient({ ...target, logo: clientLogos[target.id] });
+              setCurrentPage("dashboard");
+            }
+          }}
+        />
+      )}
       </>
     );
   }

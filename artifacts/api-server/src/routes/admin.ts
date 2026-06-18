@@ -1,18 +1,58 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, projectsTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername } from "../lib/platform-auth";
-import { fetchSiteContentWithSubpages } from "../lib/safe-fetch";
+import { fetchSiteContentWithSubpages, fetchGeoAuditContext } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
+import {
+  analyseWithClaude,
+} from "./diagnostic";
 
 const adminRouter = Router();
 
 const MODEL = "claude-sonnet-4-6";
+const INTAKE_GEN_TIMEOUT_MS = 120_000;
+
 const BRITISH_RULE =
   "Use British English spelling throughout (optimise, organisation, programme, colour, etc.). " +
   "Do not use em dashes; use hyphens or rewrite the sentence. Do not use emojis.";
+
+const PROJECT_COLORS = [
+  "#C8497A",
+  "#1f748f",
+  "#2896b9",
+  "#165265",
+  "#D4922A",
+  "#3D9B6B",
+];
+
+function randomColor(): string {
+  return PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)];
+}
+
+function deriveInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "P";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+}
+
+function generateProjectId(companyName: string): string {
+  const slug = slugify(companyName) || "project";
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `gen-${slug}-${rand}`;
+}
 
 function createAnthropicClient(): Anthropic | null {
   const baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
@@ -35,6 +75,30 @@ function sse(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+function sanitiseJsonControlChars(s: string): string {
+  let out = "";
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === "\\") { out += ch; escaped = true; continue; }
+      if (ch === '"') { out += ch; inStr = false; continue; }
+      if (ch === "\n") { out += "\\n"; continue; }
+      if (ch === "\r") { out += "\\r"; continue; }
+      if (ch === "\t") { out += "\\t"; continue; }
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) { out += "\\u" + code.toString(16).padStart(4, "0"); continue; }
+      out += ch;
+    } else {
+      if (ch === '"') inStr = true;
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : text;
@@ -45,45 +109,77 @@ function extractJson(text: string): unknown {
   try {
     return JSON.parse(slice);
   } catch {
-    // Try stripping literal newlines inside strings
     try {
-      return JSON.parse(slice.replace(/(?<=[":,\[{]\s*)(\n)/g, "\\n"));
+      return JSON.parse(sanitiseJsonControlChars(slice));
     } catch {
-      return null;
+      // Last-resort: strip literal newlines inside strings
+      try {
+        return JSON.parse(slice.replace(/(?<=[":,\[{]\s*)(\n)/g, "\\n"));
+      } catch {
+        return null;
+      }
     }
   }
 }
 
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 24);
+async function saveProjectToDb(
+  projectId: string,
+  ownerUsername: string,
+  projectData: Record<string, unknown>,
+  intake: Record<string, unknown>,
+  normalised: string,
+): Promise<void> {
+  const now = new Date();
+  const name = typeof projectData.name === "string" ? projectData.name : "";
+  await db
+    .insert(projectsTable)
+    .values({
+      id: projectId,
+      name,
+      data: projectData as object,
+      intake,
+      logo: null,
+      owner: ownerUsername,
+      updatedAt: now,
+      deletedAt: null,
+    })
+    .onConflictDoUpdate({
+      target: projectsTable.id,
+      set: {
+        name,
+        data: projectData as object,
+        intake,
+        owner: ownerUsername,
+        updatedAt: now,
+      },
+    });
+  logger.info({ projectId, name, url: normalised, owner: ownerUsername }, "admin generate: project created");
 }
 
-function requireAdmin(
-  req: Request,
-  res: Response,
-  next: () => void,
-): void {
-  if (!req.account || req.account.role !== "admin") {
-    res.status(403).json({ error: "Admin access required." });
-    return;
-  }
-  next();
+async function updateProjectData(
+  projectId: string,
+  dataUpdate: Record<string, unknown>,
+): Promise<void> {
+  await db
+    .update(projectsTable)
+    .set({ data: sql`${projectsTable.data} || ${JSON.stringify(dataUpdate)}::jsonb`, updatedAt: new Date() })
+    .where(eq(projectsTable.id, projectId));
 }
 
 adminRouter.post(
   "/admin/generate-from-url",
   requirePlatformAuth,
-  requireAdmin as unknown as Parameters<typeof adminRouter.post>[1],
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account || req.account.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+
     const rawUrl =
       typeof req.body?.url === "string" ? req.body.url.trim() : "";
     const companyHint =
       typeof req.body?.companyName === "string"
-        ? req.body.companyName.trim()
+        ? req.body.companyName.trim().slice(0, 200)
         : "";
 
     if (!rawUrl) {
@@ -91,14 +187,17 @@ adminRouter.post(
       return;
     }
 
+    const client = createAnthropicClient();
+    if (!client) {
+      res.status(503).json({ error: "AI is not configured. Please try again later." });
+      return;
+    }
+
     initSse(res);
 
     try {
       // ── Step 1: Scrape site ───────────────────────────────────────────
-      sse(res, "progress", {
-        step: "scraping",
-        message: "Scraping website content...",
-      });
+      sse(res, "step", { label: "Scraping site" });
 
       const normalised = /^https?:\/\//i.test(rawUrl)
         ? rawUrl
@@ -126,24 +225,14 @@ adminRouter.post(
           if (sp.text)
             parts.push(`\n--- ${sp.label} ---\n${sp.text}`);
         }
-        siteContent = parts.join("\n").slice(0, 12000);
+        siteContent = parts.join("\n").slice(0, 18000);
       } catch (err) {
-        logger.warn({ err, url: normalised }, "admin generate: scrape failed");
+        logger.warn({ err, url: normalised }, "admin generate: scrape failed, continuing with URL only");
         siteContent = `Website URL: ${normalised}`;
       }
 
       // ── Step 2: Generate intake with Claude ───────────────────────────
-      sse(res, "progress", {
-        step: "generating",
-        message: "Generating full project profile with AI (this takes ~30 seconds)...",
-      });
-
-      const client = createAnthropicClient();
-      if (!client) {
-        sse(res, "error", { error: "AI service is not configured." });
-        res.end();
-        return;
-      }
+      sse(res, "step", { label: "Generating intake" });
 
       const prompt = `You are an expert marketing and PR intelligence analyst. Given the website content below, generate a comprehensive intake profile for this company. This profile will be used to configure an AI Authority and GEO (Generative Engine Optimisation) platform.
 
@@ -171,6 +260,7 @@ Return ONLY a valid JSON object (no markdown, no code fences, no commentary) in 
     "1.4": "Evidence URLs: list website pages, case study URLs, news, awards pages. One URL per line. Include the homepage and 3-5 key internal pages.",
     "1.5": "Topics and associations to avoid in media or AI. If none obvious from content, write: None identified.",
     "1.7": "8-12 topics and themes the brand has genuine expertise in. Comma-separated. Should match their sector, services, and content.",
+    "1.8": "Spokespeople with name, title, area of expertise if detectable from site - or leave as empty string.",
     "1.9": "5-8 media and publication categories where this company earns or seeks coverage. Comma-separated.",
     "1.10": "5-8 media categories where their target customers spend time. Comma-separated.",
     "2.1": "Top 8 pre-purchase questions with answers. Format each as: Q: [question]\\nA: [2-3 sentence answer]\\n\\n",
@@ -180,6 +270,7 @@ Return ONLY a valid JSON object (no markdown, no code fences, no commentary) in 
     "2.5": "Homepage positioning summary in 40-50 words. Clear, AI-readable, no jargon.",
     "2.6": "Core services/products. One per line: [Service name]: [one-sentence description] - [who it is for]",
     "2.7": "Search phrases per service area. Format: [Service]: [phrase 1, phrase 2, phrase 3, phrase 4]",
+    "3.5b": "The key challenges and problems the company solves for clients.",
     "4.1": "Full legal or formal trading name",
     "4.2": "Sub-brands, product lines, or trading names. If none, repeat main brand name.",
     "4.3": "LLM boilerplate sentence: We help [audience] [achieve outcome] by [method].",
@@ -239,10 +330,8 @@ Return ONLY a valid JSON object (no markdown, no code fences, no commentary) in 
   "businessCategories": ["Business category 1", "Business category 2", "Business category 3"],
   "audienceCategories": ["Audience segment 1", "Audience segment 2", "Audience segment 3"],
   "llmQueries": {
-    "v": 1,
+    "v": "1.6",
     "discovery": [
-      "Natural language question about the problem space (no company name)",
-      "Natural language question about the problem space (no company name)",
       "Natural language question about the problem space (no company name)",
       "Natural language question about the problem space (no company name)",
       "Natural language question about the problem space (no company name)",
@@ -252,17 +341,13 @@ Return ONLY a valid JSON object (no markdown, no code fences, no commentary) in 
       "Best [service type] for [audience or use case]",
       "Who provides [specific service] for [industry]",
       "Top [service type] agencies in [geography]",
-      "Which [service type] firm is best for [outcome]",
-      "Best [service type] companies [year]",
-      "Leading [service] providers for [sector]"
+      "Which [service type] firm is best for [outcome]"
     ],
     "comparison": [
       "[Company name] vs [competitor] - which is better for [use case]",
       "[Company name] review - is it worth it for [audience]",
       "What do clients say about [company name]",
-      "[Company name] alternatives for [service type]",
-      "How does [company name] compare to [competitor]",
-      "Should I choose [company name] or [competitor] for [service]"
+      "[Company name] alternatives for [service type]"
     ]
   }
 }
@@ -274,69 +359,75 @@ LLM query rules:
 
 Return ONLY the JSON object. Absolutely no other text before or after it.`;
 
-      const message = await client.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
-        messages: [{ role: "user", content: prompt }],
-      });
+      let generated: Record<string, unknown> | null = null;
 
-      const rawText = message.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { type: "text"; text: string }).text)
-        .join("");
+      try {
+        const message = await Promise.race([
+          client.messages.create({
+            model: MODEL,
+            max_tokens: 8192,
+            messages: [{ role: "user", content: prompt }],
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), INTAKE_GEN_TIMEOUT_MS),
+          ),
+        ]);
 
-      const generated = extractJson(rawText) as Record<string, unknown> | null;
+        const rawText = (message as { content?: { type?: string; text?: string }[] })
+          .content
+          ?.filter((b) => b.type === "text")
+          .map((b) => b.text ?? "")
+          .join("") ?? "";
+
+        generated = extractJson(rawText) as Record<string, unknown> | null;
+      } catch (err) {
+        logger.error({ err }, "admin generate: intake generation failed");
+        sse(res, "error", { error: "Intake generation timed out or failed. Please try again." });
+        res.end();
+        return;
+      }
+
       if (!generated) {
-        logger.error({ rawText: rawText.slice(0, 500) }, "admin generate: JSON parse failed");
-        sse(res, "error", {
-          error: "Could not parse AI response. Please try again.",
-        });
+        logger.error({}, "admin generate: JSON parse failed");
+        sse(res, "error", { error: "Could not parse AI response. Please try again." });
         res.end();
         return;
       }
 
       // ── Step 3: Build intake and save to DB ───────────────────────────
-      sse(res, "progress", { step: "saving", message: "Saving project..." });
+      sse(res, "step", { label: "Saving project" });
 
       const now = new Date();
       const companyName =
-        (typeof generated.companyName === "string" && generated.companyName.trim())
+        (companyHint) ||
+        (typeof generated.companyName === "string" && generated.companyName.trim()
           ? generated.companyName.trim()
-          : companyHint || homepageTitle || "Generated project";
+          : "") ||
+        homepageTitle.split("|")[0].split("-")[0].trim() ||
+        "Generated project";
+
       const sector =
         (typeof generated.sector === "string" && generated.sector.trim())
           ? generated.sector.trim()
           : "Awaiting set-up";
 
-      const slug = slugify(companyName) || "project";
-      const rand = Math.random().toString(36).slice(2, 6);
-      const projectId = `gen-${slug}-${rand}`;
+      const formData = (generated.formData && typeof generated.formData === "object")
+        ? (generated.formData as Record<string, unknown>)
+        : {};
+      if (companyName && !formData["4.1"]) formData["4.1"] = companyName;
 
       const intake = deepStripEmDashes({
-        formData: (generated.formData ?? {}) as Record<string, unknown>,
+        formData,
         duals: (generated.duals ?? {}) as Record<string, unknown>,
         dualLists: (generated.dualLists ?? {}) as Record<string, unknown>,
-        spokespeople: Array.isArray(generated.spokespeople)
-          ? generated.spokespeople
-          : [],
+        spokespeople: Array.isArray(generated.spokespeople) ? generated.spokespeople : [],
         products: Array.isArray(generated.products) ? generated.products : [],
-        productQueries: Array.isArray(generated.productQueries)
-          ? generated.productQueries
-          : [],
+        productQueries: Array.isArray(generated.productQueries) ? generated.productQueries : [],
         stringLists: (generated.stringLists ?? {}) as Record<string, unknown>,
-        businessCategories: Array.isArray(generated.businessCategories)
-          ? generated.businessCategories
-          : [],
-        audienceCategories: Array.isArray(generated.audienceCategories)
-          ? generated.audienceCategories
-          : [],
+        businessCategories: Array.isArray(generated.businessCategories) ? generated.businessCategories : [],
+        audienceCategories: Array.isArray(generated.audienceCategories) ? generated.audienceCategories : [],
         mediaCategories: [],
-        llmQueries: (generated.llmQueries ?? {
-          v: 1,
-          discovery: [],
-          shortlist: [],
-          comparison: [],
-        }) as Record<string, unknown>,
+        llmQueries: (generated.llmQueries ?? { v: "1.6", discovery: [], shortlist: [], comparison: [] }) as Record<string, unknown>,
         intakeStatus: "Accepted",
         acceptedAt: now.toISOString(),
         preOptimiseSnapshot: null,
@@ -345,33 +436,73 @@ Return ONLY the JSON object. Absolutely no other text before or after it.`;
         confirmedEntity: null,
       });
 
+      const projectId = generateProjectId(companyName);
       const owner = normUsername(req.account!.username);
+      const projectColor = randomColor();
 
-      await db.insert(projectsTable).values({
+      const projectData: Record<string, unknown> = {
         id: projectId,
         name: companyName,
-        data: {
-          sector,
-          website: normalised,
-          color: "#1f748f",
-          generatedFromUrl: true,
-        },
-        intake,
-        logo: null,
+        sector: (typeof formData["4.4"] === "string" ? (formData["4.4"] as string) : sector).slice(0, 80),
+        initials: deriveInitials(companyName),
+        color: projectColor,
+        website: normalised,
+        generatedFromUrl: true,
+        contentCount: 0,
+        avgScore: 0,
+        scoreTrend: 0,
+        activePlans: 0,
+        lastActive: "Just now",
+        recentActivity: "Generated from URL",
         owner,
-        updatedAt: now,
-        deletedAt: null,
+      };
+
+      try {
+        await saveProjectToDb(projectId, owner, projectData, intake as Record<string, unknown>, normalised);
+      } catch (err) {
+        logger.error({ err, projectId }, "admin generate: DB save failed");
+        sse(res, "error", { error: "Failed to save the project. Please try again." });
+        res.end();
+        return;
+      }
+
+      // ── Step 4: Run GEO score (non-fatal) ────────────────────────────
+      sse(res, "step", { label: "Running GEO score" });
+
+      let geoScore: number | null = null;
+      try {
+        const geoCtx = await fetchGeoAuditContext(normalised);
+        const geoResult = await analyseWithClaude(geoCtx.text, geoCtx.facts);
+        geoScore = geoResult.overallScore ?? null;
+
+        if (geoScore !== null) {
+          const geoSnapshot = {
+            score: geoScore,
+            date: new Date().toISOString(),
+            categories: Array.isArray(geoResult.categories)
+              ? geoResult.categories.map((c: { name: string; score: number; max: number; status: string }) => ({
+                  name: c.name,
+                  score: c.score,
+                  max: c.max,
+                  status: c.status,
+                }))
+              : [],
+          };
+          await updateProjectData(projectId, { geoSnapshot });
+          projectData.geoSnapshot = geoSnapshot;
+        }
+      } catch (err) {
+        logger.warn({ err, projectId }, "admin generate: GEO scoring failed (non-fatal)");
+      }
+
+      sse(res, "result", {
+        projectId,
+        projectName: companyName,
+        score: geoScore,
       });
-
-      logger.info(
-        { projectId, companyName, url: normalised, owner },
-        "admin generate: project created",
-      );
-
-      sse(res, "result", { projectId, companyName });
       res.end();
     } catch (err) {
-      logger.error({ err }, "admin generate-from-url failed");
+      logger.error({ err }, "admin generate-from-url: unexpected error");
       sse(res, "error", {
         error: "Something went wrong generating the project. Please try again.",
       });
