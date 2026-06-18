@@ -165,6 +165,10 @@ const SUB_PAGE_PATTERNS = [
   /\bour[-_]work\b/i,
 ];
 
+// Ordered list of well-known paths to probe when nav-link discovery comes up
+// short (e.g. JS-rendered SPAs that ship no <a href> tags in server HTML).
+const FALLBACK_PATHS = ["/about", "/services", "/work"];
+
 function scoreSubPageHref(href: string): number {
   for (let i = 0; i < SUB_PAGE_PATTERNS.length; i++) {
     if (SUB_PAGE_PATTERNS[i].test(href)) return SUB_PAGE_PATTERNS.length - i;
@@ -199,7 +203,23 @@ function discoverSubPageUrls(html: string, baseUrl: string, max: number): string
   });
 
   candidates.sort((a, b) => b.score - a.score);
-  return candidates.slice(0, max).map((c) => c.href);
+  const result = candidates.slice(0, max).map((c) => c.href);
+
+  // Fallback for JS-heavy / single-page sites that ship no nav links in
+  // server-rendered HTML: probe well-known paths until the quota is filled.
+  // Priority stays with scored nav-link candidates; guesses only pad the tail.
+  if (result.length < max) {
+    for (const path of FALLBACK_PATHS) {
+      if (result.length >= max) break;
+      const normalizedGuess = origin + path;
+      if (!seen.has(normalizedGuess)) {
+        seen.add(normalizedGuess);
+        result.push(normalizedGuess);
+      }
+    }
+  }
+
+  return result;
 }
 
 export interface SiteContentWithSubpages {
