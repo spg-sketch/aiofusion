@@ -651,7 +651,7 @@ contentAiRouter.post(
     const prompt =
       `${reviewedPrompt || "You are a senior UK PR media-list builder. Build a target media list for the content item below."}\n\n` +
       `${BRITISH_RULE}\n\n` +
-      `Note: you do not have live web access in this run. Do NOT invent journalists, titles or emails. Where you cannot confirm a contact, set its confidence to "U" (Unverified) and say so, or return an empty journalists list with a noBeatContactNote. Be honest with the confidence flags.\n\n` +
+      `Note: you do not have live web access in this run. You MAY draw on training-knowledge to supply beat journalists, but every contact returned from training knowledge MUST carry confidence "U" (Unverified). Only omit a contact entirely if you have no training-knowledge of a relevant beat reporter for that outlet — do not fabricate names. Be honest with the confidence flags.\n\n` +
       `CONTENT ITEM:\n` +
       `Title: ${title || "(untitled)"}\n` +
       `Content type: ${contentType}\n` +

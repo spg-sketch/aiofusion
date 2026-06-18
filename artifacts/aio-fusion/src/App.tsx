@@ -6223,27 +6223,30 @@ function MediaResearchPage() {
       </tr>
     `).join("");
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Media List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions><x:WorksheetSource HRef="#MediaList"/></x:ExcelWorksheet><x:ExcelWorksheet><x:Name>Methodology</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions><x:WorksheetSource HRef="#Methodology"/></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
 <body>
-<h2>Target Media List - ${escapeHtml(selected.title)}</h2>
-<table border="1">
+<table id="MediaList" border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
     <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
-<br/><br/>
-<h2>Methodology</h2>
-<p>Generated against "${escapeHtml(selected.title)}" (${escapeHtml(selected.contentType)}) using Project Data media categories (section 1.9). Publications are ranked within each category by relevance-weighted authority across the primary target audience. Confidence flags show how each contact was sourced: [V] verified against a public source, [P] pattern-inferred from a confirmed house email pattern, [U] unverified. Reach figures are publisher-stated or third-party-derived and labelled approximate where shown.</p>
-<p>Source caveats: Unverified figures are flagged. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends. Confirm every named contact is still in role before pitching.</p>
-<br/>
-<h3>First-wave outreach sequence</h3>
-<table border="1"><thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>When</th><th>Action</th></tr></thead><tbody>
-  <tr><td>Day 0</td><td>Exclusive offer to the top-ranked outlet (${topOutlet}) with a 24-hour window.</td></tr>
-  <tr><td>Day 1</td><td>Embargoed release to the remaining category leaders.</td></tr>
-  <tr><td>Day 2</td><td>Wider distribution with a bespoke angle per outlet.</td></tr>
-  <tr><td>Day 5</td><td>Follow-up commentary or data drop to outlets without first-wave coverage.</td></tr>
-</tbody></table>
+<table id="Methodology" border="1">
+  <thead><tr style="background:#102B36;color:white;font-weight:bold;"><th>Section</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td style="font-weight:bold;">Generated for</td><td>${escapeHtml(selected.title)} (${escapeHtml(selected.contentType)})</td></tr>
+    <tr><td style="font-weight:bold;">Ranking method</td><td>Publications are ranked within each category by relevance-weighted authority across the primary target audience using Project Data media categories (section 1.9).</td></tr>
+    <tr><td style="font-weight:bold;">Confidence flags</td><td>[V] verified against a public source; [P] pattern-inferred from a confirmed house email pattern; [U] training-knowledge contact, unverified.</td></tr>
+    <tr><td style="font-weight:bold;">Reach figures</td><td>Publisher-stated or third-party-derived; labelled approximate where shown.</td></tr>
+    <tr><td style="font-weight:bold;">Source caveats</td><td>Unverified ([U]) contacts should be confirmed still in role before pitching. [P] pattern-inferred emails should be cross-checked against a second verified address before bulk sends.</td></tr>
+    <tr><td colspan="2"></td></tr>
+    <tr><td colspan="2" style="font-weight:bold;background:#102B36;color:white;">First-wave outreach sequence</td></tr>
+    <tr><td style="font-weight:bold;">Day 0</td><td>Exclusive offer to the top-ranked outlet (${topOutlet}) with a 24-hour window.</td></tr>
+    <tr><td style="font-weight:bold;">Day 1</td><td>Embargoed release to the remaining category leaders.</td></tr>
+    <tr><td style="font-weight:bold;">Day 2</td><td>Wider distribution with a bespoke angle per outlet.</td></tr>
+    <tr><td style="font-weight:bold;">Day 5</td><td>Follow-up commentary or data drop to outlets without first-wave coverage.</td></tr>
+  </tbody>
+</table>
 </body></html>`;
     const blob = new Blob([html], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
