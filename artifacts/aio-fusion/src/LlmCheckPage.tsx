@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
@@ -399,6 +399,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   });
   const [llmQueriesGenerating, setLlmQueriesGenerating] = useState(false);
   const [llmQueriesError, setLlmQueriesError] = useState("");
+  const autoQueriesTriggeredRef = useRef<Set<string>>(new Set());
   const [competitorsText, setCompetitorsText] = useState(getCompetitors().join("\n"));
   useEffect(() => {
     setCompanyName(activeClient.name);
@@ -412,6 +413,21 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setCustomKeywords(hasStructured ? "" : getPreferredKeywords().join(", "));
     setCompetitorsText(getCompetitors().join("\n"));
   }, [activeClient.id, activeClient.name]);
+
+  // Auto-generate queries on page load when none are stored for this project.
+  // Guarded by a ref so it fires at most once per project per page visit.
+  useEffect(() => {
+    if (autoQueriesTriggeredRef.current.has(activeClient.id)) return;
+    if (llmQueriesGenerating) return;
+    const hasAnyQuery = buyerQuestions.length > 0;
+    if (hasAnyQuery) return;
+    const name = (activeClient.name || "").trim();
+    const sectors = [...getBusinessSectors(), ...getTargetSectors()].filter(Boolean);
+    if (!name || sectors.length === 0) return;
+    autoQueriesTriggeredRef.current.add(activeClient.id);
+    generateQueriesOnPage(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeClient.id, buyerQuestions.length, llmQueriesGenerating]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
   const targetSectors = getTargetSectors();
@@ -534,7 +550,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAuditId, savedAudits]);
 
-  async function generateQueriesOnPage() {
+  async function generateQueriesOnPage(isAuto = false) {
     setLlmQueriesError("");
     setLlmQueriesGenerating(true);
     try {
@@ -564,7 +580,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         comparison: Array.isArray(data.comparison) ? (data.comparison as string[]) : [],
       });
     } catch (err) {
-      setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+      if (!isAuto) {
+        setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+      }
     } finally {
       setLlmQueriesGenerating(false);
     }

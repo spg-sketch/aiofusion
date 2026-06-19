@@ -1234,7 +1234,7 @@ export default function IntakePage() {
     if (optimisedFields.size <= 1 && intakeStatus === "Optimised") setIntakeStatus("Draft");
   };
 
-  const generateLlmQueries = async () => {
+  const generateLlmQueries = async (isAuto = false) => {
     setLlmQueriesError("");
     setLlmQueriesGenerating(true);
     try {
@@ -1268,7 +1268,9 @@ export default function IntakePage() {
         comparison: Array.isArray(data.comparison) ? (data.comparison as string[]) : [],
       });
     } catch (err: unknown) {
-      setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+      if (!isAuto) {
+        setLlmQueriesError((err instanceof Error ? err.message : null) || "Could not generate queries. Please try again.");
+      }
     } finally {
       setLlmQueriesGenerating(false);
     }
@@ -1604,6 +1606,12 @@ export default function IntakePage() {
                       <input
                         value={aiWebsite}
                         onChange={(e) => setAiWebsite(e.target.value)}
+                        onBlur={() => {
+                          const hasQueries = llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
+                          if (websiteValid && !hasQueries && !llmQueriesGenerating) {
+                            generateLlmQueries(true);
+                          }
+                        }}
                         placeholder="yourcompany.com"
                         className="w-full pl-4 pr-11 py-2.5 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
                         style={{ borderColor: websiteValid ? "#15803D" : "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
