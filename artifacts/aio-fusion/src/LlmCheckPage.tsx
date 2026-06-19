@@ -416,10 +416,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
   // Auto-generate queries on page load when none are stored for this project.
   // Guarded by a ref so it fires at most once per project per page visit.
+  // Derives emptiness directly from llmQueries to avoid use-before-declaration.
   useEffect(() => {
     if (autoQueriesTriggeredRef.current.has(activeClient.id)) return;
     if (llmQueriesGenerating) return;
-    const hasAnyQuery = buyerQuestions.length > 0;
+    const hasAnyQuery =
+      llmQueries.discovery.length > 0 ||
+      llmQueries.shortlist.length > 0 ||
+      llmQueries.comparison.length > 0;
     if (hasAnyQuery) return;
     const name = (activeClient.name || "").trim();
     const sectors = [...getBusinessSectors(), ...getTargetSectors()].filter(Boolean);
@@ -427,7 +431,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     autoQueriesTriggeredRef.current.add(activeClient.id);
     generateQueriesOnPage(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClient.id, buyerQuestions.length, llmQueriesGenerating]);
+  }, [activeClient.id, llmQueries, llmQueriesGenerating]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
   const targetSectors = getTargetSectors();
