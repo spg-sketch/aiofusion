@@ -283,15 +283,29 @@ export function generateProbeQuestions(
   const hasIcp = icp.trim().length > 0;
   const hasLocation = location.trim().length > 0;
   const hasPersona = persona.trim().length > 0;
+
+  // Truncate ICP, location, and persona so probe questions stay concise.
+  // Long ICPs (multi-sentence paragraphs) and many locations cause 400+ char
+  // questions that exhaust GPT context and produce empty responses.
+  const shortIcp = hasIcp
+    ? icp.split(/[.\n]/)[0].trim().slice(0, 80)
+    : "";
+  const shortLocation = hasLocation
+    ? location.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3).join(", ")
+    : "";
+  const shortPersona = hasPersona
+    ? persona.split(/[.\n]/)[0].trim().slice(0, 80)
+    : "";
+
   // ICP-aware clauses steer the AI toward specialist/niche providers that
   // serve a specific size and type of customer, rather than surfacing the big
   // household-name firms a generic "leading companies" question always returns.
-  const forIcp = hasIcp ? ` for ${icp}` : "";
-  const servingIcp = hasIcp ? ` serving ${icp}` : "";
+  const forIcp = shortIcp ? ` for ${shortIcp}` : "";
+  const servingIcp = shortIcp ? ` serving ${shortIcp}` : "";
   // Location is added as a clean qualifier because AI answers are heavily
   // localised; "the UK" is the neutral fallback used by the original probes.
-  const inLocation = hasLocation ? ` in ${location}` : "";
-  const place = hasLocation ? location : "the UK";
+  const inLocation = shortLocation ? ` in ${shortLocation}` : "";
+  const place = shortLocation || "the UK";
 
   questions.push(identity ? buildIdentityProbe({ ...identity, name: companyName }) : `What do you know about ${companyName}?`);
 
@@ -299,7 +313,7 @@ export function generateProbeQuestions(
   for (const sector of list) {
     if (hasIcp) {
       questions.push(`Which companies provide ${sector}${sectorSuffix}${forIcp}?`);
-      questions.push(`If ${icp} needed ${sector} ${v.supportNoun}${inLocation}, which specialist or ${v.boutiqueAdj} ${v.entityPlural} would you recommend, and why?`);
+      questions.push(`If ${shortIcp} needed ${sector} ${v.supportNoun}${inLocation}, which specialist or ${v.boutiqueAdj} ${v.entityPlural} would you recommend, and why?`);
       if (single) {
         questions.push(`Who are the top specialist ${sector} ${v.entityPlural}${servingIcp} in ${place}?`);
         questions.push(`Compare the best ${v.boutiqueAdj} ${sector} ${v.comparatorEntity}${forIcp}, rather than the ${v.largeRivals}.`);
@@ -318,7 +332,7 @@ export function generateProbeQuestions(
   // sector, so the buyer's role nuances the results without over-narrowing
   // every question.
   if (hasPersona) {
-    questions.push(`Which specialist ${list[0]}${sectorSuffix} ${v.entityPlural} would you recommend to ${persona}${inLocation}?`);
+    questions.push(`Which specialist ${list[0]}${sectorSuffix} ${v.entityPlural} would you recommend to ${shortPersona}${inLocation}?`);
   }
 
   if (keywords.length > 0) {

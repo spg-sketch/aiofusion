@@ -443,6 +443,39 @@ describe("generateProbeQuestions", () => {
     expect(qs.some((q) => q.includes("recommend to a CMO"))).toBe(true);
   });
 
+  it("truncates a long ICP to at most 80 chars and caps location to 3 entries", () => {
+    const longIcp =
+      "Mid-market SaaS companies with 50-500 employees operating in regulated industries including financial services, healthcare, and legal. They require enterprise-grade security.";
+    const manyLocations = "London, Manchester, Birmingham, Edinburgh, Bristol, Leeds, Liverpool";
+    const qs = generateProbeQuestions("Acme", ["widgets"], [], longIcp, manyLocations, "");
+
+    for (const q of qs) {
+      // The raw, untruncated ICP second sentence should never appear verbatim
+      expect(q).not.toContain("They require enterprise-grade security");
+      // The full ICP first sentence (131 chars) should not appear — only the
+      // 80-char truncation is allowed
+      expect(q).not.toContain(
+        "including financial services, healthcare, and legal",
+      );
+      // 4th+ locations must be stripped
+      expect(q).not.toContain("Edinburgh");
+      expect(q).not.toContain("Bristol");
+      expect(q).not.toContain("Leeds");
+      expect(q).not.toContain("Liverpool");
+    }
+  });
+
+  it("truncates a multi-sentence persona to at most 80 chars", () => {
+    const longPersona =
+      "A Chief Marketing Officer at a FTSE 250 company. They oversee a team of 30 and manage an annual budget exceeding £5 million.";
+    const qs = generateProbeQuestions("Acme", ["widgets"], [], "", "", longPersona);
+    const personaQ = qs.find((q) => q.includes("recommend to"));
+    expect(personaQ).toBeDefined();
+    // Should be truncated to first sentence only
+    expect(personaQ).toContain("A Chief Marketing Officer at a FTSE 250 company");
+    expect(personaQ).not.toContain("They oversee");
+  });
+
   it("adds a keyword probe (capped at three keywords) when keywords are supplied", () => {
     const qs = generateProbeQuestions("Acme", ["widgets"], ["fast", "cheap", "green", "loud"], "", "", "");
     const kwQuestion = qs.find((q) => q.includes("known for"));

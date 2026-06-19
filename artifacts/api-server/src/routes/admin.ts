@@ -394,6 +394,77 @@ Return ONLY the JSON object. Absolutely no other text before or after it.`;
         return;
       }
 
+      // ── Step 2b: Fallback LLM query generation (403 / no content) ────
+      // When the scraper is blocked (403) or returns no useful content,
+      // Claude has nothing to base llmQueries on and leaves the arrays empty.
+      // Run a short, targeted call using just company name, sector, and URL
+      // so field 1.6 is always populated on the resulting project.
+      const rawLlmQueries = generated.llmQueries as Record<string, unknown> | undefined;
+      const llmQueriesEmpty =
+        !rawLlmQueries ||
+        (
+          (!Array.isArray(rawLlmQueries.discovery) || (rawLlmQueries.discovery as unknown[]).length === 0) &&
+          (!Array.isArray(rawLlmQueries.shortlist) || (rawLlmQueries.shortlist as unknown[]).length === 0) &&
+          (!Array.isArray(rawLlmQueries.comparison) || (rawLlmQueries.comparison as unknown[]).length === 0)
+        );
+
+      if (llmQueriesEmpty) {
+        const fallbackCompanyName =
+          (companyHint) ||
+          (typeof generated.companyName === "string" ? generated.companyName.trim() : "") ||
+          "the company";
+        const fallbackSector =
+          (typeof generated.sector === "string" ? generated.sector.trim() : "") ||
+          "their industry";
+
+        const fallbackPrompt = `Generate GEO (Generative Engine Optimisation) search queries for the following company. Return ONLY a valid JSON object, no other text.
+
+Company name: ${fallbackCompanyName}
+Sector: ${fallbackSector}
+Website: ${normalised}
+
+Return this exact structure:
+{
+  "v": "1.6",
+  "discovery": ["question 1", "question 2", "question 3", "question 4"],
+  "shortlist": ["best X for Y 1", "best X for Y 2", "best X for Y 3", "best X for Y 4"],
+  "comparison": ["${fallbackCompanyName} vs competitor 1", "${fallbackCompanyName} review 2", "what do clients say about ${fallbackCompanyName}", "${fallbackCompanyName} alternatives 4"]
+}
+
+Rules:
+- discovery: natural conversational questions about the problem space. NO company name.
+- shortlist: "best X" or "who provides X" format. NO company name.
+- comparison: due diligence queries that MUST include ${fallbackCompanyName}.
+- Use British spelling. No em dashes.`;
+
+        try {
+          const fallbackMsg = await Promise.race([
+            client.messages.create({
+              model: MODEL,
+              max_tokens: 1024,
+              messages: [{ role: "user", content: fallbackPrompt }],
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), 30_000),
+            ),
+          ]);
+          const fallbackText = (fallbackMsg as { content?: { type?: string; text?: string }[] })
+            .content
+            ?.filter((b) => b.type === "text")
+            .map((b) => b.text ?? "")
+            .join("") ?? "";
+          const fallbackParsed = extractJson(fallbackText) as Record<string, unknown> | null;
+          if (
+            fallbackParsed &&
+            (Array.isArray(fallbackParsed.discovery) || Array.isArray(fallbackParsed.shortlist))
+          ) {
+            generated.llmQueries = fallbackParsed;
+          }
+        } catch (err) {
+          logger.warn({ err }, "admin generate: fallback llmQueries call failed (non-fatal)");
+        }
+      }
+
       // ── Step 3: Build intake and save to DB ───────────────────────────
       sse(res, "step", { label: "Saving project" });
 
