@@ -2806,10 +2806,37 @@ function GenerationProgress({
 function textToHtmlParagraphs(text: string): string {
   const trimmed = (text || "").trim();
   if (!trimmed) return "";
-  return trimmed
-    .split(/\n\n+/)
-    .map((p) => `<p style="margin:0 0 10pt 0;">${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
-    .join("");
+  const lines = trimmed.split("\n");
+  const out: string[] = [];
+  let buf: string[] = [];
+  const flush = () => {
+    if (buf.length) {
+      const html = buf.join("<br/>").trim();
+      if (html) out.push(`<p style="margin:0 0 10pt 0;">${html}</p>`);
+      buf = [];
+    }
+  };
+  for (const raw of lines) {
+    const h1m = raw.match(/^#\s+(.*)/);
+    const h2m = raw.match(/^##\s+(.*)/);
+    const h3m = raw.match(/^###\s+(.*)/);
+    if (h2m) {
+      flush();
+      out.push(`<h2 style="font-size:14pt; font-weight:700; color:#16213e; margin:14pt 0 5pt 0;">${escapeHtml(h2m[1])}</h2>`);
+    } else if (h3m) {
+      flush();
+      out.push(`<h3 style="font-size:12pt; font-weight:700; color:#374151; margin:12pt 0 4pt 0;">${escapeHtml(h3m[1])}</h3>`);
+    } else if (h1m) {
+      flush();
+      out.push(`<h2 style="font-size:15pt; font-weight:700; color:#16213e; margin:16pt 0 6pt 0;">${escapeHtml(h1m[1])}</h2>`);
+    } else if (raw.trim() === "") {
+      flush();
+    } else {
+      buf.push(escapeHtml(raw).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>"));
+    }
+  }
+  flush();
+  return out.join("");
 }
 
 // Builds a Word-compatible .doc from an HTML body and triggers a download.
@@ -5906,34 +5933,36 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const embedItems = changeLog.filter((c) => c.kind === "embed");
     const structureItems = changeLog.filter((c) => c.kind === "structure");
     const flagItems = changeLog.filter((c) => c.kind === "flag");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Optimisation Notes - ${projectName || "Draft"}</title>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Content Notes - ${escapeHtml(projectName || "Draft")}</title>
 <style>
-  body { font-family: Georgia, 'Times New Roman', serif; color: #102B36; max-width: 720px; margin: 32px auto; padding: 0 24px; line-height: 1.55; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #102B36; max-width: 720px; margin: 32px auto; padding: 0 24px; line-height: 1.65; font-size: 14px; }
   .meta { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: #6b7280; margin-bottom: 8px; }
   h1.head { font-size: 30px; font-weight: 700; margin: 0 0 8px; line-height: 1.2; }
   p.stand { font-style: italic; font-size: 16px; color: #4b5563; margin: 0 0 24px; border-left: 3px solid #C8497A; padding-left: 12px; }
-  h2 { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: #C8497A; margin: 28px 0 8px; }
-  .body { white-space: pre-wrap; font-size: 14px; }
+  .section-label { font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: #C8497A; margin: 28px 0 12px; }
+  .body p { margin: 0 0 12px; }
+  .body h2 { font-size: 16px; font-weight: 700; color: #16213e; margin: 20px 0 8px; letter-spacing: normal; text-transform: none; }
+  .body h3 { font-size: 14px; font-weight: 700; color: #374151; margin: 16px 0 6px; letter-spacing: normal; text-transform: none; }
   ul { padding-left: 20px; font-size: 13px; }
   ul li { margin-bottom: 6px; }
   .flag { color: #B45309; }
   .footer { font-family: Arial, sans-serif; font-size: 10px; color: #9ca3af; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
 </style></head><body>
-  <div class="meta">Optimisation Notes · ${dateStr}</div>
+  <div class="meta">Content Notes · ${dateStr}</div>
   <h1 class="head">${escapeHtml(articleHeadline) || "(no headline)"}</h1>
   <p class="stand">${escapeHtml(standfirst) || "(no standfirst summary)"}</p>
-  <h2>Body copy</h2>
-  <div class="body">${escapeHtml(transcript) || "(no body copy)"}</div>
-  <h2>Change log</h2>
+  <div class="section-label">Article</div>
+  <div class="body">${textToHtmlParagraphs(transcript) || "<p style='color:#6b7280'>(no article copy)</p>"}</div>
+  <div class="section-label">Change log</div>
   <ul>
     ${structureItems.map((c) => `<li><strong>Structure / phrasing:</strong> ${escapeHtml(c.text)}</li>`).join("")}
     ${embedItems.map((c) => `<li><strong>Message embedded:</strong> ${escapeHtml(c.text)}</li>`).join("")}
-    ${flagItems.map((c) => `<li class="flag"><strong>⚠ Flagged:</strong> ${escapeHtml(c.text)}</li>`).join("")}
+    ${flagItems.map((c) => `<li class="flag"><strong>Flag:</strong> ${escapeHtml(c.text)}</li>`).join("")}
     ${changeLog.length === 0 ? "<li>(No optimisation has been run yet - run Optimise first to populate this log.)</li>" : ""}
   </ul>
-  <div class="footer">${projectName ? `Project: ${escapeHtml(projectName)} · ` : ""}Content type: ${contentType}${spokesperson ? ` · Spokesperson: ${escapeHtml(spokesperson)}` : ""}${pubDate ? ` · Publication: ${pubDate}` : ""}<br/>Generated by AIO Fusion · Optimisation Notes export</div>
+  <div class="footer">${projectName ? `Project: ${escapeHtml(projectName)} · ` : ""}Content type: ${escapeHtml(contentType)}${spokesperson ? ` · Spokesperson: ${escapeHtml(spokesperson)}` : ""}${pubDate ? ` · Publication: ${escapeHtml(pubDate)}` : ""}<br/>Generated by AIO Fusion</div>
 </body></html>`;
-    const safeName = (projectName || articleHeadline || "optimisation-notes").replace(/[^a-z0-9]+/gi, "-").slice(0, 60);
+    const safeName = (projectName || articleHeadline || "content-notes").replace(/[^a-z0-9]+/gi, "-").slice(0, 60);
     if (format === "word") {
       const blob = new Blob([html], { type: "application/msword" });
       const url = URL.createObjectURL(blob);
@@ -6295,13 +6324,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
       )}
 
-      {/* Download Optimisation Notes - format chooser */}
+      {/* Download Content Notes - format chooser */}
       {showDownloadNotesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowDownloadNotesModal(false)}>
           <div className="bg-white rounded-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
               <h2 className="text-[16px] font-semibold flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-                <FileText size={16} color="#C8497A" /> Download optimisation notes
+                <FileText size={16} color="#C8497A" /> Download content notes
               </h2>
               <button onClick={() => setShowDownloadNotesModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
