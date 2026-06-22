@@ -111,6 +111,40 @@ export function domainLabel(website?: string): string {
   return parts[0] || "";
 }
 
+// Full cleaned hostname (e.g. "smg.com") for use in disambiguation anchors.
+function fullHostname(website?: string): string {
+  if (!website) return "";
+  let s = website.trim().toLowerCase();
+  s = s.replace(/^[a-z]+:\/\//, "").replace(/^www\./, "");
+  return s.split(/[/?#]/)[0] || "";
+}
+
+// A name is "confusable" when it is short or uses words common enough that
+// AI engines might answer about an unrelated namesake. Covers:
+//   - acronyms and very short names caught by isAmbiguousName (e.g. "SMG")
+//   - short multi-word names where each word is a common term (e.g. "Blue Halo")
+function isConfusableName(name: string): boolean {
+  if (isAmbiguousName(name)) return true;
+  const tokens = name.trim().toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  // Two or three short tokens whose combined character count is ≤ 10 (no spaces)
+  // are likely to collide with other organisations.
+  return tokens.length >= 2 && tokens.length <= 3 && tokens.join("").length <= 10;
+}
+
+// Rewrite buyer questions so any bare occurrence of an ambiguous/confusable
+// company name is anchored to the company's website domain.
+// E.g. "Is SMG trustworthy?" → "Is SMG (smg.com) trustworthy?"
+// This runs only at probe time; stored data is never mutated.
+function disambiguateBuyerQuestions(questions: string[], identity: BrandIdentity): string[] {
+  if (!isConfusableName(identity.name) || !identity.website) return questions;
+  const host = fullHostname(identity.website);
+  if (!host) return questions;
+  const anchored = `${identity.name} (${host})`;
+  const escaped = identity.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "gi");
+  return questions.map((q) => q.replace(re, anchored));
+}
+
 // Brand-specific phrases that, if present in a response, confirm a weak/acronym
 // match really is the brand: the domain label and the multi-word legal name.
 function corroborationSignals(identity: BrandIdentity): string[] {
@@ -1068,7 +1102,10 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // Seed the probe set with the buyer's verbatim questions so the measurement
     // uses real queries, not only generated ones. De-duplicate while preserving
     // the buyer questions first, and cap the total so the run stays bounded.
-    const buyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
+    // Disambiguate confusable names (e.g. "SMG", "Blue Halo") by appending the
+    // company's website domain so the AI engines answer about the right company.
+    const rawBuyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
+    const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
     const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, 18);
 
     const probePromises: Promise<ProbeResult | null>[] = [];

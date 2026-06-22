@@ -777,6 +777,9 @@ contentAiRouter.post(
       (companyName.trim()
         ? `- Include the company name in comparison queries.\n`
         : `- No company name was provided. Do NOT invent or guess a company name. Write comparison queries as generic due-diligence questions a buyer would ask when evaluating any provider of this type (e.g. how to check credentials, what to ask in a pitch, how to compare agencies).\n`) +
+      (companyName.trim() && websiteUrl.trim()
+        ? `- The company name may share its name with other organisations. Include the website domain in parentheses immediately after the company name in every comparison query (e.g. "${companyName.trim()} (${websiteUrl.trim().replace(/^[a-z]+:\/\//i, "").replace(/^www\./i, "").split(/[/?#]/)[0]}) vs alternatives") so each query unambiguously identifies this specific company.\n`
+        : ``) +
       `\n` +
       `Return JSON only, no commentary:\n` +
       `{"discovery": ["query1", "query2", ...7 items], "shortlist": ["query1", ...7 items], "comparison": ["query1", ...6 items]}`;
