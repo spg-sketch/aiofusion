@@ -2977,7 +2977,7 @@ function OptimiserPage({
     const accent = "#C8497A";
     const meta = [contentType, spokesperson && spokesperson !== "NA" ? spokesperson : "", contentStatus]
       .filter(Boolean)
-      .join("  &bull;  ");
+      .join("  •  ");
     const msgList = selectedMessages.length
       ? `<ul style="margin:0 0 14pt 0; padding-left:18pt;">${selectedMessages.map((m) => `<li style="margin:0 0 4pt 0;">${escapeHtml(m)}</li>`).join("")}</ul>`
       : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
@@ -5644,7 +5644,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const accent = "#C8497A";
     const meta = [contentType, spokesperson && spokesperson !== "NA" ? spokesperson : "", contentStatus]
       .filter(Boolean)
-      .join("  &bull;  ");
+      .join("  •  ");
     const targetList = mediaTarget.length
       ? `<p style="margin:0 0 14pt 0;">${mediaTarget.map((c) => escapeHtml(c)).join(", ")}</p>`
       : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
