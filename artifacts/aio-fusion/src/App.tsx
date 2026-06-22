@@ -6396,6 +6396,7 @@ type MediaListItem = {
   authority: number;
   authorityNote?: string;
   pitchAngle: string;
+  suggestedPlacement?: string;
 };
 
 const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
@@ -6499,6 +6500,7 @@ function MediaResearchPage() {
         : `<ul>${m.journalists.map((j) => `<li><b>${escapeHtml(j.name)}</b> - ${escapeHtml(j.title)} - <a href="mailto:${escapeHtml(j.email)}">${escapeHtml(j.email)}</a> - ${confidenceLabel(j.confidence)}</li>`).join("")}</ul>`
       }
       ${m.authorityNote ? `<p><b>Authority note:</b> ${escapeHtml(m.authorityNote)}</p>` : ""}
+      ${m.suggestedPlacement ? `<p><b>Suggested placement:</b> ${escapeHtml(m.suggestedPlacement)}</p>` : ""}
       <p><b>Suggested pitch angle:</b> ${escapeHtml(m.pitchAngle)}</p>
       <hr/>
     `).join("");
@@ -6554,6 +6556,7 @@ function MediaResearchPage() {
         <td>${m.authority}</td>
         <td>${escapeHtml(m.authorityNote || "")}</td>
         <td>${escapeHtml(m.pitchAngle)}</td>
+        <td>${escapeHtml(m.suggestedPlacement || "")}</td>
       </tr>
     `).join("");
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -6561,7 +6564,7 @@ function MediaResearchPage() {
 <body>
 <table id="MediaList" border="1">
   <thead><tr style="background:#102B36;color:white;font-weight:bold;">
-    <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th>
+    <th>Rank</th><th>Publication</th><th>URL</th><th>Category</th><th>Category rank</th><th>Description</th><th>Readership</th><th>Audience reach</th><th>Reach verified</th><th>Beat journalists (name | title | email | confidence)</th><th>Authority /100</th><th>Authority note</th><th>Pitch angle</th><th>Suggested placement</th>
   </tr></thead>
   <tbody>${rows}</tbody>
 </table>
@@ -6766,6 +6769,11 @@ function MediaResearchPage() {
                     {m.authorityNote && (
                       <div className="mt-3 p-2.5 rounded-lg" style={{ background: "rgba(201,160,78,0.1)" }}>
                         <p className="text-[12px] font-light italic" style={{ color: "#7A5E25" }}><span className="font-bold not-italic">Authority note:</span> {m.authorityNote}</p>
+                      </div>
+                    )}
+                    {m.suggestedPlacement && (
+                      <div className="mt-3 p-2.5 rounded-lg" style={{ background: "rgba(16,43,54,0.05)" }}>
+                        <p className="text-[12px] font-light" style={{ color: ink }}><span className="font-bold">Suggested placement:</span> {m.suggestedPlacement}</p>
                       </div>
                     )}
                     <div className="mt-3 p-2.5 rounded-lg" style={{ background: accentSoft }}>
