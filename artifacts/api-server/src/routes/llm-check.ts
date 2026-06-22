@@ -151,6 +151,12 @@ function corroborationSignals(identity: BrandIdentity): string[] {
   const sigs: string[] = [];
   const dl = domainLabel(identity.website);
   if (dl && dl.length >= 4) sigs.push(dl);
+  // For short domain labels (e.g. "smg" = 3 chars) that are excluded by the
+  // length guard above, use the full hostname ("smg.com") instead. The dot-TLD
+  // suffix makes it specific enough to match without false positives, and
+  // assessEntityClarity now asks Claude to include the domain in descriptions.
+  const host = fullHostname(identity.website);
+  if (host && (!dl || dl.length < 4)) sigs.push(host);
   if (identity.legalName) {
     // Use the FULL legal name only (including any "Group"/"Holdings"-style
     // suffix token). Stripping legal suffixes can collapse a name like
@@ -1021,10 +1027,12 @@ export async function assessEntityClarity(identity: BrandIdentity): Promise<Enti
 
   const prompt = `A PR team needs to know how clearly the name "${identity.name}" identifies a single company to AI answer engines.
 
-List the well-known companies or organisations commonly referred to as "${identity.name}", most well-known first.${identity.website ? ` Include the company at ${identity.website} if you know it.` : ""} For each, output one line exactly as:
-Full name - one short description
+List the well-known companies or organisations commonly referred to as "${identity.name}", most well-known first.${identity.website ? ` The company at ${identity.website} must be included — it is the brand being assessed.` : ""} For each, output one line exactly as:
+Full name - one short description including the organisation's website domain where you know it
 
-Rules: plain text only, one organisation per line, no preamble, no numbering, British spelling, no em dashes, no emojis. If only one organisation is well known by this name, list just that one. Do not invent organisations.`;
+Example format: Acme Corp - a UK logistics firm (acme.co.uk)
+
+Rules: plain text only, one organisation per line, no preamble, no numbering, British spelling, no em dashes, no emojis. Always include the website domain in parentheses in the description if you know it. If only one organisation is well known by this name, list just that one. Do not invent organisations.`;
 
   try {
     const response = await client.messages.create({
