@@ -21,3 +21,4 @@ export * from "./auth";
 export * from "./projects";
 export * from "./project-snapshots";
 export * from "./platform";
+export * from "./media-db";
