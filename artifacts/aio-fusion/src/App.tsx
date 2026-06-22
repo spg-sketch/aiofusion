@@ -5594,7 +5594,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const transcriptWords = countWords(transcript);
   const articleHeadlineOver = articleHeadlineWords > 20;
   const standfirstOver = standfirstWords > 50;
-  const headlineOver = headlineWords > 150;
+  const headlineOver = headlineWords > 300;
   const transcriptOver = transcriptWords > 8000;
 
   const onPickSpokesperson = (name: string) => {
@@ -6051,9 +6051,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           {standfirstOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 50-word limit by {standfirstWords - 50} words.</p>}
         </Labelled>
 
-        <Labelled label="Pitch idea / news hook" hint={`Up to 150 words for the angle, news hook and supporting reasoning. (${headlineWords} / 150)`} action={optimisePill("pitch")}>
+        <Labelled label="Pitch idea / news hook" hint={`Up to 300 words for the angle, news hook and supporting reasoning. (${headlineWords} / 300)`} action={optimisePill("pitch")}>
           <textarea value={headline} onChange={(e) => setHeadline(e.target.value)} rows={3} placeholder="Pitch the idea, angle and the news hook…" className="w-full px-3 py-2.5 rounded-lg border" style={{ borderColor: headlineOver ? vars.red : (isOpt("pitch") ? optimisedColor : vars.g200), fontSize: `${editorFontSize}px`, lineHeight: 1.5, color: pitchColor }} />
-          {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 150-word limit by {headlineWords - 150} words.</p>}
+          {headlineOver && <p className="text-[11px] mt-1" style={{ color: vars.red }}>Over the 300-word limit by {headlineWords - 300} words.</p>}
         </Labelled>
 
         <Labelled label="Transcript or notes" hint={`Up to 8,000 words - paste full transcripts, interviews or raw notes here. (${transcriptWords} / 8,000)`} action={optimisePill("transcript")}>
