@@ -9820,6 +9820,7 @@ function MediaDatabasePage() {
                     <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: vars.navy }}>Outlet</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Email</th>
                     <th className="text-left px-4 py-3 font-semibold hidden lg:table-cell" style={{ color: vars.navy }}>Phone</th>
+                    <th className="text-left px-4 py-3 font-semibold hidden xl:table-cell" style={{ color: vars.navy }}>Notes</th>
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -9836,6 +9837,9 @@ function MediaDatabasePage() {
                         {c.email && <a href={`mailto:${c.email}`} className="underline" style={{ color: vars.accent }}>{c.email}</a>}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{c.phone}</td>
+                      <td className="px-4 py-3 hidden xl:table-cell max-w-[180px]">
+                        {c.notes && <p className="text-[11px] font-light truncate" style={{ color: vars.g500 }} title={c.notes}>{c.notes}</p>}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 justify-end">
                           <button onClick={() => openEditContact(c)} className="p-1.5 rounded-lg hover:bg-gray-50" title="Edit"><PenLine size={13} color={vars.g400} /></button>

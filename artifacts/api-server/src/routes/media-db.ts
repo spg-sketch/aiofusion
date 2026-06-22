@@ -64,7 +64,9 @@ router.post(
         res.status(400).json({ error: "Missing category name" });
         return;
       }
-      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
+      // Custom categories are always scoped to the creating account —
+      // there is no global category concept.
+      const accountId = normUsername(req.account!.username);
       const [created] = await db
         .insert(mediaCategoriesTable)
         .values({ name: name.trim(), accountId })
@@ -86,7 +88,6 @@ router.delete(
         res.status(400).json({ error: "Invalid category id" });
         return;
       }
-      const visible = await visibleAccounts(req);
       const existing = await db
         .select()
         .from(mediaCategoriesTable)
@@ -97,11 +98,11 @@ router.delete(
         return;
       }
       const row = existing[0];
-      if (!isAdmin(req)) {
-        if (!row.accountId || (visible !== null && !visible.includes(row.accountId))) {
-          res.status(403).json({ error: "You cannot delete this category" });
-          return;
-        }
+      // Only the account that created the category (or admin) may delete it.
+      const owner = normUsername(req.account!.username);
+      if (!isAdmin(req) && row.accountId !== owner) {
+        res.status(403).json({ error: "You cannot delete this category" });
+        return;
       }
       await db.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.id, id));
       res.json({ ok: true });
@@ -179,19 +180,19 @@ router.put(
         res.status(400).json({ error: "Invalid outlet id" });
         return;
       }
-      const visible = await visibleAccounts(req);
       const existing = await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numId)).limit(1);
       const row = existing[0];
       if (!row || row.deletedAt) {
         res.status(404).json({ error: "Outlet not found" });
         return;
       }
-      if (!outletVisible(row.accountId, visible)) {
-        res.status(403).json({ error: "You cannot edit this outlet" });
+      // Global rows (accountId null) require admin; account-scoped rows require ownership.
+      if (row.accountId === null && !isAdmin(req)) {
+        res.status(403).json({ error: "Only admins may edit global outlets" });
         return;
       }
-      if (!isAdmin(req) && row.accountId === null) {
-        res.status(403).json({ error: "Only admins may edit global outlets" });
+      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+        res.status(403).json({ error: "You can only edit your own outlets" });
         return;
       }
       const { name, category, website, description, country, reachBand } = req.body ?? {};
@@ -224,19 +225,18 @@ router.delete(
         res.status(400).json({ error: "Invalid outlet id" });
         return;
       }
-      const visible = await visibleAccounts(req);
       const existing = await db.select().from(mediaOutletsTable).where(eq(mediaOutletsTable.id, id)).limit(1);
       const row = existing[0];
       if (!row) {
         res.json({ ok: true });
         return;
       }
-      if (!outletVisible(row.accountId, visible)) {
-        res.status(403).json({ error: "You cannot delete this outlet" });
+      if (row.accountId === null && !isAdmin(req)) {
+        res.status(403).json({ error: "Only admins may delete global outlets" });
         return;
       }
-      if (!isAdmin(req) && row.accountId === null) {
-        res.status(403).json({ error: "Only admins may delete global outlets" });
+      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+        res.status(403).json({ error: "You can only delete your own outlets" });
         return;
       }
       await db.update(mediaOutletsTable).set({ deletedAt: new Date() }).where(eq(mediaOutletsTable.id, id));
@@ -335,20 +335,19 @@ router.put(
         res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const visible = await visibleAccounts(req);
       const existing = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, numId)).limit(1);
       const row = existing[0];
       if (!row || row.deletedAt) {
         res.status(404).json({ error: "Contact not found" });
         return;
       }
-      // Global contacts (accountId null) can only be edited by admins
+      // Global contacts (accountId null) require admin; account-scoped require ownership.
       if (row.accountId === null && !isAdmin(req)) {
         res.status(403).json({ error: "Only admins may edit global contacts" });
         return;
       }
-      if (row.accountId !== null && visible !== null && !visible.includes(row.accountId)) {
-        res.status(403).json({ error: "You cannot edit this contact" });
+      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+        res.status(403).json({ error: "You can only edit your own contacts" });
         return;
       }
       const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
@@ -382,7 +381,6 @@ router.delete(
         res.status(400).json({ error: "Invalid contact id" });
         return;
       }
-      const visible = await visibleAccounts(req);
       const existing = await db.select().from(mediaContactsTable).where(eq(mediaContactsTable.id, id)).limit(1);
       const row = existing[0];
       if (!row) {
@@ -393,8 +391,8 @@ router.delete(
         res.status(403).json({ error: "Only admins may delete global contacts" });
         return;
       }
-      if (row.accountId !== null && visible !== null && !visible.includes(row.accountId)) {
-        res.status(403).json({ error: "You cannot delete this contact" });
+      if (row.accountId !== null && !isAdmin(req) && row.accountId !== normUsername(req.account!.username)) {
+        res.status(403).json({ error: "You can only delete your own contacts" });
         return;
       }
       await db.update(mediaContactsTable).set({ deletedAt: new Date() }).where(eq(mediaContactsTable.id, id));
