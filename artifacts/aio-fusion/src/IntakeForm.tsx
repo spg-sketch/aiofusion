@@ -516,6 +516,13 @@ const sections: SectionDef[] = [
         hint: "Helps calibrate entity differentiation in AI model training contexts.",
         type: "string-list",
       },
+      {
+        id: "4.9",
+        label: "Other companies with a similar name that we are NOT",
+        hint: "Optional — only fill this in if AI engines are confusing you with another organisation that shares your name. Add one per line, e.g. \"BlueHalo LLC (US defence contractor)\". These will be used to anchor the identity probe so engines answer about the right company.",
+        type: "string-list",
+        optional: true,
+      },
     ],
   },
   // ── AIO Set-Up: Section 5 (GEO vs AEO Priority Assessment) ───────────
@@ -3135,7 +3142,12 @@ export type ProjectAuthorityData = {
   expertiseTopics: string[];
   spokespeople: Spokesperson[];
   confirmedEntity: ConfirmedEntity;
+  knownNamesakes: string[];
 };
+
+function getKnownNamesakes(): string[] {
+  return fieldLines(["4.9"], true);
+}
 
 // Bundle of the intake data the Earned Media authority report scores against.
 export function getProjectAuthorityData(): ProjectAuthorityData {
@@ -3150,5 +3162,6 @@ export function getProjectAuthorityData(): ProjectAuthorityData {
     expertiseTopics: getExpertiseTopics(),
     spokespeople: getSpokespeople(),
     confirmedEntity: getConfirmedEntity(),
+    knownNamesakes: getKnownNamesakes(),
   };
 }

@@ -56,6 +56,11 @@ export interface BrandIdentity {
   // match. Absent when the user has made no choice, so the deterministic
   // fallback behaviour is unchanged.
   confirmedEntity?: { name: string; description?: string } | null;
+  // Organisations the client explicitly says share their name but are NOT them
+  // (e.g. "BlueHalo LLC (US defence contractor)"). Optional — only needed when
+  // the client knows of a specific namesake causing engine confusion. Used to
+  // anchor the identity probe and pre-seed entity clarity.
+  knownNamesakes?: string[];
 }
 
 function asIdentity(brand: BrandIdentity | string): BrandIdentity {
@@ -248,6 +253,10 @@ export function buildIdentityProbe(identity: BrandIdentity): string {
   if (ambiguous && identity.descriptor) {
     const oneLine = identity.descriptor.split(/[.\n]/)[0].trim().slice(0, 160);
     if (oneLine) anchor.push(`${oneLine}.`);
+  }
+  const namesakes = (identity.knownNamesakes || []).filter(Boolean);
+  if (namesakes.length > 0) {
+    anchor.push(`Please note: this is NOT ${namesakes.join(", NOT ")}.`);
   }
   if (anchor.length > 0) {
     q += ` ${anchor.join(" ")} Please answer specifically about this company, not other organisations with a similar name.`;
@@ -635,6 +644,7 @@ interface ProjectAuthorityData {
   expertiseTopics?: string[];
   spokespeople?: { name?: string; title?: string; expertise?: string[]; linkedin?: string }[];
   confirmedEntity?: { name: string; description?: string } | null;
+  knownNamesakes?: string[];
 }
 
 interface AssessmentDimension {
@@ -717,6 +727,7 @@ function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
       const description = typeof (ce as Record<string, unknown>).description === "string" ? ((ce as Record<string, unknown>).description as string).trim().slice(0, 300) : "";
       return { name, description };
     })(),
+    knownNamesakes: strArr(d.knownNamesakes, 10, 200),
   };
 }
 
@@ -1059,8 +1070,19 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
     const entities = parseEntityList(text);
-    if (entities.length === 0) return null;
-    return deriveEntityClarity(identity.name, identity, entities);
+    // Pre-seed any namesakes the client explicitly named so they are always
+    // treated as competing entities even if Claude didn't list them.
+    const knownNamesakes = (identity.knownNamesakes || []).filter(Boolean);
+    const seededEntities = [...entities];
+    for (const ns of knownNamesakes) {
+      const nsNorm = ns.toLowerCase();
+      const alreadyListed = seededEntities.some((e) => e.name.toLowerCase().includes(nsNorm.slice(0, 20)));
+      if (!alreadyListed) {
+        seededEntities.push({ name: ns, description: `${ns} (client-confirmed namesake)` });
+      }
+    }
+    if (seededEntities.length === 0) return null;
+    return deriveEntityClarity(identity.name, identity, seededEntities);
   } catch (err: any) {
     logger.error({ err, name: identity.name }, "Entity clarity assessment failed");
     return null;
@@ -1114,6 +1136,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     descriptor: authorityData.descriptor,
     sectors: sectorList,
     confirmedEntity: authorityData.confirmedEntity,
+    knownNamesakes: authorityData.knownNamesakes,
   };
 
   try {
