@@ -864,7 +864,7 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    section: "Project Management",
+    section: "Content Management",
     color: "#D4922A",
     items: [
       { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
@@ -875,14 +875,6 @@ const navSections: NavSection[] = [
       { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
       { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
       { label: "Archive", id: "archive", sub: "Searchable content library" },
-    ],
-  },
-  {
-    section: "Website AIO",
-    color: "#3D9B6B",
-    items: [
-      { label: "Website Content GEO", id: "geo-content", sub: "Optimise site content for AI" },
-      { label: "Website Technical GEO", id: "seo-audit", sub: "Site GEO and schema audit" },
     ],
   },
 ];
