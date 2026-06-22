@@ -5690,7 +5690,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       (actionNotes.trim() ? `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Action notes</h2>${textToHtmlParagraphs(actionNotes)}` : "") +
       `<hr style="border:none; border-top:1px solid #e5e7eb; margin:16pt 0;"/>` +
       `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Media target</h2>${targetList}`;
-    downloadWordDocument(`${(projectName || articleHeadline || "creator-brief").replace(/[^a-z0-9]/gi, "_")}.doc`, html);
+    downloadWordDocument(`${(articleHeadline || projectName || "creator-brief").replace(/[^a-z0-9]/gi, "_")}.doc`, html);
   };
 
   const projectMessages = getKeyMessages();
