@@ -652,6 +652,7 @@ interface AuthorityAssessment {
   topGaps: string[];
   priorityActions: { action: string; rationale: string; priority: string }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
+  competitorInsights?: { name: string; description: string }[];
 }
 
 // Whether the brand's name cleanly identifies it, or is shared with other
@@ -819,6 +820,18 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
         .slice(0, 40)
     : [];
 
+  const GENERIC_TERMS = new Set(["agency", "agencies", "united kingdom", "uk", "united states", "us", "usa", "consultancy", "consultancies", "firm", "firms"]);
+  const competitorInsights = Array.isArray(parsed.competitorInsights)
+    ? parsed.competitorInsights
+        .filter((c: unknown): c is Record<string, unknown> => !!c && typeof c === "object")
+        .map((c: Record<string, unknown>) => ({
+          name: typeof c.name === "string" ? c.name.trim().slice(0, 120) : "",
+          description: typeof c.description === "string" ? c.description.trim().slice(0, 400) : "",
+        }))
+        .filter((c: { name: string; description: string }) => c.name && c.description && !GENERIC_TERMS.has(c.name.toLowerCase()))
+        .slice(0, 8)
+    : undefined;
+
   return {
     index,
     grade: typeof parsed.grade === "string" && /^[A-F]$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
@@ -827,6 +840,7 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
     topGaps,
     priorityActions,
     queryTable,
+    ...(competitorInsights && competitorInsights.length > 0 ? { competitorInsights } : {}),
   };
 }
 
@@ -877,7 +891,8 @@ Return STRICT JSON only - no prose before or after, no markdown fences. Exactly 
   "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
   "topGaps": ["<the most important visibility gap>", ... up to 5],
   "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low" }, ... up to 5],
-  "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence]
+  "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence],
+  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows — do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.]
 }
 
 BRAND: ${companyName}

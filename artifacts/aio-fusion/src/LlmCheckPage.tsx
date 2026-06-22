@@ -77,6 +77,7 @@ interface AuthorityAssessment {
   topGaps: string[];
   priorityActions: { action: string; rationale: string; priority: string }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
+  competitorInsights?: { name: string; description: string }[];
 }
 
 interface EntityClarity {
@@ -716,12 +717,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       .join("");
 
     const trackedNormExport = competitors.map(normalizeName).filter(Boolean);
+    const insightMapExport = new Map<string, string>(
+      (assess?.competitorInsights || []).map((ci) => [normalizeName(ci.name), ci.description]),
+    );
     const ownsRows = result.topCompetitors
       .map((c) => {
         const qs = compQueries.get(c.name);
         const examples = qs ? [...qs].slice(0, 2).map((x) => escapeHtml(x)).join("; ") : "";
         const tracked = isTracked(c.name, trackedNormExport);
-        return `<tr><td>${escapeHtml(c.name)}</td><td>${c.mentions} of ${result.totalProbes} answers<br/><span class="muted">${examples}</span></td><td class="${tracked ? "appeared-yes" : "appeared-no"}">${tracked ? "Yes" : "No"}</td></tr>`;
+        const insight = !tracked ? insightMapExport.get(normalizeName(c.name)) : undefined;
+        return `<tr><td><strong>${escapeHtml(c.name)}</strong>${insight ? `<br/><span class="muted">${escapeHtml(insight)}</span>` : ""}</td><td>${c.mentions} of ${result.totalProbes} answers<br/><span class="muted">${examples}</span></td><td class="${tracked ? "appeared-yes" : "appeared-no"}">${tracked ? "Yes" : "No"}</td></tr>`;
       })
       .join("");
 
@@ -1728,40 +1733,67 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           Who owns the category instead
         </h3>
         <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
-          The brands the engines recommended when {result.companyName} was absent. Names not on your tracked list are rivals you may not be watching.
+          The brands the engines recommended when {result.companyName} was absent — ordered by how often they appeared.
         </p>
-        {rd.owns.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+        {rd.owns.length > 0 ? (() => {
+          const insightMap = new Map<string, string>(
+            (rd.assess?.competitorInsights || []).map((ci) => [normalizeName(ci.name), ci.description]),
+          );
+          const tracked = rd.owns.filter((c) => c.tracked);
+          const untracked = rd.owns.filter((c) => !c.tracked);
+          const CompTable = ({ rows, showInsight }: { rows: typeof rd.owns; showInsight: boolean }) => (
+            <table className="w-full text-left mb-1" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
                   <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500 }}>Competitor</th>
                   <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 px-3 whitespace-nowrap" style={{ color: vars.g500 }}>Surfaced in</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3 whitespace-nowrap" style={{ color: vars.g500 }}>On tracked list?</th>
                 </tr>
               </thead>
               <tbody>
-                {rd.owns.map((c) => (
-                  <tr key={c.name} style={{ borderBottom: `1px solid ${vars.g100}` }}>
-                    <td className="py-2.5 pr-3 align-top text-[12px] font-medium" style={{ color: vars.navy }}>{c.name}</td>
-                    <td className="py-2.5 px-3 align-top text-[12px]" style={{ color: vars.g500 }}>
-                      {c.mentions} of {result.totalProbes} answers
-                      {c.examples.length > 0 && <span className="block text-[11px] mt-0.5" style={{ color: vars.g400 }}>{c.examples.join("; ")}</span>}
-                    </td>
-                    <td className="py-2.5 pl-3 align-top text-[12px] font-semibold whitespace-nowrap" style={{ color: c.tracked ? vars.green : "#B91C1C" }}>
-                      {c.tracked ? "Yes" : "No"}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((c) => {
+                  const insight = showInsight ? insightMap.get(normalizeName(c.name)) : undefined;
+                  return (
+                    <tr key={c.name} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                      <td className="py-2.5 pr-3 align-top" style={{ maxWidth: "340px" }}>
+                        <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{c.name}</span>
+                        {insight && (
+                          <span className="block text-[11px] mt-0.5 leading-snug" style={{ color: vars.g500 }}>{insight}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 align-top text-[12px]" style={{ color: vars.g500, whiteSpace: "nowrap" }}>
+                        {c.mentions} of {result.totalProbes} answers
+                        {c.examples.length > 0 && <span className="block text-[11px] mt-0.5 whitespace-normal" style={{ color: vars.g400 }}>{c.examples.join("; ")}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            {rd.owns.some((c) => !c.tracked) && (
-              <p className="text-[11px] mt-3" style={{ color: vars.g400 }}>
-                Rivals marked No are not on your tracked competitor set (Project Set-Up 4.8). Consider adding them.
-              </p>
-            )}
-          </div>
-        ) : (
+          );
+          return (
+            <div className="overflow-x-auto space-y-5">
+              {untracked.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: "#B91C1C" }}>
+                    Rivals not on your tracked list — new intelligence
+                  </p>
+                  <CompTable rows={untracked} showInsight={true} />
+                  <p className="text-[11px] mt-2" style={{ color: vars.g400 }}>
+                    These rivals were surfaced by the AI engines but are not in your tracked competitor set (Project Set-Up 4.8). Consider adding them.
+                  </p>
+                </div>
+              )}
+              {tracked.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: vars.green }}>
+                    Known competitors — already tracked
+                  </p>
+                  <CompTable rows={tracked} showInsight={false} />
+                </div>
+              )}
+            </div>
+          );
+        })() : (
           <p className="text-[13px] p-3 rounded-lg" style={{ background: vars.g50, color: vars.g500 }}>
             No single rival was recommended often enough to stand out across these searches. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.
           </p>
