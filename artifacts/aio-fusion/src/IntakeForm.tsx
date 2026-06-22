@@ -314,7 +314,7 @@ const sections: SectionDef[] = [
       {
         id: "1.6",
         label: "LLM search queries — how prospective clients find you",
-        hint: "Generate your top 12 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit.",
+        hint: "Generate your top 12 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit. Comparison queries include your website domain in brackets (e.g. SMG (smg.com)) so AI engines evaluate the right company — essential when your name is an acronym or short phrase that other organisations share.",
         type: "llm-queries",
       },
       {
