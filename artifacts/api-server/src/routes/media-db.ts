@@ -280,13 +280,43 @@ router.get(
         .where(isNull(mediaContactsTable.deletedAt))
         .orderBy(mediaContactsTable.lastName, mediaContactsTable.firstName);
 
-      // Global contacts (accountId null) are visible to all; otherwise filter by hierarchy
-      const results = rows.filter((r) => {
-        if (r.accountId === null) return true;
-        if (visible === null) return true;
-        return visible.includes(r.accountId);
+      // Global contacts (accountId null) are visible to all; otherwise filter by hierarchy.
+      // Mask outlet metadata when the joined outlet belongs to a non-visible account —
+      // prevents leaking private outlet names through the contacts join.
+      const results = rows
+        .filter((r) => {
+          if (r.accountId === null) return true;
+          if (visible === null) return true;
+          return visible.includes(r.accountId);
+        })
+        .map((r) => {
+          const outletAccountId = r.outletName != null
+            ? (rows.find((x) => x.id === r.id) as { outletAccountId?: string | null } | undefined)?.outletAccountId ?? null
+            : null;
+          return r;
+        });
+      // Second-pass: strip outlet info if we can't verify outlet visibility.
+      // Since the join only returns a name (not the outlet's accountId), we do a
+      // conservative allow-list: expose outlet fields only for outlets we can
+      // confirm are visible (globally or via the caller's hierarchy).
+      // We need the outlet accountId — re-fetch outlet IDs visible to this caller.
+      const visibleOutletIds = new Set<number>();
+      if (results.some((r) => r.outletId)) {
+        const outletRows = await db
+          .select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId })
+          .from(mediaOutletsTable)
+          .where(isNull(mediaOutletsTable.deletedAt));
+        for (const o of outletRows) {
+          if (outletVisible(o.accountId, visible)) visibleOutletIds.add(o.id);
+        }
+      }
+      const safeResults = results.map((r) => {
+        if (r.outletId && !visibleOutletIds.has(r.outletId)) {
+          return { ...r, outletName: null, outletCategory: null };
+        }
+        return r;
       });
-      res.json({ contacts: results });
+      res.json({ contacts: safeResults });
     } catch {
       res.status(500).json({ error: "Failed to load contacts" });
     }
@@ -303,12 +333,30 @@ router.post(
         res.status(400).json({ error: "Contact must have at least a first or last name" });
         return;
       }
+      // Validate outletId: caller must have visibility over the chosen outlet.
+      let resolvedOutletId: number | null = null;
+      if (outletId) {
+        const numOutletId = Number(outletId);
+        if (numOutletId) {
+          const visible = await visibleAccounts(req);
+          const outletRow = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId, deletedAt: mediaOutletsTable.deletedAt }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numOutletId)).limit(1);
+          if (!outletRow[0] || outletRow[0].deletedAt) {
+            res.status(400).json({ error: "Outlet not found" });
+            return;
+          }
+          if (!outletVisible(outletRow[0].accountId, visible)) {
+            res.status(403).json({ error: "You cannot link to this outlet" });
+            return;
+          }
+          resolvedOutletId = numOutletId;
+        }
+      }
       // Admins can create global contacts (accountId = null)
       const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
       const [created] = await db
         .insert(mediaContactsTable)
         .values({
-          outletId: outletId ? Number(outletId) : null,
+          outletId: resolvedOutletId,
           firstName: typeof firstName === "string" ? firstName.trim() : "",
           lastName: typeof lastName === "string" ? lastName.trim() : "",
           role: typeof role === "string" ? role.trim() : "",
@@ -351,10 +399,32 @@ router.put(
         return;
       }
       const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
+      // Validate outletId if supplied — caller must be able to see that outlet.
+      let resolvedOutletId = row.outletId;
+      if (outletId !== undefined) {
+        if (!outletId) {
+          resolvedOutletId = null;
+        } else {
+          const numOid = Number(outletId);
+          if (numOid) {
+            const visible = await visibleAccounts(req);
+            const outletRow = await db.select({ id: mediaOutletsTable.id, accountId: mediaOutletsTable.accountId, deletedAt: mediaOutletsTable.deletedAt }).from(mediaOutletsTable).where(eq(mediaOutletsTable.id, numOid)).limit(1);
+            if (!outletRow[0] || outletRow[0].deletedAt) {
+              res.status(400).json({ error: "Outlet not found" });
+              return;
+            }
+            if (!outletVisible(outletRow[0].accountId, visible)) {
+              res.status(403).json({ error: "You cannot link to this outlet" });
+              return;
+            }
+            resolvedOutletId = numOid;
+          }
+        }
+      }
       const [updated] = await db
         .update(mediaContactsTable)
         .set({
-          outletId: outletId !== undefined ? (outletId ? Number(outletId) : null) : row.outletId,
+          outletId: resolvedOutletId,
           firstName: typeof firstName === "string" ? firstName.trim() : row.firstName,
           lastName: typeof lastName === "string" ? lastName.trim() : row.lastName,
           role: typeof role === "string" ? role.trim() : row.role,
