@@ -2939,6 +2939,7 @@ function OptimiserPage({
       mediaCats,
       pubDate,
       createdAt: new Date().toISOString(),
+      source: "optimiser",
     };
     saveArchive([item, ...items]);
     alert(`Saved "${item.title}" to Archive as ${status}.`);
@@ -4774,6 +4775,7 @@ type ArchiveItem = {
   createdAt: string;
   releasedAt?: string;
   releaseChannel?: string;
+  source?: "optimiser" | "creator";
 };
 
 function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
@@ -5139,9 +5141,12 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     saveArchive(updated);
   };
 
-  const sendToOptimiser = (id: string) => {
-    try { localStorage.setItem("aio.optimiser.preload", id); } catch { /* noop */ }
-    onNavigate("optimiser");
+  const sendToTool = (id: string) => {
+    const item = archive.find((a) => a.id === id);
+    const dest = item?.source === "creator" ? "creator" : "optimiser";
+    const key = dest === "creator" ? "aio.creator.preload" : "aio.optimiser.preload";
+    try { localStorage.setItem(key, id); } catch { /* noop */ }
+    onNavigate(dest);
   };
 
   const pushArchiveToPlanner = (item: ArchiveItem) => {
@@ -5266,7 +5271,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       ) : (
         <div className="space-y-3">
           {filtered.map((item) => (
-            <div key={item.id} className="bg-white border rounded-xl p-5 transition-all hover:shadow-sm cursor-pointer" style={{ borderColor: vars.g200 }} onClick={() => sendToOptimiser(item.id)}>
+            <div key={item.id} className="bg-white border rounded-xl p-5 transition-all hover:shadow-sm cursor-pointer" style={{ borderColor: vars.g200 }} onClick={() => sendToTool(item.id)}>
               <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -5285,8 +5290,8 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={(e) => { e.stopPropagation(); sendToOptimiser(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
-                    Open in Optimiser
+                  <button onClick={(e) => { e.stopPropagation(); sendToTool(item.id); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+                    {item.source === "creator" ? "Open in Creator" : "Open in Optimiser"}
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); pushArchiveToPlanner(item); }} className="text-[12px] font-medium px-3 py-1.5 rounded-lg" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this archive item">
                     Push to Comms Planner
@@ -5593,6 +5598,23 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     setSpokesLi(s?.linkedin || "");
   };
 
+  // Preload from archive when navigated here from the Archive page
+  useEffect(() => {
+    let archiveId = "";
+    try { archiveId = localStorage.getItem("aio.creator.preload") || ""; } catch { /* noop */ }
+    if (!archiveId) return;
+    try { localStorage.removeItem("aio.creator.preload"); } catch { /* noop */ }
+    const arc = loadArchive().find((a) => a.id === archiveId);
+    if (arc) {
+      const parts = splitArchiveBody(arc);
+      setArticleHeadline(parts.headline);
+      setStandfirst(parts.standfirst);
+      setTranscript(parts.bodyCopy);
+      if (arc.contentType) setContentType(arc.contentType);
+      if (arc.spokesperson) setSpokesperson(arc.spokesperson);
+    }
+  }, []);
+
   const archiveItem = () => {
     const items = loadArchive();
     const item: ArchiveItem = {
@@ -5607,6 +5629,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       standfirst: standfirst,
       bodyCopy: transcript,
       createdAt: new Date().toISOString(),
+      source: "creator",
     };
     saveArchive([item, ...items]);
     alert(`Saved "${item.title}" to Archive.`);
