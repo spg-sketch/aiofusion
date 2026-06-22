@@ -122,7 +122,7 @@ function fullHostname(website?: string): string {
 // A name is "confusable" when it is short or uses words common enough that
 // AI engines might answer about an unrelated namesake. Covers:
 //   - acronyms and very short names caught by isAmbiguousName (e.g. "SMG")
-//   - short multi-word names where each word is a common term (e.g. "Blue Halo")
+//   - short multi-word names where each word is a common term (e.g. "Blu Halo")
 function isConfusableName(name: string): boolean {
   if (isAmbiguousName(name)) return true;
   const tokens = name.trim().toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
