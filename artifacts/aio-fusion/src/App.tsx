@@ -2788,7 +2788,7 @@ function GenerationProgress({
           </span>
         </div>
         <span className={`flex-shrink-0 tabular-nums ${compact ? "text-[10px]" : "text-[11px]"}`} style={{ color: vars.g500 }}>
-          {elapsed}s{chars > 0 ? ` · ${chars.toLocaleString()} chars` : ""}
+          {elapsed}s{chars > 0 ? ` · ~${Math.round(chars / 5).toLocaleString()} words` : ""}
         </span>
       </div>
       <div className={`relative overflow-hidden rounded-full ${compact ? "mt-1.5 h-1" : "mt-2.5 h-1.5"}`} style={{ background: `${accent}26` }}>
