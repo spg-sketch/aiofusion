@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
-import { stripEmDashes } from "./lib/utils";
+import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 
 const vars = {
   navy: "#102B36",
@@ -732,8 +732,8 @@ export default function IntakePage() {
         // Strip any em dashes left in previously optimised answers so saved intake content is clean.
         for (const k of Object.keys(fd)) {
           const v = fd[k];
-          if (typeof v === "string") fd[k] = stripEmDashes(v);
-          else if (Array.isArray(v)) fd[k] = v.map((x) => (typeof x === "string" ? stripEmDashes(x) : x));
+          if (typeof v === "string") fd[k] = normaliseAddedData(stripEmDashes(v));
+          else if (Array.isArray(v)) fd[k] = v.map((x) => (typeof x === "string" ? normaliseAddedData(stripEmDashes(x)) : x));
         }
         return fd;
       }

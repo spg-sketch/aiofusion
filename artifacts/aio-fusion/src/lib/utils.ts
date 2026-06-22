@@ -17,3 +17,13 @@ export function stripEmDashes(text: string): string {
   if (!text) return text
   return text.replace(EM_DASH_RUN, " - ")
 }
+
+// Converts the legacy bracketed [ADDED DATA: ...] marker that the AI used to
+// emit into the current bold inline format **NOTE: ADDED DATA** so that
+// already-saved drafts display consistently with newly generated content.
+const LEGACY_ADDED_DATA = /\[ADDED DATA:\s*([\s\S]*?)\]/g
+
+export function normaliseAddedData(text: string): string {
+  if (!text) return text
+  return text.replace(LEGACY_ADDED_DATA, "**NOTE: ADDED DATA** $1")
+}

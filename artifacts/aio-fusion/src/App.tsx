@@ -1,7 +1,7 @@
 import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity } from "./IntakeForm";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
-import { stripEmDashes } from "./lib/utils";
+import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import ReportPage from "./ReportPage";
 import PressReleasePage from "./PressReleasePage";
 import SeoAuditPage from "./SeoAuditPage";
@@ -3197,7 +3197,7 @@ KEY MESSAGE INTEGRATION:
 Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
 
 PERMITTED ENHANCEMENTS - apply all of the following:
-1. SUPPORTING FACTS & DATA ENRICHMENT - Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data as [ADDED DATA]; do not fabricate statistics.
+1. SUPPORTING FACTS & DATA ENRICHMENT - Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data inline as **NOTE: ADDED DATA** immediately before the inserted sentence (e.g. "**NOTE: ADDED DATA** McKinsey found that..."); do not fabricate statistics.
 2. EDITORIAL STRUCTURE ENHANCEMENT - Opening hook → Premise (within first 150 words) → Evidence and elaboration → Implications and recommendations → Closing conviction statement.
 3. ENTITY CLARITY & ATTRIBUTION - Introduce all named entities with full title or name and context on first mention.
 4. INTELLECTUAL AUTHORITY SIGNALS - Where the author makes a prediction or recommendation, ensure the basis is explicit (evidence, experience, or reasoned argument).
@@ -3252,7 +3252,7 @@ KEY MESSAGE INTEGRATION:
 Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
 
 PERMITTED ENHANCEMENTS - apply all of the following:
-1. SUPPORTING FACTS & DATA ENRICHMENT - Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag inserted data as [ADDED DATA]; do not fabricate statistics.
+1. SUPPORTING FACTS & DATA ENRICHMENT - Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data inline as **NOTE: ADDED DATA** immediately before the inserted sentence (e.g. "**NOTE: ADDED DATA** McKinsey found that..."); do not fabricate statistics.
 2. EDITORIAL STRUCTURE ENHANCEMENT - High-authority thought leadership architecture: Opening hook → Premise (within first 150 words) → Evidence & elaboration → Counterargument acknowledgment & rebuttal → Implications & recommendations → Closing conviction statement.
 3. ENTITY CLARITY & ATTRIBUTION - Introduce all named entities with full title/name and context on first mention; establish the business source's expertise early.
 4. CITATION-READY & RETRIEVAL-OPTIMISED PHRASING - Each core claim expressed as a single self-contained sentence; inverted pyramid at paragraph level; bookend the most important claim in opening and conclusion.
@@ -4817,13 +4817,13 @@ function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: 
     return {
       headline: stripEmDashes(arc.headline || ""),
       standfirst: stripEmDashes(arc.standfirst || ""),
-      bodyCopy: stripEmDashes(arc.bodyCopy || arc.body || ""),
+      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy || arc.body || "")),
     };
   }
   const parts = (arc.body || "").split(/\n\n+/);
-  if (parts.length >= 3) return { headline: stripEmDashes(parts[0]), standfirst: stripEmDashes(parts[1]), bodyCopy: stripEmDashes(parts.slice(2).join("\n\n")) };
-  if (parts.length === 2) return { headline: stripEmDashes(parts[0]), standfirst: "", bodyCopy: stripEmDashes(parts[1]) };
-  return { headline: "", standfirst: "", bodyCopy: stripEmDashes(arc.body || "") };
+  if (parts.length >= 3) return { headline: stripEmDashes(parts[0]), standfirst: stripEmDashes(parts[1]), bodyCopy: normaliseAddedData(stripEmDashes(parts.slice(2).join("\n\n"))) };
+  if (parts.length === 2) return { headline: stripEmDashes(parts[0]), standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(parts[1])) };
+  return { headline: "", standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(arc.body || "")) };
 }
 
 const ARCHIVE_KEY = "aio.archive.v1";
