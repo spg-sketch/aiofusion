@@ -535,6 +535,7 @@ const sections: SectionDef[] = [
         label: "How do most customers first find and decide on you?",
         hint: "Select all the paths that apply to your customers. If it is genuinely split, you can tick more than one, and use \"A mix\" to explain below.",
         type: "checkbox",
+        optional: true,
         options: [
           "Search-led: they search, read our website, then contact us or buy",
           "Referral-led: they hear of us via press, podcasts, social or word of mouth, then look us up",
@@ -556,6 +557,7 @@ const sections: SectionDef[] = [
         id: "5.3",
         label: "Decision speed",
         type: "checkbox",
+        optional: true,
         options: [
           "Quick / transactional (minutes to hours)",
           "Considered (days to weeks, research-heavy)",
@@ -567,6 +569,7 @@ const sections: SectionDef[] = [
         id: "5.4",
         label: "Do you produce thought leadership, guides, reports or commentary that others cite?",
         type: "checkbox",
+        optional: true,
         options: [
           "Yes, regularly",
           "Infrequently",
