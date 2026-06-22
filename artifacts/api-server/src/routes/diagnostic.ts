@@ -317,7 +317,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     if (pagesFetched.length) result.pagesFetched = pagesFetched;
     if (pageFacts) result.pageFacts = pageFacts;
 
-    res.json(result);
+    res.json(deepStripEmDashes(result));
   } catch (err: any) {
     logger.error({ err: err.message }, "Diagnostic analysis failed");
     res.status(500).json({ error: "Analysis failed. Please try again." });

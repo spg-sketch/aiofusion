@@ -683,7 +683,7 @@ seoAuditRouter.post("/seo-audit", seoAuditLimiter, seoAuditConcurrencyGuard, asy
 
     const recommendations = generateRecommendations(partialResult);
 
-    res.json({ ...partialResult, recommendations });
+    res.json(deepStripEmDashes({ ...partialResult, recommendations }));
   } catch (err: any) {
     logger.error({ err, url: fullUrl }, "SEO audit failed");
     const safeMessages = ["Only http and https URLs are allowed", "Internal hostnames are not allowed", "Private IP addresses are not allowed", "URL resolves to a private IP address", "Could not resolve hostname", "Response too large"];

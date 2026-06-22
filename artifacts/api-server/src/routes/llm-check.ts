@@ -1244,7 +1244,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       entityClarity,
     };
 
-    res.json(summary);
+    res.json(deepStripEmDashes(summary));
   } catch (err: any) {
     logger.error({ err, companyName }, "LLM visibility check failed");
     res.status(500).json({ error: "LLM visibility check failed. Please try again." });
