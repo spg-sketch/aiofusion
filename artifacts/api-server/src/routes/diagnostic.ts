@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { logger } from "../lib/logger";
 import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
+import { deepStripEmDashes } from "../lib/text-sanitise";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 

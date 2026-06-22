@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { llmCheckLimiter } from "../middleware/rate-limit";
+import { deepStripEmDashes } from "../lib/text-sanitise";
 import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 
 const llmCheckRouter = Router();

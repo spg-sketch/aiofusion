@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { logger } from "../lib/logger";
 import { URL } from "url";
 import * as dns from "dns/promises";
+import { deepStripEmDashes } from "../lib/text-sanitise";
 import * as net from "net";
 import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import { seoAuditLimiter } from "../middleware/rate-limit";
