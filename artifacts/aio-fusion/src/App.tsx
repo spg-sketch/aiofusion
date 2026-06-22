@@ -3194,7 +3194,7 @@ This article pitch synopsis attributed to: ${spokesperson === "NA" ? "the compan
 Using information and instructions in Project Data doc calibrate the editorial voice, select supporting evidence appropriate to the media categories selected and the business sectors they represent, and ensure the enhanced document reflects well on the business source's authority and expertise.
 
 KEY MESSAGE INTEGRATION:
-Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
+Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph. Immediately before each embedded key message write the inline marker **NOTE: ADDED KEY MESSAGE** (e.g. "**NOTE: ADDED KEY MESSAGE** Our platform delivers...").
 
 PERMITTED ENHANCEMENTS - apply all of the following:
 1. SUPPORTING FACTS & DATA ENRICHMENT - Identify claims that would be strengthened by third-party evidence; insert credible, attributed statistics (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data inline as **NOTE: ADDED DATA** immediately before the inserted sentence (e.g. "**NOTE: ADDED DATA** McKinsey found that..."); do not fabricate statistics.
@@ -3218,7 +3218,7 @@ ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Do not introduce new information, opinions, or fabricated supporting detail.
 
 KEY MESSAGE INTEGRATION:
-Embed the chosen key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph - never bolted on.
+Embed the chosen key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph - never bolted on. Immediately before each embedded key message write the inline marker **NOTE: ADDED KEY MESSAGE** (e.g. "**NOTE: ADDED KEY MESSAGE** Our platform delivers...").
 
 LLMO OPTIMISATION OBJECTIVES - apply all of the following:
 1. ENTITY CLARITY - Introduce all named entities with full context on first mention; use consistent naming conventions throughout.
@@ -3249,7 +3249,7 @@ This ${contentType.toLowerCase()} attributed to: ${spokesperson === "NA" ? "the 
 Using information and instructions in Project Data doc calibrate the editorial voice, select supporting evidence appropriate to the media categories selected and the business sectors they represent, and ensure the enhanced document reflects well on the business source's authority and expertise.
 
 KEY MESSAGE INTEGRATION:
-Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph.
+Embed the selected key messages verbatim, but only where they arise naturally within the existing copy. Do not force placement. Each message should feel like an organic part of the sentence or paragraph. Immediately before each embedded key message write the inline marker **NOTE: ADDED KEY MESSAGE** (e.g. "**NOTE: ADDED KEY MESSAGE** Our platform delivers...").
 
 PERMITTED ENHANCEMENTS - apply all of the following:
 1. SUPPORTING FACTS & DATA ENRICHMENT - Insert credible, attributed third-party evidence (e.g. McKinsey, Gartner, ONS, WEF, peer-reviewed studies); flag all inserted data inline as **NOTE: ADDED DATA** immediately before the inserted sentence (e.g. "**NOTE: ADDED DATA** McKinsey found that..."); do not fabricate statistics.
