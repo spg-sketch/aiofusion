@@ -1,14 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
-import { and, eq, isNull, or, inArray } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 
 const router: IRouter = Router();
 
-// Returns the set of account_ids the request may see for shared/global rows.
-// null = admin (sees all). Otherwise returns own username + descendants.
 async function visibleAccounts(req: Request): Promise<string[] | null> {
   return getVisibleUsernames(req.account!);
 }
@@ -17,14 +15,18 @@ function isAdmin(req: Request): boolean {
   return req.account?.role === "admin";
 }
 
+function outletVisible(accountId: string | null, visible: string[] | null): boolean {
+  if (accountId === null) return true;
+  if (visible === null) return true;
+  return visible.includes(accountId);
+}
+
 // ---------------------------------------------------------------------------
-// Custom categories
+// Custom categories  GET /api/store/media-categories
+//                    POST /api/store/media-categories
+//                    DELETE /api/store/media-categories/:id
 // ---------------------------------------------------------------------------
 
-// GET /store/media-categories
-// Returns the standard 110 categories merged with any custom rows visible to
-// this account. Each entry is either a plain string (standard) or
-// { id, name, custom: true } (custom).
 router.get(
   "/store/media-categories",
   requirePlatformAuth,
@@ -36,10 +38,9 @@ router.get(
         .from(mediaCategoriesTable)
         .orderBy(mediaCategoriesTable.name);
 
-      // Filter to rows visible to this account (global = no account_id, or own hierarchy)
       const custom = rows.filter((r) => {
-        if (!r.accountId) return true; // global
-        if (visible === null) return true; // admin sees all
+        if (!r.accountId) return true;
+        if (visible === null) return true;
         return visible.includes(r.accountId);
       });
 
@@ -53,8 +54,6 @@ router.get(
   },
 );
 
-// POST /store/media-categories
-// Create a custom category scoped to the session account.
 router.post(
   "/store/media-categories",
   requirePlatformAuth,
@@ -77,16 +76,14 @@ router.post(
   },
 );
 
-// DELETE /store/media-categories/:id
-// Remove a custom category the account owns.
-router.post(
-  "/store/media-categories/delete",
+router.delete(
+  "/store/media-categories/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.body?.id);
+      const id = Number(req.params.id);
       if (!id) {
-        res.status(400).json({ error: "Missing category id" });
+        res.status(400).json({ error: "Invalid category id" });
         return;
       }
       const visible = await visibleAccounts(req);
@@ -100,7 +97,6 @@ router.post(
         return;
       }
       const row = existing[0];
-      // Admins can delete any; others can only delete rows they own
       if (!isAdmin(req)) {
         if (!row.accountId || (visible !== null && !visible.includes(row.accountId))) {
           res.status(403).json({ error: "You cannot delete this category" });
@@ -116,18 +112,14 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Media outlets
+// Outlets  GET    /api/store/media-db/outlets
+//          POST   /api/store/media-db/outlets
+//          PUT    /api/store/media-db/outlets/:id
+//          DELETE /api/store/media-db/outlets/:id
 // ---------------------------------------------------------------------------
 
-function outletVisible(accountId: string | null, visible: string[] | null): boolean {
-  if (accountId === null) return true; // global
-  if (visible === null) return true; // admin
-  return visible.includes(accountId);
-}
-
-// GET /store/media-outlets
 router.get(
-  "/store/media-outlets",
+  "/store/media-db/outlets",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
@@ -147,9 +139,8 @@ router.get(
   },
 );
 
-// POST /store/media-outlets
 router.post(
-  "/store/media-outlets",
+  "/store/media-db/outlets",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
@@ -178,16 +169,14 @@ router.post(
   },
 );
 
-// POST /store/media-outlets/update
-router.post(
-  "/store/media-outlets/update",
+router.put(
+  "/store/media-db/outlets/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const { id, name, category, website, description, country, reachBand } = req.body ?? {};
-      const numId = Number(id);
+      const numId = Number(req.params.id);
       if (!numId) {
-        res.status(400).json({ error: "Missing outlet id" });
+        res.status(400).json({ error: "Invalid outlet id" });
         return;
       }
       const visible = await visibleAccounts(req);
@@ -197,15 +186,15 @@ router.post(
         res.status(404).json({ error: "Outlet not found" });
         return;
       }
-      if (!isAdmin(req) && !outletVisible(row.accountId, visible)) {
+      if (!outletVisible(row.accountId, visible)) {
         res.status(403).json({ error: "You cannot edit this outlet" });
         return;
       }
-      // Non-admins cannot edit global rows
       if (!isAdmin(req) && row.accountId === null) {
         res.status(403).json({ error: "Only admins may edit global outlets" });
         return;
       }
+      const { name, category, website, description, country, reachBand } = req.body ?? {};
       const [updated] = await db
         .update(mediaOutletsTable)
         .set({
@@ -225,15 +214,14 @@ router.post(
   },
 );
 
-// POST /store/media-outlets/delete
-router.post(
-  "/store/media-outlets/delete",
+router.delete(
+  "/store/media-db/outlets/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.body?.id);
+      const id = Number(req.params.id);
       if (!id) {
-        res.status(400).json({ error: "Missing outlet id" });
+        res.status(400).json({ error: "Invalid outlet id" });
         return;
       }
       const visible = await visibleAccounts(req);
@@ -243,7 +231,7 @@ router.post(
         res.json({ ok: true });
         return;
       }
-      if (!isAdmin(req) && !outletVisible(row.accountId, visible)) {
+      if (!outletVisible(row.accountId, visible)) {
         res.status(403).json({ error: "You cannot delete this outlet" });
         return;
       }
@@ -260,12 +248,14 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Media contacts
+// Contacts  GET    /api/store/media-db/contacts
+//           POST   /api/store/media-db/contacts
+//           PUT    /api/store/media-db/contacts/:id
+//           DELETE /api/store/media-db/contacts/:id
 // ---------------------------------------------------------------------------
 
-// GET /store/media-contacts
 router.get(
-  "/store/media-contacts",
+  "/store/media-db/contacts",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
@@ -290,7 +280,9 @@ router.get(
         .where(isNull(mediaContactsTable.deletedAt))
         .orderBy(mediaContactsTable.lastName, mediaContactsTable.firstName);
 
+      // Global contacts (accountId null) are visible to all; otherwise filter by hierarchy
       const results = rows.filter((r) => {
+        if (r.accountId === null) return true;
         if (visible === null) return true;
         return visible.includes(r.accountId);
       });
@@ -301,9 +293,8 @@ router.get(
   },
 );
 
-// POST /store/media-contacts
 router.post(
-  "/store/media-contacts",
+  "/store/media-db/contacts",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
@@ -312,7 +303,8 @@ router.post(
         res.status(400).json({ error: "Contact must have at least a first or last name" });
         return;
       }
-      const accountId = normUsername(req.account!.username);
+      // Admins can create global contacts (accountId = null)
+      const accountId = isAdmin(req) ? null : normUsername(req.account!.username);
       const [created] = await db
         .insert(mediaContactsTable)
         .values({
@@ -333,16 +325,14 @@ router.post(
   },
 );
 
-// POST /store/media-contacts/update
-router.post(
-  "/store/media-contacts/update",
+router.put(
+  "/store/media-db/contacts/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const { id, outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
-      const numId = Number(id);
+      const numId = Number(req.params.id);
       if (!numId) {
-        res.status(400).json({ error: "Missing contact id" });
+        res.status(400).json({ error: "Invalid contact id" });
         return;
       }
       const visible = await visibleAccounts(req);
@@ -352,10 +342,16 @@ router.post(
         res.status(404).json({ error: "Contact not found" });
         return;
       }
-      if (visible !== null && !visible.includes(row.accountId)) {
+      // Global contacts (accountId null) can only be edited by admins
+      if (row.accountId === null && !isAdmin(req)) {
+        res.status(403).json({ error: "Only admins may edit global contacts" });
+        return;
+      }
+      if (row.accountId !== null && visible !== null && !visible.includes(row.accountId)) {
         res.status(403).json({ error: "You cannot edit this contact" });
         return;
       }
+      const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
       const [updated] = await db
         .update(mediaContactsTable)
         .set({
@@ -376,15 +372,14 @@ router.post(
   },
 );
 
-// POST /store/media-contacts/delete
-router.post(
-  "/store/media-contacts/delete",
+router.delete(
+  "/store/media-db/contacts/:id",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const id = Number(req.body?.id);
+      const id = Number(req.params.id);
       if (!id) {
-        res.status(400).json({ error: "Missing contact id" });
+        res.status(400).json({ error: "Invalid contact id" });
         return;
       }
       const visible = await visibleAccounts(req);
@@ -394,7 +389,11 @@ router.post(
         res.json({ ok: true });
         return;
       }
-      if (visible !== null && !visible.includes(row.accountId)) {
+      if (row.accountId === null && !isAdmin(req)) {
+        res.status(403).json({ error: "Only admins may delete global contacts" });
+        return;
+      }
+      if (row.accountId !== null && visible !== null && !visible.includes(row.accountId)) {
         res.status(403).json({ error: "You cannot delete this contact" });
         return;
       }

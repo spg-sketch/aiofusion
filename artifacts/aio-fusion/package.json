@@ -61,6 +61,7 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "catalog:",
     "input-otp": "^1.4.2",
+    "jsdom": "^25",
     "lucide-react": "catalog:",
     "next-themes": "^0.4.6",
     "react": "catalog:",
@@ -77,13 +78,13 @@
     "vaul": "^1.1.2",
     "vite": "catalog:",
     "vitest": "^3",
-    "jsdom": "^25",
     "wouter": "^3.3.5",
     "zod": "catalog:"
   },
   "dependencies": {
     "@workspace/replit-auth-web": "workspace:*",
     "docx": "^9.6.1",
-    "file-saver": "^2.0.5"
+    "file-saver": "^2.0.5",
+    "xlsx": "^0.18.5"
   }
 }

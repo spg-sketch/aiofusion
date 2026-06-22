@@ -9575,8 +9575,8 @@ function MediaDatabasePage() {
     setLoading(true);
     try {
       const [outR, conR, catR] = await Promise.all([
-        fetch(`${apiBase()}/api/store/media-outlets`, { credentials: "include" }),
-        fetch(`${apiBase()}/api/store/media-contacts`, { credentials: "include" }),
+        fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include" }),
+        fetch(`${apiBase()}/api/store/media-db/contacts`, { credentials: "include" }),
         fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include" }),
       ]);
       if (outR.ok) { const d = await outR.json(); setOutlets(d.outlets ?? []); }
@@ -9615,10 +9615,10 @@ function MediaDatabasePage() {
   const saveOutlet = async () => {
     if (!outletForm.name.trim() || outletSaving) return;
     setOutletSaving(true);
-    const path = editingOutlet ? "/api/store/media-outlets/update" : "/api/store/media-outlets";
-    const body = editingOutlet ? { id: editingOutlet.id, ...outletForm } : outletForm;
     try {
-      const resp = await fetch(`${apiBase()}${path}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const resp = editingOutlet
+        ? await fetch(`${apiBase()}/api/store/media-db/outlets/${editingOutlet.id}`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(outletForm) })
+        : await fetch(`${apiBase()}/api/store/media-db/outlets`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(outletForm) });
       if (resp.ok) { setShowOutletModal(false); await loadData(); }
     } catch {}
     setOutletSaving(false);
@@ -9626,7 +9626,7 @@ function MediaDatabasePage() {
   const deleteOutlet = async (id: number) => {
     setDeletingOutletId(id);
     try {
-      await fetch(`${apiBase()}/api/store/media-outlets/delete`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      await fetch(`${apiBase()}/api/store/media-db/outlets/${id}`, { method: "DELETE", credentials: "include" });
       await loadData();
     } catch {}
     setDeletingOutletId(null);
@@ -9653,10 +9653,10 @@ function MediaDatabasePage() {
   const saveContact = async () => {
     if ((!contactForm.firstName.trim() && !contactForm.lastName.trim()) || contactSaving) return;
     setContactSaving(true);
-    const path = editingContact ? "/api/store/media-contacts/update" : "/api/store/media-contacts";
-    const body = editingContact ? { id: editingContact.id, ...contactForm } : contactForm;
     try {
-      const resp = await fetch(`${apiBase()}${path}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const resp = editingContact
+        ? await fetch(`${apiBase()}/api/store/media-db/contacts/${editingContact.id}`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contactForm) })
+        : await fetch(`${apiBase()}/api/store/media-db/contacts`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(contactForm) });
       if (resp.ok) { setShowContactModal(false); await loadData(); }
     } catch {}
     setContactSaving(false);
@@ -9664,22 +9664,27 @@ function MediaDatabasePage() {
   const deleteContact = async (id: number) => {
     setDeletingContactId(id);
     try {
-      await fetch(`${apiBase()}/api/store/media-contacts/delete`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      await fetch(`${apiBase()}/api/store/media-db/contacts/${id}`, { method: "DELETE", credentials: "include" });
       await loadData();
     } catch {}
     setDeletingContactId(null);
   };
 
   // Export contacts
-  const exportContacts = (format: "csv" | "word") => {
+  const exportContacts = async (format: "xlsx" | "word") => {
     const rows = filteredContacts;
-    if (format === "csv") {
-      const header = ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"];
-      const lines = [header.join(","), ...rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes].map((v) => `"${(v ?? "").replace(/"/g, '""')}"`).join(","))];
-      const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "Media Contacts.csv"; a.click(); URL.revokeObjectURL(url);
+    if (format === "xlsx") {
+      const XLSX = await import("xlsx");
+      const data = [
+        ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"],
+        ...rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes]),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Contacts");
+      XLSX.writeFile(wb, "Media Contacts.xlsx");
     } else {
-      const rows2 = filteredContacts.map((c) => `<tr><td>${escapeHtml(`${c.firstName} ${c.lastName}`.trim())}</td><td>${escapeHtml(c.role)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.phone)}</td><td>${escapeHtml(c.outletName ?? "")}</td><td>${escapeHtml(c.outletCategory ?? "")}</td></tr>`).join("");
+      const rows2 = rows.map((c) => `<tr><td>${escapeHtml(`${c.firstName} ${c.lastName}`.trim())}</td><td>${escapeHtml(c.role)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.phone)}</td><td>${escapeHtml(c.outletName ?? "")}</td><td>${escapeHtml(c.outletCategory ?? "")}</td></tr>`).join("");
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>Media Contacts</title><style>body{font-family:Arial,sans-serif;font-size:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;}th{background:#102B36;color:#fff;}</style></head><body><h2 style="font-family:Georgia,serif;color:#102B36;">Media Contacts</h2><table><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Outlet</th><th>Category</th></tr>${rows2}</table></body></html>`;
       const blob = new Blob([html], { type: "application/msword" });
       const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "Media Contacts.doc"; a.click(); URL.revokeObjectURL(url);
@@ -9792,8 +9797,8 @@ function MediaDatabasePage() {
             </button>
             {filteredContacts.length > 0 && (
               <div className="flex items-center gap-1">
-                <button onClick={() => exportContacts("csv")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> CSV</button>
-                <button onClick={() => exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} /> Word</button>
+                <button onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Excel</button>
+                <button onClick={() => void exportContacts("word")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><FileText size={13} /> Word</button>
               </div>
             )}
           </div>

@@ -1,9 +1,5 @@
 import { integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
-// Custom media categories added by an account on top of the built-in 110.
-// account_id NULL means the row is a built-in/global standard category seeded
-// by an admin; a non-null account_id means it is private to that account and
-// its descendants.
 export const mediaCategoriesTable = pgTable("media_categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -11,8 +7,6 @@ export const mediaCategoriesTable = pgTable("media_categories", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Media outlets (publications). account_id NULL = global (admin-managed, visible
-// to all accounts). Non-null = private to that account hierarchy.
 export const mediaOutletsTable = pgTable("media_outlets", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -26,8 +20,8 @@ export const mediaOutletsTable = pgTable("media_outlets", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
-// Journalist / media contacts linked to an outlet. account_id is always set to
-// the account that created the contact; contacts are never global.
+// accountId is nullable — admins can create global contacts (accountId = null)
+// visible to all accounts, same as global outlets.
 export const mediaContactsTable = pgTable("media_contacts", {
   id: serial("id").primaryKey(),
   outletId: integer("outlet_id").references(() => mediaOutletsTable.id),
@@ -37,7 +31,7 @@ export const mediaContactsTable = pgTable("media_contacts", {
   email: text("email").notNull().default(""),
   phone: text("phone").notNull().default(""),
   notes: text("notes").notNull().default(""),
-  accountId: varchar("account_id").notNull(),
+  accountId: varchar("account_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
