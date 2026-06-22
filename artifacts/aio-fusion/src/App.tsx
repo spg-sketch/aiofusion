@@ -2989,11 +2989,12 @@ function OptimiserPage({
     const bodyCopyForDownload = bodyCopy
       .replace(/\n*Optimisation pass:[\s\S]*/i, "")
       .trimEnd();
+    const bodyWordCount = countWords(bodyCopyForDownload);
     const html =
       `<h1 style="font-family:Georgia,serif; font-size:22pt; color:#16213e; margin:0 0 6pt 0;">${escapeHtml(articleHeadline || projectTitle || "Untitled draft")}</h1>` +
       (standfirst ? `<p style="font-size:13pt; font-style:italic; color:#374151; margin:0 0 14pt 0;">${escapeHtml(standfirst)}</p>` : "") +
       `<p style="font-size:9pt; text-transform:uppercase; letter-spacing:1px; color:${accent}; margin:0 0 4pt 0;">${escapeHtml(meta)}</p>` +
-      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectTitle || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBC")}</p>` +
+      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectTitle || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBC")}  &bull;  ${bodyWordCount.toLocaleString()} words</p>` +
       `<hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 16pt 0;"/>` +
       `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Body copy</h2>` +
       (textToHtmlParagraphs(bodyCopyForDownload) || `<p style="margin:0 0 14pt 0; color:#6b7280;">(no body content)</p>`) +
@@ -5648,11 +5649,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     const targetList = mediaTarget.length
       ? `<p style="margin:0 0 14pt 0;">${mediaTarget.map((c) => escapeHtml(c)).join(", ")}</p>`
       : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
+    const articleWordCount = countWords(transcript);
     const html =
       `<h1 style="font-family:Georgia,serif; font-size:22pt; color:#16213e; margin:0 0 6pt 0;">${escapeHtml(articleHeadline || projectName || "Untitled draft")}</h1>` +
       (standfirst ? `<p style="font-size:13pt; font-style:italic; color:#374151; margin:0 0 14pt 0;">${escapeHtml(standfirst)}</p>` : "") +
       `<p style="font-size:9pt; text-transform:uppercase; letter-spacing:1px; color:${accent}; margin:0 0 4pt 0;">${escapeHtml(meta)}</p>` +
-      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectName || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBD")}${spokesLi ? `  &bull;  ${escapeHtml(spokesLi)}` : ""}</p>` +
+      `<p style="font-size:10pt; color:#6b7280; margin:0 0 18pt 0;">Project: ${escapeHtml(projectName || "-")}  &bull;  Publication: ${escapeHtml(pubDate || "TBD")}${spokesLi ? `  &bull;  ${escapeHtml(spokesLi)}` : ""}  &bull;  ${articleWordCount.toLocaleString()} words</p>` +
       `<hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 16pt 0;"/>` +
       `<h2 style="font-size:13pt; color:#16213e; margin:0 0 6pt 0;">Pitch idea / news hook</h2>` +
       (textToHtmlParagraphs(headline) || `<p style="margin:0 0 14pt 0; color:#6b7280;">(none)</p>`) +
