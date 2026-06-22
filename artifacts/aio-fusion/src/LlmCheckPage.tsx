@@ -1031,7 +1031,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                     </div>
                   </div>
                   <div>
-                    <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Sectors you're targeting</label>
+                    <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>Audiences you target</label>
                     <div className="px-3 py-2.5 rounded-lg border min-h-[42px] flex flex-wrap gap-1.5" style={{ borderColor: vars.g200, background: vars.g50 }}>
                       {targetSectors.map((s) => (s || "").trim()).filter(Boolean).length > 0 ? (
                         targetSectors.map((s) => (s || "").trim()).filter(Boolean).map((s) => {
@@ -1173,14 +1173,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 )}
               </div>
               {(() => {
-                const groups: { key: "discovery" | "shortlist" | "comparison"; label: string; sublabel: string }[] = [
+                const groups: { key: "discovery" | "shortlist" | "comparison"; label: string; sublabel: string; note?: string }[] = [
                   { key: "discovery", label: "Discovery", sublabel: "They are researching the problem space" },
                   { key: "shortlist", label: "Shortlist", sublabel: "They are looking for a provider" },
-                  { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives" },
+                  { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives", note: "Your website domain appears in brackets after your name so AI engines identify the right company — important when your name is shared with others." },
                 ];
                 return (
                   <div className="space-y-3">
-                    {groups.map(({ key, label, sublabel }) => {
+                    {groups.map(({ key, label, sublabel, note }) => {
                       const items = llmQueries[key];
                       return (
                         <div key={key} className="rounded-xl border p-3" style={{ borderColor: vars.g200, background: "white" }}>
@@ -1193,21 +1193,22 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                               <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No queries yet.</p>
                             )}
                             {items.map((q, i) => (
-                              <div key={i} className="flex items-center gap-2">
-                                <input
+                              <div key={i} className="flex items-start gap-2">
+                                <textarea
                                   value={q}
+                                  rows={2}
                                   onChange={(e) => {
                                     const next = items.map((x, j) => (j === i ? e.target.value : x));
                                     setLlmQueries((prev) => ({ ...prev, [key]: next }));
                                   }}
-                                  className="flex-1 px-3 py-2 rounded-lg border text-[13px] font-light outline-none"
+                                  className="flex-1 px-3 py-2 rounded-lg border text-[13px] font-light outline-none resize-none leading-snug"
                                   style={{ borderColor: vars.g200, color: vars.navy, background: vars.g50 }}
                                   placeholder="Type a query..."
                                 />
                                 <button
                                   type="button"
                                   onClick={() => setLlmQueries((prev) => ({ ...prev, [key]: items.filter((_, j) => j !== i) }))}
-                                  className="flex-shrink-0 p-1 rounded transition-opacity hover:opacity-70"
+                                  className="flex-shrink-0 p-1 mt-1.5 rounded transition-opacity hover:opacity-70"
                                   style={{ color: vars.g400 }}
                                   title="Remove query"
                                 >
@@ -1216,6 +1217,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                               </div>
                             ))}
                           </div>
+                          {note && items.length > 0 && (
+                            <p className="text-[11px] mb-2 flex items-start gap-1" style={{ color: vars.g400 }}>
+                              <Info size={11} className="flex-shrink-0 mt-0.5" />{note}
+                            </p>
+                          )}
                           <button
                             type="button"
                             onClick={() => setLlmQueries((prev) => ({ ...prev, [key]: [...prev[key], ""] }))}
@@ -1279,11 +1285,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 </li>
                 <li className="flex items-start justify-between gap-3">
                   <span className="text-[12px]" style={{ color: vars.navy }}>Boilerplate <span style={{ color: vars.g400 }}>(section 4.3)</span></span>
-                  <span className="text-[11px] text-right" style={{ color: boilerplate ? vars.g500 : "#8A6314" }}>{boilerplate ? "Set" : "Not set"}</span>
+                  <span className="text-[11px] text-right max-w-[55%]" style={{ color: boilerplate ? vars.g500 : "#8A6314" }}>
+                    {boilerplate ? boilerplate.slice(0, 60).trimEnd() + (boilerplate.length > 60 ? "…" : "") : "Not set — add in Project Set-Up"}
+                  </span>
                 </li>
                 <li className="flex items-start justify-between gap-3">
                   <span className="text-[12px]" style={{ color: vars.navy }}>Company descriptor <span style={{ color: vars.g400 }}>(section 1.1)</span></span>
-                  <span className="text-[11px] text-right" style={{ color: descriptor ? vars.g500 : "#8A6314" }}>{descriptor ? "Set" : "Not set"}</span>
+                  <span className="text-[11px] text-right max-w-[55%]" style={{ color: descriptor ? vars.g500 : "#8A6314" }}>
+                    {descriptor ? descriptor.slice(0, 60).trimEnd() + (descriptor.length > 60 ? "…" : "") : "Not set — add in Project Set-Up"}
+                  </span>
                 </li>
               </ul>
             </div>
