@@ -930,9 +930,9 @@ const navSections: NavSection[] = [
     color: "#D4922A",
     items: [
       { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
-      { label: "Archive", id: "archive", sub: "Searchable content library" },
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
       { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
+      { label: "Archive", id: "archive", sub: "Searchable content library" },
     ],
   },
   {
