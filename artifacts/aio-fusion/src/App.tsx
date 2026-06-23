@@ -915,6 +915,12 @@ const navSections: NavSection[] = [
     color: "#1f748f",
     items: [
       { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
+    ],
+  },
+  {
+    section: "Visibility Audits",
+    color: "#1f748f",
+    items: [
       { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
     ],
@@ -924,14 +930,26 @@ const navSections: NavSection[] = [
     color: "#D4922A",
     items: [
       { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
+      { label: "Archive", id: "archive", sub: "Searchable content library" },
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
       { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
+    ],
+  },
+  {
+    section: "Media Management",
+    color: "#4A72AF",
+    items: [
       { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
       { label: "Media Database", id: "media-database", sub: "Publications, journalists and custom categories" },
+    ],
+  },
+  {
+    section: "Reporting",
+    color: "#3D9B6B",
+    items: [
       { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
       { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
       { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
-      { label: "Archive", id: "archive", sub: "Searchable content library" },
     ],
   },
 ];
