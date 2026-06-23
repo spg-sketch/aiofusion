@@ -1040,7 +1040,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <Info size={11} />
                 {probeName.length === 0
                   ? "Enter a brand name to probe."
-                  : "Edit to probe just the core brand (for example \"Bluhalo\") or a specific sub-brand."}
+                  : "Edit to probe just the core brand name or a specific sub-brand."}
               </p>
             </div>
             {combinedSectors.length > 0 ? (
