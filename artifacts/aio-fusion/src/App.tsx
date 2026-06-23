@@ -3328,57 +3328,8 @@ function OptimiserPage({
   };
   const canResearch = RESEARCH_TYPES.includes(contentType);
   const intakeReady = !!intake;
-  const semanticPhrases = [
-    { phrase: "independent agency advisory", relevance: 0.94 },
-    { phrase: "benchmarking dataset", relevance: 0.91 },
-    { phrase: "AI agent network", relevance: 0.88 },
-    { phrase: "peer intelligence", relevance: 0.85 },
-    { phrase: "agency performance metrics", relevance: 0.82 },
-    { phrase: "autonomous agent communication", relevance: 0.79 },
-    { phrase: "gross profit margin benchmark", relevance: 0.76 },
-    { phrase: "professional network for agencies", relevance: 0.73 },
-  ];
-  const trackedChanges = [
-    {
-      type: "addition" as const,
-      label: "Answer-First Structure",
-      original:
-        "Spencer Gallagher and Mark Sainthill, co-founders of Bluhalo, the independent agency advisory and intelligence practice, today announced the launch of The Agency Agentic Collective.",
-      revised:
-        "The Agency Agentic Collective is the first professional network where independent agencies are represented by dedicated AI agents. Launched by Spencer Gallagher and Mark Sainthill of Bluhalo, the platform replaces passive networking with autonomous peer intelligence.",
-      annotation:
-        "Opening restructured to lead with a definitive, quotable answer. LLMs prioritise the first sentence for citation and summary extraction.",
-    },
-    {
-      type: "modification" as const,
-      label: "Source Attribution Signal",
-      original:
-        "Unlike conventional professional networks, The Agency Agentic Collective operates at machine speed.",
-      revised:
-        "According to the founders, The Agency Agentic Collective operates at machine speed, differentiating it from conventional professional networks by replacing human-initiated networking with automated agent cycles.",
-      annotation:
-        "Added attribution signal ('According to the founders') and expanded the differentiator into a standalone, extractable claim.",
-    },
-    {
-      type: "addition" as const,
-      label: "Conversational Query Alignment",
-      original: "",
-      revised:
-        "What does an AI agent do inside the Collective? Each agency's agent runs automated discovery cycles every 15 minutes, matching peer agencies by sector and capability, querying anonymised benchmark data, and flagging opportunities for human review.",
-      annotation:
-        "Inserted Q&A block matching natural conversational queries. This structure aligns with how users ask questions of AI assistants.",
-    },
-    {
-      type: "modification" as const,
-      label: "Semantic Phrase Density",
-      original:
-        "The platform launches with Bluhalo's proprietary benchmarking dataset as its intelligence backbone.",
-      revised:
-        "The platform launches with Bluhalo's proprietary agency benchmarking dataset covering 75 performance metrics including gross profit margin, revenue per head, and utilisation rates, drawn from 196 live advisory engagements.",
-      annotation:
-        "Expanded with high-relevance semantic phrases. Key metrics named explicitly to increase likelihood of citation in LLM responses about agency benchmarks.",
-    },
-  ];
+  const semanticPhrases: { phrase: string; relevance: number }[] = [];
+  const trackedChanges: { type: "addition" | "modification"; label: string; original: string; revised: string; annotation: string }[] = [];
 
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
 
@@ -3890,7 +3841,13 @@ OUTPUT INSTRUCTIONS:
                 <span className="text-xs" style={{ color: vars.g400 }}>{trackedChanges.length} optimisations applied</span>
               </div>
               <div className="divide-y" style={{ borderColor: vars.g100 }}>
-                {trackedChanges.map((change, i) => (
+                {trackedChanges.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <Sparkles size={24} color={vars.g300} className="mx-auto mb-3" />
+                    <p className="text-sm font-medium mb-1" style={{ color: vars.g500 }}>No optimisations yet</p>
+                    <p className="text-[12px]" style={{ color: vars.g400 }}>Add your content and click Optimise to see tracked changes here.</p>
+                  </div>
+                ) : trackedChanges.map((change, i) => (
                   <div key={i} className="p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
@@ -3927,7 +3884,11 @@ OUTPUT INSTRUCTIONS:
                 <p className="text-xs mt-0.5" style={{ color: vars.g400 }}>Key phrases LLMs are most likely to extract and cite from this optimised content</p>
               </div>
               <div className="p-5 space-y-2">
-                {semanticPhrases.map((phrase, i) => (
+                {semanticPhrases.length === 0 ? (
+                  <p className="text-[12px] text-center py-4" style={{ color: vars.g400 }}>
+                    Semantic phrases will appear here after you run Optimise.
+                  </p>
+                ) : semanticPhrases.map((phrase, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
@@ -7244,7 +7205,7 @@ function MarketingIntelligencePage() {
     setSearching(true);
     setResults(null);
     window.setTimeout(() => {
-      setResults(DEMO_EVENTS_V2);
+      setResults([]);
       setSearching(false);
     }, 700);
   };
@@ -7448,6 +7409,14 @@ function MarketingIntelligencePage() {
       {/* Results */}
       {results && (
         <div className="space-y-4">
+          {results.length === 0 ? (
+            <div className="rounded-2xl border p-10 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+              <Search size={28} color={vars.g300} className="mx-auto mb-3" />
+              <p className="text-sm font-medium mb-1" style={{ color: vars.g500 }}>No events found for this search</p>
+              <p className="text-[12px]" style={{ color: vars.g400 }}>Try adjusting the marketing type, categories, or time period and search again.</p>
+            </div>
+          ) : (
+          <>
           <div className="rounded-2xl p-5" style={{ background: "rgba(224,120,86,0.08)", border: `1px solid rgba(224,120,86,0.25)` }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
             {actionableOps.length === 0 ? (
@@ -7534,6 +7503,8 @@ function MarketingIntelligencePage() {
               </button>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
 
