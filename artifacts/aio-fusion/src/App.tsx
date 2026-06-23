@@ -911,7 +911,7 @@ type NavSection = { section: string; color: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
-    section: "Set-Up & AI Audit",
+    section: "Project Set-Up",
     color: "#1f748f",
     items: [
       { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
