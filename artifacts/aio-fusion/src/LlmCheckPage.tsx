@@ -279,6 +279,40 @@ function ScoreRing({ score, size = 100, unit = "%" }: { score: number; size?: nu
   );
 }
 
+function ReportSection({
+  icon, title, subtitle, defaultOpen = true, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-2xl border mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-start gap-3 px-4 sm:px-6 py-4 text-left hover:bg-gray-50 transition-colors"
+      >
+        <span className="mt-0.5 flex-shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold uppercase tracking-[0.1em]" style={{ color: vars.navy }}>{title}</p>
+          <p className="text-[12px] font-normal mt-0.5 leading-snug" style={{ color: vars.g400 }}>{subtitle}</p>
+        </div>
+        {open
+          ? <ChevronUp size={16} className="flex-shrink-0 mt-1" style={{ color: vars.g400 }} />
+          : <ChevronDown size={16} className="flex-shrink-0 mt-1" style={{ color: vars.g400 }} />}
+      </button>
+      {open && (
+        <div className="px-4 sm:px-6 pb-5 pt-1 border-t" style={{ borderColor: vars.g100 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: string }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -1511,11 +1545,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       </div>
 
       {/* Executive summary */}
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
-          <Eye size={14} style={{ color: vars.accent }} />
-          Executive summary
-        </h3>
+      <ReportSection
+        icon={<Eye size={14} style={{ color: vars.accent }} />}
+        title="Executive summary"
+        subtitle="A plain-English read on overall AI visibility for this brand"
+      >
         {rd.assess?.summary
           ? <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{rd.assess.summary}</p>
           : <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>
@@ -1526,15 +1560,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <strong style={{ color: vars.g600 }}>Ideal customer profile:</strong> {result.icp}
           </p>
         )}
-      </div>
+      </ReportSection>
 
       {/* Entity clarity */}
       {result.entityClarity && result.entityClarity.isAmbiguous && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
-            <AlertTriangle size={14} style={{ color: vars.accent }} />
-            Entity clarity: who else is called &ldquo;{result.entityClarity.brandName}&rdquo;
-          </h3>
+        <ReportSection
+          icon={<AlertTriangle size={14} style={{ color: vars.amber }} />}
+          title={`Entity clarity: who else is called "${result.entityClarity.brandName}"`}
+          subtitle="Other organisations sharing this name that may be causing scoring confusion"
+        >
           <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{result.entityClarity.note}</p>
           <p className="text-[12px] mt-3" style={{ color: vars.g500 }}>
             <strong style={{ color: vars.g600 }}>Status:</strong>{" "}
@@ -1638,16 +1672,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               </>
             )}
           </div>
-        </div>
+        </ReportSection>
       )}
 
       {/* Scorecard */}
       {rd.assess && rd.assess.dimensions.length > 0 && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-            <CheckCircle2 size={14} style={{ color: vars.accent }} />
-            AI Authority scorecard
-          </h3>
+        <ReportSection
+          icon={<CheckCircle2 size={14} style={{ color: vars.accent }} />}
+          title="AI Authority scorecard"
+          subtitle="How your brand performs across five scored dimensions — presence, source quality, messaging, accuracy, and people"
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
               <thead>
