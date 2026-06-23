@@ -1,4 +1,4 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity } from "./IntakeForm";
+import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
@@ -5762,6 +5762,23 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [generated, setGenerated] = useState(false);
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
   const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
+  const [targetQuery, setTargetQuery] = useState<{ text: string; category: "discovery" | "shortlist" | "comparison" } | null>(null);
+
+  const llmQueries = getLlmSearchQueries();
+  const projectCompetitors = getCompetitors();
+  const confirmedEntity = getConfirmedEntity();
+  const geography =
+    (Array.isArray((intake as { stringLists?: Record<string, string[]> })?.stringLists?.["3.3"])
+      ? ((intake as { stringLists?: Record<string, string[]> }).stringLists!["3.3"]).filter(Boolean).join(", ")
+      : "") ||
+    (typeof (intake as { formData?: Record<string, unknown> })?.formData?.["4.5"] === "string"
+      ? ((intake as { formData?: Record<string, unknown> }).formData!["4.5"] as string)
+      : "");
+  const allLlmQueries: { text: string; category: "discovery" | "shortlist" | "comparison" }[] = [
+    ...llmQueries.discovery.map((q) => ({ text: q, category: "discovery" as const })),
+    ...llmQueries.shortlist.map((q) => ({ text: q, category: "shortlist" as const })),
+    ...llmQueries.comparison.map((q) => ({ text: q, category: "comparison" as const })),
+  ];
 
   const articleHeadlineWords = countWords(articleHeadline);
   const standfirstWords = countWords(standfirst);
@@ -5926,14 +5943,28 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const createDraft = async () => {
     if (generating || optimisingField) return;
     const theme = articleHeadline.trim() || headline.trim() || transcript.trim();
-    if (!theme) {
-      alert("Add a headline or subject (and optionally a pitch idea or notes) so the AI knows what to write about.");
+    if (!theme && !targetQuery) {
+      alert("Add a headline or select a Target LLM Query so the AI knows what to write about.");
       return;
     }
     setCreatorError("");
     setGenerateChars(0);
     setGenerating(true);
     const snapshot = { articleHeadline, standfirst, transcript };
+    let queryAuditData: { mentionCount: number; totalProbes: number; competitors: string[] } | undefined;
+    if (targetQuery) {
+      const projectId = getActiveProjectId() || "default";
+      const savedAudits = loadSavedAudits(projectId);
+      if (savedAudits.length > 0) {
+        const latestAudit = savedAudits[0];
+        const matchingProbes = latestAudit.result.probes.filter((p) => p.question === targetQuery.text);
+        if (matchingProbes.length > 0) {
+          const mentionCount = matchingProbes.filter((p) => p.mentioned).length;
+          const auditCompetitors = Array.from(new Set(matchingProbes.flatMap((p) => p.competitors || []).filter(Boolean)));
+          queryAuditData = { mentionCount, totalProbes: matchingProbes.length, competitors: auditCompetitors };
+        }
+      }
+    }
     try {
       const data = await streamContent(
         "/api/content/generate",
@@ -5948,6 +5979,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           selectedMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
           mediaCategories: mediaTarget,
           projectData: buildProjectDataText(),
+          targetQuery: targetQuery ? { text: targetQuery.text, category: targetQuery.category } : undefined,
+          queryAuditData,
+          confirmedCompany: confirmedEntity?.name || "",
+          competitors: projectCompetitors.slice(0, 10),
+          geography,
         },
         setGenerateChars,
       );
@@ -6159,6 +6195,61 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             </select>
           </Labelled>
         </div>
+
+        <Labelled label="Target LLM Query" hint="Pick a query from section 1.6 to write a GEO-targeted article. The AI will structure the piece to earn a citation when someone asks this exact question. You can leave this blank for a free-form draft.">
+          {allLlmQueries.length > 0 ? (
+            <select
+              value={targetQuery?.text || ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) { setTargetQuery(null); return; }
+                const found = allLlmQueries.find((q) => q.text === val);
+                if (found) setTargetQuery(found);
+              }}
+              className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white"
+              style={{ borderColor: vars.g200 }}
+            >
+              <option value="">— No target query (free-form draft) —</option>
+              {llmQueries.discovery.length > 0 && (
+                <optgroup label="Discovery">
+                  {llmQueries.discovery.map((q) => <option key={q} value={q}>{q}</option>)}
+                </optgroup>
+              )}
+              {llmQueries.shortlist.length > 0 && (
+                <optgroup label="Shortlist">
+                  {llmQueries.shortlist.map((q) => <option key={q} value={q}>{q}</option>)}
+                </optgroup>
+              )}
+              {llmQueries.comparison.length > 0 && (
+                <optgroup label="Comparison &amp; Trust">
+                  {llmQueries.comparison.map((q) => <option key={q} value={q}>{q}</option>)}
+                </optgroup>
+              )}
+            </select>
+          ) : (
+            <div className="rounded-lg border px-3 py-2.5 text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: vars.g500 }}>
+              No queries generated yet —{" "}
+              <button
+                type="button"
+                className="underline font-semibold"
+                style={{ color: vars.accent }}
+                onClick={() => onNavigate("intake")}
+              >
+                generate them in section 1.6
+              </button>{" "}
+              of Project Set-Up first.
+            </div>
+          )}
+          {targetQuery && (
+            <p className="mt-1.5 text-[12px] font-light" style={{ color: vars.g500 }}>
+              <span className="font-semibold" style={{ color: vars.accent }}>GEO goal:</span>{" "}
+              This article aims to get{" "}
+              <strong style={{ color: vars.navy }}>{confirmedEntity?.name || projectName || "your company"}</strong>{" "}
+              cited when someone asks:{" "}
+              <em>"{targetQuery.text}"</em>
+            </p>
+          )}
+        </Labelled>
 
         <div className="rounded-xl border p-4" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
           <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>

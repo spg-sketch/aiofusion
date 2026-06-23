@@ -468,6 +468,15 @@ function normaliseSupportingData(raw: unknown): { text: string; url: string }[] 
     .slice(0, 12);
 }
 
+const GEO_STAGE_LABELS: Record<string, string> = {
+  discovery:
+    "Discovery — the prospect is researching the problem space and may not yet know this type of provider exists",
+  shortlist:
+    "Shortlist — the prospect knows what they want and is actively evaluating providers",
+  comparison:
+    "Comparison and trust — the prospect is doing due diligence, comparing providers, or verifying credentials",
+};
+
 contentAiRouter.post(
   "/content/generate",
   contentAiLimiter,
@@ -483,8 +492,26 @@ contentAiRouter.post(
     const selectedMessages = asStringArray(body.selectedMessages);
     const mediaCategories = asStringArray(body.mediaCategories);
     const projectData = asString(body.projectData, MAX_PROJECT_DATA_CHARS);
+    const confirmedCompany = asString(body.confirmedCompany, 200);
+    const competitors = asStringArray(body.competitors, 15);
+    const geography = asString(body.geography, 300);
 
-    if (!headline.trim() && !pitch.trim() && !sourceNotes.trim()) {
+    const rawTargetQuery =
+      body.targetQuery && typeof body.targetQuery === "object"
+        ? (body.targetQuery as Record<string, unknown>)
+        : null;
+    const targetQueryText = rawTargetQuery ? asString(rawTargetQuery.text, 500) : "";
+    const targetQueryCategory = rawTargetQuery ? asString(rawTargetQuery.category, 40) : "";
+
+    const rawQueryAudit =
+      body.queryAuditData && typeof body.queryAuditData === "object"
+        ? (body.queryAuditData as Record<string, unknown>)
+        : null;
+    const auditMentionCount = rawQueryAudit && typeof rawQueryAudit.mentionCount === "number" ? rawQueryAudit.mentionCount : null;
+    const auditTotalProbes = rawQueryAudit && typeof rawQueryAudit.totalProbes === "number" ? rawQueryAudit.totalProbes : null;
+    const auditCompetitors = rawQueryAudit ? asStringArray(rawQueryAudit.competitors, 10) : [];
+
+    if (!headline.trim() && !pitch.trim() && !sourceNotes.trim() && !targetQueryText.trim()) {
       res
         .status(400)
         .json({ error: "Add a headline or subject (and optionally a pitch idea or notes) so the AI knows what to write about." });
@@ -512,17 +539,51 @@ contentAiRouter.post(
       ? selectedMessages.map((m, i) => `${i + 1}. ${m}`).join("\n")
       : "(none selected - infer the strongest one or two from the Project Data)";
 
+    // GEO target block: fires only for Prompt 2.1 (article family) when a target query is supplied.
+    // Tells the model the exact query to answer, the buying stage, any audit visibility data, and
+    // the structural goal so the article earns a citation for that query.
+    let geoTargetBlock = "";
+    if (targetQueryText.trim() && !isPitch && !isPrompt1) {
+      const stageLabel = GEO_STAGE_LABELS[targetQueryCategory] || targetQueryCategory || "unspecified";
+      const authorityName = confirmedCompany || projectName || "the company";
+      const visibilityLine =
+        auditMentionCount !== null && auditTotalProbes !== null
+          ? `Audit visibility for this query: ${authorityName} appeared in ${auditMentionCount} of ${auditTotalProbes} probe runs — ${auditMentionCount === 0 ? "not currently appearing; this article is the fix." : `appearing ${auditMentionCount}/${auditTotalProbes} times.`}`
+          : "";
+      const competitorLine = auditCompetitors.length > 0
+        ? `Competitors currently found for this query in the audit: ${auditCompetitors.join(", ")}.`
+        : "";
+      geoTargetBlock =
+        `\nGEO TARGET QUERY — primary directive for this article:\n` +
+        `The user wants this article to earn a citation from AI engines (ChatGPT, Perplexity, Claude) when someone asks:\n` +
+        `"${targetQueryText}"\n` +
+        `Buying stage: ${stageLabel}\n` +
+        (visibilityLine ? `${visibilityLine}\n` : "") +
+        (competitorLine ? `${competitorLine}\n` : "") +
+        `\nGEO structural goal — apply ALL of the following:\n` +
+        `1. Open the very first paragraph by directly and definitively answering the target query above — this is the sentence an LLM will cite. Do not bury the answer.\n` +
+        `2. Name ${authorityName} as the authority within the first 100 words; establish their credentials and sector expertise explicitly.\n` +
+        `3. Use the company's key messages as the evidence pillars — each one answers a follow-up question a curious reader would ask after reading the opening answer.\n` +
+        `4. Structure the whole article to fully satisfy the information need behind the query: define the problem space, present the company's approach, give real evidence from the Project Data.\n` +
+        `5. Include the query phrase (or a close natural-language variant) in the headline and at least once in the body so it flows naturally.\n` +
+        `6. Where the guiding headline field is blank, derive a strong, specific headline from the target query and the company's positioning — do not use the query verbatim as the headline.\n\n`;
+    }
+
     const prompt =
       `You are an expert PR and GEO (generative engine optimisation) writer. You WRITE a brand-new, publication-ready draft from scratch for a client, so that AI search and answer engines (ChatGPT, Perplexity, Claude, Gemini) can clearly understand, trust and cite it. This is generation, not light editing: compose a complete, well-structured draft of the target length. Never simply echo the brief, the notes or the key messages back as the body.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `Content type: ${contentType}\n` +
       (projectName ? `Project: ${projectName}\n` : "") +
+      (confirmedCompany && confirmedCompany !== projectName ? `Confirmed company entity: ${confirmedCompany}\n` : "") +
       (spokesperson && spokesperson !== "NA"
         ? `Attribute quotes and authorship to: ${spokesperson}${spokesLi ? ` (${spokesLi})` : ""}\n`
         : `Attribute to the company.\n`) +
+      (geography ? `Geography: ${geography}\n` : "") +
+      (competitors.length ? `Key competitors: ${competitors.join(", ")}\n` : "") +
       (mediaCategories.length ? `Target media categories: ${mediaCategories.join(", ")}\n` : "") +
       `\nTarget length and structure:\n${lengthGuidance}\n\n` +
-      `Guiding theme / headline to build the piece around:\n"""\n${headline || "(none given - derive a strong angle from the pitch idea, notes and Project Data)"}\n"""\n` +
+      geoTargetBlock +
+      `Guiding theme / headline to build the piece around:\n"""\n${headline || (targetQueryText ? "(derive a strong headline from the GEO target query and company positioning above)" : "(none given - derive a strong angle from the pitch idea, notes and Project Data)")}\n"""\n` +
       (pitch ? `\nPitch idea / news hook:\n"""\n${pitch}\n"""\n` : "") +
       `\nSource notes / transcript to draw on (raw material - use it, do not contradict it; do not invent facts beyond it and the Project Data):\n"""\n${sourceNotes || "(none supplied - write from the Project Data and the theme above)"}\n"""\n\n` +
       `Key messages to weave in verbatim where they fit naturally:\n${messagesBlock}\n\n` +
@@ -553,11 +614,15 @@ contentAiRouter.post(
         res.end();
         return;
       }
+      const changeLog = normaliseChangeLog(parsed.changeLog);
+      if (targetQueryText.trim()) {
+        changeLog.push({ kind: "structure", text: `Draft written to target: "${targetQueryText}"` });
+      }
       sse(res, "result", {
         headline: typeof parsed.headline === "string" ? parsed.headline.trim() : headline,
         standfirst: typeof parsed.standfirst === "string" ? parsed.standfirst.trim() : "",
         bodyCopy: outBody,
-        changeLog: normaliseChangeLog(parsed.changeLog),
+        changeLog,
         supportingData: normaliseSupportingData(parsed.supportingData),
       });
       res.end();
