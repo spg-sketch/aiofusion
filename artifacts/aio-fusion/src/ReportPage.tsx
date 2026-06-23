@@ -86,49 +86,7 @@ type TrackerRow = {
 };
 
 const TRACKER_KEY = "aio.earnedTracker.v2";
-// Seeded to mirror an SMG-style Earned Media & Third-Party Coverage Report -
-// Jan–Apr 2026 spanning Press releases / News stories, Authored articles &
-// Media features, Case studies, Whitepapers & Reports, Blog posts, Social
-// posts and Conference / Event references. Reach figures are estimated
-// publisher media-kit / Similarweb / LinkedIn follower counts.
-const seedTracker: TrackerRow[] = [
-  // 1. Press Releases & News Stories
-  { id: "t1",  date: "2026-03-04", title: "Simpatico launches industry-first GEO Authority Index for B2B PR",                                  type: "Press Release",              publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/news/geo-index", reach: 15000,    score: 8 },
-  { id: "t2",  date: "2026-03-18", title: "GEO 'firmly in the growth phase', finds Simpatico's Authority Index",                              type: "Article (Trade Publication)", publication: "PRWeek",              category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://prweek.com/article/geo-growth",   reach: 480000,   score: 8 },
-  { id: "t3",  date: "2026-04-08", title: "Earned media's next phase will be won by differentiation, not scale",                              type: "Article (Trade Publication)", publication: "The Drum",            category: "Marketing & Advertising", spokesperson: "Helen Croydon",     link: "https://thedrum.com/news/2026/04/08",     reach: 11500000, score: 9 },
-  { id: "t4",  date: "2026-04-12", title: "The newsroom is GEO's next frontier, but no one has cracked it yet",                               type: "Article (Trade Publication)", publication: "The Drum",            category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://thedrum.com/news/2026/04/12",     reach: 11500000, score: 8 },
-  { id: "t5",  date: "2026-04-22", title: "PR silos, measurement and misconceptions continue to stymie GEO growth",                            type: "Article (Trade Publication)", publication: "Adweek",              category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://adweek.com/2026/04/geo",          reach: 7400000,  score: 9 },
-
-  // 2. Authored Articles, Media Features & Reports
-  { id: "t6",  date: "2026-01-22", title: "The six changes set to shape a more mature GEO market in 2026",                                     type: "Article (Trade Publication)", publication: "PRovoke Media",       category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://provokemedia.com/2026/01/22",     reach: 220000,   score: 8 },
-  { id: "t7",  date: "2026-04-10", title: "What B2B brands can learn from Lighthouse on turning research into earned media moments",          type: "Article (Trade Publication)", publication: "The Drum",            category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://thedrum.com/2026/04/10",          reach: 11500000, score: 7 },
-  { id: "t8",  date: "2026-04-18", title: "All media is earned media: if fragmentation is the challenge, infrastructure is the answer",        type: "Article (Trade Publication)", publication: "B2B Marketing",       category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://b2bmarketing.net/2026/04/18",     reach: 95000,    score: 9 },
-  { id: "t9",  date: "2026-03-25", title: "Spokesperson experience and connectivity key to winning in GEO (Beet.TV)",                          type: "Article (Trade Publication)", publication: "Beet.TV",             category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://beet.tv/2026/03/simpatico",       reach: 50000,    score: 6 },
-
-  // 3. Case Studies & Similar References
-  { id: "t10", date: "2026-03-12", title: "Research: Winning audiences and creating moments with B2B GEO (Lighthouse x Simpatico)",            type: "Case Study",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/research/lighthouse", reach: 15000, score: 7 },
-  { id: "t11", date: "2026-04-14", title: "Unlocking the trade media opportunity with WHSmith Travel and Simpatico",                            type: "Case Study",                  publication: "RETHINK Retail",      category: "Retail",             spokesperson: "Helen Croydon",     link: "https://rethink.industry/case-studies/whsmith", reach: 17000, score: 7 },
-  { id: "t12", date: "2026-04-21", title: "Boots Earned Authority powered by Simpatico: Highly Commended - The Drum Awards",                   type: "Case Study",                  publication: "The Drum",            category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://thedrum.com/awards/boots",        reach: 11500000, score: 8 },
-
-  // 4. Published Whitepapers & Reports
-  { id: "t13", date: "2026-01-14", title: "6 GEO Trends You Can't Miss In 2026",                                                                type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/reports/2026-trends", reach: 15000, score: 8 },
-  { id: "t14", date: "2026-03-04", title: "GEO Authority Index - Earned Authority Maturity Report 2026",                                        type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/reports/authority-index", reach: 15000, score: 9 },
-  { id: "t15", date: "2026-03-26", title: "It's time for B2B brands to rethink how they grow earned authority",                                 type: "Whitepaper",                  publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://simpaticopr.co.uk/reports/grow-authority", reach: 15000, score: 7 },
-
-  // 5. Blog Posts
-  { id: "t16", date: "2026-01-10", title: "AI, attribution & accountability for earned media at CES 2026",                                      type: "Blog Post",                   publication: "simpaticopr.co.uk",   category: "Marketing & Advertising", spokesperson: "Spencer Gallagher", link: "https://simpaticopr.co.uk/blog/ces-2026", reach: 15000,    score: 7 },
-  { id: "t17", date: "2026-04-09", title: "Earned media's next test: breaking out of its silos (IAB Connected Comms Summit)",                   type: "Blog Post",                   publication: "simpaticopr.co.uk",   category: "Marketing & PR",     spokesperson: "Helen Croydon",     link: "https://simpaticopr.co.uk/blog/iab-2026", reach: 15000,    score: 6 },
-
-  // 6. Social Posts - LinkedIn, Substack, Medium
-  { id: "t18", date: "2026-04-15", title: "Adweek and Simpatico partner for GEO Leadership Summit (LinkedIn post)",                              type: "Social Post",                 publication: "Adweek (LinkedIn)",   category: "Marketing & Advertising", spokesperson: "NA",                link: "https://linkedin.com/company/adweek/posts", reach: 163000,   score: 7 },
-  { id: "t19", date: "2026-02-20", title: "6 GEO Trends report shared across LinkedIn by Simpatico team",                                       type: "Social Post",                 publication: "LinkedIn - Simpatico team", category: "Marketing & PR", spokesperson: "NA",                link: "https://linkedin.com/company/simpaticopr", reach: 100000,   score: 6 },
-
-  // 7. Conference & Event Website References
-  { id: "t20", date: "2026-01-29", title: "2026 IAB Annual Leadership Meeting - Spencer Gallagher listed as speaker",                            type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/alm-2026/speakers", reach: 400000,   score: 8 },
-  { id: "t21", date: "2026-03-08", title: "Shoptalk Spring 2026 - Simpatico & WHSmith panel on travel earned media",                             type: "Speaker Submission",          publication: "shoptalk.com",        category: "Retail",             spokesperson: "Helen Croydon",     link: "https://shoptalk.com/spring-2026/agenda",  reach: 150000,   score: 7 },
-  { id: "t22", date: "2026-04-02", title: "2026 IAB Connected Comms Summit - Spencer Gallagher listed as speaker",                               type: "Speaker Submission",          publication: "iab.com",             category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://iab.com/events/connected-comms-2026", reach: 400000, score: 9 },
-  { id: "t23", date: "2026-04-18", title: "Spencer Gallagher named 2026 PRovoke Top 250 - recognition listing",                                   type: "Directory Entry",             publication: "PRovoke Media",       category: "Marketing & PR",     spokesperson: "Spencer Gallagher", link: "https://provokemedia.com/top250-2026",     reach: 220000,   score: 7 },
-];
+const seedTracker: TrackerRow[] = [];
 
 function loadTracker(): TrackerRow[] {
   try {
@@ -392,41 +350,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
   function runAiSearch() {
     setAiSearched(true);
-    // SMG-style coverage spread across all 7 bucket types Patrick illustrated:
-    // Press Release / News, Authored Article + Media Feature, Case Study,
-    // Whitepaper, Blog Post, Social Post and Conference / Event reference.
-    const baseResults: typeof aiResults = [
-      // Press release pickup
-      { title: "GEO 'firmly in the growth phase', finds Simpatico's Authority Index",                                  type: "Press Release",              publication: "PRWeek",            reach: 480000,   scores: { Claude: 8, Gemini: 8, ChatGPT: 9, Perplexity: 8, CoPilot: 7 }, link: "https://prweek.com/article/geo-growth" },
-      { title: "Simpatico launches industry-first GEO Authority Index for B2B PR",                                      type: "Press Release",              publication: "PRovoke Media",     reach: 220000,   scores: { Claude: 7, Gemini: 7, ChatGPT: 8, Perplexity: 8, CoPilot: 6 }, link: "https://provokemedia.com/2026/03/04" },
-
-      // Authored articles & media features
-      { title: "Earned media's next phase will be won by differentiation, not scale",                                    type: "Article (Trade Publication)", publication: "The Drum",          reach: 11500000, scores: { Claude: 9, Gemini: 9, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://thedrum.com/news/2026/04/08" },
-      { title: "PR silos, measurement and misconceptions continue to stymie GEO growth",                                 type: "Article (Trade Publication)", publication: "Adweek",            reach: 7400000,  scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://adweek.com/2026/04/geo" },
-      { title: "All media is earned media: if fragmentation is the challenge, infrastructure is the answer",             type: "Article (Trade Publication)", publication: "B2B Marketing",     reach: 95000,    scores: { Claude: 8, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 7 }, link: "https://b2bmarketing.net/2026/04/18" },
-
-      // Case study
-      { title: "Boots Earned Authority powered by Simpatico - Highly Commended, The Drum Awards",                        type: "Case Study",                  publication: "The Drum",          reach: 11500000, scores: { Claude: 8, Gemini: 8, ChatGPT: 8, Perplexity: 9, CoPilot: 7 }, link: "https://thedrum.com/awards/boots" },
-
-      // Whitepaper / report
-      { title: "GEO Authority Index - Earned Authority Maturity Report 2026",                                            type: "Whitepaper",                  publication: "simpaticopr.co.uk", reach: 15000,    scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://simpaticopr.co.uk/reports/authority-index" },
-
-      // Blog post
-      { title: "AI, attribution & accountability for earned media at CES 2026",                                          type: "Blog Post",                   publication: "simpaticopr.co.uk", reach: 15000,    scores: { Claude: 7, Gemini: 6, ChatGPT: 7, Perplexity: 7, CoPilot: 6 }, link: "https://simpaticopr.co.uk/blog/ces-2026" },
-
-      // Social post
-      { title: "Adweek and Simpatico partner for GEO Leadership Summit (LinkedIn announcement)",                          type: "Social Post",                 publication: "Adweek (LinkedIn)", reach: 163000,   scores: { Claude: 7, Gemini: 7, ChatGPT: 8, Perplexity: 7, CoPilot: 6 }, link: "https://linkedin.com/company/adweek/posts" },
-
-      // Conference / event reference
-      { title: "2026 IAB Connected Comms Summit - Spencer Gallagher listed as speaker",                                  type: "Speaker Submission",          publication: "iab.com",           reach: 400000,   scores: { Claude: 9, Gemini: 8, ChatGPT: 9, Perplexity: 9, CoPilot: 8 }, link: "https://iab.com/events/connected-comms-2026" },
-    ];
-    const personFilter = aiSearch.spokesperson.trim().toLowerCase();
-    const titleFilter = aiSearch.contentTitle.trim().toLowerCase();
-    setAiResults(baseResults.filter(r => {
-      if (personFilter && !r.title.toLowerCase().includes(personFilter)) return false;
-      if (titleFilter && !r.title.toLowerCase().includes(titleFilter)) return false;
-      return true;
-    }));
+    setAiResults([]);
   }
 
   function addAiResultToTracker(r: typeof aiResults[number]) {
