@@ -1716,16 +1716,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           <p className="text-[11px] mt-3" style={{ color: vars.g400 }}>
             Index weighting: non-branded presence and share of voice 50%, source and message 20%, accuracy and entity 20%, people 10%.
           </p>
-        </div>
+        </ReportSection>
       )}
 
       {/* Prioritised actions */}
       {rd.assess && rd.assess.priorityActions.length > 0 && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-            <ArrowRight size={14} style={{ color: vars.accent }} />
-            Prioritised actions
-          </h3>
+        <ReportSection
+          icon={<ArrowRight size={14} style={{ color: vars.accent }} />}
+          title="Prioritised actions"
+          subtitle="The highest-impact steps to improve AI visibility — ranked by priority"
+        >
           <div className="flex flex-col gap-2">
             {rd.assess.priorityActions.map((a, i) => {
               const pc = a.priority === "high" ? { bg: "#FEE2E2", c: "#B91C1C" } : a.priority === "low" ? { bg: vars.g100, c: vars.g500 } : { bg: "#FEFCE8", c: "#A16207" };
@@ -1742,30 +1742,30 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               );
             })}
           </div>
-        </div>
+        </ReportSection>
       )}
 
       {/* Top visibility gaps */}
       {gapItems.length > 0 && (
-        <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
-            <TrendingDown size={14} style={{ color: vars.accent }} />
-            Top visibility gaps
-          </h3>
+        <ReportSection
+          icon={<TrendingDown size={14} style={{ color: vars.accent }} />}
+          title="Top visibility gaps"
+          subtitle="Queries where AI isn't naming this brand — the highest-opportunity areas to address"
+        >
           <ul className="list-disc pl-5 space-y-1.5">
             {gapItems.map((g, i) => (
               <li key={i} className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>{g}</li>
             ))}
           </ul>
-        </div>
+        </ReportSection>
       )}
 
       {/* Who owns the category instead */}
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1 flex items-center gap-2" style={{ color: vars.navy }}>
-          <Users size={14} style={{ color: vars.accent }} />
-          Who owns the category instead
-        </h3>
+      <ReportSection
+        icon={<Users size={14} style={{ color: vars.accent }} />}
+        title="Who owns the category instead"
+        subtitle="The brands AI recommended when this company wasn't cited — ordered by frequency"
+      >
         <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
           The brands the engines recommended when {result.companyName} was absent — ordered by how often they appeared.
         </p>
@@ -1832,14 +1832,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             No single rival was recommended often enough to stand out across these searches. That is an opening: the AI has no clear go-to name in your sector yet, so there is space to claim it.
           </p>
         )}
-      </div>
+      </ReportSection>
 
       {/* Blind-probe evidence log */}
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6 overflow-hidden" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-          <Search size={14} style={{ color: vars.accent }} />
-          Blind-probe evidence log
-        </h3>
+      <ReportSection
+        icon={<Search size={14} style={{ color: vars.accent }} />}
+        title="Blind-probe evidence log"
+        subtitle="Every query sent to the AI engines, and whether this brand appeared in the answer"
+        defaultOpen={false}
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
             <thead>
@@ -1866,25 +1867,27 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </tbody>
           </table>
         </div>
-      </div>
+      </ReportSection>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4 flex items-center gap-2" style={{ color: vars.navy }}>
-          <Zap size={14} style={{ color: vars.accent }} />
-          Detailed Probe Results
-        </h3>
+      <ReportSection
+        icon={<Zap size={14} style={{ color: vars.accent }} />}
+        title="Detailed probe results"
+        subtitle="The full AI responses to each question — expand individual rows to read the answer verbatim"
+        defaultOpen={false}
+      >
         <div className="space-y-2">
           {result.probes.map((probe, i) => (
             <ProbeRow key={i} probe={probe} companyName={result.companyName} />
           ))}
         </div>
-      </div>
+      </ReportSection>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
-          <Eye size={14} style={{ color: vars.accent }} />
-          Method & caveats
-        </h3>
+      <ReportSection
+        icon={<Eye size={14} style={{ color: vars.accent }} />}
+        title="Method &amp; caveats"
+        subtitle="How the audit works, what the numbers mean, and what to watch out for"
+        defaultOpen={false}
+      >
         <ul className="list-disc pl-5 space-y-1.5">
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
             Blind probes were run across ChatGPT and Claude using {rd.totalQueries} non-branded category queries a prospect, journalist or researcher might ask. {result.companyName} was never named in the prompts.
@@ -1904,10 +1907,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </li>
           )}
         </ul>
-      </div>
+      </ReportSection>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>How to Interpret These Results</h3>
+      <ReportSection
+        icon={<Info size={14} style={{ color: vars.accent }} />}
+        title="How to interpret these results"
+        subtitle="A practical guide to making sense of your score and acting on it"
+        defaultOpen={false}
+      >
         <div className="space-y-3">
           {[
             { t: "This is the real test.", b: "We're asking AI models the same questions a prospect, journalist or researcher would ask. If your brand doesn't appear, that's the gap GEO work needs to close." },
@@ -1926,7 +1933,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </div>
           ))}
         </div>
-      </div>
+      </ReportSection>
 
       <div className="rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4 mb-6" style={{ background: vars.navy, color: "white" }}>
         <div className="flex-1">

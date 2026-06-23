@@ -122,7 +122,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     );
 
     // The original visibility report renders.
-    expect(screen.getByText("Detailed Probe Results")).toBeInTheDocument();
+    expect(screen.getByText("Detailed probe results")).toBeInTheDocument();
     expect(screen.getByText("Who owns the category instead")).toBeInTheDocument();
 
     // The assessment-only scorecard must be ABSENT for legacy audits.
