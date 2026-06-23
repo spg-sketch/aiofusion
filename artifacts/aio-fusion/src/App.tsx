@@ -3635,7 +3635,7 @@ OUTPUT INSTRUCTIONS:
               <button onClick={downloadDraft} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border bg-white" style={{ borderColor: vars.navy, color: vars.navy }}>
                 <Download size={14} /> Download
               </button>
-              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-50 disabled:cursor-not-allowed" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-50 disabled:cursor-not-allowed" style={{ borderColor: vars.g200, color: vars.navy }}>
                 <FileText size={14} /> Optimised Notes
               </button>
               <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
