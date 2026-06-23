@@ -24,7 +24,7 @@
     "openid-client": "^6.8.4",
     "pino": "^9",
     "pino-http": "^10",
-    "undici": "^8.2.0"
+    "undici": "^8.5.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.2",

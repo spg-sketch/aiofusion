@@ -2278,7 +2278,7 @@ function persistSavedDiagnostics(clientId: string, list: SavedDiagnostic[]): boo
 type SavedScored = { id: string; savedAt: string; score: number };
 
 const contentGeoKey = (clientId: string) => `aio.savedContentGeo.${clientId}`;
-const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
+export const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
 
 function loadSavedScored(storageKey: string): SavedScored[] {
   try {
@@ -9849,15 +9849,11 @@ function MediaDatabasePage() {
   const exportContacts = async (format: "xlsx" | "word") => {
     const rows = filteredContacts;
     if (format === "xlsx") {
-      const XLSX = await import("xlsx");
-      const data = [
-        ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"],
-        ...rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes]),
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Contacts");
-      XLSX.writeFile(wb, "Media Contacts.xlsx");
+      const headers = ["First Name", "Last Name", "Role", "Email", "Phone", "Outlet", "Category", "Notes"];
+      const dataRows = rows.map((c) => [c.firstName, c.lastName, c.role, c.email, c.phone, c.outletName ?? "", c.outletCategory ?? "", c.notes]);
+      const csvContent = [headers, ...dataRows].map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "Media Contacts.csv"; a.click(); URL.revokeObjectURL(url);
     } else {
       const rows2 = rows.map((c) => `<tr><td>${escapeHtml(`${c.firstName} ${c.lastName}`.trim())}</td><td>${escapeHtml(c.role)}</td><td>${escapeHtml(c.email)}</td><td>${escapeHtml(c.phone)}</td><td>${escapeHtml(c.outletName ?? "")}</td><td>${escapeHtml(c.outletCategory ?? "")}</td></tr>`).join("");
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>Media Contacts</title><style>body{font-family:Arial,sans-serif;font-size:12px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;}th{background:#102B36;color:#fff;}</style></head><body><h2 style="font-family:Georgia,serif;color:#102B36;">Media Contacts</h2><table><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Outlet</th><th>Category</th></tr>${rows2}</table></body></html>`;
