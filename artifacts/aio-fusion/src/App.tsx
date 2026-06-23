@@ -944,11 +944,16 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    section: "Marketing Intelligence",
+    color: "#C9A04E",
+    items: [
+      { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
+    ],
+  },
+  {
     section: "Reporting",
     color: "#3D9B6B",
     items: [
-      { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
-      { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
       { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
     ],
   },
