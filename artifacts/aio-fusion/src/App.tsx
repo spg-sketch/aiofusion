@@ -927,11 +927,11 @@ const navSections: NavSection[] = [
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
       { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
       { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
+      { label: "Media Database", id: "media-database", sub: "Publications, journalists and custom categories" },
       { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
       { label: "Release Gateway", id: "gateway", sub: "Approve and release content", locked: true },
       { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
       { label: "Archive", id: "archive", sub: "Searchable content library" },
-      { label: "Media Database", id: "media-database", sub: "Publications, journalists and custom categories" },
     ],
   },
 ];
