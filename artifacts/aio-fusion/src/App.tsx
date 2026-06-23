@@ -114,7 +114,7 @@ import {
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
-export const cycleKey = (clientId: string) => `aio.cycle.${clientId}`;
+const cycleKey = (clientId: string) => `aio.cycle.${clientId}`;
 export function loadCycle(clientId: string): CycleHistory {
   try {
     const raw = localStorage.getItem(cycleKey(clientId));
@@ -2251,7 +2251,7 @@ type DiagnosticResult = {
   };
 };
 
-export type SavedDiagnostic = { id: string; savedAt: string; result: DiagnosticResult };
+type SavedDiagnostic = { id: string; savedAt: string; result: DiagnosticResult };
 
 const savedDiagnosticsKey = (clientId: string) => `aio.savedDiagnostics.${clientId}`;
 
@@ -2275,10 +2275,10 @@ function persistSavedDiagnostics(clientId: string, list: SavedDiagnostic[]): boo
   }
 }
 
-export type SavedScored = { id: string; savedAt: string; score: number };
+type SavedScored = { id: string; savedAt: string; score: number };
 
-export const contentGeoKey = (clientId: string) => `aio.savedContentGeo.${clientId}`;
-export const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
+const contentGeoKey = (clientId: string) => `aio.savedContentGeo.${clientId}`;
+const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
 
 function loadSavedScored(storageKey: string): SavedScored[] {
   try {
