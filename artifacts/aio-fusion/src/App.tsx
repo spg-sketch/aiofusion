@@ -8111,8 +8111,8 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
     {
       name: "Agency",
       tagline: "For PR agencies and marketing teams running multiple client brands.",
-      monthly: 449,
-      annual: 359,
+      monthly: 499,
+      annual: 399,
       color: accent,
       highlight: true,
       cta: "Start Free Trial",
