@@ -1306,6 +1306,7 @@ function ClientSelectorPage({
   useContentStore();
   const displayClients = projects;
   const isAdmin = session?.role === "admin";
+  const isClient = session?.role === "client";
 
   const paper = "#FBF6EC";
   const ink = "#102B36";
@@ -1367,7 +1368,8 @@ function ClientSelectorPage({
         </div>
 
         {/* Three primary actions - visible in both empty and populated states */}
-        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isAdmin ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isAdmin ? "md:grid-cols-4" : isClient ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+          {!isClient && (
           <button
             onClick={onCreateProject}
             className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
@@ -1383,6 +1385,7 @@ function ClientSelectorPage({
             </div>
             <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
           </button>
+          )}
           {isAdmin && onGenerateFromUrl && (
             <button
               onClick={onGenerateFromUrl}
@@ -1450,6 +1453,7 @@ function ClientSelectorPage({
               A project is a single brand, product or campaign you want to optimise.
               You'll set up its messaging, audience and content plan once - then everything you publish flows through it.
             </p>
+            {!isClient && (
             <button
               onClick={onCreateProject}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all hover:brightness-110"
@@ -1457,6 +1461,7 @@ function ClientSelectorPage({
             >
               <Plus size={14} /> Create your first project
             </button>
+            )}
             <p className="text-[11px] font-light mt-5" style={{ color: vars.g400 }}>
               Typical setup takes 10–15 minutes. You can save and return at any time.
             </p>
@@ -1637,6 +1642,7 @@ function ClientSelectorPage({
               </div>
             );
           })}
+          {!isClient && (
           <button
             onClick={onCreateProject}
             className="rounded-2xl border-2 border-dashed p-7 text-left transition-all hover:shadow-md min-h-[260px] flex flex-col items-center justify-center gap-3"
@@ -1653,6 +1659,7 @@ function ClientSelectorPage({
               <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Set up a new brand, product or campaign</p>
             </div>
           </button>
+          )}
         </div>
         )}
       </div>
