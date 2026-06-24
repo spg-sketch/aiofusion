@@ -156,7 +156,9 @@ async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: 
   }
 }
 
-export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<boolean> {
+export type PushProjectResult = { ok: boolean; limitReached?: boolean; error?: string };
+
+export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<PushProjectResult> {
   try {
     const res = await fetch(`${apiBase()}/api/store/projects/upsert`, {
       method: "POST",
@@ -169,9 +171,15 @@ export async function pushProjectMeta(project: StoredProject, logo?: string | nu
         logo: logo ?? null,
       }),
     });
-    return res.ok;
+    if (res.ok) return { ok: true };
+    try {
+      const json = (await res.json()) as { error?: string; limitReached?: boolean };
+      return { ok: false, limitReached: json.limitReached === true, error: json.error };
+    } catch {
+      return { ok: false };
+    }
   } catch {
-    return false; // will retry on next change/sync
+    return { ok: false }; // will retry on next change/sync
   }
 }
 

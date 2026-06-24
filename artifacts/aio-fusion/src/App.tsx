@@ -292,8 +292,8 @@ async function migrateAssignOwnerlessToAdmin(): Promise<void> {
       // Persist the claim locally only once the shared store confirms it. A
       // transient push failure then leaves the project ownerless so it retries
       // on the next sync, rather than going NULL-owned on the server forever.
-      const ok = await pushProjectMeta(claimed as unknown as Record<string, unknown> & { id: string });
-      if (!ok) continue;
+      const result = await pushProjectMeta(claimed as unknown as Record<string, unknown> & { id: string });
+      if (!result.ok) continue;
       const current = loadStoredProjects();
       const idx = current.findIndex((x) => x.id === p.id);
       if (idx !== -1 && !current[idx].owner) {
@@ -10005,7 +10005,18 @@ function App() {
     };
   }, [resyncProjects]);
 
-  const beginCreateProject = () => requireSessionThen(() => setNamingProject(true));
+  const beginCreateProject = () => requireSessionThen(() => {
+    // Pre-flight limit check for non-admin accounts: if the visible project list
+    // is already at 3 or more, surface a friendly message rather than letting
+    // the user name a project that the server will then reject.
+    if (session && session.role !== "admin" && visibleProjects.length >= 3) {
+      window.alert(
+        "You've reached the 3-project limit for agency accounts.\n\nTo add more projects, contact info@aiofusions.ai.",
+      );
+      return;
+    }
+    setNamingProject(true);
+  });
 
   const handleDeleteProject = (id: string) => {
     const next = loadStoredProjects().filter((p) => p.id !== id);
@@ -10018,7 +10029,7 @@ function App() {
     void deleteRemoteProject(id);
   };
 
-  const confirmCreateProject = (name: string, logo?: string) => {
+  const confirmCreateProject = async (name: string, logo?: string) => {
     const project = createStoredProject(name);
     setStoredProjects(loadStoredProjects());
     setActiveProjectId(project.id);
@@ -10027,7 +10038,23 @@ function App() {
     setActiveClient(logo ? { ...project, logo } : project);
     setCurrentPage("intake");
     setView("platform");
-    void pushProjectMeta(project as unknown as Record<string, unknown> & { id: string }, logo);
+    const pushResult = await pushProjectMeta(
+      project as unknown as Record<string, unknown> & { id: string },
+      logo,
+    );
+    if (!pushResult.ok && pushResult.limitReached) {
+      // Roll back the locally created project — the server rejected it.
+      const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
+      saveStoredProjects(rolled);
+      setStoredProjects(rolled);
+      const prev = rolled[0] ?? null;
+      setActiveProjectId(prev?.id ?? null);
+      setActiveClient(prev ?? null);
+      window.alert(
+        pushResult.error ??
+          "You've reached the 3-project limit for agency accounts.\n\nTo add more projects, contact info@aiofusions.ai.",
+      );
+    }
   };
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, projectsTable, projectSnapshotsTable } from "@workspace/db";
-import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
 import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
@@ -206,6 +206,27 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
+      // Enforce the 3-project limit for non-admin accounts on new projects only.
+      // Admins are never restricted. "user" is the legacy alias for "agency".
+      if (existingOwner === undefined && req.account!.role !== "admin") {
+        const [countRow] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(projectsTable)
+          .where(
+            and(
+              isNull(projectsTable.deletedAt),
+              visible !== null ? inArray(projectsTable.owner, visible) : undefined,
+            ),
+          );
+        if ((countRow?.count ?? 0) >= 3) {
+          res.status(403).json({
+            error:
+              "You've reached the 3-project limit for agency accounts. Contact info@aiofusions.ai to add more projects.",
+            limitReached: true,
+          });
+          return;
+        }
+      }
       const now = new Date();
       const owner = normUsername(req.account!.username);
       const incomingName = typeof name === "string" ? name.trim() : "";
@@ -275,6 +296,28 @@ router.post(
       if (existingOwner !== undefined && !canSee(existingOwner, visible)) {
         res.status(403).json({ error: "You cannot modify this project." });
         return;
+      }
+      // Enforce the 3-project limit for non-admin accounts on new projects only,
+      // matching the same guard on /upsert. The intake route also inserts a new
+      // row when the project does not exist yet, so it must be gated the same way.
+      if (existingOwner === undefined && req.account!.role !== "admin") {
+        const [countRow] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(projectsTable)
+          .where(
+            and(
+              isNull(projectsTable.deletedAt),
+              visible !== null ? inArray(projectsTable.owner, visible) : undefined,
+            ),
+          );
+        if ((countRow?.count ?? 0) >= 3) {
+          res.status(403).json({
+            error:
+              "You've reached the 3-project limit for agency accounts. Contact info@aiofusions.ai to add more projects.",
+            limitReached: true,
+          });
+          return;
+        }
       }
       const now = new Date();
       const owner = normUsername(req.account!.username);
