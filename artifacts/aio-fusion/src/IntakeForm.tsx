@@ -1075,13 +1075,22 @@ export default function IntakePage() {
         setAudienceCategories(data.audienceCategories as string[]);
       }
       if (data.llmQueries && typeof data.llmQueries === "object") {
-        const q = data.llmQueries as { v?: string; discovery?: string[]; shortlist?: string[]; comparison?: string[] };
+        const q = data.llmQueries as { v?: unknown; discovery?: string[]; shortlist?: string[]; comparison?: string[] };
         setLlmQueries({
-          v: q.v || "1.6",
+          v: 1,
           discovery: Array.isArray(q.discovery) ? q.discovery : [],
           shortlist: Array.isArray(q.shortlist) ? q.shortlist : [],
           comparison: Array.isArray(q.comparison) ? q.comparison : [],
         });
+      }
+      if (Array.isArray(data.spokespeople) && data.spokespeople.length > 0) {
+        setSpokespeople(data.spokespeople as Spokesperson[]);
+      }
+      if (Array.isArray(data.products) && data.products.length > 0) {
+        setProducts(data.products as Product[]);
+      }
+      if (Array.isArray(data.productQueries) && data.productQueries.length > 0) {
+        setProductQueries(data.productQueries as ProductQuery[]);
       }
       setAutoFillNotice("All fields filled from your website. Please review each answer before saving.");
     } catch (err: unknown) {

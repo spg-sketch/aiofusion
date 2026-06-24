@@ -512,6 +512,10 @@ Return ONLY the JSON object. Absolutely no other text before or after it.`;
       (typeof generated.companyName === "string" ? generated.companyName.trim() : "");
     if (companyName && !formData["4.1"]) formData["4.1"] = companyName;
 
+    const rawLlmQueries = generated.llmQueries && typeof generated.llmQueries === "object"
+      ? (generated.llmQueries as Record<string, unknown>)
+      : { v: 1, discovery: [], shortlist: [], comparison: [] };
+
     const cleaned = deepStripEmDashes({
       formData,
       duals: (generated.duals ?? {}) as Record<string, unknown>,
@@ -519,7 +523,15 @@ Return ONLY the JSON object. Absolutely no other text before or after it.`;
       stringLists: (generated.stringLists ?? {}) as Record<string, unknown>,
       businessCategories: Array.isArray(generated.businessCategories) ? generated.businessCategories : [],
       audienceCategories: Array.isArray(generated.audienceCategories) ? generated.audienceCategories : [],
-      llmQueries: (generated.llmQueries ?? { v: "1.6", discovery: [], shortlist: [], comparison: [] }) as Record<string, unknown>,
+      llmQueries: {
+        v: 1,
+        discovery: Array.isArray(rawLlmQueries.discovery) ? rawLlmQueries.discovery : [],
+        shortlist: Array.isArray(rawLlmQueries.shortlist) ? rawLlmQueries.shortlist : [],
+        comparison: Array.isArray(rawLlmQueries.comparison) ? rawLlmQueries.comparison : [],
+      },
+      spokespeople: Array.isArray(generated.spokespeople) ? generated.spokespeople : [],
+      products: Array.isArray(generated.products) ? generated.products : [],
+      productQueries: Array.isArray(generated.productQueries) ? generated.productQueries : [],
     }) as Record<string, unknown>;
 
     res.json({ ok: true, ...cleaned, aiWebsite: normalised });
