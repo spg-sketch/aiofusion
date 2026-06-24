@@ -1,0 +1,507 @@
+import { Router, type IRouter, type Request, type Response } from "express";
+import {
+  db,
+  archiveItemsTable,
+  plannerItemsTable,
+  scoringConfigsTable,
+} from "@workspace/db";
+import { and, eq, isNull, or, inArray } from "drizzle-orm";
+import { requirePlatformAuth } from "../middleware/platform-auth";
+import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+
+const router: IRouter = Router();
+
+// Resolve the set of owner usernames the request may see.
+// Returns null for an admin (sees all).
+async function visibleOwners(req: Request): Promise<string[] | null> {
+  return getVisibleUsernames(req.account!);
+}
+
+function canSeeOwner(owner: string, visible: string[] | null): boolean {
+  if (visible === null) return true;
+  return visible.includes(normUsername(owner));
+}
+
+// ---------------------------------------------------------------------------
+// Content Archive  GET    /api/store/archive
+//                  POST   /api/store/archive
+//                  PUT    /api/store/archive/:id
+//                  DELETE /api/store/archive/:id
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/store/archive",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const projectId =
+        typeof req.query.projectId === "string" && req.query.projectId
+          ? req.query.projectId
+          : null;
+
+      const rows = await db
+        .select()
+        .from(archiveItemsTable)
+        .where(isNull(archiveItemsTable.deletedAt))
+        .orderBy(archiveItemsTable.createdAt);
+
+      const allowed = rows.filter((r) => canSeeOwner(r.owner, visible));
+      const filtered = projectId
+        ? allowed.filter((r) => r.projectId === projectId)
+        : allowed;
+
+      res.json({ items: filtered });
+    } catch {
+      res.status(500).json({ error: "Failed to load archive" });
+    }
+  },
+);
+
+router.post(
+  "/store/archive",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const owner = normUsername(req.account!.username);
+
+      const {
+        id,
+        projectId,
+        title,
+        contentType,
+        spokesperson,
+        status,
+        tags,
+        headline,
+        standfirst,
+        bodyCopy,
+        body,
+        selectedMessages,
+        mediaCats,
+        pubDate,
+        releasedAt,
+        releaseChannel,
+        source,
+        createdAt,
+      } = req.body ?? {};
+
+      if (!id || typeof id !== "string") {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+      if (!projectId || typeof projectId !== "string") {
+        res.status(400).json({ error: "Missing projectId" });
+        return;
+      }
+      if (!canSeeOwner(owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const [row] = await db
+        .insert(archiveItemsTable)
+        .values({
+          id,
+          projectId,
+          owner,
+          title: title ?? "",
+          contentType: contentType ?? "",
+          spokesperson: spokesperson ?? null,
+          status: status ?? "Draft",
+          tags: Array.isArray(tags) ? tags : [],
+          headline: headline ?? null,
+          standfirst: standfirst ?? null,
+          bodyCopy: bodyCopy ?? null,
+          body: body ?? null,
+          selectedMessages: Array.isArray(selectedMessages)
+            ? selectedMessages
+            : null,
+          mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+          pubDate: pubDate ?? null,
+          releasedAt: releasedAt ?? null,
+          releaseChannel: releaseChannel ?? null,
+          source: source ?? null,
+          createdAt: createdAt ? new Date(createdAt) : new Date(),
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      res.json({ ok: true, item: row ?? null });
+    } catch {
+      res.status(500).json({ error: "Failed to create archive item" });
+    }
+  },
+);
+
+router.put(
+  "/store/archive/:id",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+
+      const existing = await db
+        .select({ owner: archiveItemsTable.owner })
+        .from(archiveItemsTable)
+        .where(eq(archiveItemsTable.id, id))
+        .limit(1);
+
+      if (!existing[0]) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      if (!canSeeOwner(existing[0].owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const {
+        title,
+        contentType,
+        spokesperson,
+        status,
+        tags,
+        headline,
+        standfirst,
+        bodyCopy,
+        body,
+        selectedMessages,
+        mediaCats,
+        pubDate,
+        releasedAt,
+        releaseChannel,
+        source,
+      } = req.body ?? {};
+
+      const [updated] = await db
+        .update(archiveItemsTable)
+        .set({
+          title: title ?? "",
+          contentType: contentType ?? "",
+          spokesperson: spokesperson ?? null,
+          status: status ?? "Draft",
+          tags: Array.isArray(tags) ? tags : [],
+          headline: headline ?? null,
+          standfirst: standfirst ?? null,
+          bodyCopy: bodyCopy ?? null,
+          body: body ?? null,
+          selectedMessages: Array.isArray(selectedMessages)
+            ? selectedMessages
+            : null,
+          mediaCats: Array.isArray(mediaCats) ? mediaCats : null,
+          pubDate: pubDate ?? null,
+          releasedAt: releasedAt ?? null,
+          releaseChannel: releaseChannel ?? null,
+          source: source ?? null,
+        })
+        .where(eq(archiveItemsTable.id, id))
+        .returning();
+
+      res.json({ ok: true, item: updated });
+    } catch {
+      res.status(500).json({ error: "Failed to update archive item" });
+    }
+  },
+);
+
+router.delete(
+  "/store/archive/:id",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+
+      const existing = await db
+        .select({ owner: archiveItemsTable.owner })
+        .from(archiveItemsTable)
+        .where(eq(archiveItemsTable.id, id))
+        .limit(1);
+
+      if (!existing[0]) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      if (!canSeeOwner(existing[0].owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      await db
+        .update(archiveItemsTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(archiveItemsTable.id, id));
+
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete archive item" });
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Comms Planner    GET    /api/store/planner
+//                  POST   /api/store/planner
+//                  PUT    /api/store/planner/:id
+//                  DELETE /api/store/planner/:id
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/store/planner",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const projectId =
+        typeof req.query.projectId === "string" && req.query.projectId
+          ? req.query.projectId
+          : null;
+
+      const rows = await db
+        .select()
+        .from(plannerItemsTable)
+        .where(isNull(plannerItemsTable.deletedAt))
+        .orderBy(plannerItemsTable.week, plannerItemsTable.createdAt);
+
+      const allowed = rows.filter((r) => canSeeOwner(r.owner, visible));
+      const filtered = projectId
+        ? allowed.filter((r) => r.projectId === projectId)
+        : allowed;
+
+      res.json({ items: filtered });
+    } catch {
+      res.status(500).json({ error: "Failed to load planner" });
+    }
+  },
+);
+
+router.post(
+  "/store/planner",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const owner = normUsername(req.account!.username);
+
+      const {
+        id,
+        projectId,
+        title,
+        contentType,
+        spokesperson,
+        keyMessage,
+        audience,
+        channels,
+        week,
+        status,
+        releaseDate,
+        notes,
+      } = req.body ?? {};
+
+      if (!id || typeof id !== "string") {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+      if (!projectId || typeof projectId !== "string") {
+        res.status(400).json({ error: "Missing projectId" });
+        return;
+      }
+      if (!canSeeOwner(owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const [row] = await db
+        .insert(plannerItemsTable)
+        .values({
+          id,
+          projectId,
+          owner,
+          title: title ?? "",
+          contentType: contentType ?? "",
+          spokesperson: spokesperson ?? "",
+          keyMessage: keyMessage ?? "",
+          audience: audience ?? "",
+          channels: Array.isArray(channels) ? channels : [],
+          week: typeof week === "number" ? week : 1,
+          status: status ?? "Planned",
+          releaseDate: releaseDate ?? "",
+          notes: notes ?? "",
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      res.json({ ok: true, item: row ?? null });
+    } catch {
+      res.status(500).json({ error: "Failed to create planner item" });
+    }
+  },
+);
+
+router.put(
+  "/store/planner/:id",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+
+      const existing = await db
+        .select({ owner: plannerItemsTable.owner })
+        .from(plannerItemsTable)
+        .where(eq(plannerItemsTable.id, id))
+        .limit(1);
+
+      if (!existing[0]) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      if (!canSeeOwner(existing[0].owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const {
+        title,
+        contentType,
+        spokesperson,
+        keyMessage,
+        audience,
+        channels,
+        week,
+        status,
+        releaseDate,
+        notes,
+      } = req.body ?? {};
+
+      const [updated] = await db
+        .update(plannerItemsTable)
+        .set({
+          title: title ?? "",
+          contentType: contentType ?? "",
+          spokesperson: spokesperson ?? "",
+          keyMessage: keyMessage ?? "",
+          audience: audience ?? "",
+          channels: Array.isArray(channels) ? channels : [],
+          week: typeof week === "number" ? week : 1,
+          status: status ?? "Planned",
+          releaseDate: releaseDate ?? "",
+          notes: notes ?? "",
+        })
+        .where(eq(plannerItemsTable.id, id))
+        .returning();
+
+      res.json({ ok: true, item: updated });
+    } catch {
+      res.status(500).json({ error: "Failed to update planner item" });
+    }
+  },
+);
+
+router.delete(
+  "/store/planner/:id",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const visible = await visibleOwners(req);
+      const id = String(req.params.id || "").trim();
+      if (!id) {
+        res.status(400).json({ error: "Missing id" });
+        return;
+      }
+
+      const existing = await db
+        .select({ owner: plannerItemsTable.owner })
+        .from(plannerItemsTable)
+        .where(eq(plannerItemsTable.id, id))
+        .limit(1);
+
+      if (!existing[0]) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      if (!canSeeOwner(existing[0].owner, visible)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      await db
+        .update(plannerItemsTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(plannerItemsTable.id, id));
+
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete planner item" });
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Scoring Config   GET /api/store/scoring-config
+//                  PUT /api/store/scoring-config
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/store/scoring-config",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const owner = normUsername(req.account!.username);
+      const rows = await db
+        .select()
+        .from(scoringConfigsTable)
+        .where(eq(scoringConfigsTable.owner, owner))
+        .limit(1);
+
+      res.json({ config: rows[0]?.config ?? null });
+    } catch {
+      res.status(500).json({ error: "Failed to load scoring config" });
+    }
+  },
+);
+
+router.put(
+  "/store/scoring-config",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const owner = normUsername(req.account!.username);
+      const { config } = req.body ?? {};
+
+      if (!config || typeof config !== "object") {
+        res.status(400).json({ error: "Missing config" });
+        return;
+      }
+
+      await db
+        .insert(scoringConfigsTable)
+        .values({ owner, config })
+        .onConflictDoUpdate({
+          target: scoringConfigsTable.owner,
+          set: { config, updatedAt: new Date() },
+        });
+
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to save scoring config" });
+    }
+  },
+);
+
+export default router;

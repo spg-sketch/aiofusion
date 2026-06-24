@@ -1303,6 +1303,7 @@ function ClientSelectorPage({
   session?: { username: string; role: string } | null;
   onGenerateFromUrl?: () => void;
 }) {
+  useContentStore();
   const displayClients = projects;
   const isAdmin = session?.role === "admin";
 
@@ -1690,6 +1691,7 @@ function DashboardPage({
   onNavigate: (p: string) => void;
   activeClient: Client;
 }) {
+  useContentStore();
   // ── Live audit data ───────────────────────────────────────────────────────
   const savedAudits = loadSavedAudits(activeClient.id);
   const latestAudit = savedAudits.length > 0 ? savedAudits[savedAudits.length - 1] : null;
@@ -3129,8 +3131,9 @@ function OptimiserPage({
   // Optimiser message picker only offers key messages from Project Set-Up 1.2 and 1.3.
   const keyMessagePicks = projectDataMessages.filter((m) => m.fieldId === "1.2" || m.fieldId === "1.3");
 
+  const contentVersion = useContentStore();
   const RESEARCH_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
-  const archiveAll = useMemo(() => loadArchive(), [showRetrieve]);
+  const archiveAll = useMemo(() => loadArchive(), [showRetrieve, contentVersion]);
   const filteredArchive = archiveAll.filter((a) => !retrieveQuery || (a.title + " " + (a.body || "")).toLowerCase().includes(retrieveQuery.toLowerCase()));
 
   // Preload from planner / archive
@@ -4018,12 +4021,14 @@ OUTPUT INSTRUCTIONS:
 }
 
 function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
-  const [projects, setProjects] = useState<PlannerProject[]>(loadPlannerProjects());
+  const contentVersion = useContentStore();
+  const [projects, setProjects] = useState<PlannerProject[]>(() => loadPlannerProjects());
+  useEffect(() => { setProjects(loadPlannerProjects()); }, [contentVersion]);
   const [editing, setEditing] = useState<PlannerProject | null>(null);
   const plannerKeyMessages = useMemo(() => getKeyMessages(), [editing?.id]);
   const [showArchivePicker, setShowArchivePicker] = useState(false);
   const [showMethodology, setShowMethodology] = useState(false);
-  const archive = useMemo(() => loadArchive(), [showArchivePicker]);
+  const archive = useMemo(() => loadArchive(), [showArchivePicker, contentVersion]);
 
   const sendToOptimiser = (archiveId?: string) => {
     if (archiveId) {
@@ -4036,7 +4041,8 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
     onNavigate("media-research");
   };
   const RESEARCH_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
-  const [cfg, setCfg] = useState<ScoringConfig>(loadScoringConfig());
+  const [cfg, setCfg] = useState<ScoringConfig>(() => loadScoringConfig());
+  useEffect(() => { setCfg(loadScoringConfig()); }, [contentVersion]);
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<"cards" | "spreadsheet">("spreadsheet");
   const update = (next: PlannerProject[]) => { setProjects(next); savePlannerProjects(next); };
@@ -5094,6 +5100,7 @@ type ArchiveItem = {
   releasedAt?: string;
   releaseChannel?: string;
   source?: "optimiser" | "creator";
+  projectId?: string;
 };
 
 function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
@@ -5111,26 +5118,175 @@ function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: 
   return { headline: "", standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(arc.body || "")) };
 }
 
-const ARCHIVE_KEY = "aio.archive.v1";
+// ---------------------------------------------------------------------------
+// Content store — archive, planner and scoring config
+// ---------------------------------------------------------------------------
+// Items live in a module-level in-memory cache populated from the server on
+// login. All reads return synchronously from the cache so existing call sites
+// (useMemo, useState initialisers, etc.) keep working without change.
+// Mutations fire REST calls in the background, update the cache immediately,
+// and dispatch `aio:content-store-changed` so subscribed components re-render.
+// ---------------------------------------------------------------------------
+
+const CONTENT_STORE_MIGRATED_KEY = "aio.store.migrated.v1";
+// Legacy localStorage keys — kept so the one-time migration can find them.
+const ARCHIVE_KEY  = "aio.archive.v1";
 const PROJECTS_KEY = "aio.planner.projects.v1";
 
-// Planner and archive data are scoped per project. The default/legacy project
-// keeps the bare key so existing data is never lost (mirrors the intake key
-// convention in IntakeForm). When no clientId is passed, the currently active
-// project is used, so existing call sites keep working unchanged.
-function scopedStoreKey(base: string, clientId?: string): string {
+let _archiveCache:  (ArchiveItem & { projectId: string })[] | null = null;
+let _plannerCache:  (PlannerProject & { projectId: string })[] | null = null;
+let _scoringCache:  ScoringConfig | null = null;
+
+// Resolve the effective project id for a given clientId argument (mirrors the
+// old scopedStoreKey logic so call sites that pass client.id still work).
+function effectiveProjectId(clientId?: string): string {
   const id = clientId ?? getActiveProjectId();
-  if (id && id !== "default") return `${base}::${id}`;
-  return base;
+  return id && id !== "default" ? id : "default";
 }
-function archiveKeyFor(clientId?: string): string { return scopedStoreKey(ARCHIVE_KEY, clientId); }
-function plannerKeyFor(clientId?: string): string { return scopedStoreKey(PROJECTS_KEY, clientId); }
+
+// Subscribe to content-store changes and force a re-render. Returns a version
+// counter that increments on every change so components can use it as a
+// useEffect dependency.
+function useContentStore(): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const handler = () => setVersion((v) => v + 1);
+    window.addEventListener("aio:content-store-changed", handler);
+    return () => window.removeEventListener("aio:content-store-changed", handler);
+  }, []);
+  return version;
+}
+
+// Load all content for this session from the server. Fires
+// `aio:content-store-changed` when done so all subscribed components refresh.
+async function initContentStore(): Promise<void> {
+  try {
+    const [archRes, planRes, cfgRes] = await Promise.all([
+      fetch(`${apiBase()}/api/store/archive`,       { credentials: "include" }),
+      fetch(`${apiBase()}/api/store/planner`,        { credentials: "include" }),
+      fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" }),
+    ]);
+    if (archRes.ok)  _archiveCache  = (await archRes.json()).items  ?? [];
+    else             _archiveCache  = _archiveCache  ?? [];
+    if (planRes.ok)  _plannerCache  = (await planRes.json()).items  ?? [];
+    else             _plannerCache  = _plannerCache  ?? [];
+    if (cfgRes.ok) {
+      const raw = (await cfgRes.json()).config as Partial<ScoringConfig> | null;
+      _scoringCache = raw
+        ? { ...DEFAULT_SCORING, ...raw,
+            statusMultipliers: { ...DEFAULT_SCORING.statusMultipliers, ...(raw.statusMultipliers ?? {}) },
+            typeWeights: raw.typeWeights ?? DEFAULT_SCORING.typeWeights,
+            channels:    raw.channels    ?? DEFAULT_SCORING.channels }
+        : DEFAULT_SCORING;
+    } else {
+      _scoringCache = _scoringCache ?? DEFAULT_SCORING;
+    }
+  } catch {
+    _archiveCache  = _archiveCache  ?? [];
+    _plannerCache  = _plannerCache  ?? [];
+    _scoringCache  = _scoringCache  ?? DEFAULT_SCORING;
+  }
+  window.dispatchEvent(new Event("aio:content-store-changed"));
+}
+
+// One-time migration: upload any data still only in this browser's localStorage
+// to the server, then set a guard key so it only runs once per browser.
+async function migrateLocalStorageContentToServer(): Promise<void> {
+  try { if (localStorage.getItem(CONTENT_STORE_MIGRATED_KEY)) return; } catch { return; }
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const key of keys.filter((k) => k === ARCHIVE_KEY || k.startsWith(ARCHIVE_KEY + "::"))) {
+      const projectId = key.includes("::") ? key.split("::").pop()! : "default";
+      const items: ArchiveItem[] = JSON.parse(localStorage.getItem(key) || "[]");
+      for (const item of items) {
+        if (item.id.startsWith("seed-")) continue;
+        await fetch(`${apiBase()}/api/store/archive`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...item, projectId }),
+        });
+      }
+    }
+    for (const key of keys.filter((k) => k === PROJECTS_KEY || k.startsWith(PROJECTS_KEY + "::"))) {
+      const projectId = key.includes("::") ? key.split("::").pop()! : "default";
+      const items: PlannerProject[] = JSON.parse(localStorage.getItem(key) || "[]");
+      for (const item of items) {
+        await fetch(`${apiBase()}/api/store/planner`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...item, projectId }),
+        });
+      }
+    }
+    const rawCfg = localStorage.getItem("aio.scoring.v1");
+    if (rawCfg) {
+      await fetch(`${apiBase()}/api/store/scoring-config`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: JSON.parse(rawCfg) }),
+      });
+    }
+    localStorage.setItem(CONTENT_STORE_MIGRATED_KEY, "1");
+  } catch {
+    // Will retry on next load if the guard key was not set.
+  }
+}
+
+// Strip projectId for comparison so items fetched from the cache (which have
+// projectId) compare equal to the same item without the server-added field.
+function stripProjectId(item: ArchiveItem | PlannerProject): ArchiveItem | PlannerProject {
+  const { projectId: _p, ...rest } = item as typeof item & { projectId?: string };
+  return rest as ArchiveItem | PlannerProject;
+}
 
 function loadArchive(clientId?: string): ArchiveItem[] {
-  try { return JSON.parse(localStorage.getItem(archiveKeyFor(clientId)) || "[]"); } catch { return []; }
+  if (_archiveCache === null) return [];
+  const pid = effectiveProjectId(clientId);
+  return _archiveCache.filter((a) => a.projectId === pid);
 }
-function saveArchive(items: ArchiveItem[], clientId?: string) {
-  localStorage.setItem(archiveKeyFor(clientId), JSON.stringify(items));
+
+function saveArchive(newItems: ArchiveItem[], clientId?: string) {
+  const pid = effectiveProjectId(clientId);
+  const oldItems = _archiveCache === null
+    ? []
+    : _archiveCache.filter((a) => a.projectId === pid);
+
+  const oldMap = new Map(oldItems.map((a) => [a.id, a]));
+  const newMap = new Map(newItems.map((a) => [a.id, a]));
+
+  for (const old of oldItems) {
+    if (!newMap.has(old.id)) {
+      fetch(`${apiBase()}/api/store/archive/${old.id}`,
+        { method: "DELETE", credentials: "include" }).catch(console.error);
+    }
+  }
+  for (const item of newItems) {
+    const withPid = { ...item, projectId: pid };
+    if (!oldMap.has(item.id)) {
+      fetch(`${apiBase()}/api/store/archive`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withPid),
+      }).catch(console.error);
+    } else if (JSON.stringify(stripProjectId(oldMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item))) {
+      fetch(`${apiBase()}/api/store/archive/${item.id}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withPid),
+      }).catch(console.error);
+    }
+  }
+
+  const withPid = newItems.map((a) => ({ ...a, projectId: pid }));
+  _archiveCache = [
+    ...(_archiveCache ?? []).filter((a) => a.projectId !== pid),
+    ...withPid,
+  ];
+  window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
 type PlannerStatus = "Planned" | "Drafting" | "Review" | "Approved";
@@ -5150,10 +5306,49 @@ type PlannerProject = {
 };
 
 function loadPlannerProjects(clientId?: string): PlannerProject[] {
-  try { return JSON.parse(localStorage.getItem(plannerKeyFor(clientId)) || "[]"); } catch { return []; }
+  if (_plannerCache === null) return [];
+  const pid = effectiveProjectId(clientId);
+  return _plannerCache.filter((p) => p.projectId === pid);
 }
-function savePlannerProjects(items: PlannerProject[], clientId?: string) {
-  localStorage.setItem(plannerKeyFor(clientId), JSON.stringify(items));
+
+function savePlannerProjects(newItems: PlannerProject[], clientId?: string) {
+  const pid = effectiveProjectId(clientId);
+  const oldItems = _plannerCache === null
+    ? []
+    : _plannerCache.filter((p) => p.projectId === pid);
+
+  const oldMap = new Map(oldItems.map((p) => [p.id, p]));
+  const newMap = new Map(newItems.map((p) => [p.id, p]));
+
+  for (const old of oldItems) {
+    if (!newMap.has(old.id)) {
+      fetch(`${apiBase()}/api/store/planner/${old.id}`,
+        { method: "DELETE", credentials: "include" }).catch(console.error);
+    }
+  }
+  for (const item of newItems) {
+    const withPid = { ...item, projectId: pid };
+    if (!oldMap.has(item.id)) {
+      fetch(`${apiBase()}/api/store/planner`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withPid),
+      }).catch(console.error);
+    } else if (JSON.stringify(stripProjectId(oldMap.get(item.id)!)) !== JSON.stringify(stripProjectId(item))) {
+      fetch(`${apiBase()}/api/store/planner/${item.id}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withPid),
+      }).catch(console.error);
+    }
+  }
+
+  const withPid = newItems.map((p) => ({ ...p, projectId: pid }));
+  _plannerCache = [
+    ...(_plannerCache ?? []).filter((p) => p.projectId !== pid),
+    ...withPid,
+  ];
+  window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
 const SEED_PURGED_KEY = "aio.seed.demo.purged.v1";
@@ -5253,17 +5448,17 @@ const DEFAULT_SCORING: ScoringConfig = {
   statusMultipliers: { Approved: 1, Review: 0.85, Drafting: 0.7, Planned: 0.5 },
 };
 
-const SCORING_KEY = "aio.scoring.v1";
 function loadScoringConfig(): ScoringConfig {
-  try {
-    const raw = localStorage.getItem(SCORING_KEY);
-    if (!raw) return DEFAULT_SCORING;
-    const parsed = JSON.parse(raw) as Partial<ScoringConfig>;
-    return { ...DEFAULT_SCORING, ...parsed, statusMultipliers: { ...DEFAULT_SCORING.statusMultipliers, ...(parsed.statusMultipliers || {}) }, typeWeights: parsed.typeWeights || DEFAULT_SCORING.typeWeights, channels: parsed.channels || DEFAULT_SCORING.channels };
-  } catch { return DEFAULT_SCORING; }
+  return _scoringCache ?? DEFAULT_SCORING;
 }
 function saveScoringConfig(cfg: ScoringConfig) {
-  try { localStorage.setItem(SCORING_KEY, JSON.stringify(cfg)); } catch { /* noop */ }
+  _scoringCache = cfg;
+  fetch(`${apiBase()}/api/store/scoring-config`, {
+    method: "PUT", credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ config: cfg }),
+  }).catch(console.error);
+  window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
 function scoreProject(p: PlannerProject, cfg: ScoringConfig = loadScoringConfig()) {
@@ -5284,7 +5479,9 @@ const STATUS_COLOURS: Record<PlannerStatus, { bg: string; fg: string }> = {
 };
 
 function ReleaseGatewayPage() {
-  const [archive, setArchive] = useState<ArchiveItem[]>(loadArchive());
+  const contentVersion = useContentStore();
+  const [archive, setArchive] = useState<ArchiveItem[]>(() => loadArchive());
+  useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
   const finals = archive.filter((i) => i.status === "Final");
   const wires = [
     { name: "PR Newswire", desc: "Global newswire distribution.", color: "#1f748f" },
@@ -5400,12 +5597,14 @@ function ReleaseGatewayPage() {
 }
 
 function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
+  const contentVersion = useContentStore();
   const intake = loadIntakeData();
   const projectName = (intake?.formData["4.1"] as string) || "your project";
   const keyMessages = getKeyMessages();
   const intakeSpeakers = getSpokespeople();
 
-  const [archive, setArchive] = useState<ArchiveItem[]>(loadArchive());
+  const [archive, setArchive] = useState<ArchiveItem[]>(() => loadArchive());
+  useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
   const [query, setQuery] = useState("");
   const [periodFilter, setPeriodFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("");
@@ -5869,6 +6068,7 @@ const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
 };
 
 function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void }) {
+  useContentStore();
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const intake = loadIntakeData();
   const spokesList = getSpokespeople();
@@ -6804,6 +7004,7 @@ Deliverable:
 - A structured list in a Word document.`;
 
 function MediaResearchPage() {
+  useContentStore();
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
   const messages = getKeyMessages();
@@ -9691,6 +9892,8 @@ function App() {
     void (async () => {
       const s = await bootstrapAuth();
       setSessionState(s);
+      await migrateLocalStorageContentToServer();
+      await initContentStore();
       await resyncProjects();
     })();
   }, [resyncProjects]);

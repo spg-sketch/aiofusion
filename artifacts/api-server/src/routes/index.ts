@@ -7,6 +7,7 @@ import llmCheckRouter from "./llm-check";
 import aiAssistRouter from "./ai-assist";
 import contentAiRouter from "./content-ai";
 import storeRouter from "./store";
+import storeContentRouter from "./store-content";
 import mediaDbRouter from "./media-db";
 import platformRouter from "./platform";
 import adminRouter from "./admin";
@@ -23,6 +24,7 @@ router.use(llmCheckRouter);
 router.use(aiAssistRouter);
 router.use(contentAiRouter);
 router.use(storeRouter);
+router.use(storeContentRouter);
 router.use(mediaDbRouter);
 router.use(adminRouter);
 
