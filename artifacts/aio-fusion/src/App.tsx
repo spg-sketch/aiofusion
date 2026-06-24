@@ -2325,12 +2325,30 @@ function DiagnosticPage({
   const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  type AuditLockInfo = { locked: boolean; lastRunAt?: string; nextAvailableAt?: string; daysRemaining?: number };
+  const [diagAuditLock, setDiagAuditLock] = useState<AuditLockInfo>({ locked: false });
+  const [showDiagConfirm, setShowDiagConfirm] = useState(false);
+  const [diagPendingForce, setDiagPendingForce] = useState(false);
 
   useEffect(() => {
     setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
     setResult(null);
     setError(null);
     setJustSaved(false);
+    setDiagAuditLock({ locked: false });
+    setShowDiagConfirm(false);
+    setDiagPendingForce(false);
+  }, [activeClient.id]);
+
+  useEffect(() => {
+    if (!activeClient.id) return;
+    const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((d: AuditLockInfo) => setDiagAuditLock(d))
+      .catch(() => { /* non-blocking */ });
   }, [activeClient.id]);
 
   useEffect(() => {
@@ -2467,7 +2485,7 @@ Inputs supplied with this brief:
 Engine used:
 - Anthropic Claude (claude-sonnet-4-5), run at temperature 0 and grounded on the measured facts so the same page gives near-identical results each time. OpenAI (gpt-5), also at temperature 0 with a fixed seed, is kept as a silent backup only if Claude is unavailable.`;
 
-  const handleRunDiagnostic = async () => {
+  const handleRunDiagnostic = async (force = false) => {
     if (!contentInput.trim() && !urlInput.trim()) {
       setError("Please enter a homepage URL or paste content to analyse.");
       return;
@@ -2488,6 +2506,8 @@ Engine used:
           // measured as the same company across every audit. Omitted when no
           // identity has been confirmed, leaving the result unchanged.
           confirmedEntity: getConfirmedEntity() || undefined,
+          projectId: activeClient.id,
+          force,
         }),
       });
       if (!resp.ok) {
@@ -2497,6 +2517,9 @@ Engine used:
       const data = await resp.json();
       setResult(data);
       setJustSaved(false);
+      // Refresh audit lock so the next visit shows the correct last-run date.
+      const lockResp = await fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, { credentials: "include" }).catch(() => null);
+      if (lockResp?.ok) lockResp.json().then(setDiagAuditLock).catch(() => {});
     } catch (err: any) {
       setError(err.message || "Analysis failed. Please try again.");
     } finally {
@@ -2557,24 +2580,75 @@ Engine used:
                 {error}
               </div>
             )}
+            {diagAuditLock.lastRunAt && (
+              <div className="mb-4 p-3 rounded-lg flex items-start gap-2 text-sm" style={{ background: "#F5F7FA", borderLeft: "3px solid #1f748f", color: "#165265" }}>
+                <Lock size={14} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-medium">Last run: {new Date(diagAuditLock.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                  {diagAuditLock.locked && diagAuditLock.daysRemaining && diagAuditLock.daysRemaining > 0 && (
+                    <span className="font-light"> · next run available in {diagAuditLock.daysRemaining} day{diagAuditLock.daysRemaining === 1 ? "" : "s"}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Pre-run confirmation dialog */}
+            {showDiagConfirm && (
+              <div className="mb-4 p-4 rounded-lg border" style={{ background: "#FFFBF0", borderColor: "#E5A800" }}>
+                <p className="text-sm font-medium mb-1" style={{ color: "#7A5800" }}>
+                  {diagPendingForce ? "Force re-run this audit?" : "Run this audit?"}
+                </p>
+                <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
+                  {diagPendingForce
+                    ? "This will override the 21-day lock and consume LLM credits. Continue?"
+                    : "This will fetch and analyse your website with Claude. It typically takes 15–30 seconds and consumes LLM credits."}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setShowDiagConfirm(false); handleRunDiagnostic(diagPendingForce); }}
+                    className="px-4 py-1.5 rounded text-xs font-medium text-white"
+                    style={{ background: "#1f748f" }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setShowDiagConfirm(false)}
+                    className="px-4 py-1.5 rounded text-xs font-medium"
+                    style={{ background: "#e8ecf0", color: "#165265" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleRunDiagnostic}
-                disabled={loading}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
-                style={{ background: "#1f748f" }}
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Analysing with Claude...
-                  </>
-                ) : (
-                  <>
-                    <Search size={16} /> Run Diagnostic
-                  </>
-                )}
-              </button>
+              {diagAuditLock.locked && getLocalSession()?.role !== "admin" ? (
+                <div className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium opacity-60 cursor-not-allowed" style={{ background: "#e8ecf0", color: "#165265" }}>
+                  <Lock size={16} /> Audit locked
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setDiagPendingForce(diagAuditLock.locked); setShowDiagConfirm(true); }}
+                    disabled={loading || showDiagConfirm}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+                    style={{ background: "#1f748f" }}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Analysing with Claude...
+                      </>
+                    ) : (
+                      <>
+                        <Search size={16} /> {diagAuditLock.locked ? "Force Re-run Diagnostic" : "Run Diagnostic"}
+                      </>
+                    )}
+                  </button>
+                  {diagAuditLock.locked && (
+                    <span className="text-xs font-light" style={{ color: "#B03D33" }}>Admin override</span>
+                  )}
+                </>
+              )}
             </div>
             {loading && (
               <div className="mt-6 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>

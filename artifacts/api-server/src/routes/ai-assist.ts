@@ -101,6 +101,7 @@ aiAssistRouter.post(
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8192,
+        temperature: 0,
         messages: [{ role: "user", content: prompt }],
       });
       const block = message.content[0];
@@ -274,6 +275,7 @@ aiAssistRouter.post(
       const message = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8192,
+        temperature: 0,
         messages: [{ role: "user", content: prompt }],
       });
       const block = message.content[0];

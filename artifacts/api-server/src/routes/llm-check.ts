@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { and, eq } from "drizzle-orm";
+import { db, auditLocksTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { llmCheckLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
@@ -47,7 +49,9 @@ export interface ProbeResult {
   competitors: string[];
 }
 
-const RUNS_PER_QUESTION = 3;
+const RUNS_PER_QUESTION = 2;
+const MAX_QUESTIONS = 8;
+const AUDIT_LOCK_DAYS = 21;
 
 const LEGAL_SUFFIXES = new Set([
   "ltd", "limited", "inc", "incorporated", "llc", "plc", "llp", "co", "company",
@@ -517,7 +521,9 @@ export function groupProbesByQuery(results: ProbeResult[]): ProbeSummary[] {
   return [...grouped.values()].map((runs) => {
     const runCount = runs.length;
     const mentionRuns = runs.filter((r) => r.mentioned).length;
-    const mentioned = mentionRuns * 2 >= runCount;
+    // Strict majority: brand must be mentioned in MORE than half the runs.
+    // With RUNS_PER_QUESTION=2, this means 2/2 required (not 1/2).
+    const mentioned = mentionRuns * 2 > runCount;
     const repr = runs.find((r) => r.mentioned) || runs[0];
     const competitorMap = new Map<string, string>();
     for (const r of runs) {
@@ -1106,13 +1112,90 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
   }
 }
 
+// GET /api/audit-lock — returns the current lock status for a project+auditType pair.
+// Called by the frontend on page load so it can show the last-run date and block
+// the run button before the user even tries to fire the audit.
+llmCheckRouter.get("/audit-lock", async (req: Request, res: Response) => {
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+  const auditType = typeof req.query.auditType === "string" ? req.query.auditType.trim() : "visibility";
+
+  if (!projectId) {
+    res.json({ locked: false });
+    return;
+  }
+
+  try {
+    const existing = await db
+      .select()
+      .from(auditLocksTable)
+      .where(and(eq(auditLocksTable.projectId, projectId), eq(auditLocksTable.auditType, auditType)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      res.json({ locked: false });
+      return;
+    }
+
+    const lastRunAt = existing[0].lastRunAt;
+    const msPerDay = 86_400_000;
+    const nextAvailableAt = new Date(lastRunAt.getTime() + AUDIT_LOCK_DAYS * msPerDay);
+    const now = new Date();
+    const locked = nextAvailableAt > now;
+    const daysRemaining = locked ? Math.ceil((nextAvailableAt.getTime() - now.getTime()) / msPerDay) : 0;
+
+    res.json({
+      locked,
+      lastRunAt: lastRunAt.toISOString(),
+      nextAvailableAt: nextAvailableAt.toISOString(),
+      daysRemaining,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "Audit lock status check failed");
+    res.json({ locked: false });
+  }
+});
+
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
-  const { companyName, sector, sectors, keywords, icp, location, persona, projectData, businessType: rawBusinessType } = req.body;
+  const { companyName, sector, sectors, keywords, icp, location, persona, projectData, businessType: rawBusinessType, projectId: rawProjectId, force: rawForce } = req.body;
   const businessType: BusinessType = (rawBusinessType === "service" || rawBusinessType === "product" || rawBusinessType === "consumer") ? rawBusinessType : "";
+  const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : "";
+  const force = rawForce === true;
 
   if (!companyName || typeof companyName !== "string") {
     res.status(400).json({ error: "companyName is required" });
     return;
+  }
+
+  // 21-day audit lock: block repeat runs to control LLM costs.
+  // Admins can bypass with force=true for legitimate re-runs (e.g. post-relaunch).
+  if (projectId) {
+    try {
+      const existing = await db
+        .select()
+        .from(auditLocksTable)
+        .where(and(eq(auditLocksTable.projectId, projectId), eq(auditLocksTable.auditType, "visibility")))
+        .limit(1);
+
+      if (existing.length > 0) {
+        const lastRunAt = existing[0].lastRunAt;
+        const msPerDay = 86_400_000;
+        const nextAvailableAt = new Date(lastRunAt.getTime() + AUDIT_LOCK_DAYS * msPerDay);
+        if (nextAvailableAt > new Date()) {
+          const isAdmin = req.account?.role === "admin";
+          if (!force || !isAdmin) {
+            res.status(429).json({
+              error: `This audit was last run on ${lastRunAt.toLocaleDateString("en-GB")}. The next run is available on ${nextAvailableAt.toLocaleDateString("en-GB")}.`,
+              locked: true,
+              lastRunAt: lastRunAt.toISOString(),
+              nextAvailableAt: nextAvailableAt.toISOString(),
+            });
+            return;
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.warn({ err, projectId }, "Audit lock check failed; proceeding without lock enforcement");
+    }
   }
 
   const rawSectors = [
@@ -1172,7 +1255,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // company's website domain so the AI engines answer about the right company.
     const rawBuyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
-    const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, 18);
+    const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, MAX_QUESTIONS);
 
     // Total individual LLM calls: one per (question × run × model).
     const totalProbeCount = questions.length * RUNS_PER_QUESTION * 2;
@@ -1274,6 +1357,18 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       assessment,
       entityClarity,
     };
+
+    // Record this run so the 21-day lock is enforced on the next attempt.
+    if (projectId) {
+      const owner = typeof req.account?.username === "string" ? req.account.username : "";
+      db.insert(auditLocksTable)
+        .values({ projectId, auditType: "visibility", owner, lastRunAt: new Date() })
+        .onConflictDoUpdate({
+          target: [auditLocksTable.projectId, auditLocksTable.auditType],
+          set: { lastRunAt: new Date(), owner },
+        })
+        .catch((err: any) => logger.warn({ err, projectId }, "Failed to update audit lock after visibility run"));
+    }
 
     sseSend(res, "result", summary);
     res.end();

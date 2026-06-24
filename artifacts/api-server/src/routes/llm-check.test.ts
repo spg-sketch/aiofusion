@@ -785,12 +785,14 @@ describe("groupProbesByQuery", () => {
     expect(minority[0].mentioned).toBe(false);
   });
 
-  it("treats an exact half as mentioned (tie goes to mentioned)", () => {
+  it("treats an exact half (1/2) as NOT mentioned (strict majority required)", () => {
+    // With RUNS_PER_QUESTION=2 a 1/2 split is ambiguous; conservative threshold
+    // requires strict majority so the tie resolves to not-mentioned.
     const tie = groupProbesByQuery([
       probe({ question: "q", mentioned: true }),
       probe({ question: "q", mentioned: false }),
     ]);
-    expect(tie[0].mentioned).toBe(true);
+    expect(tie[0].mentioned).toBe(false);
   });
 
   it("picks a mentioning run as the representative when one exists", () => {

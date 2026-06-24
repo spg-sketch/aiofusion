@@ -1,11 +1,15 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { and, eq } from "drizzle-orm";
+import { db, auditLocksTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
+
+const AUDIT_LOCK_DAYS = 21;
 
 const diagnosticRouter = Router();
 
@@ -241,10 +245,44 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
 diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
   const { content, url } = req.body;
   const confirmedEntity = sanitizeConfirmedEntity(req.body?.confirmedEntity);
+  const projectId = typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";
+  const force = req.body.force === true;
 
   if (!content && !url) {
     res.status(400).json({ error: "Either content or url is required" });
     return;
+  }
+
+  // 21-day audit lock: block repeat runs to control LLM costs.
+  // Admins can bypass with force=true for legitimate re-runs (e.g. post-relaunch).
+  if (projectId) {
+    try {
+      const existing = await db
+        .select()
+        .from(auditLocksTable)
+        .where(and(eq(auditLocksTable.projectId, projectId), eq(auditLocksTable.auditType, "website")))
+        .limit(1);
+
+      if (existing.length > 0) {
+        const lastRunAt = existing[0].lastRunAt;
+        const msPerDay = 86_400_000;
+        const nextAvailableAt = new Date(lastRunAt.getTime() + AUDIT_LOCK_DAYS * msPerDay);
+        if (nextAvailableAt > new Date()) {
+          const isAdmin = req.account?.role === "admin";
+          if (!force || !isAdmin) {
+            res.status(429).json({
+              error: `This audit was last run on ${lastRunAt.toLocaleDateString("en-GB")}. The next run is available on ${nextAvailableAt.toLocaleDateString("en-GB")}.`,
+              locked: true,
+              lastRunAt: lastRunAt.toISOString(),
+              nextAvailableAt: nextAvailableAt.toISOString(),
+            });
+            return;
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.warn({ err, projectId }, "Diagnostic audit lock check failed; proceeding without lock enforcement");
+    }
   }
 
   if (typeof content === "string" && content.length > MAX_CONTENT_CHARS) {
@@ -316,6 +354,18 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     if (fetchedUrl) result.fetchedUrl = fetchedUrl;
     if (pagesFetched.length) result.pagesFetched = pagesFetched;
     if (pageFacts) result.pageFacts = pageFacts;
+
+    // Record this run so the 21-day lock is enforced on the next attempt.
+    if (projectId) {
+      const owner = typeof req.account?.username === "string" ? req.account.username : "";
+      db.insert(auditLocksTable)
+        .values({ projectId, auditType: "website", owner, lastRunAt: new Date() })
+        .onConflictDoUpdate({
+          target: [auditLocksTable.projectId, auditLocksTable.auditType],
+          set: { lastRunAt: new Date(), owner },
+        })
+        .catch((err: any) => logger.warn({ err, projectId }, "Failed to update audit lock after website diagnostic run"));
+    }
 
     res.json(deepStripEmDashes(result));
   } catch (err: any) {

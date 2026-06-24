@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureDefaultAdmin } from "./lib/platform-auth";
+import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
 
 const rawPort = process.env["PORT"];
 
@@ -28,5 +29,9 @@ app.listen(port, (err) => {
   // no admin account exists yet.
   ensureDefaultAdmin().catch((err) => {
     logger.error({ err }, "Failed to ensure default admin account");
+  });
+
+  ensureAuditLocksTable().catch((err) => {
+    logger.error({ err }, "Failed to ensure audit_locks table");
   });
 });

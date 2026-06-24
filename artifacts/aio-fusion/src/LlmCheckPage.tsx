@@ -4,6 +4,7 @@ import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
+import { getSession } from "./lib/auth";
 import {
   Eye,
   Search,
@@ -28,6 +29,7 @@ import {
   X,
   Loader2,
   Wand2,
+  Lock,
 } from "lucide-react";
 
 const vars = {
@@ -506,6 +508,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
+  type AuditLockInfo = { locked: boolean; lastRunAt?: string; nextAvailableAt?: string; daysRemaining?: number };
+  const [auditLock, setAuditLock] = useState<AuditLockInfo>({ locked: false });
+  const [showRunConfirm, setShowRunConfirm] = useState(false);
+  const [pendingForce, setPendingForce] = useState(false);
   // The identity the user has confirmed is theirs for an ambiguous brand name.
   // Read from the project on mount/switch; persisted via setConfirmedEntity so
   // the next audit run anchors to it.
@@ -531,6 +537,21 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setJustSaved(false);
     setConfirmedEntityState(getConfirmedEntity());
     setEditingIdentity(false);
+    setAuditLock({ locked: false });
+    setShowRunConfirm(false);
+    setPendingForce(false);
+  }, [activeClient.id]);
+
+  // Fetch audit lock status for this project whenever the active client changes.
+  useEffect(() => {
+    if (!activeClient.id) return;
+    const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((d) => setAuditLock(d))
+      .catch(() => { /* non-blocking */ });
   }, [activeClient.id]);
 
   // Pull this project's shared Set-Up from the server, then refresh the confirmed
@@ -630,7 +651,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     }
   }
 
-  async function runCheck() {
+  async function runCheck(force = false) {
     setLoading(true);
     setError("");
     setResult(null);
@@ -665,6 +686,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           persona: getClientPersona(),
           businessType,
           projectData,
+          projectId: activeClient.id,
+          force,
         }),
       });
 
@@ -719,6 +742,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       setCycleData(updated);
       saveAuditToHistory(finalData);
       recordAuditDuration("visibility", Date.now() - _auditStart);
+      // Refresh audit lock so the UI reflects the new last-run date immediately.
+      const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, { credentials: "include" })
+        .then((r) => r.json())
+        .then(setAuditLock)
+        .catch(() => {});
     } catch (err: any) {
       setError(err.message || "Failed to run visibility check");
     } finally {
@@ -1389,30 +1418,81 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 {error}
               </div>
             )}
+            {auditLock.lastRunAt && (
+              <div className="mb-4 p-3 rounded-lg flex items-start gap-2 text-sm" style={{ background: "#F5F7FA", borderLeft: "3px solid #1f748f", color: "#165265" }}>
+                <Lock size={14} className="flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-medium">Last run: {new Date(auditLock.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                  {auditLock.locked && auditLock.daysRemaining && auditLock.daysRemaining > 0 && (
+                    <span className="font-light"> · next run available in {auditLock.daysRemaining} day{auditLock.daysRemaining === 1 ? "" : "s"}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Pre-run confirmation dialog */}
+            {showRunConfirm && (
+              <div className="mb-4 p-4 rounded-lg border" style={{ background: "#FFFBF0", borderColor: "#E5A800" }}>
+                <p className="text-sm font-medium mb-1" style={{ color: "#7A5800" }}>
+                  {pendingForce ? "Force re-run this audit?" : "Run this audit?"}
+                </p>
+                <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
+                  {pendingForce
+                    ? "This will override the 21-day lock and consume LLM credits. Continue?"
+                    : "This will query Claude and ChatGPT across up to 8 questions. It typically takes 1–3 minutes and consumes LLM credits."}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setShowRunConfirm(false); runCheck(pendingForce); }}
+                    className="px-4 py-1.5 rounded text-xs font-medium text-white"
+                    style={{ background: "#1f748f" }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => setShowRunConfirm(false)}
+                    className="px-4 py-1.5 rounded text-xs font-medium"
+                    style={{ background: "#e8ecf0", color: "#165265" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3 flex-wrap">
-              <button
-                onClick={runCheck}
-                disabled={loading || auditSectors.length === 0 || probeName.length === 0}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
-                style={{ background: "#1f748f" }}
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Querying Claude & ChatGPT...
-                  </>
-                ) : (
-                  <>
-                    <Search size={16} /> Run Visibility Audit
-                  </>
-                )}
-              </button>
-              {!loading && (() => { const hint = getTypicalDurationHint("visibility"); return hint ? (
-                <span className="flex items-center gap-1 text-xs" style={{ color: vars.g400 }}>
-                  <Clock size={12} />
-                  {hint}
-                </span>
-              ) : null; })()}
+              {auditLock.locked && getSession()?.role !== "admin" ? (
+                <div className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium opacity-60 cursor-not-allowed" style={{ background: "#e8ecf0", color: "#165265" }}>
+                  <Lock size={16} /> Audit locked
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setPendingForce(auditLock.locked); setShowRunConfirm(true); }}
+                    disabled={loading || auditSectors.length === 0 || probeName.length === 0 || showRunConfirm}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
+                    style={{ background: "#1f748f" }}
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Querying Claude & ChatGPT...
+                      </>
+                    ) : (
+                      <>
+                        <Search size={16} /> {auditLock.locked ? "Force Re-run Audit" : "Run Visibility Audit"}
+                      </>
+                    )}
+                  </button>
+                  {auditLock.locked && (
+                    <span className="text-xs font-light" style={{ color: "#B03D33" }}>Admin override</span>
+                  )}
+                  {!loading && (() => { const hint = getTypicalDurationHint("visibility"); return hint ? (
+                    <span className="flex items-center gap-1 text-xs" style={{ color: vars.g400 }}>
+                      <Clock size={12} />
+                      {hint}
+                    </span>
+                  ) : null; })()}
+                </>
+              )}
             </div>
             <div className="mt-4">
               <CountdownBanner
