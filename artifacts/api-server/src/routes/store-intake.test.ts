@@ -25,8 +25,9 @@ vi.mock("@workspace/db", async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema });
 
-  // Mirror lib/db/src/schema/projects.ts (only the projects table is touched by
-  // an admin-actor intake save; auth helpers short-circuit for an admin).
+  // Mirror lib/db/src/schema/projects.ts and project-snapshots.ts. The
+  // intake route calls snapshotProject() on every save, which reads and
+  // writes project_snapshots — both tables must exist.
   await client.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id varchar PRIMARY KEY,
@@ -37,6 +38,17 @@ vi.mock("@workspace/db", async () => {
       owner varchar,
       updated_at timestamptz NOT NULL DEFAULT now(),
       deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS project_snapshots (
+      id serial PRIMARY KEY,
+      project_id varchar NOT NULL,
+      name varchar NOT NULL DEFAULT '',
+      data jsonb NOT NULL DEFAULT '{}'::jsonb,
+      intake jsonb,
+      logo text,
+      owner varchar,
+      reason varchar NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now()
     );
   `);
 

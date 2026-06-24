@@ -4119,6 +4119,13 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         <p className="text-[15px] font-light max-w-5xl" style={{ color: vars.g600 }}>Plan your whole PR and marketing schedule in one place and see a live score for the AI authority each activity will earn. A joined-up plan means every release, article and event builds your visibility in AI answers instead of working in isolation. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
+      {!_contentStoreReady && (
+        <div className="rounded-xl px-4 py-3 mb-4 text-[13px] font-light flex items-center gap-2" style={{ background: accentSoft, color: ink, border: `1px solid ${accentPink}30` }}>
+          <span className="inline-block w-3 h-3 rounded-full animate-pulse" style={{ background: accentPink }} />
+          Loading your planner content from the server…
+        </div>
+      )}
+
       {/* Action toolbar - Variant C ink panel */}
       <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: ink, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center justify-between flex-wrap gap-3">
