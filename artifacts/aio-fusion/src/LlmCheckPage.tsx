@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import { getSession } from "./lib/auth";
 import {
@@ -442,6 +442,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const autoQueriesTriggeredRef = useRef<Set<string>>(new Set());
   const [competitorsText, setCompetitorsText] = useState(getCompetitors().join("\n"));
   useEffect(() => {
+    // Pin the active project key FIRST so every subsequent localStorage read
+    // targets this project's data, not whatever was last active in the session.
+    setActiveProjectId(activeClient.id);
     setCompanyName(activeClient.name);
     setIcpProfile(getIcpProfile());
     setIcpLocation(getClientLocations());
@@ -452,6 +455,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       : { discovery: getBuyerQuestions(), shortlist: [], comparison: [] });
     setCustomKeywords(hasStructured ? "" : getPreferredKeywords().join(", "));
     setCompetitorsText(getCompetitors().join("\n"));
+    setSpokespeople(getSpokespeople());
+    setEvidenceUrls(getEvidenceUrls());
+    setBoilerplate(getBoilerplate());
+    setDescriptor(getCompanyDescriptor());
   }, [activeClient.id, activeClient.name]);
 
   // Auto-generate queries on page load when none are stored for this project.
@@ -499,10 +506,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const competitors = competitorsText.split(/[\n,]+/).map((c) => c.trim()).filter(Boolean);
   // The remaining authority signals are shown read-only so the user can see what
   // is feeding the score, with a pointer to where to edit them in Project Set-Up.
-  const spokespeople = getSpokespeople();
-  const evidenceUrls = getEvidenceUrls();
-  const boilerplate = getBoilerplate();
-  const descriptor = getCompanyDescriptor();
+  // Stored as state so they refresh when activeClient.id changes (the useEffect
+  // above calls setActiveProjectId first, ensuring reads target the right project).
+  const [spokespeople, setSpokespeople] = useState(() => getSpokespeople());
+  const [evidenceUrls, setEvidenceUrls] = useState(() => getEvidenceUrls());
+  const [boilerplate, setBoilerplate] = useState(() => getBoilerplate());
+  const [descriptor, setDescriptor] = useState(() => getCompanyDescriptor());
   const [cycleData, setCycleData] = useState<CycleHistory>(() => loadCycle(activeClient.id));
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));

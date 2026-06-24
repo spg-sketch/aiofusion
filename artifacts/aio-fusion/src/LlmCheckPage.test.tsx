@@ -245,8 +245,8 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /our company, not the others listed/i }));
 
-    // It is persisted into the active project's intake blob.
-    const intake = JSON.parse(localStorage.getItem("aio.intake.v2") || "{}");
+    // It is persisted into the active project's intake blob (namespaced key).
+    const intake = JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}");
     expect(intake.confirmedEntity).toEqual({ name: "SMG", description: "" });
 
     // The UI now reflects the confirmed identity.
@@ -261,7 +261,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /No, we are Sinclair Media Group/i }));
 
-    const intake = JSON.parse(localStorage.getItem("aio.intake.v2") || "{}");
+    const intake = JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}");
     expect(intake.confirmedEntity).toEqual({ name: "Sinclair Media Group", description: "a US broadcaster" });
   });
 
