@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { AddressInfo } from "node:net";
+import type { Server } from "node:http";
+import express from "express";
 
 // Mock the Anthropic SDK so the stage-two scoring call never hits the network.
 // `messagesCreate` is hoisted so the mock factory can reference it.
@@ -10,7 +13,75 @@ vi.mock("@anthropic-ai/sdk", () => ({
   },
 }));
 
-import {
+// Mock the OpenAI SDK so probe calls never hit the network.
+const { chatCompletionsCreate } = vi.hoisted(() => ({ chatCompletionsCreate: vi.fn() }));
+vi.mock("openai", () => ({
+  default: class MockOpenAI {
+    chat = { completions: { create: chatCompletionsCreate } };
+    constructor(_opts: unknown) {}
+  },
+}));
+
+// In-memory audit-lock store used by the @workspace/db mock below.
+const { auditLocks } = vi.hoisted(() => ({
+  auditLocks: [] as Array<{ projectId: string; auditType: string; owner: string; lastRunAt: Date }>,
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: (col: any, val: unknown) => ({ kind: "eq", col, val }),
+  and: (...parts: unknown[]) => ({ kind: "and", parts }),
+}));
+
+vi.mock("@workspace/db", () => {
+  const auditLocksTable = {
+    projectId: { __col: "projectId" },
+    auditType: { __col: "auditType" },
+    owner:     { __col: "owner" },
+    lastRunAt: { __col: "lastRunAt" },
+  };
+  function matches(row: any, pred: any): boolean {
+    if (!pred) return true;
+    if (pred.kind === "eq") return row[pred.col.__col] === pred.val;
+    if (pred.kind === "and") return pred.parts.every((p: any) => matches(row, p));
+    return true;
+  }
+  const db = {
+    select: () => ({
+      from: () => ({
+        where: (pred: any) => ({
+          limit: (n: number) =>
+            Promise.resolve(auditLocks.filter((r) => matches(r, pred)).slice(0, n)),
+        }),
+      }),
+    }),
+    insert: () => ({
+      values: (vals: any) => ({
+        onConflictDoUpdate: () => ({
+          catch: () => {
+            const idx = auditLocks.findIndex(
+              (r) => r.projectId === vals.projectId && r.auditType === vals.auditType,
+            );
+            if (idx >= 0) Object.assign(auditLocks[idx], vals);
+            else auditLocks.push({ ...vals });
+            return Promise.resolve();
+          },
+        }),
+      }),
+    }),
+  };
+  return { db, auditLocksTable };
+});
+
+// Pass-through middleware mocks so the route tests exercise handler logic
+// without per-IP rate budgets or concurrency slots interfering.
+vi.mock("../middleware/rate-limit", () => ({
+  llmCheckLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+vi.mock("../middleware/concurrency-guard", () => ({
+  llmCheckConcurrencyGuard: (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
+import llmCheckRouter, {
   extractJson,
   parseAssessment,
   scoreAuthority,
@@ -885,5 +956,150 @@ describe("computeVisibilityMetrics", () => {
       probe({ mentioned: false, competitors: ["Globex"] }),
     ]);
     expect(m.shareOfVoice).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — audit-lock gate (POST /api/llm-check) and status endpoint
+// (GET /api/audit-lock). These tests exercise the full Express handler so the
+// lock-check branching (429 / SSE-200 / admin bypass) is verified end-to-end.
+// ---------------------------------------------------------------------------
+
+describe("llm-check HTTP routes — audit-lock", () => {
+  let server: Server;
+  let baseUrl: string;
+  let account: { username: string; role: string } | undefined;
+  const savedEnv = { ...process.env };
+
+  beforeEach(async () => {
+    auditLocks.length = 0;
+    account = undefined;
+    messagesCreate.mockReset();
+    chatCompletionsCreate.mockReset();
+
+    // Pin the AI integration env vars to test values so createAnthropicClient()
+    // returns the mocked client (not null) and createOpenAIClient() stays null.
+    // This makes the SSE probe-run fully hermetic: Claude probes hit the mock,
+    // OpenAI probes short-circuit to null, and the route completes quickly.
+    process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = "https://example.test";
+    process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY = "test-key";
+    delete process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    delete process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+    // Empty-but-valid model reply: no mention, no competitors.
+    // Used for all probe calls AND the secondary scoreAuthority call so
+    // the SSE response completes without hanging.
+    messagesCreate.mockResolvedValue({ content: [{ type: "text", text: "" }] });
+
+    const app = express();
+    app.use(express.json());
+    app.use((req: any, _res: any, next: any) => {
+      req.account = account;
+      next();
+    });
+    app.use("/api", llmCheckRouter);
+
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterEach(async () => {
+    process.env = { ...savedEnv };
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  async function postCheck(body: unknown) {
+    const res = await fetch(`${baseUrl}/api/llm-check`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.includes("text/event-stream")) {
+      await res.text();
+      return { status: res.status, json: null as any };
+    }
+    return { status: res.status, json: (await res.json().catch(() => null)) as any };
+  }
+
+  async function getAuditLock(params: Record<string, string>) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${baseUrl}/api/audit-lock${qs ? `?${qs}` : ""}`);
+    return { status: res.status, json: (await res.json()) as any };
+  }
+
+  describe("POST /api/llm-check — audit-lock gate", () => {
+    it("skips the lock gate and proceeds when no projectId is supplied", async () => {
+      const { status } = await postCheck({ companyName: "Acme", sectors: ["widgets"] });
+      expect(status).toBe(200);
+    });
+
+    it("returns 429 with locked=true when the project ran within 21 days", async () => {
+      auditLocks.push({ projectId: "proj-1", auditType: "visibility", owner: "", lastRunAt: new Date() });
+      const { status, json } = await postCheck({ companyName: "Acme", sectors: ["widgets"], projectId: "proj-1" });
+      expect(status).toBe(429);
+      expect(json.locked).toBe(true);
+      expect(json.lastRunAt).toBeDefined();
+      expect(json.nextAvailableAt).toBeDefined();
+    });
+
+    it("bypasses the lock when force=true and the session role is admin", async () => {
+      auditLocks.push({ projectId: "proj-1", auditType: "visibility", owner: "", lastRunAt: new Date() });
+      account = { username: "admin", role: "admin" };
+      const { status } = await postCheck({
+        companyName: "Acme",
+        sectors: ["widgets"],
+        projectId: "proj-1",
+        force: true,
+      });
+      expect(status).toBe(200);
+    });
+
+    it("still returns 429 when force=true but the session is not admin", async () => {
+      auditLocks.push({ projectId: "proj-1", auditType: "visibility", owner: "", lastRunAt: new Date() });
+      account = { username: "user1", role: "client" };
+      const { status, json } = await postCheck({
+        companyName: "Acme",
+        sectors: ["widgets"],
+        projectId: "proj-1",
+        force: true,
+      });
+      expect(status).toBe(429);
+      expect(json.locked).toBe(true);
+    });
+  });
+
+  describe("GET /api/audit-lock", () => {
+    it("returns locked=false when no projectId is given", async () => {
+      const { json } = await getAuditLock({});
+      expect(json.locked).toBe(false);
+    });
+
+    it("returns locked=false for an unknown project", async () => {
+      const { json } = await getAuditLock({ projectId: "no-such-project" });
+      expect(json.locked).toBe(false);
+    });
+
+    it("returns locked=true with correct daysRemaining when within 21 days", async () => {
+      const lastRunAt = new Date(Date.now() - 5 * 86_400_000);
+      auditLocks.push({ projectId: "proj-locked", auditType: "visibility", owner: "", lastRunAt });
+      const { json } = await getAuditLock({ projectId: "proj-locked", auditType: "visibility" });
+      expect(json.locked).toBe(true);
+      expect(json.daysRemaining).toBe(16);
+      expect(json.lastRunAt).toBeDefined();
+      expect(json.nextAvailableAt).toBeDefined();
+    });
+
+    it("returns locked=false and daysRemaining=0 when the 21-day window has expired", async () => {
+      const lastRunAt = new Date(Date.now() - 22 * 86_400_000);
+      auditLocks.push({ projectId: "proj-old", auditType: "visibility", owner: "", lastRunAt });
+      const { json } = await getAuditLock({ projectId: "proj-old", auditType: "visibility" });
+      expect(json.locked).toBe(false);
+      expect(json.daysRemaining).toBe(0);
+    });
   });
 });

@@ -32,6 +32,56 @@ vi.mock("../middleware/concurrency-guard", () => ({
   diagnosticConcurrencyGuard: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
+// In-memory audit-lock store for the @workspace/db mock below.
+const { auditLocks } = vi.hoisted(() => ({
+  auditLocks: [] as Array<{ projectId: string; auditType: string; owner: string; lastRunAt: Date }>,
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: (col: any, val: unknown) => ({ kind: "eq", col, val }),
+  and: (...parts: unknown[]) => ({ kind: "and", parts }),
+}));
+
+vi.mock("@workspace/db", () => {
+  const auditLocksTable = {
+    projectId: { __col: "projectId" },
+    auditType: { __col: "auditType" },
+    owner:     { __col: "owner" },
+    lastRunAt: { __col: "lastRunAt" },
+  };
+  function matches(row: any, pred: any): boolean {
+    if (!pred) return true;
+    if (pred.kind === "eq") return row[pred.col.__col] === pred.val;
+    if (pred.kind === "and") return pred.parts.every((p: any) => matches(row, p));
+    return true;
+  }
+  const db = {
+    select: () => ({
+      from: () => ({
+        where: (pred: any) => ({
+          limit: (n: number) =>
+            Promise.resolve(auditLocks.filter((r) => matches(r, pred)).slice(0, n)),
+        }),
+      }),
+    }),
+    insert: () => ({
+      values: (vals: any) => ({
+        onConflictDoUpdate: () => ({
+          catch: () => {
+            const idx = auditLocks.findIndex(
+              (r) => r.projectId === vals.projectId && r.auditType === vals.auditType,
+            );
+            if (idx >= 0) Object.assign(auditLocks[idx], vals);
+            else auditLocks.push({ ...vals });
+            return Promise.resolve();
+          },
+        }),
+      }),
+    }),
+  };
+  return { db, auditLocksTable };
+});
+
 import diagnosticRouter, { normaliseResult, extractJSON, sanitizeConfirmedEntity, buildIdentityAnchor } from "./diagnostic";
 
 const CATEGORY_NAMES = [
@@ -448,5 +498,97 @@ describe("POST /api/diagnostic", () => {
     const { status, json } = await post({ content: "Page content." });
     expect(status).toBe(500);
     expect(json.error).toMatch(/unavailable/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HTTP route tests — audit-lock gate (POST /api/diagnostic).
+// These tests exercise the full Express handler so the 21-day lock-check
+// branching (429 / 200 / admin bypass) is verified end-to-end.
+// ---------------------------------------------------------------------------
+
+describe("POST /api/diagnostic — audit-lock gate", () => {
+  let server: Server;
+  let baseUrl: string;
+  let account: { username: string; role: string } | undefined;
+  const savedEnv = { ...process.env };
+
+  function modelReply(text: string) {
+    return { content: [{ type: "text", text }] };
+  }
+
+  async function post(body: unknown) {
+    const res = await fetch(`${baseUrl}/api/diagnostic`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, json: (await res.json().catch(() => null)) as any };
+  }
+
+  beforeEach(async () => {
+    messagesCreate.mockReset();
+    chatCompletionsCreate.mockReset();
+    auditLocks.length = 0;
+    account = undefined;
+    process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = "https://example.test";
+    process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY = "test-key";
+    delete process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    delete process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+    const app = express();
+    app.use(express.json());
+    app.use((req: any, _res: any, next: any) => {
+      req.account = account;
+      next();
+    });
+    app.use("/api", diagnosticRouter);
+
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterEach(async () => {
+    process.env = { ...savedEnv };
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("skips the lock gate and proceeds when no projectId is supplied", async () => {
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(validRaw())));
+    const { status } = await post({ content: "Some page content." });
+    expect(status).toBe(200);
+    expect(messagesCreate).toHaveBeenCalled();
+  });
+
+  it("returns 429 with locked=true when the project ran within 21 days", async () => {
+    auditLocks.push({ projectId: "proj-1", auditType: "website", owner: "", lastRunAt: new Date() });
+    const { status, json } = await post({ content: "Some page content.", projectId: "proj-1" });
+    expect(status).toBe(429);
+    expect(json.locked).toBe(true);
+    expect(json.lastRunAt).toBeDefined();
+    expect(json.nextAvailableAt).toBeDefined();
+    expect(messagesCreate).not.toHaveBeenCalled();
+  });
+
+  it("bypasses the lock when force=true and the session role is admin", async () => {
+    auditLocks.push({ projectId: "proj-1", auditType: "website", owner: "", lastRunAt: new Date() });
+    account = { username: "admin", role: "admin" };
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(validRaw())));
+    const { status } = await post({ content: "Some page content.", projectId: "proj-1", force: true });
+    expect(status).toBe(200);
+    expect(messagesCreate).toHaveBeenCalled();
+  });
+
+  it("still returns 429 when force=true but the session is not admin", async () => {
+    auditLocks.push({ projectId: "proj-1", auditType: "website", owner: "", lastRunAt: new Date() });
+    account = { username: "user1", role: "client" };
+    const { status, json } = await post({ content: "Some page content.", projectId: "proj-1", force: true });
+    expect(status).toBe(429);
+    expect(json.locked).toBe(true);
+    expect(messagesCreate).not.toHaveBeenCalled();
   });
 });
