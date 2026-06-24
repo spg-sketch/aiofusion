@@ -1363,12 +1363,16 @@ function ClientSelectorPage({
               className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
               style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
             >
-              {displayClients.length === 0 ? <>Welcome to your <span style={{ color: accent }}>Project Hub</span></> : "Your Projects"}
+              Agency <span style={{ color: accent }}>Project Hub</span>
             </h1>
             <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
               {displayClients.length === 0
                 ? "Set up your first project to start optimising your PR and marketing output for AI discoverability - or jump into archived work or platform guidance."
                 : "Select a project to manage AI optimisation, on-going PR and marketing output."}
+            </p>
+            <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+              Agency accounts can have up to 3 projects for your clients or yourself by default. For additional projects please contact{" "}
+              <a href="mailto:info@aiofusions.ai" style={{ color: vars.g500, textDecoration: "underline" }}>info@aiofusions.ai</a>
             </p>
           </div>
         </div>
@@ -1654,24 +1658,6 @@ function ClientSelectorPage({
               </div>
             );
           })}
-          {!isClient && (
-          <button
-            onClick={onCreateProject}
-            className="rounded-2xl border-2 border-dashed p-7 text-left transition-all hover:shadow-md min-h-[260px] flex flex-col items-center justify-center gap-3"
-            style={{ background: "rgba(200,73,122,0.04)", borderColor: `${accent}55`, color: ink }}
-          >
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ background: accentSoft, color: accent }}
-            >
-              <Plus size={20} />
-            </div>
-            <div className="text-center">
-              <p className="text-[14px] font-semibold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>New project</p>
-              <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Set up a new brand, product or campaign</p>
-            </div>
-          </button>
-          )}
         </div>
         )}
       </div>
