@@ -1435,6 +1435,12 @@ function ClientSelectorPage({
           </button>
         </div>
 
+        {isClient && (
+          <p className="text-[13px] font-light mb-6" style={{ color: vars.g500 }}>
+            If you would like to run multiple projects, you will need to upgrade to an Agency account. Please contact us to discuss.
+          </p>
+        )}
+
         {displayClients.length === 0 ? (
           <div
             className="rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center"
