@@ -1971,6 +1971,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <span className="text-[11px]" style={{ color: vars.g400 }}>
           Checked {new Date(result.checkedAt).toLocaleString()} · Results reflect AI model knowledge at time of query and may vary between sessions
         </span>
+        <span className="text-[11px] font-medium" style={{ color: vars.g500 }}>
+          · Next report available from{" "}
+          {new Date(new Date(result.checkedAt).getTime() + 21 * 24 * 60 * 60 * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+        </span>
       </div>
     </div>
   );
