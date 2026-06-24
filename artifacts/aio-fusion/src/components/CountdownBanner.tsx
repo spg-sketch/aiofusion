@@ -19,23 +19,28 @@ export default function CountdownBanner({
   label = "Your report is being prepared",
 }: CountdownBannerProps) {
   const [remaining, setRemaining] = useState(durationSeconds);
+  const [overtime, setOvertime] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!active) {
       setRemaining(durationSeconds);
+      setOvertime(0);
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
 
     setRemaining(durationSeconds);
+    setOvertime(0);
 
     intervalRef.current = setInterval(() => {
       setRemaining((prev) => {
-        if (prev <= 1) {
-          return 0;
+        if (prev > 0) {
+          return prev - 1;
         }
-        return prev - 1;
+        // already at zero — count overtime
+        setOvertime((o) => o + 1);
+        return 0;
       });
     }, 1000);
 
@@ -66,9 +71,14 @@ export default function CountdownBanner({
       </div>
       <div className="flex-1 min-w-0">
         {finished ? (
-          <p className="text-[13px] font-semibold" style={{ color: "#102B36" }}>
-            Still working — almost there…
-          </p>
+          <>
+            <p className="text-[13px] font-semibold" style={{ color: "#102B36" }}>
+              Still working — almost there…
+            </p>
+            <p className="text-[11px] mt-0.5 font-light" style={{ color: "#374151" }}>
+              You can switch tabs but please keep this tab open.
+            </p>
+          </>
         ) : (
           <>
             <p className="text-[13px] font-semibold" style={{ color: "#102B36" }}>
@@ -83,15 +93,19 @@ export default function CountdownBanner({
           </>
         )}
       </div>
-      {!finished && (
-        <div
-          className="flex-shrink-0 text-[18px] font-bold tabular-nums"
-          style={{ color: "#1f748f", minWidth: 38, textAlign: "right" }}
-          aria-hidden="true"
-        >
-          {formatMmSs(remaining)}
-        </div>
-      )}
+      <div
+        className="flex-shrink-0 text-[18px] font-bold tabular-nums"
+        style={{ color: "#1f748f", minWidth: 52, textAlign: "right" }}
+        aria-hidden="true"
+      >
+        {finished ? (
+          <span style={{ color: "#b45309", fontSize: 13, fontWeight: 600 }}>
+            +{formatMmSs(overtime)}
+          </span>
+        ) : (
+          formatMmSs(remaining)
+        )}
+      </div>
     </div>
   );
 }
