@@ -1697,6 +1697,25 @@ function DashboardPage({
   activeClient: Client;
 }) {
   useContentStore();
+
+  // ── Audit-lock state (fetched from server) ────────────────────────────────
+  type AuditLockInfo = { locked: boolean; lastRunAt?: string; nextAvailableAt?: string; daysRemaining?: number };
+  const [earnedAuditLock, setEarnedAuditLock] = useState<AuditLockInfo>({ locked: false });
+  const [websiteAuditLock, setWebsiteAuditLock] = useState<AuditLockInfo>({ locked: false });
+
+  useEffect(() => {
+    if (!activeClient.id) return;
+    const base = import.meta.env.DEV ? `https://${window.location.host}` : "";
+    fetch(`${base}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d: AuditLockInfo) => setEarnedAuditLock(d))
+      .catch(() => {});
+    fetch(`${base}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((d: AuditLockInfo) => setWebsiteAuditLock(d))
+      .catch(() => {});
+  }, [activeClient.id]);
+
   // ── Live audit data ───────────────────────────────────────────────────────
   const savedAudits = loadSavedAudits(activeClient.id);
   const latestAudit = savedAudits.length > 0 ? savedAudits[savedAudits.length - 1] : null;
@@ -1757,6 +1776,13 @@ function DashboardPage({
     : null;
   const diagnosticDate = latestDiagnostic
     ? new Date(latestDiagnostic.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : null;
+
+  const earnedLockDate = earnedAuditLock.lastRunAt
+    ? new Date(earnedAuditLock.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : null;
+  const websiteLockDate = websiteAuditLock.lastRunAt
+    ? new Date(websiteAuditLock.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : null;
 
   // ── Website top categories ────────────────────────────────────────────
@@ -1857,6 +1883,9 @@ function DashboardPage({
               <Eye size={28} color={vars.g300} className="mb-2" />
               <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Earned Media Visibility Audit to see your AI mention score.</p>
+              {earnedLockDate
+                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {earnedLockDate}</p>
+                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
@@ -1895,7 +1924,10 @@ function DashboardPage({
             </>
           )}
           <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            {earnedScore === null ? "Run Earned Media Visibility Audit" : "View / Re-run Audit"} <ArrowRight size={12} />
+            {earnedAuditLock.locked
+              ? <><Lock size={11} />View Audit (locked)</>
+              : earnedScore === null ? "Run Earned Media Visibility Audit" : "View / Re-run Audit"}
+            <ArrowRight size={12} />
           </button>
         </div>
 
@@ -1909,6 +1941,9 @@ function DashboardPage({
               <Globe size={28} color={vars.g300} className="mb-2" />
               <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Website Visibility Audit to score your site for AI citation readiness.</p>
+              {websiteLockDate
+                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {websiteLockDate}</p>
+                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
@@ -1935,7 +1970,10 @@ function DashboardPage({
             </>
           )}
           <button onClick={() => onNavigate("diagnostic")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            {websiteScore === null ? "Run Website Visibility Audit" : "View / Re-run Audit"} <ArrowRight size={12} />
+            {websiteAuditLock.locked
+              ? <><Lock size={11} />View Audit (locked)</>
+              : websiteScore === null ? "Run Website Visibility Audit" : "View / Re-run Audit"}
+            <ArrowRight size={12} />
           </button>
         </div>
       </div>

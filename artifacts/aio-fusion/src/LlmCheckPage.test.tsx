@@ -136,7 +136,8 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
-    expect(screen.getByText("Executive summary")).toBeInTheDocument();
+    // The executive summary section starts collapsed; click to expand it.
+    fireEvent.click(screen.getByText("Executive summary"));
     expect(screen.getByText(/non-branded category queries across ChatGPT and Claude/i)).toBeInTheDocument();
   });
 
