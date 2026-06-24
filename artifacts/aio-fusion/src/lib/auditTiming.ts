@@ -40,3 +40,17 @@ export function getAuditDurationSeconds(type: AuditOperationType): number {
   const avgMs = history.reduce((sum, ms) => sum + ms, 0) / history.length;
   return Math.max(10, Math.round(avgMs / 1000));
 }
+
+/**
+ * Returns a human-readable hint like "Usually takes ~4 min" based on past
+ * audit runs, or null when no history exists yet.
+ */
+export function getTypicalDurationHint(type: AuditOperationType): string | null {
+  const history = loadHistory(type);
+  if (history.length === 0) return null;
+  const avgMs = history.reduce((sum, ms) => sum + ms, 0) / history.length;
+  const seconds = Math.max(10, Math.round(avgMs / 1000));
+  if (seconds < 60) return `Usually takes ~${seconds}s`;
+  const mins = Math.round(seconds / 60);
+  return `Usually takes ~${mins} min`;
+}

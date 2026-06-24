@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import CountdownBanner from "./components/CountdownBanner";
-import { recordAuditDuration, getAuditDurationSeconds } from "./lib/auditTiming";
+import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import {
@@ -1389,7 +1389,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 {error}
               </div>
             )}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 onClick={runCheck}
                 disabled={loading || auditSectors.length === 0 || probeName.length === 0}
@@ -1407,6 +1407,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   </>
                 )}
               </button>
+              {!loading && (() => { const hint = getTypicalDurationHint("visibility"); return hint ? (
+                <span className="flex items-center gap-1 text-xs" style={{ color: vars.g400 }}>
+                  <Clock size={12} />
+                  {hint}
+                </span>
+              ) : null; })()}
             </div>
             <div className="mt-4">
               <CountdownBanner

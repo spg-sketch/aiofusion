@@ -32,7 +32,7 @@ import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
-import { recordAuditDuration, getAuditDurationSeconds } from "./lib/auditTiming";
+import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
 
 const vars = {
   navy: "#102B36",
@@ -1103,24 +1103,34 @@ export default function IntakePage() {
     }
   };
 
-  const AiAssistButton = ({ fieldId }: { fieldId: string }) => (
-    <button
-      type="button"
-      onClick={() => askAiForField(fieldId)}
-      disabled={aiLoadingField !== null}
-      className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-      style={{
-        borderColor: "rgba(200,73,122,0.4)",
-        color: "#C8497A",
-        background: "#FBE3ED",
-        opacity: aiLoadingField !== null && aiLoadingField !== fieldId ? 0.5 : 1,
-        cursor: aiLoadingField !== null ? "default" : "pointer",
-      }}
-    >
-      <Sparkles size={13} className={aiLoadingField === fieldId ? "animate-pulse" : ""} />
-      {aiLoadingField === fieldId ? "Drafting from your website..." : "Ask AI to complete this"}
-    </button>
-  );
+  const AiAssistButton = ({ fieldId }: { fieldId: string }) => {
+    const hint = aiLoadingField === null ? getTypicalDurationHint("draft") : null;
+    return (
+      <span className="inline-flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => askAiForField(fieldId)}
+          disabled={aiLoadingField !== null}
+          className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+          style={{
+            borderColor: "rgba(200,73,122,0.4)",
+            color: "#C8497A",
+            background: "#FBE3ED",
+            opacity: aiLoadingField !== null && aiLoadingField !== fieldId ? 0.5 : 1,
+            cursor: aiLoadingField !== null ? "default" : "pointer",
+          }}
+        >
+          <Sparkles size={13} className={aiLoadingField === fieldId ? "animate-pulse" : ""} />
+          {aiLoadingField === fieldId ? "Drafting from your website..." : "Ask AI to complete this"}
+        </button>
+        {hint && (
+          <span className="mt-2 text-[11px]" style={{ color: vars.g400 }}>
+            {hint}
+          </span>
+        )}
+      </span>
+    );
+  };
 
   const markComplete = (idx: number, scroll = true) => { setCompleted((prev) => new Set(prev).add(idx)); if (scroll) scrollToTop(); };
 

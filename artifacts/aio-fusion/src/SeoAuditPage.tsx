@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
-import { recordAuditDuration, getAuditDurationSeconds } from "./lib/auditTiming";
+import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
 import {
   Globe,
   Search,
@@ -374,6 +374,12 @@ export default function SeoAuditPage({
               {error}
             </div>
           )}
+          {!loading && (() => { const hint = getTypicalDurationHint("website"); return hint ? (
+            <p className="mt-2 flex items-center gap-1 text-xs" style={{ color: vars.g400 }}>
+              <Zap size={11} />
+              {hint}
+            </p>
+          ) : null; })()}
         </div>
 
         <CountdownBanner
