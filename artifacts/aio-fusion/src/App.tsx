@@ -6816,6 +6816,77 @@ function MediaResearchPage() {
   const [mediaChars, setMediaChars] = useState(0);
   const [mediaError, setMediaError] = useState("");
 
+  // Media Database cross-reference
+  const sessionUser = getLocalSession();
+  const isAdminUser = sessionUser?.role === "admin";
+  const [dbContacts, setDbContacts] = useState<Contact[]>([]);
+  const [dbOutlets, setDbOutlets] = useState<{ id: number; name: string }[]>([]);
+  const [flaggedJournalists, setFlaggedJournalists] = useState<Set<string>>(new Set());
+  const [addToDbModal, setAddToDbModal] = useState<{ name: string; title: string; email: string; outletName: string } | null>(null);
+  const [addToDbForm, setAddToDbForm] = useState({ firstName: "", lastName: "", role: "", email: "", outletId: "", notes: "" });
+  const [addToDbSaving, setAddToDbSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${apiBase()}/api/store/media-db/contacts`, { credentials: "include" }).then((r) => r.ok ? r.json() : null),
+      fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include" }).then((r) => r.ok ? r.json() : null),
+    ]).then(([cd, od]) => {
+      if (cd?.contacts) setDbContacts(cd.contacts as Contact[]);
+      if (od?.outlets) setDbOutlets((od.outlets as Outlet[]).map((o) => ({ id: o.id, name: o.name })));
+    }).catch(() => {});
+  }, []);
+
+  const normStr = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  const findDbContact = (aiName: string, aiOutlet: string): Contact | null => {
+    const normAi = normStr(aiName);
+    if (!normAi) return null;
+    for (const c of dbContacts) {
+      const dbFull = normStr(`${c.firstName}${c.lastName}`);
+      if (!dbFull) continue;
+      if (normAi === dbFull || (dbFull.length > 4 && normAi.includes(dbFull)) || (normAi.length > 4 && dbFull.includes(normAi))) {
+        if (c.outletName) {
+          const normO = normStr(c.outletName);
+          const normAiO = normStr(aiOutlet);
+          if (normAiO.includes(normO) || normO.includes(normAiO)) return c;
+        } else {
+          return c;
+        }
+      }
+    }
+    return null;
+  };
+
+  const openAddToDb = (j: MediaJournalist, outletName: string) => {
+    const parts = j.name.trim().split(/\s+/);
+    const firstName = parts[0] || "";
+    const lastName = parts.slice(1).join(" ");
+    const matchedOutlet = dbOutlets.find((o) => {
+      const normO = normStr(o.name);
+      const normA = normStr(outletName);
+      return normO && normA && (normO === normA || normA.includes(normO) || normO.includes(normA));
+    });
+    setAddToDbForm({ firstName, lastName, role: j.title, email: j.email, outletId: matchedOutlet ? String(matchedOutlet.id) : "", notes: "" });
+    setAddToDbModal({ name: j.name, title: j.title, email: j.email, outletName });
+  };
+
+  const saveAddToDb = async () => {
+    if (addToDbSaving) return;
+    setAddToDbSaving(true);
+    try {
+      const resp = await fetch(`${apiBase()}/api/store/media-db/contacts`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addToDbForm),
+      });
+      if (resp.ok) {
+        const refreshed = await fetch(`${apiBase()}/api/store/media-db/contacts`, { credentials: "include" }).then((r) => r.json()).catch(() => null);
+        if (refreshed?.contacts) setDbContacts(refreshed.contacts as Contact[]);
+        setAddToDbModal(null);
+      }
+    } catch {}
+    setAddToDbSaving(false);
+  };
+
   useEffect(() => {
     try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
   }, []);
@@ -7128,17 +7199,46 @@ function MediaResearchPage() {
                           {m.noBeatContactNote || "No current beat contact identified."}
                         </div>
                       ) : (
-                        <ul className="space-y-1.5">
-                          {m.journalists.map((j) => (
-                            <li key={j.name} className="text-[13px] font-light" style={{ color: vars.navy }}>
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${confidenceColor(j.confidence)}1a`, color: confidenceColor(j.confidence) }}>[{j.confidence}] {confidenceLabel(j.confidence)}</span>
-                                <span className="font-semibold">{j.name}</span>
-                                <span style={{ color: vars.g500 }}>- {j.title}</span>
-                                <a href={`mailto:${j.email}`} className="text-[12px] underline" style={{ color: vars.accent }}>{j.email}</a>
-                              </div>
-                            </li>
-                          ))}
+                        <ul className="space-y-2">
+                          {m.journalists.map((j) => {
+                            const dbMatch = findDbContact(j.name, m.publication);
+                            const effectiveEmail = dbMatch?.email || j.email;
+                            const effectiveTitle = dbMatch?.role || j.title;
+                            const flagKey = j.name + "|" + m.publication;
+                            const isFlagged = flaggedJournalists.has(flagKey);
+                            return (
+                              <li key={j.name} className="text-[13px] font-light" style={{ color: vars.navy }}>
+                                <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 flex-1 min-w-0">
+                                    {dbMatch ? (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(61,155,107,0.12)", color: "#3D9B6B" }}>[V] Database</span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${confidenceColor(j.confidence)}1a`, color: confidenceColor(j.confidence) }}>[{j.confidence}] {confidenceLabel(j.confidence)}</span>
+                                    )}
+                                    <span className="font-semibold">{j.name}</span>
+                                    <span style={{ color: vars.g500 }}>- {effectiveTitle}</span>
+                                    {effectiveEmail && <a href={`mailto:${effectiveEmail}`} className="text-[12px] underline" style={{ color: vars.accent }}>{effectiveEmail}</a>}
+                                    {dbMatch && j.email && dbMatch.email && normStr(dbMatch.email) !== normStr(j.email) && (
+                                      <span className="text-[10px] line-through" style={{ color: vars.g300 }}>{j.email}</span>
+                                    )}
+                                  </div>
+                                  {!dbMatch && isAdminUser && j.confidence === "U" && (
+                                    <button onClick={() => openAddToDb(j, m.publication)} className="flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: "rgba(31,116,143,0.1)", color: vars.accent }}>
+                                      <Plus size={10} /> Add to database
+                                    </button>
+                                  )}
+                                  {!dbMatch && !isAdminUser && j.confidence === "U" && !isFlagged && (
+                                    <button onClick={() => setFlaggedJournalists((prev) => new Set([...prev, flagKey]))} className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: "rgba(201,160,78,0.1)", color: "#7A5E25" }}>
+                                      Flag for review
+                                    </button>
+                                  )}
+                                  {isFlagged && (
+                                    <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded" style={{ background: "rgba(201,160,78,0.15)", color: "#7A5E25" }}>Flagged</span>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </div>
@@ -7182,6 +7282,54 @@ function MediaResearchPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Add to database modal */}
+      {addToDbModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setAddToDbModal(null)}>
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <div>
+                <h2 className="text-[16px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Add to Media Database</h2>
+                <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Saving from Media Research: <b>{addToDbModal.outletName}</b></p>
+              </div>
+              <button onClick={() => setAddToDbModal(null)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="p-6 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                {(["firstName", "lastName"] as const).map((key) => (
+                  <div key={key}>
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{key === "firstName" ? "First name" : "Last name"}</label>
+                    <input value={addToDbForm[key]} onChange={(e) => setAddToDbForm((f) => ({ ...f, [key]: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                  </div>
+                ))}
+              </div>
+              {(["role", "email"] as const).map((key) => (
+                <div key={key}>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>{key === "role" ? "Role / title" : "Email"}</label>
+                  <input value={addToDbForm[key]} onChange={(e) => setAddToDbForm((f) => ({ ...f, [key]: e.target.value }))} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+                </div>
+              ))}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
+                <SearchableOutletPicker outlets={dbOutlets} value={addToDbForm.outletId} onChange={(id) => setAddToDbForm((f) => ({ ...f, outletId: id }))} />
+                {!addToDbForm.outletId && (
+                  <p className="text-[11px] mt-1.5" style={{ color: vars.g400 }}>Outlet not yet in your database — add it in Media Database first, then it will appear here.</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Notes</label>
+                <textarea rows={2} value={addToDbForm.notes} onChange={(e) => setAddToDbForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Beat, preferences, any context..." className="w-full px-3 py-2 rounded-lg border text-[13px] resize-none" style={{ borderColor: vars.g200 }} />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setAddToDbModal(null)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>Cancel</button>
+              <button onClick={() => void saveAddToDb()} disabled={(!addToDbForm.firstName.trim() && !addToDbForm.lastName.trim()) || addToDbSaving} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: (!addToDbForm.firstName.trim() && !addToDbForm.lastName.trim()) || addToDbSaving ? 0.5 : 1 }}>
+                {addToDbSaving ? "Saving..." : "Add to database"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
