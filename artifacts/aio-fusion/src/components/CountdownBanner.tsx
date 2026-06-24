@@ -5,6 +5,7 @@ interface CountdownBannerProps {
   active: boolean;
   durationSeconds: number;
   label?: string;
+  sampleCount?: number;
 }
 
 function formatMmSs(seconds: number): string {
@@ -17,6 +18,7 @@ export default function CountdownBanner({
   active,
   durationSeconds,
   label = "Your report is being prepared",
+  sampleCount,
 }: CountdownBannerProps) {
   const [remaining, setRemaining] = useState(durationSeconds);
   const [overtime, setOvertime] = useState(0);
@@ -38,7 +40,6 @@ export default function CountdownBanner({
         if (prev > 0) {
           return prev - 1;
         }
-        // already at zero — count overtime
         setOvertime((o) => o + 1);
         return 0;
       });
@@ -52,6 +53,10 @@ export default function CountdownBanner({
   if (!active) return null;
 
   const finished = remaining === 0;
+  const basisNote =
+    sampleCount && sampleCount > 0
+      ? `Based on your last ${sampleCount} audit${sampleCount === 1 ? "" : "s"}`
+      : null;
 
   return (
     <div
@@ -89,6 +94,9 @@ export default function CountdownBanner({
             </p>
             <p className="text-[11px] mt-0.5 font-light" style={{ color: "#374151" }}>
               You can switch tabs but please keep this tab open.
+              {basisNote && (
+                <span style={{ color: "#6b7280" }}>{" "}· {basisNote}</span>
+              )}
             </p>
           </>
         )}

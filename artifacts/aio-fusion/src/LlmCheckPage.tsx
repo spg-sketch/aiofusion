@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
 import CountdownBanner from "./components/CountdownBanner";
-import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
+import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import { getSession } from "./lib/auth";
@@ -741,7 +741,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       const updated = recordCycle(activeClient.id, finalData.visibilityScore);
       setCycleData(updated);
       saveAuditToHistory(finalData);
-      recordAuditDuration("visibility", Date.now() - _auditStart);
+      recordAuditDuration("visibility", Date.now() - _auditStart, getAuditDurationSeconds("visibility") * 1000);
       // Refresh audit lock so the UI reflects the new last-run date immediately.
       const apiBase2 = import.meta.env.DEV ? `https://${window.location.host}` : "";
       fetch(`${apiBase2}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=visibility`, { credentials: "include" })
@@ -1499,6 +1499,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 active={loading}
                 durationSeconds={getAuditDurationSeconds("visibility")}
                 label="Your visibility report is being prepared"
+                sampleCount={getAuditSampleCount("visibility")}
               />
               {loading && probeProgress && probeProgress.total > 0 && (
                 <div

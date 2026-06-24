@@ -32,7 +32,7 @@ import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
-import { recordAuditDuration, getAuditDurationSeconds, getTypicalDurationHint } from "./lib/auditTiming";
+import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
 
 const vars = {
   navy: "#102B36",
@@ -1006,7 +1006,7 @@ export default function IntakePage() {
         setDual("1.2", "long", data.draft.long || "");
         setAiNotice("Drafted from your website. Please review and edit before saving.");
       }
-      recordAuditDuration("draft", Date.now() - _aiDraftStart);
+      recordAuditDuration("draft", Date.now() - _aiDraftStart, getAuditDurationSeconds("draft") * 1000);
     } catch (err: any) {
       setAiError(err.message || "Could not draft this answer. Please try again.");
     } finally {
@@ -1784,6 +1784,7 @@ export default function IntakePage() {
                   active={aiLoadingField !== null}
                   durationSeconds={getAuditDurationSeconds("draft")}
                   label="Drafting from your website"
+                  sampleCount={getAuditSampleCount("draft")}
                 />
               </div>
             </div>
