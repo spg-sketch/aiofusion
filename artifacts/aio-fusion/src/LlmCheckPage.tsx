@@ -1560,6 +1560,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         icon={<Eye size={14} style={{ color: vars.accent }} />}
         title="Executive summary"
         subtitle="A plain-English read on overall AI visibility for this brand"
+        defaultOpen={false}
       >
         {rd.assess?.summary
           ? <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{rd.assess.summary}</p>
