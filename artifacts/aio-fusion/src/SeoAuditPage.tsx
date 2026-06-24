@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
+import { recordAuditDuration, getAuditDurationSeconds } from "./lib/auditTiming";
 import {
   Globe,
   Search,
@@ -287,6 +288,7 @@ export default function SeoAuditPage({
     setError("");
     setResult(null);
     setJustSaved(false);
+    const _auditStart = Date.now();
 
     try {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
@@ -305,6 +307,7 @@ export default function SeoAuditPage({
       const data = await resp.json();
       setResult(data);
       saveAudit(data);
+      recordAuditDuration("website", Date.now() - _auditStart);
     } catch (err: any) {
       setError(err.message || "Failed to run audit");
     } finally {
@@ -375,7 +378,7 @@ export default function SeoAuditPage({
 
         <CountdownBanner
           active={loading}
-          durationSeconds={120}
+          durationSeconds={getAuditDurationSeconds("website")}
           label="Website audit running"
         />
 

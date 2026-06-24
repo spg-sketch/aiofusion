@@ -32,6 +32,7 @@ import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
+import { recordAuditDuration, getAuditDurationSeconds } from "./lib/auditTiming";
 
 const vars = {
   navy: "#102B36",
@@ -978,6 +979,7 @@ export default function IntakePage() {
       setAiError("Add your company website above first, then I can draft this for you.");
       return;
     }
+    const _aiDraftStart = Date.now();
     setAiLoadingField(fieldId);
     try {
       const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
@@ -1004,6 +1006,7 @@ export default function IntakePage() {
         setDual("1.2", "long", data.draft.long || "");
         setAiNotice("Drafted from your website. Please review and edit before saving.");
       }
+      recordAuditDuration("draft", Date.now() - _aiDraftStart);
     } catch (err: any) {
       setAiError(err.message || "Could not draft this answer. Please try again.");
     } finally {
@@ -1769,7 +1772,7 @@ export default function IntakePage() {
               <div className="mt-2">
                 <CountdownBanner
                   active={aiLoadingField !== null}
-                  durationSeconds={60}
+                  durationSeconds={getAuditDurationSeconds("draft")}
                   label="Drafting from your website"
                 />
               </div>
