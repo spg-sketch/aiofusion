@@ -3953,7 +3953,7 @@ OUTPUT INSTRUCTIONS:
               </div>
               <div className="flex-1 overflow-y-auto p-4">
                 {filteredArchive.length === 0 ? (
-                  <p className="text-[13px] font-light text-center py-8" style={{ color: vars.g500 }}>{archiveAll.length === 0 ? "Archive is empty." : "No matches."}</p>
+                  <p className="text-[13px] font-light text-center py-8" style={{ color: vars.g500 }}>{!_contentStoreReady ? "Loading content…" : archiveAll.length === 0 ? "Archive is empty." : "No matches."}</p>
                 ) : (
                   <div className="space-y-2">
                     {filteredArchive.map((a) => (
@@ -4440,7 +4440,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             <div className="flex-1 overflow-y-auto p-4">
               {archive.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-[13px] font-light" style={{ color: vars.g500 }}>The Archive is empty. Save a piece from the Optimiser or Creator first.</p>
+                  <p className="text-[13px] font-light" style={{ color: vars.g500 }}>{!_contentStoreReady ? "Loading content…" : "The Archive is empty. Save a piece from the Optimiser or Creator first."}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -5136,6 +5136,7 @@ const PROJECTS_KEY = "aio.planner.projects.v1";
 let _archiveCache:  (ArchiveItem & { projectId: string })[] | null = null;
 let _plannerCache:  (PlannerProject & { projectId: string })[] | null = null;
 let _scoringCache:  ScoringConfig | null = null;
+let _contentStoreReady = false;
 
 // Resolve the effective project id for a given clientId argument (mirrors the
 // old scopedStoreKey logic so call sites that pass client.id still work).
@@ -5186,6 +5187,7 @@ async function initContentStore(): Promise<void> {
     _plannerCache  = _plannerCache  ?? [];
     _scoringCache  = _scoringCache  ?? DEFAULT_SCORING;
   }
+  _contentStoreReady = true;
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
@@ -5782,8 +5784,8 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={28} color={vars.g400} className="mx-auto mb-3" />
-          <p className="text-[14px] font-medium" style={{ color: vars.navy }}>{archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
-          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
+          <p className="text-[14px] font-medium" style={{ color: vars.navy }}>{!_contentStoreReady ? "Loading your content…" : archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
+          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{!_contentStoreReady ? "Fetching your saved pieces from the server." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
         </div>
       ) : (
         <div className="space-y-3">
