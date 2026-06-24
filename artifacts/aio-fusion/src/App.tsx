@@ -4773,7 +4773,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
-              { l: "For AI Agents", v: "for-agents" },
+              { l: "Pricing", v: "pricing" },
               { l: "Insights", v: "insights" },
               { l: "Contact", v: "contact" },
               { l: "About", v: "about" },
@@ -4794,7 +4794,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
-              { l: "For AI Agents", v: "for-agents" },
+              { l: "Pricing", v: "pricing" },
               { l: "Insights", v: "insights" },
               { l: "Contact", v: "contact" },
               { l: "About", v: "about" },
@@ -7579,6 +7579,334 @@ Deliverable:
 - A sortable Excel with one row per opportunity - include multiple opportunities for each event.
 - A structured list on a Word document.`;
 
+function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
+  const [annual, setAnnual] = useState(true);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const paper = "#FBF6EC";
+  const ink = "#102B36";
+  const accent = "#C8497A";
+  const accentSoft = "#FBE3ED";
+  const teal = vars.teal;
+
+  type PlanFeature = { label: string; starter: string | boolean; agency: string | boolean; enterprise: string | boolean };
+
+  const PLANS = [
+    {
+      name: "Starter",
+      tagline: "For solo practitioners and small in-house teams getting started with GEO.",
+      monthly: 149,
+      annual: 119,
+      color: teal,
+      highlight: false,
+      cta: "Start Free Trial",
+      seats: "1 user",
+      projects: "1 brand / project",
+      includes: [
+        "Project Set-Up and brand profile",
+        "LLM Visibility Check — 5 runs per month",
+        "AI content generations — 15 per month",
+        "Content Optimiser",
+        "Content Creator",
+        "Comms Planner",
+        "Coverage Tracker and reporting",
+        "Email support",
+      ],
+      excludes: ["Earned Media Authority Audit", "Marketing Intelligence", "Media Database", "Client sub-accounts"],
+    },
+    {
+      name: "Agency",
+      tagline: "For PR agencies and marketing teams running multiple client brands.",
+      monthly: 449,
+      annual: 359,
+      color: accent,
+      highlight: true,
+      cta: "Start Free Trial",
+      seats: "5 user seats",
+      projects: "Up to 10 brands / projects",
+      includes: [
+        "Everything in Starter, plus:",
+        "LLM Visibility Check — 30 runs per month",
+        "Unlimited AI content generations",
+        "Earned Media Authority Audit",
+        "Marketing Intelligence search",
+        "Media Database (outlets and contacts)",
+        "Client sub-accounts",
+        "Priority email and chat support",
+      ],
+      excludes: ["Unlimited AI runs", "White-label", "Custom AI configuration", "Dedicated account manager"],
+    },
+    {
+      name: "Enterprise",
+      tagline: "For larger organisations needing scale, security and dedicated support.",
+      monthly: null,
+      annual: null,
+      color: ink,
+      highlight: false,
+      cta: "Contact Sales",
+      seats: "Unlimited seats",
+      projects: "Unlimited brands / projects",
+      includes: [
+        "Everything in Agency, plus:",
+        "Unlimited LLM Visibility Checks",
+        "Unlimited AI content generations",
+        "Earned Media Authority Audit — unlimited",
+        "Custom AI model configuration",
+        "White-label option",
+        "Dedicated account manager",
+        "SLA guarantee",
+        "API access",
+        "SSO and enterprise security",
+      ],
+      excludes: [],
+    },
+  ];
+
+  const TABLE_ROWS: PlanFeature[] = [
+    { label: "Brands / projects", starter: "1", agency: "Up to 10", enterprise: "Unlimited" },
+    { label: "User seats", starter: "1", agency: "5", enterprise: "Unlimited" },
+    { label: "Project Set-Up and brand profile", starter: true, agency: true, enterprise: true },
+    { label: "LLM Visibility Checks", starter: "5 / month", agency: "30 / month", enterprise: "Unlimited" },
+    { label: "AI content generations", starter: "15 / month", agency: "Unlimited", enterprise: "Unlimited" },
+    { label: "Content Optimiser", starter: true, agency: true, enterprise: true },
+    { label: "Content Creator", starter: true, agency: true, enterprise: true },
+    { label: "Comms Planner", starter: true, agency: true, enterprise: true },
+    { label: "Coverage Tracker and reporting", starter: true, agency: true, enterprise: true },
+    { label: "Earned Media Authority Audit", starter: false, agency: true, enterprise: true },
+    { label: "Marketing Intelligence search", starter: false, agency: true, enterprise: true },
+    { label: "Media Database", starter: false, agency: true, enterprise: true },
+    { label: "Client sub-accounts", starter: false, agency: true, enterprise: true },
+    { label: "Custom AI model configuration", starter: false, agency: false, enterprise: true },
+    { label: "White-label option", starter: false, agency: false, enterprise: true },
+    { label: "API access", starter: false, agency: false, enterprise: true },
+    { label: "SSO and enterprise security", starter: false, agency: false, enterprise: true },
+    { label: "Dedicated account manager", starter: false, agency: false, enterprise: true },
+    { label: "SLA guarantee", starter: false, agency: false, enterprise: true },
+    { label: "Support", starter: "Email", agency: "Priority email and chat", enterprise: "Dedicated" },
+  ];
+
+  const FAQS = [
+    { q: "What counts as an LLM Visibility Check?", a: "Each LLM Visibility Check runs your brand or a specific piece of content through multiple AI engines (Claude, ChatGPT, Perplexity, Gemini and CoPilot) simultaneously and scores the responses. Because each check involves multiple live API calls, we cap them per tier to keep pricing predictable for you." },
+    { q: "What happens if I reach my monthly AI run limit?", a: "You will receive a notification when you are approaching your limit. You will not be automatically charged. You can either wait for the limit to reset at the start of your next billing cycle, or contact us to discuss upgrading your plan." },
+    { q: "Is there a free trial?", a: "Yes — both the Starter and Agency plans include a 14-day free trial with full access to all features on that tier. No credit card required to start." },
+    { q: "Can I change plan at any time?", a: "Yes. You can upgrade or downgrade at any point. Upgrades take effect immediately and are prorated. Downgrades take effect at the end of your current billing period." },
+    { q: "Are prices per user or per account?", a: "Prices are per account, not per seat. Each plan includes a set number of user seats so your team can collaborate. Additional seats beyond the plan allowance are available on the Agency and Enterprise plans." },
+    { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details to apply." },
+  ];
+
+  function Cell({ v }: { v: string | boolean }) {
+    if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: `${teal}22` }}><Check size={12} color={teal} strokeWidth={2.5} /></span></span>;
+    if (v === false) return <span className="flex justify-center text-[18px] font-light" style={{ color: vars.g300 }}>—</span>;
+    return <span className="text-[12px] font-medium text-center block" style={{ color: ink }}>{v}</span>;
+  }
+
+  const navLinks = [
+    { l: "Features", v: "landing#features" },
+    { l: "For In-house", v: "for-inhouse" },
+    { l: "For PR Agencies", v: "for-agencies" },
+    { l: "Pricing", v: "pricing" },
+    { l: "Insights", v: "insights" },
+    { l: "Contact", v: "contact" },
+  ];
+
+  return (
+    <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(251,246,236,0.95)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
+          <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
+          </button>
+          <div className="hidden md:flex items-center gap-6">
+            {navLinks.map((it) => (
+              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: it.v === "pricing" ? accent : ink }}>{it.l}</button>
+            ))}
+            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
+              {isAuthed ? <><User size={14} /> My Account</> : <>Platform Login</>}
+            </button>
+          </div>
+          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ color: ink }}>{menuOpen ? <X size={24} /> : <Menu size={24} />}</button>
+        </div>
+        {menuOpen && (
+          <div className="md:hidden px-4 pb-5 flex flex-col gap-3 border-t" style={{ background: paper, borderColor: vars.g200 }}>
+            {navLinks.map((it) => (
+              <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
+            ))}
+            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: ink, color: paper }}>{isAuthed ? "My Account" : "Platform Login"}</button>
+          </div>
+        )}
+      </nav>
+
+      {/* Hero */}
+      <section className="pt-[110px] sm:pt-[130px] pb-12 sm:pb-16 text-center px-4">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+          <Sparkles size={11} color={accent} />
+          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Transparent Pricing</span>
+        </div>
+        <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.1] mb-4 max-w-3xl mx-auto" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+          Plans built for PR and marketing teams
+        </h1>
+        <p className="text-[15px] font-light max-w-xl mx-auto mb-8 leading-relaxed" style={{ color: vars.g600 }}>
+          No hidden costs. AI usage limits are clearly defined per plan so you can budget with confidence.
+        </p>
+        <div className="inline-flex items-center rounded-full p-1 gap-1" style={{ background: vars.g100 }}>
+          <button onClick={() => setAnnual(false)} className="px-5 py-2 rounded-full text-[13px] font-semibold transition-all" style={{ background: annual ? "transparent" : "white", color: annual ? vars.g500 : ink, boxShadow: annual ? "none" : "0 1px 4px rgba(0,0,0,0.1)" }}>Monthly</button>
+          <button onClick={() => setAnnual(true)} className="px-5 py-2 rounded-full text-[13px] font-semibold transition-all flex items-center gap-2" style={{ background: annual ? "white" : "transparent", color: annual ? ink : vars.g500, boxShadow: annual ? "0 1px 4px rgba(0,0,0,0.1)" : "none" }}>
+            Annual
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${teal}22`, color: teal }}>Save 20%</span>
+          </button>
+        </div>
+      </section>
+
+      {/* Pricing cards */}
+      <section className="pb-16 px-4 sm:px-8">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-5 items-start">
+          {PLANS.map((plan) => (
+            <div key={plan.name} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.highlight ? `2px solid ${accent}` : `1px solid ${vars.g200}`, background: plan.highlight ? "white" : paper, boxShadow: plan.highlight ? `0 20px 48px -12px ${accent}40` : "none", position: "relative" }}>
+              {plan.highlight && (
+                <div className="text-center py-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ background: accent, color: "white" }}>Most Popular</div>
+              )}
+              <div className="p-7">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h2 className="text-[22px]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.name}</h2>
+                  <span className="text-[11px] font-medium mt-1" style={{ color: vars.g400 }}>{plan.projects}</span>
+                </div>
+                <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{plan.tagline}</p>
+                {plan.monthly !== null ? (
+                  <div className="mb-6">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
+                      <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{annual ? plan.annual : plan.monthly}</span>
+                      <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
+                    </div>
+                    {annual && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Billed annually — save £{((plan.monthly - plan.annual!) * 12).toLocaleString()}/yr</p>}
+                    {!annual && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Or £{plan.annual}/mo billed annually</p>}
+                  </div>
+                ) : (
+                  <div className="mb-6">
+                    <span className="text-[36px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Custom</span>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Tailored to your organisation</p>
+                  </div>
+                )}
+                <button onClick={plan.cta === "Contact Sales" ? () => onNavigate("contact") : onLogin} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6" style={{ background: plan.highlight ? accent : ink, color: "white" }}>
+                  {plan.cta}
+                </button>
+                <div className="flex items-center gap-2 mb-5 pb-5" style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                  <Users size={13} color={vars.g400} />
+                  <span className="text-[12px]" style={{ color: vars.g500 }}>{plan.seats}</span>
+                </div>
+                <ul className="space-y-3">
+                  {plan.includes.map((item, i) => (
+                    <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: i === 0 && item.includes("Everything") ? vars.g400 : ink }}>
+                      {i === 0 && item.includes("Everything") ? (
+                        <span className="text-[12px] font-semibold italic flex-1">{item}</span>
+                      ) : (
+                        <>
+                          <Check size={14} color={plan.color} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
+                          <span className="font-light leading-snug">{item}</span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* LLM usage note */}
+      <section className="py-10 px-4 sm:px-8" style={{ background: `${teal}0D` }}>
+        <div className="max-w-3xl mx-auto flex gap-4 items-start">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${teal}22` }}>
+            <Info size={18} color={teal} />
+          </div>
+          <div>
+            <p className="text-[13px] font-semibold mb-1" style={{ color: ink }}>About AI usage limits</p>
+            <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+              Each LLM Visibility Check and Earned Media Audit involves live calls to multiple AI engines — Claude, ChatGPT, Perplexity, Gemini and CoPilot — which carry real API costs. We pass these limits through transparently rather than building them into a higher flat fee. Content generation (Optimiser, Creator) is less expensive per run, which is why it has a separate, more generous allowance on Starter and is unlimited on Agency and above. If you need more runs, contact us and we can discuss options.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Feature comparison table */}
+      <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>Full Comparison</span>
+            <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything included, at a glance</h2>
+          </div>
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
+            <div className="grid grid-cols-4" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
+              <div className="p-4" />
+              {PLANS.map((p) => (
+                <div key={p.name} className="p-4 text-center">
+                  <p className="text-[13px] font-bold" style={{ color: p.highlight ? accent : ink }}>{p.name}</p>
+                </div>
+              ))}
+            </div>
+            {TABLE_ROWS.map((row, i) => (
+              <div key={row.label} className="grid grid-cols-4 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
+                <div className="p-4 text-[13px] font-light" style={{ color: ink }}>{row.label}</div>
+                <div className="p-4"><Cell v={row.starter} /></div>
+                <div className="p-4"><Cell v={row.agency} /></div>
+                <div className="p-4"><Cell v={row.enterprise} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16 px-4 sm:px-8" style={{ background: paper }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-10">
+            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: teal }}>FAQ</span>
+            <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Questions and answers</h2>
+          </div>
+          <div className="space-y-3">
+            {FAQS.map((faq, i) => (
+              <div key={i} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
+                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full flex items-center justify-between gap-4 p-5 text-left" style={{ background: openFaq === i ? "white" : paper }}>
+                  <span className="text-[14px] font-semibold" style={{ color: ink }}>{faq.q}</span>
+                  <ChevronDown size={16} color={vars.g400} className="flex-shrink-0 transition-transform" style={{ transform: openFaq === i ? "rotate(180deg)" : "none" }} />
+                </button>
+                {openFaq === i && (
+                  <div className="px-5 pb-5 bg-white">
+                    <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>{faq.a}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-16 px-4 sm:px-8 text-center" style={{ background: ink }}>
+        <h2 className="text-3xl md:text-4xl mb-4" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI visibility?</h2>
+        <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Start your 14-day free trial today. No credit card required.</p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button onClick={onLogin} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Start Free Trial</button>
+          <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-white/10" style={{ border: "1.5px solid rgba(251,246,236,0.35)", color: "#FBF6EC" }}>Talk to Sales</button>
+        </div>
+      </section>
+
+      <footer className="py-10 border-t" style={{ background: paper, borderColor: "rgba(16,43,54,0.1)" }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
+          <div className="flex items-center gap-6">
+            {[{ l: "About", v: "about" }, { l: "Contact", v: "contact" }, { l: "Insights", v: "insights" }].map((it) => (
+              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>{it.l}</button>
+            ))}
+            <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, isAuthed }: { title: string; eyebrow?: any; children: any; onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; dark?: boolean; isAuthed?: boolean }) {
   // Variant C aesthetic across all marketing pages: cream surface, ink type,
   // raspberry accents and Alice serif headings. Content unchanged.
@@ -7598,7 +7926,7 @@ function MarketingPage({ title, eyebrow, children, onLogin, onBack, onNavigate, 
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
-              { l: "For AI Agents", v: "for-agents" },
+              { l: "Pricing", v: "pricing" },
               { l: "Insights", v: "insights" },
               { l: "Contact", v: "contact" },
               { l: "About", v: "about" },
@@ -9096,7 +9424,7 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
 // at real URLs (e.g. /about, /for-agents) so they can be linked to, typed in
 // directly, refreshed and shared. These maps translate between the two.
 type PublicView =
-  | "landing" | "about" | "contact" | "insights"
+  | "landing" | "about" | "contact" | "insights" | "pricing"
   | "for-inhouse" | "for-agencies" | "for-agents";
 
 const VIEW_TO_SLUG: Record<string, string> = {
@@ -9104,6 +9432,7 @@ const VIEW_TO_SLUG: Record<string, string> = {
   about: "about",
   contact: "contact",
   insights: "insights",
+  pricing: "pricing",
   "for-inhouse": "for-inhouse",
   "for-agencies": "for-agencies",
   "for-agents": "for-agents",
@@ -9116,6 +9445,7 @@ const SLUG_TO_VIEW: Record<string, PublicView> = {
   about: "about",
   contact: "contact",
   insights: "insights",
+  pricing: "pricing",
   "for-inhouse": "for-inhouse",
   inhouse: "for-inhouse",
   "in-house": "for-inhouse",
@@ -9148,7 +9478,7 @@ function viewToUrl(v: string): string {
 }
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact">(() => publicViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing">(() => publicViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
@@ -9386,7 +9716,7 @@ function App() {
   };
 
   const goToView = (v: string) => {
-    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies") {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing") {
       if (v === "insights") setInsightsFilter(null);
       setView(v as any);
       window.scrollTo(0, 0);
@@ -9419,6 +9749,9 @@ function App() {
   }
   if (view === "contact") {
     return <ContactPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
+  }
+  if (view === "pricing") {
+    return <PricingPage onLogin={enterPlatform} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "platform-home") {
     return (
