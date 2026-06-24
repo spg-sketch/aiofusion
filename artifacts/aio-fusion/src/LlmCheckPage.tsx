@@ -416,6 +416,7 @@ function highlightName(text: string, name: string): React.ReactNode {
 export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId, onConsumePending }: { activeClient: Client; onNavigate?: (p: string) => void; pendingAuditId?: string | null; onConsumePending?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [probeProgress, setProbeProgress] = useState<{ done: number; total: number } | null>(null);
   const [result, setResult] = useState<LlmCheckResult | null>(null);
   const prefilledKeywords = getPreferredKeywords();
   const [customKeywords, setCustomKeywords] = useState(() => {
@@ -635,6 +636,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setResult(null);
     setJustSaved(false);
     const _auditStart = Date.now();
+    setProbeProgress(null);
 
     try {
       const keywords = customKeywords
@@ -671,16 +673,57 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
 
-      const data = await resp.json();
-      setResult(data);
-      const updated = recordCycle(activeClient.id, data.visibilityScore);
+      // The endpoint now streams SSE: progress events while probes run, then a
+      // single result event with the full payload.
+      if (!resp.body) throw new Error("Response stream could not be read.");
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalData: LlmCheckResult | null = null;
+      let sseError: string | null = null;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          let event = "message";
+          let dataStr = "";
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          let parsed: Record<string, unknown>;
+          try { parsed = JSON.parse(dataStr); } catch { continue; }
+          if (event === "progress") {
+            const done = typeof parsed.done === "number" ? parsed.done : 0;
+            const total = typeof parsed.total === "number" ? parsed.total : 0;
+            setProbeProgress({ done, total });
+          } else if (event === "result") {
+            finalData = parsed as unknown as LlmCheckResult;
+          } else if (event === "error") {
+            sseError = typeof parsed.error === "string" ? parsed.error : "Visibility check failed. Please try again.";
+          }
+        }
+      }
+
+      if (sseError) throw new Error(sseError);
+      if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
+
+      setResult(finalData);
+      const updated = recordCycle(activeClient.id, finalData.visibilityScore);
       setCycleData(updated);
-      saveAuditToHistory(data);
+      saveAuditToHistory(finalData);
       recordAuditDuration("visibility", Date.now() - _auditStart);
     } catch (err: any) {
       setError(err.message || "Failed to run visibility check");
     } finally {
       setLoading(false);
+      setProbeProgress(null);
     }
   }
 
@@ -1371,6 +1414,33 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 durationSeconds={getAuditDurationSeconds("visibility")}
                 label="Your visibility report is being prepared"
               />
+              {loading && probeProgress && probeProgress.total > 0 && (
+                <div
+                  className="mt-2 px-4 py-2.5 rounded-xl flex items-center gap-3"
+                  style={{ background: "#f0f8fb", border: "1px solid rgba(31,116,143,0.18)" }}
+                >
+                  <Loader2 size={14} className="flex-shrink-0 animate-spin" style={{ color: "#1f748f" }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[12px] font-medium" style={{ color: "#165265" }}>
+                        Probe {probeProgress.done} of {probeProgress.total} complete
+                      </span>
+                      <span className="text-[11px] tabular-nums" style={{ color: "#6B7280" }}>
+                        {Math.round((probeProgress.done / probeProgress.total) * 100)}%
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: "rgba(31,116,143,0.15)" }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          background: "linear-gradient(90deg, #1f748f, #2896b9)",
+                          width: `${Math.round((probeProgress.done / probeProgress.total) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             {loading && (
               <div className="mt-4 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>

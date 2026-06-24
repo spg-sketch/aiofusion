@@ -8,6 +8,22 @@ import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
 
 const llmCheckRouter = Router();
 
+function initSse(res: Response): void {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  const flushHeaders = (res as unknown as { flushHeaders?: () => void }).flushHeaders;
+  if (typeof flushHeaders === "function") flushHeaders.call(res);
+}
+
+function sseSend(res: Response, event: string, data: unknown): void {
+  if (res.writableEnded) return;
+  const payload = event === "result" ? deepStripEmDashes(data) : data;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+
 function createOpenAIClient(): OpenAI | null {
   const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -1141,6 +1157,9 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
   };
 
   try {
+    // Switch to SSE so the client receives live progress events as probes complete.
+    initSse(res);
+
     // Resolve how clearly the brand name identifies the company. Runs concurrently
     // with the probes; independent of their results and fail-soft.
     const entityClarityPromise = assessEntityClarity(identity);
@@ -1155,11 +1174,23 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
     const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, 18);
 
+    // Total individual LLM calls: one per (question × run × model).
+    const totalProbeCount = questions.length * RUNS_PER_QUESTION * 2;
+    let completedProbes = 0;
+
+    // Wrap each probe so a progress event fires as soon as it settles.
+    function trackProbe(p: Promise<ProbeResult | null>): Promise<ProbeResult | null> {
+      return p.then(
+        (r) => { completedProbes++; sseSend(res, "progress", { done: completedProbes, total: totalProbeCount }); return r; },
+        () => { completedProbes++; sseSend(res, "progress", { done: completedProbes, total: totalProbeCount }); return null; },
+      );
+    }
+
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(probeOpenAI(q, identity));
-        probePromises.push(probeClaude(q, identity));
+        probePromises.push(trackProbe(probeOpenAI(q, identity)));
+        probePromises.push(trackProbe(probeClaude(q, identity)));
       }
     }
 
@@ -1244,10 +1275,14 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       entityClarity,
     };
 
-    res.json(deepStripEmDashes(summary));
+    sseSend(res, "result", summary);
+    res.end();
   } catch (err: any) {
     logger.error({ err, companyName }, "LLM visibility check failed");
-    res.status(500).json({ error: "LLM visibility check failed. Please try again." });
+    if (!res.writableEnded) {
+      sseSend(res, "error", { error: "LLM visibility check failed. Please try again." });
+      res.end();
+    }
   }
 });
 
