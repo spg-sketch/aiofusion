@@ -1906,7 +1906,7 @@ function DashboardPage({
                       <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
                     </div>
                   ))}
-                  {auditDate && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {auditDate}</p>}
+                  {(earnedLockDate || auditDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {earnedLockDate ?? auditDate}</p>}
                 </div>
               </div>
               {topCompetitors.length > 0 && (
@@ -1964,7 +1964,7 @@ function DashboardPage({
                       <span className="text-[12px] truncate" style={{ color: vars.navy }}>{cat.name}</span>
                     </div>
                   ))}
-                  {diagnosticDate && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {diagnosticDate}</p>}
+                  {(websiteLockDate || diagnosticDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {websiteLockDate ?? diagnosticDate}</p>}
                 </div>
               </div>
             </>
