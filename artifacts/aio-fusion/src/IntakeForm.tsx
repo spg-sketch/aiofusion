@@ -31,6 +31,7 @@ import {
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
+import CountdownBanner from "./components/CountdownBanner";
 
 const vars = {
   navy: "#102B36",
@@ -1646,6 +1647,13 @@ export default function IntakePage() {
               })()}
               {aiError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
               {aiNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
+              <div className="mt-3">
+                <CountdownBanner
+                  active={aiLoadingField !== null}
+                  durationSeconds={60}
+                  label="Drafting from your website"
+                />
+              </div>
             </div>
           </div>
         </div>

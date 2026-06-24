@@ -1,0 +1,25 @@
+#83 - LLM Cost Optimisation
+What & Why
+The Visibility Audit (LLM Check) is the dominant cost driver, making 25–45 LLM calls per run (8–14 questions × 2 models × 3 repetitions each). Two types of change reduce cost: a 21-day audit limit (the data doesn't change meaningfully that quickly) and targeted reductions to the probe count and temperature settings.
+
+Done looks like
+Running the Visibility Audit or Website Audit on a project that has already been run in the last 21 days is blocked — the UI shows the last run date and a message like "Next audit available [date]". Admins can force a re-run to override this for genuine cases (e.g. post-relaunch).
+The last-run date is shown on each audit's entry point so users always know when it was last run.
+The visibility audit runs each question twice (not three times) and still uses majority logic correctly.
+Question generation is hard-capped at 8 questions (removing the high-cost tail end).
+AI-assist and content-ai calls that do not currently set a temperature explicitly are set to temperature 0, reducing token over-generation.
+No change to the dual-model (Claude + GPT-5) probe strategy — cross-LLM visibility measurement stays intact.
+Out of scope
+Removing or merging the two-model probe strategy
+Changing the Website Audit's single-call LLM structure (already minimal)
+Auto-populate field-level caching beyond the temperature fix
+Steps
+21-day audit lock — backend — Store a last_run_at timestamp for each audit type (visibility / website) per project in the database. Add a pre-flight check on both audit endpoints: if last_run_at is within the last 21 days, return a 429-style response with the next-available date. Add an admin-only force=true query param that bypasses this check.
+
+21-day audit lock — UI with countdown and pre-run confirmation — On the Visibility Audit and Website Audit entry points, fetch and display the last-run date. If the lock is active, replace the "Run Audit" button with a disabled state showing a days countdown: "Next audit available in X days (on [date])". The day count should update correctly on revisit (e.g. if 18 days have passed, show "3 days"). For admin accounts, show a secondary "Force re-run" link alongside the lock message. When the audit is available and the user clicks "Run Audit", show a confirmation dialog before proceeding: "Please check all your information is correct before running. You can only run this audit once every 21 days." with Cancel and Confirm buttons.
+
+Reduce RUNS_PER_QUESTION from 3 to 2 — Update the constant in llm-check.ts. Adjust the majority-vote logic: with 2 runs, treat 2/2 as "mentioned" and 0/2 or 1/2 as "not mentioned" (conservative default unless a single mention includes a corroboration signal). Update any comments or tests that reference the value 3.
+
+Cap question count at 8 — Add a hard MAX_QUESTIONS = 8 cap after question generation in llm-check.ts, slicing the array before it enters the probe loop. This eliminates the expensive 14-question tail.
+
+Set temperature = 0 on content-ai and ai-assist calls — Audit every Anthropic SDK call in content-ai.ts and ai-assist.ts; add temperature: 0 where it is currently absent.

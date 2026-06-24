@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import InfoTip from "./InfoTip";
+import CountdownBanner from "./components/CountdownBanner";
 import {
   Globe,
   Search,
@@ -371,6 +372,12 @@ export default function SeoAuditPage({
             </div>
           )}
         </div>
+
+        <CountdownBanner
+          active={loading}
+          durationSeconds={120}
+          label="Website audit running"
+        />
 
         {loading && (
           <div className="flex flex-col items-center justify-center py-20">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./App";
+import CountdownBanner from "./components/CountdownBanner";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import {
@@ -1361,8 +1362,15 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 )}
               </button>
             </div>
+            <div className="mt-4">
+              <CountdownBanner
+                active={loading}
+                durationSeconds={300}
+                label="Your visibility report is being prepared"
+              />
+            </div>
             {loading && (
-              <div className="mt-6 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>
+              <div className="mt-4 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: vars.accent }} />
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine visibility probes</span>
