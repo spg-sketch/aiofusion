@@ -224,6 +224,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     expect(written).toContain("AI Authority scorecard");
     expect(written).toContain("Prioritised actions");
+    expect(written).toContain("Acme appears in some answers but trails Globex.");
   });
 
   it("renders the entity-clarity section in-page when the name is ambiguous", () => {
