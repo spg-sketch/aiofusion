@@ -141,6 +141,21 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     expect(screen.getByText(/non-branded category queries across ChatGPT and Claude/i)).toBeInTheDocument();
   });
 
+  it("renders the assessed summary text in the Executive summary section when an assessment is present", () => {
+    seedSavedAudit(MODERN_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    // The executive summary section starts collapsed; click to expand it.
+    fireEvent.click(screen.getByText("Executive summary"));
+
+    // The AI-generated summary from assessment.summary must be visible.
+    expect(
+      screen.getByText("Acme appears in some answers but trails Globex."),
+    ).toBeInTheDocument();
+  });
+
   it("renders the AI Authority scorecard only when an assessment is present", () => {
     seedSavedAudit(MODERN_RESULT);
     render(
