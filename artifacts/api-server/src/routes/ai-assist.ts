@@ -2,8 +2,9 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { aiAssistLimiter } from "../middleware/rate-limit";
-import { fetchSiteContent } from "../lib/safe-fetch";
-import { stripEmDashes } from "../lib/text-sanitise";
+import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
+import { stripEmDashes, deepStripEmDashes } from "../lib/text-sanitise";
+import { requirePlatformAuth } from "../middleware/platform-auth";
 
 const aiAssistRouter = Router();
 
@@ -323,6 +324,205 @@ aiAssistRouter.post(
       logger.error({ err, fieldId }, "ai-assist: optimise-field call failed");
       res.status(502).json({ error: "The AI optimisation could not be generated right now. Please try again." });
     }
+  },
+);
+
+// ── Auto-fill all Set-Up fields from a website (platform users) ───────────
+// Unlike /admin/generate-from-url (which creates a full project + GEO score),
+// this endpoint only returns the generated intake data so the client can merge
+// it into the IntakeForm fields the user is already filling in. No project is
+// created. Accessible to all authenticated platform users (admin, agency, client).
+const INTAKE_MODEL = "claude-sonnet-4-6";
+const INTAKE_TIMEOUT_MS = 120_000;
+
+const BRITISH_RULE_ASSIST =
+  "Use British English spelling throughout (optimise, organisation, programme, colour, etc.). " +
+  "Do not use em dashes; use hyphens or rewrite the sentence. Do not use emojis.";
+
+function extractJsonAssist(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) return null;
+  try { return JSON.parse(candidate.slice(start, end + 1)); } catch { return null; }
+}
+
+aiAssistRouter.post(
+  "/ai-assist/generate-intake",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const rawUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+    const companyHint = typeof req.body?.companyName === "string" ? req.body.companyName.trim().slice(0, 200) : "";
+
+    if (!rawUrl) {
+      res.status(400).json({ error: "A website URL is required." });
+      return;
+    }
+
+    const client = createAnthropicClient();
+    if (!client) {
+      res.status(503).json({ error: "AI is not configured. Please try again later." });
+      return;
+    }
+
+    const normalised = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+
+    let siteContent = "";
+    try {
+      const { homepage, subpages } = await fetchSiteContentWithSubpages(normalised, 5000, 2500, 4);
+      const parts: string[] = [];
+      if (homepage.title) parts.push(`Page title: ${homepage.title}`);
+      if (homepage.description) parts.push(`Meta description: ${homepage.description}`);
+      if (homepage.text) parts.push(`Homepage content:\n${homepage.text}`);
+      for (const sp of subpages) {
+        if (sp.text) parts.push(`\n--- ${sp.label} ---\n${sp.text}`);
+      }
+      siteContent = parts.join("\n").slice(0, 18000);
+    } catch (err) {
+      logger.warn({ err, url: normalised }, "ai-assist generate-intake: scrape failed, continuing with URL only");
+      siteContent = `Website URL: ${normalised}`;
+    }
+
+    const prompt = `You are an expert marketing and PR intelligence analyst. Given the website content below, generate a comprehensive intake profile for this company. This profile will be used to configure an AI Authority and GEO (Generative Engine Optimisation) platform.
+
+${BRITISH_RULE_ASSIST}
+
+WEBSITE URL: ${normalised}
+${companyHint ? `COMPANY NAME (hint): ${companyHint}` : ""}
+
+WEBSITE CONTENT:
+${siteContent}
+
+Instructions:
+- Be specific and factual. Only use information visible in or clearly implied by the website content.
+- Where information is not visible, make reasonable inferences based on the company type, sector, and tone.
+- Do NOT invent specific client names, award names, or claims not supported by the content.
+- Generate all fields thoroughly - this is the foundation for AI visibility work.
+
+Return ONLY a valid JSON object (no markdown, no code fences, no commentary) in exactly this structure:
+
+{
+  "companyName": "Short brand name used in common usage",
+  "sector": "Primary sector / industry",
+  "formData": {
+    "1.1": "Company descriptor for press and AI use: 200-250 words covering who they are, what they do, the audiences they serve, and their key differentiators. Write in third person.",
+    "1.4": "Evidence URLs: list website pages, case study URLs, news, awards pages. One URL per line.",
+    "1.5": "Topics and associations to avoid in media or AI. If none obvious from content, write: None identified.",
+    "1.7": "8-12 topics and themes the brand has genuine expertise in. Comma-separated.",
+    "1.8": "Spokespeople with name, title, area of expertise if detectable from site - or leave as empty string.",
+    "1.9": "5-8 media and publication categories where this company earns or seeks coverage. Comma-separated.",
+    "1.10": "5-8 media categories where their target customers spend time. Comma-separated.",
+    "2.1": "Top 8 pre-purchase questions with answers. Format each as: Q: [question]\\nA: [2-3 sentence answer]\\n\\n",
+    "2.2": "3-4 post-purchase or onboarding questions with answers. Same format.",
+    "2.3": "3 common misconceptions or objections. Format each as: Misconception: [text]\\nReality: [text]\\n\\n",
+    "2.4": "4-6 industry questions this company is expert enough to answer authoritatively. One per line.",
+    "2.5": "Homepage positioning summary in 40-50 words. Clear, AI-readable, no jargon.",
+    "2.6": "Core services/products. One per line: [Service name]: [one-sentence description] - [who it is for]",
+    "2.7": "Search phrases per service area. Format: [Service]: [phrase 1, phrase 2, phrase 3, phrase 4]",
+    "3.5b": "The key challenges and problems the company solves for clients.",
+    "4.1": "Full legal or formal trading name",
+    "4.2": "Sub-brands, product lines, or trading names. If none, repeat main brand name.",
+    "4.3": "LLM boilerplate sentence: We help [audience] [achieve outcome] by [method].",
+    "4.4": "Primary sector and any relevant sub-sectors",
+    "4.5": "Geographies of operation: countries, regions, or cities visible from the site",
+    "4.6": "Founding year if visible, otherwise empty string",
+    "4.7": "Trust signal URLs: awards pages, accreditations, press coverage, case studies. One per line.",
+    "5.5": "Brief assessment: is this company likely to appear in AI-generated answers?",
+    "5.6": "8-10 questions a prospective client asks before hiring. One per line.",
+    "5.7": "6-10 industry trend topics where this company has specialist expertise. Comma-separated.",
+    "6.2": "Website URL and any visible contact details",
+    "6.3": "Social media profile URLs visible on site. One per line.",
+    "6.7": "Key website pages and likely H1 headings. Format: [Page name]: [H1 or likely heading]",
+    "7.3": "Third-party profile URLs: LinkedIn company page, Wikipedia, Crunchbase, industry directories. One per line."
+  },
+  "duals": {
+    "1.2": {
+      "short": "Primary positioning message in 8-10 words",
+      "long": "Extended version in 20-25 words adding proof point or context"
+    }
+  },
+  "dualLists": {
+    "1.3": [
+      { "short": "6 words or fewer", "long": "Supporting message in 20-25 words" },
+      { "short": "6 words or fewer", "long": "Supporting message in 20-25 words" },
+      { "short": "6 words or fewer", "long": "Supporting message in 20-25 words" }
+    ],
+    "3.1": [
+      { "short": "Primary buyer persona job title", "long": "Description of their role, seniority, priorities, and what they need from a provider like this" },
+      { "short": "Secondary buyer persona job title", "long": "Description of their role and priorities" }
+    ],
+    "3.2": [
+      { "short": "", "long": "Ideal client: organisation type, size, sector, and key characteristics" },
+      { "short": "", "long": "Second ideal client type if the company serves multiple segments" }
+    ],
+    "3.5": [
+      { "short": "", "long": "First pain point or challenge this company solves for clients" },
+      { "short": "", "long": "Second pain point" },
+      { "short": "", "long": "Third pain point" }
+    ],
+    "3.6": [
+      { "short": "", "long": "Primary outcome clients achieve, with example or metric if visible on site" },
+      { "short": "", "long": "Second valued outcome" }
+    ]
+  },
+  "stringLists": {
+    "3.3": ["City or country 1", "City or country 2"],
+    "4.8": ["Direct competitor 1", "Direct competitor 2", "Direct competitor 3", "Direct competitor 4", "Direct competitor 5"]
+  },
+  "businessCategories": ["Business category 1", "Business category 2", "Business category 3"],
+  "audienceCategories": ["Audience segment 1", "Audience segment 2", "Audience segment 3"],
+  "llmQueries": {
+    "v": "1.6",
+    "discovery": ["Natural language question about the problem space (no company name)", "Natural language question", "Natural language question", "Natural language question"],
+    "shortlist": ["Best [service type] for [audience or use case]", "Who provides [specific service] for [industry]", "Top [service type] agencies in [geography]", "Which [service type] firm is best for [outcome]"],
+    "comparison": ["[Company name] vs [competitor] - which is better for [use case]", "[Company name] review - is it worth it for [audience]", "What do clients say about [company name]", "[Company name] alternatives for [service type]"]
+  }
+}
+
+Return ONLY the JSON object. Absolutely no other text before or after it.`;
+
+    let generated: Record<string, unknown> | null = null;
+    try {
+      const message = await Promise.race([
+        client.messages.create({
+          model: INTAKE_MODEL,
+          max_tokens: 8192,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), INTAKE_TIMEOUT_MS)),
+      ]);
+      const rawText = (message as { content?: { type?: string; text?: string }[] })
+        .content?.filter((b) => b.type === "text").map((b) => b.text ?? "").join("") ?? "";
+      generated = extractJsonAssist(rawText) as Record<string, unknown> | null;
+    } catch (err) {
+      logger.error({ err }, "ai-assist generate-intake: Claude call failed");
+      res.status(502).json({ error: "Could not generate intake data. Please try again." });
+      return;
+    }
+
+    if (!generated) {
+      res.status(502).json({ error: "Could not parse the AI response. Please try again." });
+      return;
+    }
+
+    const formData = (generated.formData && typeof generated.formData === "object")
+      ? (generated.formData as Record<string, unknown>) : {};
+    const companyName = companyHint ||
+      (typeof generated.companyName === "string" ? generated.companyName.trim() : "");
+    if (companyName && !formData["4.1"]) formData["4.1"] = companyName;
+
+    const cleaned = deepStripEmDashes({
+      formData,
+      duals: (generated.duals ?? {}) as Record<string, unknown>,
+      dualLists: (generated.dualLists ?? {}) as Record<string, unknown>,
+      stringLists: (generated.stringLists ?? {}) as Record<string, unknown>,
+      businessCategories: Array.isArray(generated.businessCategories) ? generated.businessCategories : [],
+      audienceCategories: Array.isArray(generated.audienceCategories) ? generated.audienceCategories : [],
+      llmQueries: (generated.llmQueries ?? { v: "1.6", discovery: [], shortlist: [], comparison: [] }) as Record<string, unknown>,
+    }) as Record<string, unknown>;
+
+    res.json({ ok: true, ...cleaned, aiWebsite: normalised });
   },
 );
 

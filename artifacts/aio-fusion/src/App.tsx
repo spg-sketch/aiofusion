@@ -1,4 +1,5 @@
 import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
+import CountdownBanner from "./components/CountdownBanner";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
@@ -666,6 +667,7 @@ function GenerateFromUrlModal({
         />
 
         {isRunning && (
+          <>
           <div className="mb-5 rounded-xl border p-4" style={{ borderColor: `${accent}40`, background: `${accent}08` }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -693,6 +695,10 @@ function GenerateFromUrlModal({
               </p>
             </div>
           </div>
+          <div className="mt-3">
+            <CountdownBanner active={isRunning} durationSeconds={90} label="Generating your project from the website" />
+          </div>
+          </>
         )}
 
         {errorMsg && (

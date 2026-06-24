@@ -882,6 +882,9 @@ export default function IntakePage() {
   const [aiLoadingField, setAiLoadingField] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string>("");
   const [aiNotice, setAiNotice] = useState<string>("");
+  const [autoFillLoading, setAutoFillLoading] = useState(false);
+  const [autoFillError, setAutoFillError] = useState("");
+  const [autoFillNotice, setAutoFillNotice] = useState("");
   const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
   const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
@@ -1005,6 +1008,86 @@ export default function IntakePage() {
       setAiError(err.message || "Could not draft this answer. Please try again.");
     } finally {
       setAiLoadingField(null);
+    }
+  };
+
+  const handleAutoFill = async () => {
+    const url = aiWebsite.trim();
+    if (!url) return;
+    setAutoFillError("");
+    setAutoFillNotice("");
+    setAutoFillLoading(true);
+    try {
+      const apiBase = import.meta.env.DEV ? `https://${window.location.host}` : "";
+      const companyName = (formData["4.1"] as string) || "";
+      const resp = await fetch(`${apiBase}/api/ai-assist/generate-intake`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ url, companyName: companyName || undefined }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ error: "Could not auto-fill. Please try again." }));
+        throw new Error(data.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.formData && typeof data.formData === "object") {
+        setFormData((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(data.formData as Record<string, unknown>)) {
+            if (typeof v === "string" && v.trim()) next[k] = v;
+            else if (Array.isArray(v) && v.length > 0) next[k] = v as string[];
+          }
+          return next;
+        });
+      }
+      if (data.duals && typeof data.duals === "object") {
+        setDuals((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(data.duals as Record<string, { short?: string; long?: string }>)) {
+            if (v && (v.short || v.long)) next[k] = { short: v.short || "", long: v.long || "" };
+          }
+          return next;
+        });
+      }
+      if (data.dualLists && typeof data.dualLists === "object") {
+        setDualLists((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(data.dualLists as Record<string, unknown[]>)) {
+            if (Array.isArray(v) && v.length > 0) next[k] = v as DualListValue;
+          }
+          return next;
+        });
+      }
+      if (data.stringLists && typeof data.stringLists === "object") {
+        setStringLists((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(data.stringLists as Record<string, string[]>)) {
+            if (Array.isArray(v) && v.length > 0) next[k] = v;
+          }
+          return next;
+        });
+      }
+      if (Array.isArray(data.businessCategories) && data.businessCategories.length > 0) {
+        setBusinessCategories(data.businessCategories as string[]);
+      }
+      if (Array.isArray(data.audienceCategories) && data.audienceCategories.length > 0) {
+        setAudienceCategories(data.audienceCategories as string[]);
+      }
+      if (data.llmQueries && typeof data.llmQueries === "object") {
+        const q = data.llmQueries as { v?: string; discovery?: string[]; shortlist?: string[]; comparison?: string[] };
+        setLlmQueries({
+          v: q.v || "1.6",
+          discovery: Array.isArray(q.discovery) ? q.discovery : [],
+          shortlist: Array.isArray(q.shortlist) ? q.shortlist : [],
+          comparison: Array.isArray(q.comparison) ? q.comparison : [],
+        });
+      }
+      setAutoFillNotice("All fields filled from your website. Please review each answer before saving.");
+    } catch (err: unknown) {
+      setAutoFillError((err instanceof Error ? err.message : null) || "Could not auto-fill. Please try again.");
+    } finally {
+      setAutoFillLoading(false);
     }
   };
 
@@ -1638,16 +1721,43 @@ export default function IntakePage() {
                       )}
                     </div>
                     {websiteValid && (
-                      <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#15803D" }}>
-                        <Check size={13} strokeWidth={3} /> Website saved. Use "Ask AI to complete this" under a question.
-                      </p>
+                      <>
+                        <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#15803D" }}>
+                          <Check size={13} strokeWidth={3} /> Website saved. Use "Ask AI to complete this" under a question.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { void handleAutoFill(); }}
+                          disabled={autoFillLoading || aiLoadingField !== null}
+                          className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-bold uppercase tracking-[0.12em] border-2 transition-all"
+                          style={{
+                            background: autoFillLoading ? "rgba(200,73,122,0.08)" : "#C8497A",
+                            borderColor: "#C8497A",
+                            color: autoFillLoading ? "#C8497A" : "white",
+                            opacity: aiLoadingField !== null ? 0.5 : 1,
+                            cursor: autoFillLoading || aiLoadingField !== null ? "default" : "pointer",
+                          }}
+                        >
+                          <Sparkles size={14} className={autoFillLoading ? "animate-pulse" : ""} />
+                          {autoFillLoading ? "Filling all fields from your website…" : "Auto-fill all fields from my website"}
+                        </button>
+                      </>
                     )}
                   </>
                 );
               })()}
+              {autoFillError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{autoFillError}</p>}
+              {autoFillNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#15803D" }}>{autoFillNotice}</p>}
               {aiError && <p className="text-[12px] font-medium mt-2" style={{ color: "#DC2626" }}>{aiError}</p>}
               {aiNotice && <p className="text-[12px] font-medium mt-2" style={{ color: "#1F748F" }}>{aiNotice}</p>}
               <div className="mt-3">
+                <CountdownBanner
+                  active={autoFillLoading}
+                  durationSeconds={90}
+                  label="Filling all fields from your website"
+                />
+              </div>
+              <div className="mt-2">
                 <CountdownBanner
                   active={aiLoadingField !== null}
                   durationSeconds={60}
