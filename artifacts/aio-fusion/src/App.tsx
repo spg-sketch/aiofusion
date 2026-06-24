@@ -7589,9 +7589,30 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
   const accentSoft = "#FBE3ED";
   const teal = vars.teal;
 
-  type PlanFeature = { label: string; starter: string | boolean; agency: string | boolean; enterprise: string | boolean };
+  type PlanFeature = { label: string; solo: string | boolean; starter: string | boolean; agency: string | boolean; enterprise: string | boolean };
 
   const PLANS = [
+    {
+      name: "Solo",
+      tagline: "Try the platform hands-on. Great for freelancers and individuals exploring GEO.",
+      monthly: 49,
+      annual: 39,
+      color: vars.gold,
+      highlight: false,
+      cta: "Start Free Trial",
+      seats: "1 user",
+      projects: "1 brand / project",
+      badge: null,
+      includes: [
+        "Project Set-Up and brand profile",
+        "LLM Visibility Check — 2 runs per month",
+        "AI content generations — 5 per month",
+        "Content Optimiser",
+        "Content Creator",
+        "Email support",
+      ],
+      excludes: ["Comms Planner", "Coverage Tracker", "Earned Media Authority Audit", "Marketing Intelligence", "Media Database"],
+    },
     {
       name: "Starter",
       tagline: "For solo practitioners and small in-house teams getting started with GEO.",
@@ -7602,15 +7623,13 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
       cta: "Start Free Trial",
       seats: "1 user",
       projects: "1 brand / project",
+      badge: null,
       includes: [
-        "Project Set-Up and brand profile",
+        "Everything in Solo, plus:",
         "LLM Visibility Check — 5 runs per month",
         "AI content generations — 15 per month",
-        "Content Optimiser",
-        "Content Creator",
         "Comms Planner",
         "Coverage Tracker and reporting",
-        "Email support",
       ],
       excludes: ["Earned Media Authority Audit", "Marketing Intelligence", "Media Database", "Client sub-accounts"],
     },
@@ -7663,32 +7682,32 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
   ];
 
   const TABLE_ROWS: PlanFeature[] = [
-    { label: "Brands / projects", starter: "1", agency: "Up to 10", enterprise: "Unlimited" },
-    { label: "User seats", starter: "1", agency: "5", enterprise: "Unlimited" },
-    { label: "Project Set-Up and brand profile", starter: true, agency: true, enterprise: true },
-    { label: "LLM Visibility Checks", starter: "5 / month", agency: "30 / month", enterprise: "Unlimited" },
-    { label: "AI content generations", starter: "15 / month", agency: "Unlimited", enterprise: "Unlimited" },
-    { label: "Content Optimiser", starter: true, agency: true, enterprise: true },
-    { label: "Content Creator", starter: true, agency: true, enterprise: true },
-    { label: "Comms Planner", starter: true, agency: true, enterprise: true },
-    { label: "Coverage Tracker and reporting", starter: true, agency: true, enterprise: true },
-    { label: "Earned Media Authority Audit", starter: false, agency: true, enterprise: true },
-    { label: "Marketing Intelligence search", starter: false, agency: true, enterprise: true },
-    { label: "Media Database", starter: false, agency: true, enterprise: true },
-    { label: "Client sub-accounts", starter: false, agency: true, enterprise: true },
-    { label: "Custom AI model configuration", starter: false, agency: false, enterprise: true },
-    { label: "White-label option", starter: false, agency: false, enterprise: true },
-    { label: "API access", starter: false, agency: false, enterprise: true },
-    { label: "SSO and enterprise security", starter: false, agency: false, enterprise: true },
-    { label: "Dedicated account manager", starter: false, agency: false, enterprise: true },
-    { label: "SLA guarantee", starter: false, agency: false, enterprise: true },
-    { label: "Support", starter: "Email", agency: "Priority email and chat", enterprise: "Dedicated" },
+    { label: "Brands / projects", solo: "1", starter: "1", agency: "Up to 10", enterprise: "Unlimited" },
+    { label: "User seats", solo: "1", starter: "1", agency: "5", enterprise: "Unlimited" },
+    { label: "Project Set-Up and brand profile", solo: true, starter: true, agency: true, enterprise: true },
+    { label: "LLM Visibility Checks", solo: "2 / month", starter: "5 / month", agency: "30 / month", enterprise: "Unlimited" },
+    { label: "AI content generations", solo: "5 / month", starter: "15 / month", agency: "Unlimited", enterprise: "Unlimited" },
+    { label: "Content Optimiser", solo: true, starter: true, agency: true, enterprise: true },
+    { label: "Content Creator", solo: true, starter: true, agency: true, enterprise: true },
+    { label: "Comms Planner", solo: false, starter: true, agency: true, enterprise: true },
+    { label: "Coverage Tracker and reporting", solo: false, starter: true, agency: true, enterprise: true },
+    { label: "Earned Media Authority Audit", solo: false, starter: false, agency: true, enterprise: true },
+    { label: "Marketing Intelligence search", solo: false, starter: false, agency: true, enterprise: true },
+    { label: "Media Database", solo: false, starter: false, agency: true, enterprise: true },
+    { label: "Client sub-accounts", solo: false, starter: false, agency: true, enterprise: true },
+    { label: "Custom AI model configuration", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "White-label option", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "API access", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "SSO and enterprise security", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "Dedicated account manager", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "SLA guarantee", solo: false, starter: false, agency: false, enterprise: true },
+    { label: "Support", solo: "Email", starter: "Email", agency: "Priority email and chat", enterprise: "Dedicated" },
   ];
 
   const FAQS = [
     { q: "What counts as an LLM Visibility Check?", a: "Each LLM Visibility Check runs your brand or a specific piece of content through multiple AI engines (Claude, ChatGPT, Perplexity, Gemini and CoPilot) simultaneously and scores the responses. Because each check involves multiple live API calls, we cap them per tier to keep pricing predictable for you." },
     { q: "What happens if I reach my monthly AI run limit?", a: "You will receive a notification when you are approaching your limit. You will not be automatically charged. You can either wait for the limit to reset at the start of your next billing cycle, or contact us to discuss upgrading your plan." },
-    { q: "Is there a free trial?", a: "Yes — both the Starter and Agency plans include a 14-day free trial with full access to all features on that tier. No credit card required to start." },
+    { q: "Is there a free trial?", a: "Yes — all paid plans include a 14-day free trial with full access to that tier's features. No credit card required to start." },
     { q: "Can I change plan at any time?", a: "Yes. You can upgrade or downgrade at any point. Upgrades take effect immediately and are prorated. Downgrades take effect at the end of your current billing period." },
     { q: "Are prices per user or per account?", a: "Prices are per account, not per seat. Each plan includes a set number of user seats so your team can collaborate. Additional seats beyond the plan allowance are available on the Agency and Enterprise plans." },
     { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details to apply." },
@@ -7759,7 +7778,7 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
 
       {/* Pricing cards */}
       <section className="pb-16 px-4 sm:px-8">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-5 items-start">
+        <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
           {PLANS.map((plan) => (
             <div key={plan.name} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.highlight ? `2px solid ${accent}` : `1px solid ${vars.g200}`, background: plan.highlight ? "white" : paper, boxShadow: plan.highlight ? `0 20px 48px -12px ${accent}40` : "none", position: "relative" }}>
               {plan.highlight && (
@@ -7837,7 +7856,7 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
             <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything included, at a glance</h2>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
-            <div className="grid grid-cols-4" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
+            <div className="grid grid-cols-5" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
               <div className="p-4" />
               {PLANS.map((p) => (
                 <div key={p.name} className="p-4 text-center">
@@ -7846,8 +7865,9 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
               ))}
             </div>
             {TABLE_ROWS.map((row, i) => (
-              <div key={row.label} className="grid grid-cols-4 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
+              <div key={row.label} className="grid grid-cols-5 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
                 <div className="p-4 text-[13px] font-light" style={{ color: ink }}>{row.label}</div>
+                <div className="p-4"><Cell v={row.solo} /></div>
                 <div className="p-4"><Cell v={row.starter} /></div>
                 <div className="p-4"><Cell v={row.agency} /></div>
                 <div className="p-4"><Cell v={row.enterprise} /></div>
