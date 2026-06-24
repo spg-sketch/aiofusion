@@ -9101,7 +9101,7 @@ function UsersAdminPage({
             Manage platform users
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            Create the accounts that run on the platform. An Agency Reseller can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only. Use the controls below to set a friendly name and to move any project to the account that should own it.
+            Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only. Use the controls below to set a friendly name and to move any project to the account that should own it.
           </p>
         </div>
 
@@ -9242,9 +9242,8 @@ function UsersAdminPage({
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               >
-                <option value="agency">Agency Reseller</option>
+                <option value="agency">Agency</option>
                 <option value="client">Direct Client</option>
-                <option value="admin">Master Admin</option>
               </select>
             </div>
             <div className="md:col-span-4">
