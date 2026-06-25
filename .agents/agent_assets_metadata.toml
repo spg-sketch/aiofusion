@@ -125,3 +125,9 @@ id = "POE8BU8mnecBpFNafgWBa"
 uri = "file://backups/aio-fusion-db-20260612-151628.sql.gz"
 type = "unspecified"
 title = "AIO Fusion database backup (12 Jun 2026)"
+
+[[outputs]]
+id = "bs-RCgb120pxP8R9NqDV8"
+uri = "file://docs/competitor-semrush-pr-toolkit.md"
+type = "text"
+title = "AIO Fusion vs Semrush AI PR Toolkit — Competitor Analysis"
