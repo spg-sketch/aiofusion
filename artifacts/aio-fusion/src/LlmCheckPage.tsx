@@ -1535,7 +1535,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[12px] font-medium" style={{ color: "#165265" }}>
-                        Probe {probeProgress.done} of {probeProgress.total} complete
+                        {probeProgress.done >= probeProgress.total
+                          ? "Generating report…"
+                          : `Probe ${probeProgress.done} of ${probeProgress.total} complete`}
                       </span>
                       <span className="text-[11px] tabular-nums" style={{ color: "#6B7280" }}>
                         {Math.round((probeProgress.done / probeProgress.total) * 100)}%
