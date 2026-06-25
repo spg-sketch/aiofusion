@@ -8317,6 +8317,21 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
         </div>
       </section>
 
+      {/* LLM usage note */}
+      <section className="py-10 px-4 sm:px-8" style={{ background: `${teal}0D` }}>
+        <div className="max-w-3xl mx-auto flex gap-4 items-start">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${teal}22` }}>
+            <Info size={18} color={teal} />
+          </div>
+          <div>
+            <p className="text-[13px] font-semibold mb-1" style={{ color: ink }}>About AI usage limits</p>
+            <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+              Each LLM Visibility Check and Earned Media Audit involves live calls to multiple AI engines — Claude, ChatGPT, Perplexity, Gemini and CoPilot — which carry real API costs. We pass these limits through transparently rather than building them into a higher flat fee. Content generation (Optimiser, Creator) is less expensive per run, which is why it has a separate, more generous allowance on Starter and is unlimited on Agency and above. If you need more runs, contact us and we can discuss options.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Feature comparison table */}
       <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
         <div className="max-w-5xl mx-auto">
