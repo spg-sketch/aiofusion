@@ -1124,7 +1124,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-            Score whether AI models like ChatGPT and Claude mention {probeName || activeClient.name} when asked about the sectors you operate in and the markets you sell to.
+            Score how often {probeName || activeClient.name} is mentioned when AI engines are asked about your sectors and target markets.
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
@@ -1417,8 +1417,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               <p className="text-[11px] mt-2 flex items-start gap-1" style={{ color: buyerQuestions.length === 0 ? "#8A6314" : vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
                 {buyerQuestions.length > 0
-                  ? `These ${buyerQuestions.length} queries are fired at ChatGPT and Claude word for word. We then check whether you appear in the answer.`
-                  : "Generate queries above, or type your own. They are fired verbatim at ChatGPT and Claude so we can check whether you appear."}
+                  ? `These ${buyerQuestions.length} queries are run as blind probes. We then check whether you appear in the answer.`
+                  : "Generate queries above, or type your own. They are run as blind probes so we can check whether you appear."}
               </p>
             </div>
             <div className="mb-6">
@@ -1598,10 +1598,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               <div className="mt-4 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: "rgba(31,116,143,0.02)" }}>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: vars.accent }} />
-                  <span className="text-sm font-medium" style={{ color: vars.navy }}>Running dual-engine visibility probes</span>
+                  <span className="text-sm font-medium" style={{ color: vars.navy }}>Running visibility probes</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  We're asking both Claude and ChatGPT real sector questions and counting whether {probeName || activeClient.name} appears in their responses. This typically takes 1-3 minutes.
+                  We're running real sector questions as blind probes and counting whether {probeName || activeClient.name} appears in the responses. This typically takes 1–3 minutes.
                 </p>
               </div>
             )}

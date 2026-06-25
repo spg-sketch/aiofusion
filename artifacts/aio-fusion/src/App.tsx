@@ -2589,7 +2589,7 @@ Engine used:
             Score your site for AI agent visibility and citation.
           </p>
           <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: vars.g500 }}>
-            This assessment looks at your website the way AI tools like ChatGPT, Claude and Google's AI Overviews now read it. We check the things that decide whether an AI will trust your site, understand what you do, and name you in its answers: how your content is structured, how clearly your brand and services are described, the behind the scenes markup that helps machines make sense of the page, and the signals that show you are a credible source.
+            This assessment looks at your website the way AI search and answer engines now read it. We check the things that decide whether an engine will trust your site, understand what you do, and name you in its answers: how your content is structured, how clearly your brand and services are described, the behind-the-scenes markup that helps machines make sense of the page, and the signals that show you are a credible source.
           </p>
           <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: vars.g500 }}>
             You get a single readiness score and a short, prioritised list of fixes, so you can see exactly where you stand today and what to improve to be mentioned more often when people ask AI about your sector.
@@ -2647,7 +2647,7 @@ Engine used:
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {diagPendingForce
                     ? "This will override the 21-day lock. Continue?"
-                    : "This will fetch and analyse your website with Claude. It typically takes 15–30 seconds."}
+                    : "This will fetch and analyse your website. It typically takes 15–30 seconds."}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -2704,7 +2704,7 @@ Engine used:
                   <span className="text-sm font-medium" style={{ color: vars.navy }}>Running analysis</span>
                 </div>
                 <p className="text-xs font-light" style={{ color: vars.g500 }}>
-                  Your content is being analysed by Claude, alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This typically takes 15-30 seconds.
+                  Your website is being analysed alongside the figures measured directly from your page, to produce a comprehensive GEO authority score. This typically takes 15–30 seconds.
                 </p>
               </div>
             )}
