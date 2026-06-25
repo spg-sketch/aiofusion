@@ -33,12 +33,14 @@ const MIGRATED_FLAG = "accounts_migrated";
 function publicAccount(
   row: { username: string; role: string; parent: string | null },
   displayName?: string,
+  archived?: boolean,
 ) {
   return {
     username: row.username,
     role: normalizeRole(row.role),
     parent: row.parent ?? undefined,
     ...(displayName ? { displayName } : {}),
+    ...(archived ? { archived: true } : {}),
   };
 }
 
@@ -47,6 +49,31 @@ function publicAccount(
 // is needed. The value is JSON, currently just { displayName }.
 const PROFILE_PREFIX = "account:profile:";
 const profileKey = (username: string) => `${PROFILE_PREFIX}${normUsername(username)}`;
+
+// Archived accounts are soft-deactivated: they cannot log in and are shown
+// in a separate section. The flag is stored as a platform_meta row.
+const ARCHIVE_PREFIX = "account:archived:";
+const archiveKey = (username: string) => `${ARCHIVE_PREFIX}${normUsername(username)}`;
+
+async function getArchivedSet(): Promise<Set<string>> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${ARCHIVE_PREFIX}%`));
+  return new Set(rows.map((r) => r.key.slice(ARCHIVE_PREFIX.length)));
+}
+
+async function setArchived(username: string, archived: boolean): Promise<void> {
+  const key = archiveKey(username);
+  if (archived) {
+    await db
+      .insert(platformMetaTable)
+      .values({ key, value: "true" })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+  } else {
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+  }
+}
 
 function parseDisplayName(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -129,6 +156,15 @@ router.post("/platform/login", async (req: Request, res: Response) => {
       res.status(401).json({ error: "Incorrect username or password." });
       return;
     }
+    const [archivedRow] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, archiveKey(username)))
+      .limit(1);
+    if (archivedRow?.value === "true") {
+      res.status(403).json({ error: "This account has been archived. Contact your administrator." });
+      return;
+    }
     const sid = await createPlatformSession(account.username);
     setPlatformCookie(res, sid);
     res.json({ account: { username: account.username, role: account.role } });
@@ -170,10 +206,10 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
-      const names = await getDisplayNames();
+      const [names, archivedSet] = await Promise.all([getDisplayNames(), getArchivedSet()]);
       res.json({
         accounts: filtered.map((r) =>
-          publicAccount(r, names.get(normUsername(r.username))),
+          publicAccount(r, names.get(normUsername(r.username)), archivedSet.has(normUsername(r.username))),
         ),
       });
     } catch {
@@ -305,6 +341,38 @@ router.post(
         return;
       }
       await setDisplayName(target, displayName);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to update account" });
+    }
+  },
+);
+
+// Archive (or unarchive) an account. Archived accounts cannot log in and are
+// shown separately in the parent's UI. Projects are NOT reassigned — the parent
+// keeps visibility. Only the parent or an admin may archive a sub-account.
+router.post(
+  "/platform/accounts/archive",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(req.body?.username);
+      const archive = req.body?.archive !== false;
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (!(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot archive this account." });
+        return;
+      }
+      await setArchived(target, archive);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to update account" });

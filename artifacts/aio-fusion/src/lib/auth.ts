@@ -27,6 +27,8 @@ export type User = {
   // (e.g. a client login created by an agency user). Undefined for top-level
   // accounts and admins.
   parent?: string;
+  // Soft-deactivated accounts are hidden from the active list and cannot log in.
+  archived?: boolean;
 };
 
 export type Session = {
@@ -230,7 +232,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -262,6 +264,7 @@ function cacheAccounts(accounts: ServerAccount[]): void {
     createdAt: Date.now(),
     ...(a.displayName ? { displayName: a.displayName } : {}),
     ...(a.parent ? { parent: a.parent } : {}),
+    ...(a.archived ? { archived: true } : {}),
   }));
   saveUsers(users);
 }
@@ -397,6 +400,16 @@ export async function serverDeleteUser(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts/delete", { username });
   if (!ok) return { ok: false, error: json?.error || "Failed to delete account." };
+  await refreshAccountsCache();
+  return { ok: true };
+}
+
+export async function serverArchiveUser(
+  username: string,
+  archive: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/archive", { username, archive });
+  if (!ok) return { ok: false, error: json?.error || "Failed to update account." };
   await refreshAccountsCache();
   return { ok: true };
 }

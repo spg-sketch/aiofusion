@@ -24,6 +24,7 @@ import {
   serverChangePassword,
   serverAssignOwner,
   serverSetDisplayName,
+  serverArchiveUser,
   refreshAccountsCache,
   canCreateSubAccounts,
   bootstrapAuth,
@@ -112,6 +113,7 @@ import {
   List as ListIcon,
   Clock,
   Undo2,
+  ArchiveRestore,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -9555,8 +9557,10 @@ function SubAccountsPage({
   const refresh = () => setTick((t) => t + 1);
 
   // Re-read on every refresh tick so adds, deletes and assignments show at once.
-  const subAccounts = useMemo(() => getLocalSubAccounts(session.username), [session.username, tick]);
-  const subUsernames = useMemo(() => new Set(subAccounts.map((u) => u.username.toLowerCase())), [subAccounts]);
+  const allSubAccounts = useMemo(() => getLocalSubAccounts(session.username), [session.username, tick]);
+  const subAccounts = useMemo(() => allSubAccounts.filter((u) => !u.archived), [allSubAccounts]);
+  const archivedSubAccounts = useMemo(() => allSubAccounts.filter((u) => u.archived), [allSubAccounts]);
+  const subUsernames = useMemo(() => new Set(allSubAccounts.map((u) => u.username.toLowerCase())), [allSubAccounts]);
   const manageable = useMemo(() => {
     const me = session.username.toLowerCase();
     return loadStoredProjects().filter((p) => {
@@ -9587,6 +9591,18 @@ function SubAccountsPage({
       } else {
         setAddError(result.error);
       }
+    })();
+  };
+
+  const handleArchive = (username: string, archive: boolean) => {
+    const msg = archive
+      ? `Archive client account '${username}'? They will not be able to sign in until restored. Their projects remain visible to you.`
+      : `Restore client account '${username}'? They will be able to sign in again.`;
+    if (!confirm(msg)) return;
+    void (async () => {
+      const result = await serverArchiveUser(username, archive);
+      if (!result.ok) { alert(result.error); return; }
+      refresh();
     })();
   };
 
@@ -9707,7 +9723,7 @@ function SubAccountsPage({
         {/* CLIENT ACCOUNTS LIST */}
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your client accounts ({subAccounts.length})</h2>
+            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your client accounts ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
           </div>
           {subAccounts.length === 0 ? (
             <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>No client accounts yet. Create one above to give a client their own login.</p>
@@ -9728,13 +9744,20 @@ function SubAccountsPage({
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
+                        </button>
+                        <button
+                          onClick={() => handleArchive(u.username, true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                        >
+                          <Archive size={12} /> Archive
                         </button>
                         <button
                           onClick={() => handleDelete(u.username)}
@@ -9780,6 +9803,65 @@ function SubAccountsPage({
             </ul>
           )}
         </div>
+
+        {/* ARCHIVED ACCOUNTS */}
+        {archivedSubAccounts.length > 0 && (
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
+              <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Archived clients ({archivedSubAccounts.length})</h2>
+              <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
+            </div>
+            <ul className="divide-y" style={{ borderColor: vars.g200 }}>
+              {archivedSubAccounts.map((u) => {
+                const owned = manageable.filter((p) => (p.owner || "").toLowerCase() === u.username.toLowerCase());
+                return (
+                  <li key={u.username} className="px-6 py-4" style={{ background: vars.g100 + "40" }}>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex items-center gap-3 opacity-60">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: vars.g200, color: vars.g400 }}>
+                          <User size={16} />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-bold" style={{ color: vars.g500 }}>{u.username}</p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g400 }}>Archived</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleArchive(u.username, false)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                        >
+                          <ArchiveRestore size={12} /> Restore
+                        </button>
+                        <button
+                          onClick={() => handleDelete(u.username)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                    {owned.length > 0 && (
+                      <div className="mt-3 sm:pl-[52px]">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g400 }}>Their projects ({owned.length})</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {owned.map((p) => (
+                            <span key={p.id} className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full opacity-60" style={{ background: vars.g200, color: vars.g500 }}>
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
+                              {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {/* PROJECT ASSIGNMENT */}
         <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
