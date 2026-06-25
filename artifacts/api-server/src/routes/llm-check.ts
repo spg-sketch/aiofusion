@@ -458,6 +458,12 @@ const GENERIC_CONCEPT_ENDINGS = new Set([
   "communications", "communication", "information", "knowledge",
   "campaigns", "campaign", "storytelling", "measurement", "monitoring",
   "branding", "planning", "execution", "production", "distribution",
+  // domain-specific topic headings that frequently appear in AI-formatted lists
+  "network", "model", "models", "infrastructure", "integration", "commerce",
+  "platform", "data", "technology", "privacy", "compliance",
+  "activation", "monetisation", "monetization", "organisation", "organization",
+  "structure", "tier", "inventory", "operations", "revenue", "analytics",
+  "loyalty", "consortium", "initiative", "programme", "program",
 ]);
 
 // Returns true only when the extracted name looks like an actual organisation
@@ -482,20 +488,25 @@ export function extractCompetitors(text: string, brand: BrandIdentity | string):
       .filter((x): x is string => !!x)
       .map((x) => x.toLowerCase().trim()),
   );
-  const patterns = [
-    /(?:companies|firms|agencies|providers|organizations|organisations)(?:\s+(?:like|such as|including|are))\s+([^.]+)/gi,
-    /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–—:])/g,
-    /\*{2}([A-Z][A-Za-z0-9\s&.']+?)\*{2}/g,
+  const patterns: Array<{ re: RegExp; minWords?: number }> = [
+    { re: /(?:companies|firms|agencies|providers|organizations|organisations)(?:\s+(?:like|such as|including|are))\s+([^.]+)/gi },
+    // Numbered-list pattern: require at least 2 words to exclude bare single-word
+    // topic fragments ("Non", "Closed", "Off", "Build") that appear as list headers.
+    { re: /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–—:])/g, minWords: 2 },
+    { re: /\*{2}([A-Z][A-Za-z0-9\s&.']+?)\*{2}/g },
   ];
 
   const names = new Set<string>();
-  for (const pattern of patterns) {
+  for (const { re: pattern, minWords } of patterns) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
       const found = match[1]?.trim();
       if (found && found.length > 2 && found.length < 60 && !exclude.has(found.toLowerCase())) {
         const cleaned = found.replace(/^\d+\.\s*/, "").replace(/\*+/g, "").trim();
-        if (cleaned.length > 2 && isLikelyBrandName(cleaned)) names.add(cleaned);
+        if (cleaned.length > 2 && isLikelyBrandName(cleaned)) {
+          if (minWords && cleaned.split(/\s+/).length < minWords) continue;
+          names.add(cleaned);
+        }
       }
     }
   }
@@ -732,6 +743,7 @@ interface AuthorityAssessment {
   priorityActions: { action: string; rationale: string; priority: string }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
   competitorInsights?: { name: string; description: string }[];
+  categoryFraming?: { query: string; themes: string }[];
 }
 
 // Whether the brand's name cleanly identifies it, or is shared with other
@@ -914,6 +926,17 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
         .slice(0, 8)
     : undefined;
 
+  const categoryFraming = Array.isArray(parsed.categoryFraming)
+    ? parsed.categoryFraming
+        .filter((c: unknown): c is Record<string, unknown> => !!c && typeof c === "object")
+        .map((c: Record<string, unknown>) => ({
+          query: typeof c.query === "string" ? c.query.trim().slice(0, 300) : "",
+          themes: typeof c.themes === "string" ? c.themes.trim().slice(0, 400) : "",
+        }))
+        .filter((c: { query: string; themes: string }) => c.query && c.themes)
+        .slice(0, 40)
+    : undefined;
+
   return {
     index,
     grade: typeof parsed.grade === "string" && /^[A-F]$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
@@ -923,6 +946,7 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
     priorityActions,
     queryTable,
     ...(competitorInsights && competitorInsights.length > 0 ? { competitorInsights } : {}),
+    ...(categoryFraming && categoryFraming.length > 0 ? { categoryFraming } : {}),
   };
 }
 
@@ -974,7 +998,8 @@ Return STRICT JSON only - no prose before or after, no markdown fences. Exactly 
   "topGaps": ["<the most important visibility gap>", ... up to 5],
   "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low" }, ... up to 5],
   "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence],
-  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows — do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.]
+  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows — do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
+  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query — do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say — frameworks, dominant terminology, competitor context — not on what the brand failed to do.]
 }
 
 BRAND: ${companyName}

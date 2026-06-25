@@ -420,10 +420,12 @@ describe("extractCompetitors", () => {
     expect(result).toContain("Globex, Initech and Umbrella");
   });
 
-  it("extracts names from a numbered list", () => {
-    const text = "1. Globex - a leader\n2. Initech - fast growing\n3. Umbrella - global";
+  it("extracts multi-word names from a numbered list", () => {
+    // Pattern 2 (numbered list) requires >= 2 words to filter single-word noise fragments.
+    // Use multi-word brand names to test the numbered-list pattern.
+    const text = "1. Globex Corp - a leader\n2. Initech Group - fast growing\n3. Umbrella Labs - global";
     const result = extractCompetitors(text, "Acme");
-    expect(result).toEqual(expect.arrayContaining(["Globex", "Initech", "Umbrella"]));
+    expect(result).toEqual(expect.arrayContaining(["Globex Corp", "Initech Group", "Umbrella Labs"]));
   });
 
   it("extracts names from bold markdown", () => {
@@ -433,10 +435,11 @@ describe("extractCompetitors", () => {
   });
 
   it("excludes the company itself", () => {
-    const text = "1. Acme - the brand\n2. Globex - a rival";
-    const result = extractCompetitors(text, "Acme");
-    expect(result).not.toContain("Acme");
-    expect(result).toContain("Globex");
+    // Exclusion is exact-match on the identity name, so use the same full name
+    const text = "1. Acme Corp - the brand\n2. Globex Systems - a rival";
+    const result = extractCompetitors(text, "Acme Corp");
+    expect(result).not.toContain("Acme Corp");
+    expect(result).toContain("Globex Systems");
   });
 
   it("deduplicates and caps the result at 10 names", () => {
@@ -449,6 +452,54 @@ describe("extractCompetitors", () => {
 
   it("returns an empty array when nothing matches", () => {
     expect(extractCompetitors("Just a plain sentence with no list.", "Acme")).toEqual([]);
+  });
+
+  it("rejects single-word fragments from numbered-list pattern", () => {
+    // These are AI formatting artefacts, not brand names
+    const text = "1. Non - closed network\n2. Off - display model\n3. Closed - restricted access\n4. Build - construction approach";
+    const result = extractCompetitors(text, "Acme");
+    expect(result).not.toContain("Non");
+    expect(result).not.toContain("Off");
+    expect(result).not.toContain("Closed");
+    expect(result).not.toContain("Build");
+  });
+
+  it("rejects multi-word topic headings via the generic-concept endings blocklist", () => {
+    const text = [
+      "1. Display Advertising - a key channel",
+      "2. Omnichannel Integration - connects everything",
+      "3. Revenue Models - various tiers",
+      "4. Omnichannel Commerce - full funnel",
+      "5. Data Platform - analytics layer",
+    ].join("\n");
+    const result = extractCompetitors(text, "Acme");
+    expect(result).not.toContain("Display Advertising");
+    expect(result).not.toContain("Omnichannel Integration");
+    expect(result).not.toContain("Revenue Models");
+    expect(result).not.toContain("Omnichannel Commerce");
+    expect(result).not.toContain("Data Platform");
+  });
+
+  it("still passes genuine multi-word brand names from numbered lists through the filters", () => {
+    // Multi-word brand names (>= 2 words) must survive the minWords guard on pattern 2.
+    // Names ending with a generic concept word (e.g. "Data", "Media") are correctly excluded.
+    const text = [
+      "1. Citrus Ad - sponsored listings",
+      "2. Pacvue Inc - retail media",
+      "3. Epsilon Data - loyalty and analytics",
+    ].join("\n");
+    const result = extractCompetitors(text, "Acme");
+    expect(result).toContain("Citrus Ad");
+    expect(result).toContain("Pacvue Inc");
+    expect(result).not.toContain("Epsilon Data"); // "Data" is in GENERIC_CONCEPT_ENDINGS
+  });
+
+  it("still passes genuine single-word brand names when they appear in bold markdown", () => {
+    // Single-word brands are captured by the bold pattern (not the numbered-list pattern)
+    const text = "Top retail media platforms include **Criteo** and **Pacvue** for sponsored listings.";
+    const result = extractCompetitors(text, "Acme");
+    expect(result).toContain("Criteo");
+    expect(result).toContain("Pacvue");
   });
 });
 

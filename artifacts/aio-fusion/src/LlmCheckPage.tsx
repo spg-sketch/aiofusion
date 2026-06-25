@@ -84,6 +84,7 @@ interface AuthorityAssessment {
   priorityActions: { action: string; rationale: string; priority: string }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
   competitorInsights?: { name: string; description: string }[];
+  categoryFraming?: { query: string; themes: string }[];
 }
 
 interface EntityClarity {
@@ -233,6 +234,7 @@ interface ReportData {
   queryRows: ReportQueryRow[];
   owns: ReportOwnsRow[];
   trackedCount: number;
+  categoryFraming: { query: string; themes: string }[];
 }
 
 function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData {
@@ -275,7 +277,9 @@ function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData
     tracked: isTracked(c.name, trackedNorm),
   }));
 
-  return { assess, idx, grade, presencePct, sov, appearedCount, totalQueries, queryRows, owns, trackedCount: tracked.filter((t) => t.trim()).length };
+  const categoryFraming = assess?.categoryFraming || [];
+
+  return { assess, idx, grade, presencePct, sov, appearedCount, totalQueries, queryRows, owns, trackedCount: tracked.filter((t) => t.trim()).length, categoryFraming };
 }
 
 function ScoreRing({ score, size = 100, unit = "%" }: { score: number; size?: number; unit?: string }) {
@@ -1099,6 +1103,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         : `<p class="muted box">No single rival was recommended often enough to stand out. That is an opening: the engines have no clear go-to name in your sector yet, so there is space to claim it.</p>`}
     </div>
     ${assessmentQueryBlock}
+    ${assess && assess.categoryFraming && assess.categoryFraming.length > 0
+      ? `<div class="card">
+      <h2>What the AI says about this category</h2>
+      <p class="meta-line" style="margin-bottom:10px;">How AI engines frame each topic when this brand is not named — the vocabulary and concepts you need to own. Derived from blind-probe evidence only.</p>
+      <table>
+        <thead><tr><th style="width:38%">Query</th><th>How engines frame this topic</th></tr></thead>
+        <tbody>${assess.categoryFraming.map((row) => `<tr><td><strong>${escapeHtml(row.query)}</strong></td><td class="muted">${escapeHtml(row.themes)}</td></tr>`).join("")}</tbody>
+      </table>
+    </div>`
+      : ""}
     <div class="card">
       <h2>Blind-probe evidence log</h2>
       <table>
@@ -2132,6 +2146,38 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </p>
         )}
       </ReportSection>
+
+      {/* What the AI says about this category */}
+      {rd.categoryFraming.length > 0 && (
+        <ReportSection
+          icon={<Info size={14} style={{ color: vars.accent }} />}
+          title="What the AI says about this category"
+          subtitle="How AI engines frame each topic when this brand isn't named — the vocabulary and concepts you need to own"
+          defaultOpen={true}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pr-3" style={{ color: vars.g500, width: "38%" }}>Query</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-[0.06em] py-2 pl-3" style={{ color: vars.g500 }}>How engines frame this topic</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rd.categoryFraming.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                    <td className="py-2.5 pr-3 align-top text-[12px] font-medium" style={{ color: vars.navy }}>{row.query}</td>
+                    <td className="py-2.5 pl-3 align-top text-[12px]" style={{ color: vars.g500 }}>{row.themes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px]" style={{ color: vars.g400 }}>
+            Derived from blind-probe evidence only — reflects what AI engines say when the brand is not named in the prompt.
+          </p>
+        </ReportSection>
+      )}
 
       {/* Blind-probe evidence log */}
       <ReportSection
