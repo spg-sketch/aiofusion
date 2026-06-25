@@ -1,0 +1,321 @@
+his score may understate real visibility
+
+“SMG” is a name shared with other organisations. An earlier version of the detection method could discount genuine mentions for ambiguous names like this, producing near-zero scores. The detection has since been improved — re-run the audit to get an up-to-date result.
+
+Re-run audit
+12
+AI Authority Index
+
+12
+/ 100
+Grade F
+0 vs previous (0%)
+0%
+
+Presence
+
+0%
+
+Share of voice
+
+0 / 8
+
+Queries appeared
+
+Non-branded category queries (0 of 8) vs named competitors · 19 tracked competitors · ChatGPT 0% · Claude 0% · Cycle 12
+
+
+Executive summary
+
+A plain-English read on overall AI visibility for this brand
+
+
+Entity clarity: who else is called "SMG"
+
+Other organisations sharing this name that may be causing scoring confusion
+
+The name "SMG" is shared with other well-known organisations that the engines surface first, so the brand competes for its own name and a depressed score partly reflects this identity confusion. The identity probe was anchored to the brand's website to measure the correct company.
+
+Status: The brand is recognised under this name but is not the most prominent holder — present but confused.
+
+Other organisations known as “SMG”	What they are
+Scottish Media Group	a former Scottish television company that owned STV (now part of STV Group plc, stv.tv)
+Service Management Group	a US customer experience management company (smg.com)
+Shanghai Media Group	a Chinese state-owned media conglomerate (smgbb.cn)
+Speedy Hire SMG	the specialist services division of UK equipment rental company Speedy Hire (speedyservices.co.uk)
+Sinclair Marketing Group	a US automotive marketing company
+SMG	formerly Scala Media Group, a Swedish cinema advertising company
+Which company is “SMG”?
+
+Confirm or correct the identity so the next audit measures the right organisation.
+
+Yes, that’s us — SMG is our company, not the others listed.
+No, we are Scottish Media Group — a former Scottish television company that owned STV (now part of STV Group plc, stv.tv)
+No, we are Service Management Group — a US customer experience management company (smg.com)
+No, we are Shanghai Media Group — a Chinese state-owned media conglomerate (smgbb.cn)
+No, we are Speedy Hire SMG — the specialist services division of UK equipment rental company Speedy Hire (speedyservices.co.uk)
+No, we are Sinclair Marketing Group — a US automotive marketing company
+No, we are SMG — formerly Scala Media Group, a Swedish cinema advertising company
+
+AI Authority scorecard
+
+How your brand performs across five scored dimensions — presence, source quality, messaging, accuracy, and people
+
+Dimension	Score / 5	Read
+Non-branded presence	0 / 5	SMG did not appear unprompted in any of the eight probe responses, despite questions directly targeting its embedded model, UK retail media planning, and retail media consultancy.
+Prominence / position	N/M	Not measurable — brand appeared too rarely in this run for a reliable score.
+Share of voice	0 / 5	SMG captured zero mentions whilst Pacvue Commerce and Quotient Technology each received four mentions, Walmart Connect, Citrus Ad, and Koddi received three, and tracked competitors Criteo appeared frequently.
+Spokesperson authority	3 / 5	Six named spokespeople supplied with relevant retail media and commerce expertise, including CEO Katie Streeter Hurle and North America MD Sean Crawford, though no evidence of their visibility in probe responses or third-party coverage was provided.
+Source quality (earned-led)	2 / 5	The supplied URLs include the primary domain (smg.team), product sites (plan-apps.com, capture.team), and structured service/resource pages, though no third-party press or authoritative industry citations were provided.
+Message fidelity	N/M	Not measurable — brand appeared too rarely in this run for a reliable score.
+Factual accuracy	N/M	Not measurable — brand appeared too rarely in this run for a reliable score.
+Entity clarity	1 / 5	The brand name is highly ambiguous, shared with at least five other well-known entities including Scottish Media Group, Service Management Group, and Shanghai Media Group, making it difficult for AI engines to resolve the correct referent without additional context.
+Index weighting: non-branded presence and share of voice 50%, source and message 20%, accuracy and entity 20%, people 10%.
+
+
+Prioritised actions
+
+The highest-impact steps to improve AI visibility — ranked by priority
+
+HIGH
+Rebrand or consistently use the full legal name with a disambiguating qualifier (e.g., 'SMG Commerce Media', 'SMG Retail Media') in all digital properties, boilerplate, and structured data to overcome the five-way entity collision.
+
+The brand name alone is ambiguous across Scottish Media Group, Service Management Group, Shanghai Media Group, and others; engines cannot reliably resolve queries to the commerce media agency, which explains zero appearances even in highly relevant contexts.
+
+HIGH
+Secure and distribute authoritative third-party coverage in trade publications (The Drum, Campaign, Digiday, AdExchanger) that explicitly covers SMG's embedded model, Plan-Apps platform, and named retail partnerships (Boots, Asda, Co-op, Morrisons).
+
+No third-party citations were supplied; engines rely heavily on reputable sources to validate claims and build entity knowledge, and SMG's operational scale (seven networks, 500 specialists, £500 million incremental revenue) is invisible without independent corroboration.
+
+HIGH
+Publish and promote detailed, structured case studies and thought leadership on the embedded agency model, placing spokespeople (Katie Streeter Hurle, Lee LeFeuvre, Sean Crawford) as authors in formats that engines can parse.
+
+The embedded model question yielded zero SMG mentions but cited Walmart Connect, Triad, and Albertsons; SMG has proprietary expertise here but no discoverable content that positions the brand as the category authority.
+
+HIGH
+Implement schema.org structured data (Organization, Service, SoftwareApplication for Plan-Apps) across smg.team, plan-apps.com, and capture.team to explicitly declare entity type, services, and differentiation from namesake organisations.
+
+Entity clarity scored only 15; structured data helps engines disambiguate and surface the correct SMG in commerce media contexts rather than defaulting to Scottish Media Group or other namesakes.
+
+MEDIUM
+Contribute quoted expertise and data (e.g., retail media network benchmarks, incrementality study results) to industry reports and journalist queries, ensuring spokespeople are cited by name and title in third-party articles indexed by engines.
+
+Six credible spokespeople were supplied but none appeared in probe evidence; engines learn authority from repeated third-party attribution, and SMG's unique cross-network intelligence and in-store measurement data are currently invisible to AI systems.
+
+
+Top visibility gaps
+
+Queries where AI isn't naming this brand — the highest-opportunity areas to address
+
+Complete absence from AI responses on core differentiators: the embedded agency model question and UK retail media specialist agency question received zero SMG mentions despite direct alignment with the brand's positioning.
+Severe entity disambiguation problem - the brand name resolves to five other organisations, preventing engines from surfacing SMG even when the context (retail media, embedded model) strongly matches the agency's expertise.
+No visibility in retail media consultancy or technology platform probes, where competitors Pacvue, Quotient, Criteo, Citrus Ad, and Koddi dominate, despite SMG's Plan-Apps platform and 18 years of operational history.
+Tracked competitors (Criteo Retail Media, Koddi, Citrus Ad) appear consistently whilst SMG captures zero share of voice, indicating the brand is not recognised as a peer in the same category by AI engines.
+Zero third-party authoritative citations or press coverage supplied in evidence URLs, limiting engines' ability to validate claims about operating seven retail media networks, 500 specialists, or £2.3 million daily media trade.
+
+Who owns the category instead
+
+The brands AI recommended when this company wasn't cited — ordered by frequency
+
+The brands the engines recommended when SMG was absent — ordered by how often they appeared.
+
+Rivals not on your tracked list — new intelligence
+
+Competitor	Surfaced in
+Pacvue Commerce
+Mentioned four times across consultancy and platform probes. Engines position Pacvue as a specialist in retail media strategy, optimization, and analytics with a focus on helping both retailers building networks and brands advertising on them, with AI-driven capabilities.
+4 of 32 answers
+Who are the best retail media consultancy firms for enterprise retailers looking to launch or scale a media network globally; What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?
+Quotient Technology
+Appeared four times in consultancy and embedded-services contexts. Engines describe Quotient as providing white-label retail media solutions with embedded support for network setup, advertiser recruitment, and ongoing optimization, particularly for grocers.
+4 of 32 answers
+Who are the best retail media consultancy firms for enterprise retailers looking to launch or scale a media network globally; What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?
+Walmart Connect
+Named three times as an example of retail media networks and embedded models. Engines cite Walmart Connect as a leading retail media network demonstrating best practices in monetizing first-party shopper data and operating at scale.
+3 of 32 answers
+What does it mean to have an embedded agency model for retail media and how does it work?
+Non	2 of 32 answers
+How do large retailers build and monetise a retail media network
+Closed	2 of 32 answers
+How do large retailers build and monetise a retail media network
+Omnichannel Integration	2 of 32 answers
+What is connected commerce marketing and how does it help retailers and brands
+These rivals were surfaced by the AI engines but are not in your tracked competitor set (Project Set-Up 4.8). Consider adding them.
+
+Known competitors — already tracked
+
+Competitor	Surfaced in
+Citrus Ad	3 of 32 answers
+What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?; Which retail media technology platforms act as an end-to-end operating system covering planning, activation, and measurement for retail media networks?
+Koddi	3 of 32 answers
+What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?; Which retail media technology platforms act as an end-to-end operating system covering planning, activation, and measurement for retail media networks?
+
+Blind-probe evidence log
+
+Every query sent to the AI engines, and whether this brand appeared in the answer
+
+Query	Appeared	Competitors surfaced	Sources / notes
+How do large retailers build and monetise a retail media network	No	Partners frequently used, Organizational Structure, Sponsored Product Ads, Display Advertising, Offsite Advertising, Premium Placements, Data & Insights Products, Non, This transforms retail P&L, Technical Infrastructure, Ad Tech Stack, Closed, Data Infrastructure	Engines named Partners frequently used and Organizational Structure instead.
+What does it mean to have an embedded agency model for retail media and how does it work?	No	Campaign management, Client services, Technology integration, Reporting and analytics, Sales support, Dedicated resources, Hybrid ownership, Walmart Connect, Triad Retail Media, Albertsons Media Collective, Dedicated Account Teams, First	Engines named Campaign management and Client services instead.
+How can a retailer turn its first-party shopper data into an advertising revenue	No	Monetization Models, Privacy and Compliance, Build a Retail Media Network, Examples, Leverage Your Data Advantages, Purchase behavior, Basket analysis, Loyalty program data, Create Advertiser Solutions, Sponsored products, Off, Build the Technology Platform	Engines named Monetization Models and Privacy and Compliance instead.
+What is connected commerce marketing and how does it help retailers and brands	No	Omnichannel Integration, Data, Shoppable Media, Increased conversion rates, Higher customer lifetime value, Better inventory management, Enhanced customer insights, Direct consumer relationships, Attribution clarity, Faster market response, Unified Customer Data, Personalized Experiences	Engines named Omnichannel Integration and Data instead.
+Which agencies in the UK specialise in planning, activating, and measuring retail media campaigns for major retailers?	No	Threefold, Pocket Media, Strategi Digital, Mindshare, OMD UK, Havas Market, The Kite Factory, Amsive Digital, Incubeta, Acorn Strategy, Pacvue, The7Stars	Engines named Threefold and Pocket Media instead.
+Who are the best retail media consultancy firms for enterprise retailers looking to launch or scale a media network globally	No	Pacvue Commerce, Quartile, Bain & Company, McKinsey & Company, Publicis Sapient, Deloitte Digital, CommerceIQ, Goodway Group, Technology build vs. buy, Strategic planning, Criteo, Quotient Technology	Engines named Pacvue Commerce and Quartile instead.
+What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?	No	Criteo Commerce Media, Citrus Ad, Quotient Technology, Koddi, Pacvue Commerce, Skai, Criteo, Managed Service Specialists, Walkway Digital, Epsilon	Engines named Criteo Commerce Media and Citrus Ad instead.
+Which retail media technology platforms act as an end-to-end operating system covering planning, activation, and measurement for retail media networks?	No	Criteo Commerce Media Platform, Koddi, Cooler Screens, Pacvue Commerce, Comprehensive Platform Providers, Citrus Ad, Criteo Retail Media Platform, Quotient Technology, Scibids	Engines named Criteo Commerce Media Platform and Koddi instead.
+
+Detailed probe results
+
+The full AI responses to each question — expand individual rows to read the answer verbatim
+
+
+How do large retailers build and monetise a retail media network
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+How do large retailers build and monetise a retail media network
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+What does it mean to have an embedded agency model for retail media and how does it work?
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+What does it mean to have an embedded agency model for retail media and how does it work?
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+How can a retailer turn its first-party shopper data into an advertising revenue
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+How can a retailer turn its first-party shopper data into an advertising revenue
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+What is connected commerce marketing and how does it help retailers and brands
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+What is connected commerce marketing and how does it help retailers and brands
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+Which agencies in the UK specialise in planning, activating, and measuring retail media campaigns for major retailers?
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+Which agencies in the UK specialise in planning, activating, and measuring retail media campaigns for major retailers?
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+Who are the best retail media consultancy firms for enterprise retailers looking to launch or scale a media network globally
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+Who are the best retail media consultancy firms for enterprise retailers looking to launch or scale a media network globally
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+What companies provide in-house embedded retail media specialists to help retailers operate their own media networks?
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+Which retail media technology platforms act as an end-to-end operating system covering planning, activation, and measurement for retail media networks?
+
+GPT-5 (ChatGPT)
+
+0/2 runs
+Not found
+
+Which retail media technology platforms act as an end-to-end operating system covering planning, activation, and measurement for retail media networks?
+
+Claude (Anthropic)
+
+0/2 runs
+Not found
+
+Method & caveats
+
+How the audit works, what the numbers mean, and what to watch out for
+
+Blind probes were run across ChatGPT and Claude using 8 non-branded category queries a prospect, journalist or researcher might ask. SMG was never named in the prompts.
+Presence is the share of probes in which SMG appeared. Share of voice weighs those mentions against the rival brands the engines named.
+AI responses are not deterministic, so individual results vary. The trend across repeated cycles is the meaningful signal, not a single run.
+Some ICP-narrowed probes are phrased to surface specialist or independent providers rather than large household names — a global agency or enterprise vendor is not expected to appear in those specific questions.
+Scorecard dimensions marked N/M (not measurable) could not be scored reliably because the brand appeared in too few probes. They are not failures — they indicate where more visibility work is needed first.
+
+How to interpret these results
+
+A practical guide to making sense of your score and acting on it
+
+1
+This is the real test. We're asking AI models the same questions a prospect, journalist or researcher would ask. If your brand doesn't appear, that's the gap GEO work needs to close.
+
+2
+Scores are directional, not precise. AI model responses aren't deterministic - the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful.
+
+3
+Competitors reveal what's working. The companies AI does mention are winning the visibility race in your sector - analyse what they're doing differently with content structure, schema markup and authority signals.
+
+4
+Use this as a baseline. Run it now, do your GEO work (diagnostic, content optimisation, schema, authority planning), then run it again. A score moving from 20% to 50% is a measurable result you can report to the client.
+
+5
+Set the right business type. Use the Business type selector to match the probe vocabulary to the client — agencies and providers for services, platforms and vendors for products, brands for consumer. This ensures the competitor set AI surfaces is actually comparable to the client.
+
+ Continue the loop
+
+Use this score to drive the next cycle
+
+Optimise the next piece of content, push it through Plan and Release, then re-run this audit. Each cycle should move the score.
+
+Saved to history
+Run New Audit
+Checked 25/06/2026, 12:54:58 · Results reflect AI model knowledge at time of query and may vary between sessions
