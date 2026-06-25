@@ -441,6 +441,40 @@ function findMentionContext(text: string, brand: BrandIdentity | string): string
   return context;
 }
 
+// Words that commonly appear at the end of conceptual headings rather than
+// brand names. If the last word of an extracted string is in this set, it
+// is almost certainly a topic category, not a company name.
+const GENERIC_CONCEPT_ENDINGS = new Set([
+  "excellence", "capability", "capabilities", "culture", "coverage",
+  "mentions", "mention", "trust", "credibility", "research", "strategy",
+  "strategies", "innovation", "performance", "awareness", "engagement",
+  "relationships", "relationship", "influence", "leadership", "authority",
+  "expertise", "quality", "impact", "value", "growth", "success",
+  "intelligence", "media", "content", "social", "presence", "visibility",
+  "recognition", "reputation", "positioning", "reach", "narrative",
+  "approach", "framework", "methodology", "solutions", "solution",
+  "insights", "insight", "analytics", "experience", "talent", "services",
+  "service", "results", "outcomes", "thinking", "marketing", "advertising",
+  "communications", "communication", "information", "knowledge",
+  "campaigns", "campaign", "storytelling", "measurement", "monitoring",
+  "branding", "planning", "execution", "production", "distribution",
+]);
+
+// Returns true only when the extracted name looks like an actual organisation
+// rather than a conceptual heading or topic phrase.
+function isLikelyBrandName(name: string): boolean {
+  const words = name.trim().split(/\s+/);
+  // Brands rarely exceed four words
+  if (words.length > 4) return false;
+  // Reject if the final word is a generic concept noun
+  const lastWord = words[words.length - 1].toLowerCase().replace(/[^a-z]/g, "");
+  if (GENERIC_CONCEPT_ENDINGS.has(lastWord)) return false;
+  // Reject if the name contains a preposition mid-phrase (e.g. "Participate in Real",
+  // "Press Coverage of Brands"). Ampersand (&) is fine — it appears in real brand names.
+  if (words.length > 1 && /\b(in|of|for|is|the|a|an|at|to|with|by|from|about|on|via)\b/i.test(name)) return false;
+  return true;
+}
+
 export function extractCompetitors(text: string, brand: BrandIdentity | string): string[] {
   const identity = asIdentity(brand);
   const exclude = new Set(
@@ -461,7 +495,7 @@ export function extractCompetitors(text: string, brand: BrandIdentity | string):
       const found = match[1]?.trim();
       if (found && found.length > 2 && found.length < 60 && !exclude.has(found.toLowerCase())) {
         const cleaned = found.replace(/^\d+\.\s*/, "").replace(/\*+/g, "").trim();
-        if (cleaned.length > 2) names.add(cleaned);
+        if (cleaned.length > 2 && isLikelyBrandName(cleaned)) names.add(cleaned);
       }
     }
   }
