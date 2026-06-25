@@ -435,6 +435,25 @@ const GEN_LENGTH_2: Record<string, string> = {
   "Social post": "Around 600 words.",
 };
 
+// Hard token ceiling per content type. Prevents the model from running far
+// past the stated word target. Values include generous JSON-wrapper overhead
+// (headline, standfirst, changeLog, supportingData) on top of the body text.
+// At ~1.3 tokens/word: 900 w ≈ 1,170 body tokens + ~600 JSON overhead = ~1,770
+// → rounded up with extra safety margin.
+const GEN_MAX_TOKENS: Record<string, number> = {
+  "Press release": 2500,
+  "Case study": 2200,
+  "Speaker submission": 2000,
+  "Award submission": 2000,
+  "Event copy": 1800,
+  "Directory entry": 1500,
+  Article: 2500,
+  Whitepaper: 5000,
+  "Blog post": 2000,
+  "Social post": 1500,
+  "Article Media Pitch": 1500,
+};
+
 const GEN_OBJECTIVES_1 =
   `LLMO optimisation objectives - apply all of the following:\n` +
   `1. Entity clarity: introduce every named entity (people, companies, products, locations) with full context on first mention; use consistent naming and avoid ambiguous pronouns.\n` +
@@ -600,9 +619,11 @@ contentAiRouter.post(
       `{"headline": "...", "standfirst": "...", "bodyCopy": "the full draft", "changeLog": [{"kind": "embed"|"structure"|"flag", "text": "..."}], "supportingData": [{"text": "what to add and why", "url": "https://..."}]}\n` +
       `The changeLog should note where each key message was placed and the main structural choices, and flag anything the human must verify. supportingData lists suggested third-party statistics or sources to consider (may be empty); never fabricate figures.`;
 
+    const maxTokens = GEN_MAX_TOKENS[contentType] ?? 3000;
+
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt);
+      const raw = await streamModelText(res, client, prompt, maxTokens);
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
