@@ -258,6 +258,7 @@ contentAiRouter.post(
       `Strict rules:\n` +
       `- Your job is to edit and improve the draft above, not to write a new piece. Every paragraph in the output must trace back to something in the submitted draft.\n` +
       `- Preserve every fact, name, number, quote and claim the user provided. Do not invent statistics or facts.\n` +
+      `- Do NOT write or invent spokesperson quotes. Only retain direct quotes that already appear verbatim in the submitted draft. If a point needs attributing to a spokesperson but no quote exists in the draft, write it in reported speech instead.\n` +
       `- Genuinely rewrite the copy: sharpen the headline, rework the standfirst, and restructure the body answer-first so the most quotable, newsworthy statement leads.\n` +
       `- End the body copy with a short paragraph beginning "Optimisation pass:" that lists, in plain words, where each key message was woven in and any structural change made.\n` +
       `- If a selected key message could not be placed naturally, do not force it; record it as a "flag" entry in the change log instead.\n\n` +
@@ -415,7 +416,7 @@ const GEN_PROMPT_1_TYPES = new Set([
 
 const GEN_LENGTH_1: Record<string, string> = {
   "Press release":
-    "Around 900 words. Open with a headline and standfirst, then begin the first paragraph with City, Country, Date: the source company plus a short descriptor and the priority news. Order newsworthy facts by significance through the following paragraphs, place a spokesperson quote towards the end, and close with the company boilerplate drawn from the Project Data.",
+    "Around 900 words. Open with a headline and standfirst, then begin the first paragraph with City, Country, Date: the source company plus a short descriptor and the priority news. Order newsworthy facts by significance through the following paragraphs, and close with the company boilerplate drawn from the Project Data. If the source notes contain a verbatim spokesperson quote, place it towards the end; if no direct quote is present in the source material, attribute the point in reported speech only — do not invent a quote.",
   "Case study":
     "Around 800 words. Use a Challenge, Solution, Results structure (or the best-practice format for the company's sector), referencing the Project Data throughout.",
   "Speaker submission":
@@ -614,6 +615,7 @@ contentAiRouter.post(
       `Strict rules:\n` +
       `- Write a full, original draft of the target length. Do not return the brief, notes or key messages verbatim as the body.\n` +
       `- Keep every fact, name, number and quote accurate to the Project Data and source notes. Do not fabricate statistics; attribute any third-party data and flag it for human checking.\n` +
+      `- Do NOT write or invent spokesperson quotes. Only include a direct quote if the exact words appear verbatim in the source notes or Project Data supplied by the user. If no quote is present in the source material, write the attributed point in reported speech instead.\n` +
       `- Embed each selected key message verbatim only where it fits naturally; if one cannot be placed, record it as a "flag" in the change log rather than forcing it.\n\n` +
       `Return JSON only, no commentary, in exactly this shape:\n` +
       `{"headline": "...", "standfirst": "...", "bodyCopy": "the full draft", "changeLog": [{"kind": "embed"|"structure"|"flag", "text": "..."}], "supportingData": [{"text": "what to add and why", "url": "https://..."}]}\n` +
