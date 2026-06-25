@@ -8,6 +8,7 @@ import { fetchGeoAuditContext, type GeoAuditFacts } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
+import { logAdminEvent } from "../lib/admin-events";
 
 const AUDIT_LOCK_DAYS = 21;
 
@@ -280,6 +281,14 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
             });
             return;
           }
+          // Admin forced the audit past the 21-day lock — log for accountability.
+          void logAdminEvent(
+            { username: req.account!.username },
+            "forced_website_audit",
+            projectId,
+            "project",
+            { lastRunAt: lastRunAt.toISOString(), url: typeof url === "string" ? url.trim() : undefined },
+          );
         }
       }
     } catch (err: any) {

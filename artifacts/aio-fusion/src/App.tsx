@@ -114,6 +114,7 @@ import {
   Clock,
   Undo2,
   ArchiveRestore,
+  RefreshCw,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -9061,6 +9062,42 @@ function UsersAdminPage({
   const [genError, setGenError] = useState<string | null>(null);
   const [genResult, setGenResult] = useState<{ projectId: string; companyName: string } | null>(null);
 
+  // ── Audit log state ───────────────────────────────────────────────────────
+  type AdminEvent = {
+    id: number;
+    actorUsername: string;
+    action: string;
+    targetId: string | null;
+    targetType: string | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+  };
+  const [auditEvents, setAuditEvents] = useState<AdminEvent[] | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const loadAuditEvents = () => {
+    setAuditLoading(true);
+    setAuditError(null);
+    void fetch(`${apiBase()}/api/platform/admin-events`, { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Failed to load audit log");
+        const data = await r.json() as { events: AdminEvent[] };
+        setAuditEvents(data.events ?? []);
+      })
+      .catch(() => setAuditError("Could not load audit log. Please try again."))
+      .finally(() => setAuditLoading(false));
+  };
+
+  const ACTION_LABELS: Record<string, string> = {
+    forced_llm_audit: "Forced LLM audit",
+    forced_website_audit: "Forced website audit",
+    account_delete: "Deleted account",
+    account_role_change: "Changed account role",
+    project_owner_reassign: "Reassigned project owner",
+    platform_migrate: "Ran platform migration",
+  };
+
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedUrl = genUrl.trim();
@@ -9535,6 +9572,83 @@ function UsersAdminPage({
             })}
           </ul>
         </div>
+
+        {/* AUDIT LOG */}
+        <div className="rounded-2xl p-6 sm:p-8 mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#F0F4FF" }}>
+                <Shield size={16} color="#1f748f" />
+              </div>
+              <div>
+                <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Audit log</h2>
+                <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+                  Read-only record of privileged admin actions. The 100 most recent events, newest first.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={loadAuditEvents}
+              disabled={auditLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40 shrink-0"
+              style={{ borderColor: vars.g200, color: vars.navy }}
+            >
+              {auditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              {auditEvents === null ? "Load" : "Refresh"}
+            </button>
+          </div>
+
+          {auditError && (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl mb-4" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
+              <AlertTriangle size={13} color={vars.red} />
+              <span className="text-[12px] font-medium" style={{ color: vars.red }}>{auditError}</span>
+            </div>
+          )}
+
+          {auditEvents === null && !auditLoading && !auditError && (
+            <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>Click Load to fetch the audit log.</p>
+          )}
+
+          {auditEvents !== null && auditEvents.length === 0 && (
+            <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>No admin events recorded yet.</p>
+          )}
+
+          {auditEvents !== null && auditEvents.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
+              <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Time</th>
+                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Actor</th>
+                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Action</th>
+                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Target</th>
+                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEvents.map((ev, i) => {
+                    const rowBg = i % 2 === 0 ? "white" : vars.g100;
+                    const ts = new Date(ev.createdAt);
+                    const timeStr = ts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + " " + ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+                    const actionLabel = ACTION_LABELS[ev.action] ?? ev.action;
+                    const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "—";
+                    const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" · ").slice(0, 120) : "";
+                    return (
+                      <tr key={ev.id} style={{ background: rowBg, borderBottom: `1px solid ${vars.g200}` }}>
+                        <td className="px-4 py-2.5 whitespace-nowrap font-mono" style={{ color: vars.g600 }}>{timeStr}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap font-semibold" style={{ color: ink }}>{ev.actorUsername}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: vars.navy }}>{actionLabel}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>{target}</td>
+                        <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

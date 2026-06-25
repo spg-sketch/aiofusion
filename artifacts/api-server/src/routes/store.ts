@@ -5,6 +5,7 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
 import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
+import { logAdminEvent } from "../lib/admin-events";
 
 const router: IRouter = Router();
 
@@ -436,6 +437,13 @@ router.post(
         res.status(409).json({ error: "You cannot reassign this project." });
         return;
       }
+      void logAdminEvent(
+        { username: req.account!.username },
+        "project_owner_reassign",
+        id,
+        "project",
+        { previousOwner: existingOwner ?? null, newOwner: target },
+      );
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to reassign project" });

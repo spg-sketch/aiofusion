@@ -7,6 +7,7 @@ import { logger } from "../lib/logger";
 import { llmCheckLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
+import { logAdminEvent } from "../lib/admin-events";
 
 const llmCheckRouter = Router();
 
@@ -1193,6 +1194,14 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
             });
             return;
           }
+          // Admin forced the audit past the 21-day lock — log for accountability.
+          void logAdminEvent(
+            { username: req.account!.username },
+            "forced_llm_audit",
+            projectId,
+            "project",
+            { companyName, lastRunAt: lastRunAt.toISOString() },
+          );
         }
       }
     } catch (err: any) {

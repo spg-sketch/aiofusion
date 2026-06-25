@@ -4,8 +4,9 @@ import {
   platformAccountsTable,
   platformMetaTable,
   projectsTable,
+  adminEventsTable,
 } from "@workspace/db";
-import { eq, sql, like } from "drizzle-orm";
+import { desc, eq, sql, like } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -26,6 +27,7 @@ import {
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { loginLimiter } from "../middleware/rate-limit";
+import { logAdminEvent } from "../lib/admin-events";
 
 const router: IRouter = Router();
 
@@ -424,6 +426,13 @@ router.post(
         .delete(platformAccountsTable)
         .where(eq(platformAccountsTable.username, target));
       await deleteProfile(target);
+      void logAdminEvent(
+        { username: actor.username },
+        "account_delete",
+        target,
+        "account",
+        { deletedRole: existing.role, projectsReassignedTo: normUsername(actor.username) },
+      );
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete account" });
@@ -504,10 +513,111 @@ router.post(
         set: { value: "true" },
       });
 
+    void logAdminEvent(
+      { username: req.account!.username },
+      "platform_migrate",
+      null,
+      "platform",
+      { inserted },
+    );
+
     res.json({ ok: true, inserted });
   } catch {
     res.status(500).json({ error: "Migration failed" });
   }
 });
+
+// Change an account's role. Admin-only — only an admin may escalate or
+// demote another account's role. Cannot be used to demote the last admin.
+router.post(
+  "/platform/accounts/role",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      if (actor.role !== "admin") {
+        res.status(403).json({ error: "Only an admin can change account roles." });
+        return;
+      }
+      const target = normUsername(req.body?.username);
+      const newRole = normalizeRole(req.body?.role);
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      if (!["admin", "agency", "client"].includes(newRole)) {
+        res.status(400).json({ error: "Role must be admin, agency, or client." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (existing.role === newRole) {
+        res.json({ ok: true });
+        return;
+      }
+      // Prevent removing the last admin.
+      if (existing.role === "admin" && newRole !== "admin") {
+        const admins = await db
+          .select({ username: platformAccountsTable.username })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.role, "admin"));
+        if (admins.length <= 1) {
+          res.status(400).json({ error: "Cannot demote the last admin." });
+          return;
+        }
+      }
+      const prevRole = existing.role;
+      await db
+        .update(platformAccountsTable)
+        .set({ role: newRole })
+        .where(eq(platformAccountsTable.username, target));
+      void logAdminEvent(
+        { username: actor.username },
+        "account_role_change",
+        target,
+        "account",
+        { previousRole: prevRole, newRole },
+      );
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to change account role" });
+    }
+  },
+);
+
+// --- Admin events (audit log) -----------------------------------------------
+
+// Return the 100 most recent admin events, newest first. Admin-only.
+router.get(
+  "/platform/admin-events",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (req.account!.role !== "admin") {
+        res.status(403).json({ error: "Admin access required." });
+        return;
+      }
+      const rows = await db
+        .select({
+          id: adminEventsTable.id,
+          actorUsername: adminEventsTable.actorUsername,
+          action: adminEventsTable.action,
+          targetId: adminEventsTable.targetId,
+          targetType: adminEventsTable.targetType,
+          metadata: adminEventsTable.metadata,
+          createdAt: adminEventsTable.createdAt,
+        })
+        .from(adminEventsTable)
+        .orderBy(desc(adminEventsTable.createdAt))
+        .limit(100);
+      res.json({ events: rows });
+    } catch {
+      res.status(500).json({ error: "Failed to load audit log" });
+    }
+  },
+);
 
 export default router;
