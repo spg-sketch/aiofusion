@@ -171,6 +171,25 @@ function deriveInitials(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
+// Read the most meaningful sector label for a project card directly from that
+// project's stored intake data, without changing the active project. Falls back
+// gracefully at every step so the card never crashes.
+function getProjectSectorLabel(projectId: string): string {
+  try {
+    const key = projectId === "default"
+      ? "aio.intake.v2"
+      : `aio.intake.v2::${projectId}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return "Awaiting set-up";
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed.intakeStatus === "Accepted") return "Completed";
+    const sectors = (parsed.businessCategories as string[] | undefined) || [];
+    if (sectors.length > 0) return sectors[0];
+    if (parsed.intakeStatus === "Optimised") return "Optimised";
+  } catch { /* noop */ }
+  return "Awaiting set-up";
+}
+
 function loadStoredProjects(): Client[] {
   try {
     const raw = localStorage.getItem(CREATED_PROJECTS_KEY);
@@ -1367,17 +1386,20 @@ function ClientSelectorPage({
               className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
               style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
             >
-              Agency <span style={{ color: accent }}>Project Hub</span>
+              {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
+              <span style={{ color: accent }}>Project Hub</span>
             </h1>
             <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
               {displayClients.length === 0
                 ? "Set up your first project to start optimising your PR and marketing output for AI discoverability - or jump into archived work or platform guidance."
                 : "Select a project to manage AI optimisation, on-going PR and marketing output."}
             </p>
+            {!isAdmin && (
             <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
-              Agency accounts can have up to 3 projects for your clients or yourself by default. For additional projects please contact{" "}
+              {isClient ? "Client accounts have" : "Agency accounts can have"} up to 3 projects{isClient ? "" : " for your clients or yourself"} by default. For additional projects please contact{" "}
               <a href="mailto:info@aiofusions.ai" style={{ color: vars.g500, textDecoration: "underline" }}>info@aiofusions.ai</a>
             </p>
+            )}
           </div>
         </div>
 
@@ -1567,7 +1589,7 @@ function ClientSelectorPage({
                           className="text-[11px] font-medium px-2 py-0.5 rounded mt-1 inline-block"
                           style={{ background: `${client.color}08`, color: client.color }}
                         >
-                          {client.sector}
+                          {getProjectSectorLabel(client.id)}
                         </span>
                       </div>
                     </div>
