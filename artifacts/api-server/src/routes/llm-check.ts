@@ -737,7 +737,9 @@ function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
     website: str(d.website, 300),
     boilerplate: str(d.boilerplate, 600),
     competitors: strArr(d.competitors, 20, 120),
-    evidenceUrls: strArr(d.evidenceUrls, 30, 300),
+    evidenceUrls: strArr(d.evidenceUrls, 30, 300).map((u) =>
+      u.includes("://") ? u : `https://${u}`
+    ),
     buyerQuestions: strArr(d.buyerQuestions, 15, 300),
     expertiseTopics: strArr(d.expertiseTopics, 15, 200),
     spokespeople: Array.isArray(d.spokespeople)
@@ -951,12 +953,14 @@ ${JSON.stringify(
       boilerplate: projectData.boilerplate || "",
       competitors: projectData.competitors || [],
       expertiseTopics: projectData.expertiseTopics || [],
-      evidenceUrls: projectData.evidenceUrls || [],
       spokespeople: sp,
     },
     null,
     1,
   )}
+
+BRAND WEBSITE AND EVIDENCE URLS (these are web addresses belonging to or citing the brand - treat each entry as a URL, not a label or description):
+${JSON.stringify(projectData.evidenceUrls || [], null, 1)}
 
 PRECOMPUTED METRICS (from the probes, for reference - you may refine the index):
 ${JSON.stringify(metrics, null, 1)}
