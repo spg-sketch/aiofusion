@@ -94,6 +94,29 @@ async function cmdDownload(nameArg?: string): Promise<void> {
   console.log(`Downloaded ${objectName} -> ${dest}`);
 }
 
+/**
+ * Tables that must exist in the restored database.
+ * - projects / users: must exist AND contain at least one row (a backup with
+ *   zero rows in either is not trustworthy).
+ * - sessions / audit_locks: must exist but may be legitimately empty (sessions
+ *   expire; audit_locks are only populated while an audit is running).
+ */
+const MUST_HAVE_ROWS: ReadonlyArray<string> = ["projects", "users"];
+const MUST_EXIST: ReadonlyArray<string> = ["sessions", "audit_locks"];
+
+function queryCount(dbUrl: string, table: string): { ok: boolean; count: number; error: string } {
+  const res = spawnSync(
+    "psql",
+    [dbUrl, "-tAc", `select count(*) from ${table}`],
+    { encoding: "utf8" },
+  );
+  if (res.status !== 0) {
+    return { ok: false, count: -1, error: res.stderr || String(res.error?.message ?? "") };
+  }
+  const n = Number((res.stdout || "").trim());
+  return { ok: true, count: Number.isInteger(n) ? n : -1, error: "" };
+}
+
 async function cmdVerifyRestore(): Promise<void> {
   const target = process.env.TARGET_DATABASE_URL;
   if (!target) {
@@ -123,40 +146,75 @@ async function cmdVerifyRestore(): Promise<void> {
     encoding: "utf8",
   });
   if (restore.status !== 0) {
+    await Promise.all([rm(gz, { force: true }), rm(sql, { force: true })]);
     throw new Error(`Restore failed: ${restore.stderr || restore.error?.message}`);
   }
 
-  const count = spawnSync(
-    "psql",
-    [target, "-tAc", "select count(*) from projects"],
-    { encoding: "utf8" },
-  );
-  if (count.status !== 0) {
-    throw new Error(
-      `Could not read projects after restore: ${count.stderr}`,
-    );
-  }
-  const restored = Number((count.stdout || "").trim());
+  await Promise.all([rm(gz, { force: true }), rm(sql, { force: true })]);
 
+  // Fetch the manifest so we can cross-check the projects count.
   const { prefix } = getBackupLocation();
   const bucket = getBackupBucket();
   const [manifestBuf] = await bucket
     .file(`${prefix}/${path.basename(objectName).replace(/\.sql\.gz$/, ".json")}`)
     .download();
-  const expected = (JSON.parse(manifestBuf.toString("utf8")) as {
+  const manifest = JSON.parse(manifestBuf.toString("utf8")) as {
     projectsCount: number;
-  }).projectsCount;
+  };
 
-  await Promise.all([rm(gz, { force: true }), rm(sql, { force: true })]);
+  // --- Table verification ---
+  const failures: string[] = [];
+  const report: string[] = [];
 
-  if (restored !== expected) {
+  for (const table of MUST_HAVE_ROWS) {
+    const { ok, count, error } = queryCount(target, table);
+    if (!ok) {
+      failures.push(`table '${table}' is not queryable after restore: ${error}`);
+      report.push(`  ❌ ${table}: query error — ${error}`);
+      continue;
+    }
+    if (count === 0) {
+      failures.push(`table '${table}' is empty after restore (expected rows > 0)`);
+      report.push(`  ❌ ${table}: 0 rows (expected > 0)`);
+      continue;
+    }
+    // Extra check: projects row count must match the manifest.
+    if (table === "projects" && count !== manifest.projectsCount) {
+      failures.push(
+        `projects row count mismatch: restored ${count} but manifest says ${manifest.projectsCount}`,
+      );
+      report.push(
+        `  ❌ projects: ${count} rows (manifest says ${manifest.projectsCount})`,
+      );
+      continue;
+    }
+    report.push(`  ✅ ${table}: ${count} row(s)`);
+  }
+
+  for (const table of MUST_EXIST) {
+    const { ok, count, error } = queryCount(target, table);
+    if (!ok) {
+      failures.push(`table '${table}' does not exist or is not queryable after restore: ${error}`);
+      report.push(`  ❌ ${table}: query error — ${error}`);
+    } else {
+      report.push(`  ✅ ${table}: ${count} row(s) (may be empty — existence confirmed)`);
+    }
+  }
+
+  console.log(`[restore] Table verification results:`);
+  for (const line of report) console.log(line);
+
+  if (failures.length > 0) {
     throw new Error(
-      `[restore] ❌ Restored projects (${restored}) != backup manifest (${expected})`,
+      `[restore] ❌ Dry-run restore FAILED (${failures.length} issue(s)):\n` +
+        failures.map((f) => `  • ${f}`).join("\n"),
     );
   }
+
   console.log(
-    `[restore] ✅ Restore verified: ${restored} projects recovered from ` +
-      `${path.basename(objectName)} into the scratch database.`,
+    `\n[restore] ✅ Dry-run restore PASSED: all core tables present and populated.\n` +
+      `  Backup: ${path.basename(objectName)}\n` +
+      `  projects: ${manifest.projectsCount} row(s) confirmed.`,
   );
 }
 

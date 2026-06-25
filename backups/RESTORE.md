@@ -79,19 +79,52 @@ unless you have confirmed the backup is the one you want.
    ```
    This count must match `projectsCount` in the backup's `*.json` manifest.
 
-### Automated restore test (proves the path works end-to-end)
+### Automated dry-run restore test (proves the path works end-to-end)
+
+`pnpm --filter @workspace/scripts run restore:verify` downloads the latest
+verified backup from object storage, restores it into a **throwaway** scratch
+database, and confirms that all four core tables are present and populated:
+
+| Table | Assertion |
+|---|---|
+| `projects` | exists + row count matches the backup manifest |
+| `users` | exists + at least one row |
+| `sessions` | exists (may be empty — sessions expire) |
+| `audit_locks` | exists (may be empty — only set during live audits) |
+
+The script exits **non-zero** and prints a clear `❌` failure message if any
+check fails. It refuses to run if `TARGET_DATABASE_URL` equals the live
+`DATABASE_URL`, as a safety guard against accidentally overwriting production.
+
+Run before any major release or whenever you want confidence that the backup is
+genuinely recoverable:
 
 ```bash
-# Create a throwaway database, restore the latest good backup into it, and
-# assert the projects rows match the manifest. Never point this at the live DB.
+# 1. Create a throwaway scratch database
 psql "$DATABASE_URL" -c "CREATE DATABASE aio_fusion_restore_test"
+
+# 2. Run the dry-run restore (downloads latest backup, restores, verifies)
 TARGET_DATABASE_URL="$(node -e "const u=new URL(process.env.DATABASE_URL);u.pathname='/aio_fusion_restore_test';console.log(u.toString())")" \
   pnpm --filter @workspace/scripts run restore:verify
+
+# 3. Drop the scratch database when done
 psql "$DATABASE_URL" -c "DROP DATABASE aio_fusion_restore_test"
 ```
 
-`restore:verify` refuses to run if `TARGET_DATABASE_URL` equals the live
-`DATABASE_URL`, as a guard against accidentally overwriting production.
+Expected output on success:
+```
+[restore] Downloading db-backups/aio-fusion-db-YYYYMMDD-HHMMSS.sql.gz
+[restore] Restoring into scratch database...
+[restore] Table verification results:
+  ✅ projects: N row(s)
+  ✅ users: N row(s)
+  ✅ sessions: N row(s) (may be empty — existence confirmed)
+  ✅ audit_locks: N row(s) (may be empty — existence confirmed)
+
+[restore] ✅ Dry-run restore PASSED: all core tables present and populated.
+  Backup: aio-fusion-db-YYYYMMDD-HHMMSS.sql.gz
+  projects: N row(s) confirmed.
+```
 
 This procedure was validated end-to-end on 2026-06-15: a verified backup
 (8 projects) was restored into a scratch database and all 8 project rows came
