@@ -1397,7 +1397,14 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const rawBuyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
     const anchoredGenerated = disambiguateBuyerQuestions(generated, identity);
-    const questions = [...new Set([...buyerQuestions, ...anchoredGenerated])].slice(0, MAX_QUESTIONS);
+    // The identity probe (anchoredGenerated[0]) must always be included so that
+    // short/ambiguous names like "SMG" have at least one anchored probe and are
+    // not detected at 0% when the user has >= MAX_QUESTIONS buyer questions that
+    // fill all slots before any generated probe gets a chance to run.
+    const identityProbe = anchoredGenerated[0];
+    const questions = [
+      ...new Set([identityProbe, ...buyerQuestions, ...anchoredGenerated.slice(1)]),
+    ].slice(0, MAX_QUESTIONS);
 
     // Tag each question with its intent tier so the weighted Authority Index
     // can give buyer-intent probes more influence than generic sector probes.
