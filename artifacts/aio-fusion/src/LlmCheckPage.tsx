@@ -158,6 +158,10 @@ function isTracked(name: string, trackedNorm: string[]): boolean {
   return trackedNorm.some((t) => t && (t === n || (t.length >= 4 && (n.includes(t) || t.includes(n)))));
 }
 
+function isLikelyAffectedByCorroborationFix(r: LlmCheckResult): boolean {
+  return !!(r.entityClarity?.isAmbiguous && r.visibilityScore <= 15);
+}
+
 // Display labels and a fixed worst-first order for the scorecard, so the table
 // reads like the reference report regardless of the order the model returns the
 // dimensions in. Names not in this map keep their own label and sort last.
@@ -546,6 +550,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   const previousScore = cycleData.history.length > 0 ? cycleData.history[cycleData.history.length - 1].score : null;
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
   const [justSaved, setJustSaved] = useState(false);
+  const [resultIsFromSaved, setResultIsFromSaved] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
   type AuditLockInfo = { locked: boolean; lastRunAt?: string; nextAvailableAt?: string; daysRemaining?: number };
   const [auditLock, setAuditLock] = useState<AuditLockInfo>({ locked: false });
@@ -574,6 +579,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setResult(null);
     setError("");
     setJustSaved(false);
+    setResultIsFromSaved(false);
     setConfirmedEntityState(getConfirmedEntity());
     setEditingIdentity(false);
     setAuditLock({ locked: false });
@@ -631,6 +637,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setResult(a.result);
     setError("");
     setJustSaved(true);
+    setResultIsFromSaved(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -793,6 +800,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       if (!finalData) throw new Error("The audit ended before it finished. Please try again.");
 
       setResult(finalData);
+      setResultIsFromSaved(false);
       const updated = recordCycle(activeClient.id, finalData.visibilityScore);
       setCycleData(updated);
       saveAuditToHistory(finalData);
@@ -1609,41 +1617,54 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               Reopen a past audit to view its full report. Saved on this device only.
             </p>
             <div className="flex flex-col gap-2">
-              {savedAudits.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-[rgba(31,116,143,0.04)]"
-                  style={{ borderColor: vars.g200 }}
-                >
-                  <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
-                    <div
-                      className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
-                      style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
-                    >
-                      {a.result.visibilityScore}%
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>
-                        {a.result.companyName}
-                      </p>
-                      <p className="text-[11px] font-light" style={{ color: vars.g500 }}>
-                        Saved {new Date(a.savedAt).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                  </button>
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[12px] font-medium" style={{ color: vars.accent }}>
-                    Open <ArrowRight size={13} />
-                  </span>
-                  <button
-                    onClick={() => deleteSavedAudit(a.id)}
-                    className="p-2 rounded-lg transition-colors hover:bg-[rgba(0,0,0,0.04)]"
-                    style={{ color: vars.g400 }}
-                    title="Remove this saved audit"
+              {savedAudits.map((a) => {
+                const affected = isLikelyAffectedByCorroborationFix(a.result);
+                return (
+                  <div
+                    key={a.id}
+                    className="flex flex-col rounded-lg border transition-colors hover:bg-[rgba(31,116,143,0.04)]"
+                    style={{ borderColor: affected ? "#F59E0B" : vars.g200 }}
                   >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3 p-3">
+                      <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
+                        <div
+                          className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
+                          style={{ background: affected ? "#FEF3C7" : "rgba(31,116,143,0.08)", color: affected ? "#92400E" : vars.accent }}
+                        >
+                          {a.result.visibilityScore}%
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>
+                            {a.result.companyName}
+                          </p>
+                          <p className="text-[11px] font-light" style={{ color: vars.g500 }}>
+                            Saved {new Date(a.savedAt).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </button>
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[12px] font-medium" style={{ color: vars.accent }}>
+                        Open <ArrowRight size={13} />
+                      </span>
+                      <button
+                        onClick={() => deleteSavedAudit(a.id)}
+                        className="p-2 rounded-lg transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                        style={{ color: vars.g400 }}
+                        title="Remove this saved audit"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                    {affected && (
+                      <div className="flex items-start gap-2 px-3 pb-3 pt-0">
+                        <AlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: "#D97706" }} />
+                        <p className="text-[11px] leading-snug" style={{ color: "#92400E" }}>
+                          Score may understate real visibility — this brand name is shared with other organisations and the older detection method may have discounted genuine mentions. Open and re-run to get an updated result.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1722,6 +1743,31 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </div>
         </div>
       </div>
+
+      {/* Stale-result warning for saved audits affected by the corroboration-fix */}
+      {resultIsFromSaved && isLikelyAffectedByCorroborationFix(result) && (
+        <div
+          className="rounded-xl border px-4 py-3 mb-6 flex items-start gap-3"
+          style={{ background: "#FFFBEB", borderColor: "#F59E0B" }}
+        >
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: "#D97706" }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold mb-0.5" style={{ color: "#92400E" }}>
+              This score may understate real visibility
+            </p>
+            <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>
+              &ldquo;{result.companyName}&rdquo; is a name shared with other organisations. An earlier version of the detection method could discount genuine mentions for ambiguous names like this, producing near-zero scores. The detection has since been improved — re-run the audit to get an up-to-date result.
+            </p>
+          </div>
+          <button
+            onClick={() => { setResult(null); setError(""); setResultIsFromSaved(false); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold shrink-0 self-start transition-all hover:brightness-95"
+            style={{ background: "#F59E0B", color: "white" }}
+          >
+            <Repeat size={13} /> Re-run audit
+          </button>
+        </div>
+      )}
 
       {/* Hero - AI Authority Index */}
       <div className="rounded-2xl border p-5 sm:p-7 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
