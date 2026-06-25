@@ -1396,6 +1396,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       probes,
       assessment,
       entityClarity,
+      detectionVersion: 2,
     };
 
     // Record this run so the 21-day lock is enforced on the next attempt.

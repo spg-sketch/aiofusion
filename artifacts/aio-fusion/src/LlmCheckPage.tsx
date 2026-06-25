@@ -113,6 +113,7 @@ interface LlmCheckResult {
   probes: ProbeItem[];
   assessment?: AuthorityAssessment | null;
   entityClarity?: EntityClarity | null;
+  detectionVersion?: number;
 }
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
@@ -159,7 +160,18 @@ function isTracked(name: string, trackedNorm: string[]): boolean {
 }
 
 function isLikelyAffectedByCorroborationFix(r: LlmCheckResult): boolean {
+  if (r.detectionVersion) return false;
   return !!(r.entityClarity?.isAmbiguous && r.visibilityScore <= 15);
+}
+
+function isSupersededByNewerRun(audit: SavedAudit, allAudits: SavedAudit[]): boolean {
+  const norm = normalizeName(audit.result.companyName);
+  return allAudits.some(
+    (a) =>
+      a.id !== audit.id &&
+      normalizeName(a.result.companyName) === norm &&
+      a.result.checkedAt > audit.result.checkedAt,
+  );
 }
 
 // Display labels and a fixed worst-first order for the scorecard, so the table
@@ -1619,17 +1631,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <div className="flex flex-col gap-2">
               {savedAudits.map((a) => {
                 const affected = isLikelyAffectedByCorroborationFix(a.result);
+                const superseded = affected && isSupersededByNewerRun(a, savedAudits);
+                const showWarning = affected && !superseded;
                 return (
                   <div
                     key={a.id}
                     className="flex flex-col rounded-lg border transition-colors hover:bg-[rgba(31,116,143,0.04)]"
-                    style={{ borderColor: affected ? "#F59E0B" : vars.g200 }}
+                    style={{ borderColor: showWarning ? "#F59E0B" : vars.g200 }}
                   >
                     <div className="flex items-center gap-3 p-3">
                       <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
                         <div
                           className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
-                          style={{ background: affected ? "#FEF3C7" : "rgba(31,116,143,0.08)", color: affected ? "#92400E" : vars.accent }}
+                          style={{ background: showWarning ? "#FEF3C7" : "rgba(31,116,143,0.08)", color: showWarning ? "#92400E" : vars.accent }}
                         >
                           {a.result.visibilityScore}%
                         </div>
@@ -1654,11 +1668,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                         <Trash2 size={15} />
                       </button>
                     </div>
-                    {affected && (
+                    {showWarning && (
                       <div className="flex items-start gap-2 px-3 pb-3 pt-0">
                         <AlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: "#D97706" }} />
                         <p className="text-[11px] leading-snug" style={{ color: "#92400E" }}>
                           Score may understate real visibility — this brand name is shared with other organisations and the older detection method may have discounted genuine mentions. Open and re-run to get an updated result.
+                        </p>
+                      </div>
+                    )}
+                    {superseded && (
+                      <div className="flex items-start gap-2 px-3 pb-3 pt-0">
+                        <CheckCircle2 size={13} className="shrink-0 mt-0.5" style={{ color: vars.g400 }} />
+                        <p className="text-[11px] leading-snug" style={{ color: vars.g500 }}>
+                          Superseded by a newer run — the score concern no longer applies to this client.
                         </p>
                       </div>
                     )}
@@ -1745,7 +1767,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       </div>
 
       {/* Stale-result warning for saved audits affected by the corroboration-fix */}
-      {resultIsFromSaved && isLikelyAffectedByCorroborationFix(result) && (
+      {resultIsFromSaved && isLikelyAffectedByCorroborationFix(result) &&
+        !savedAudits.some(
+          (a) =>
+            normalizeName(a.result.companyName) === normalizeName(result.companyName) &&
+            a.result.checkedAt > result.checkedAt,
+        ) && (
         <div
           className="rounded-xl border px-4 py-3 mb-6 flex items-start gap-3"
           style={{ background: "#FFFBEB", borderColor: "#F59E0B" }}

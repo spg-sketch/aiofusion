@@ -344,6 +344,67 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     });
   });
 
+  it("clears the stale-score warning card when a newer saved audit exists for the same company", () => {
+    const oldAffected: SavedAudit = {
+      id: "audit-old",
+      savedAt: "2025-01-15T11:00:00.000Z",
+      result: {
+        ...AMBIGUOUS_RESULT,
+        checkedAt: "2025-01-15T10:00:00.000Z",
+        visibilityScore: 5,
+      } as SavedAudit["result"],
+    };
+    const freshRerun: SavedAudit = {
+      id: "audit-new",
+      savedAt: "2026-06-01T12:00:00.000Z",
+      result: {
+        ...AMBIGUOUS_RESULT,
+        checkedAt: "2026-06-01T11:00:00.000Z",
+        visibilityScore: 5,
+        detectionVersion: 2,
+      } as SavedAudit["result"],
+    };
+    localStorage.setItem(
+      `aio.savedAudits.${CLIENT.id}`,
+      JSON.stringify([freshRerun, oldAffected]),
+    );
+
+    render(<LlmCheckPage activeClient={CLIENT} />);
+
+    const cards = document.querySelectorAll('[style*="border-color"]');
+    expect(cards.length).toBeGreaterThan(0);
+
+    expect(screen.queryByText(/Superseded by a newer run/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Score may understate real visibility/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show the stale-score warning banner for an audit that carries detectionVersion", () => {
+    const freshAffected: SavedAudit = {
+      id: "audit-fresh",
+      savedAt: "2026-06-01T12:00:00.000Z",
+      result: {
+        ...AMBIGUOUS_RESULT,
+        checkedAt: "2026-06-01T11:00:00.000Z",
+        visibilityScore: 5,
+        detectionVersion: 2,
+      } as SavedAudit["result"],
+    };
+    localStorage.setItem(
+      `aio.savedAudits.${CLIENT.id}`,
+      JSON.stringify([freshAffected]),
+    );
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-fresh" onConsumePending={() => {}} />,
+    );
+
+    expect(
+      screen.queryByText(/This score may understate real visibility/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("reflects a server-confirmed company on open even when this browser never stored it", async () => {
     seedSavedAudit(AMBIGUOUS_RESULT);
     // Make the open client the active project so the synced intake lands on the
