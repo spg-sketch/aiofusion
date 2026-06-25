@@ -49,6 +49,7 @@ export interface ProbeResult {
   mentionContext: string | null;
   competitors: string[];
   anchored?: boolean;
+  intentTier?: "buyer" | "sector" | "identity";
 }
 
 const RUNS_PER_QUESTION = 2;
@@ -524,6 +525,7 @@ export interface ProbeSummary {
   responsePreview: string;
   competitors: string[];
   anchored?: boolean;
+  intentTier?: "buyer" | "sector" | "identity";
 }
 
 export interface VisibilityMetrics {
@@ -596,6 +598,7 @@ export function groupProbesByQuery(results: ProbeResult[]): ProbeSummary[] {
       responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
       competitors: [...competitorMap.values()].slice(0, 12),
       anchored: runs.some((r) => r.anchored),
+      intentTier: repr.intentTier,
     };
   });
 }
@@ -740,10 +743,11 @@ interface AuthorityAssessment {
   summary: string;
   dimensions: AssessmentDimension[];
   topGaps: string[];
-  priorityActions: { action: string; rationale: string; priority: string }[];
+  priorityActions: { action: string; rationale: string; priority: string; failedProbes?: string[] }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
   competitorInsights?: { name: string; description: string }[];
   categoryFraming?: { query: string; themes: string }[];
+  narrativeSignals?: { gpt: string[]; claude: string[]; divergence: string | null };
 }
 
 // Whether the brand's name cleanly identifies it, or is shared with other
@@ -897,6 +901,9 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
           action: typeof a.action === "string" ? a.action.trim().slice(0, 300) : "",
           rationale: typeof a.rationale === "string" ? a.rationale.trim().slice(0, 400) : "",
           priority: a.priority === "high" || a.priority === "medium" || a.priority === "low" ? (a.priority as string) : "medium",
+          failedProbes: Array.isArray(a.failedProbes)
+            ? a.failedProbes.filter((q: unknown): q is string => typeof q === "string").map((q: string) => q.trim().slice(0, 300)).filter(Boolean).slice(0, 5)
+            : undefined,
         }))
         .filter((a: { action: string }) => a.action)
         .slice(0, 8)
@@ -937,6 +944,23 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
         .slice(0, 40)
     : undefined;
 
+  const rawNs = parsed.narrativeSignals;
+  let narrativeSignals: { gpt: string[]; claude: string[]; divergence: string | null } | undefined;
+  if (rawNs && typeof rawNs === "object") {
+    const gptArr = Array.isArray(rawNs.gpt)
+      ? rawNs.gpt.filter((x: unknown): x is string => typeof x === "string").map((s: string) => s.trim().slice(0, 80)).filter(Boolean).slice(0, 10)
+      : [];
+    const claudeArr = Array.isArray(rawNs.claude)
+      ? rawNs.claude.filter((x: unknown): x is string => typeof x === "string").map((s: string) => s.trim().slice(0, 80)).filter(Boolean).slice(0, 10)
+      : [];
+    const divergence = typeof rawNs.divergence === "string" && rawNs.divergence.trim()
+      ? rawNs.divergence.trim().slice(0, 400)
+      : null;
+    if (gptArr.length > 0 || claudeArr.length > 0) {
+      narrativeSignals = { gpt: gptArr, claude: claudeArr, divergence };
+    }
+  }
+
   return {
     index,
     grade: typeof parsed.grade === "string" && /^[A-F]$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
@@ -947,6 +971,7 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
     queryTable,
     ...(competitorInsights && competitorInsights.length > 0 ? { competitorInsights } : {}),
     ...(categoryFraming && categoryFraming.length > 0 ? { categoryFraming } : {}),
+    ...(narrativeSignals ? { narrativeSignals } : {}),
   };
 }
 
@@ -954,8 +979,9 @@ export async function scoreAuthority(
   companyName: string,
   projectData: ProjectAuthorityData,
   evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
-  metrics: { presence: number; shareOfVoice: number; visibilityScore: number; topCompetitors: { name: string; mentions: number }[] },
+  metrics: { presence: number; shareOfVoice: number; visibilityScore: number; weightedVisibilityScore?: number; topCompetitors: { name: string; mentions: number }[] },
   entityClarity?: EntityClarity | null,
+  narrativeContext?: { gptContexts: string[]; claudeContexts: string[]; failedQuestions: string[] },
 ): Promise<AuthorityAssessment | null> {
   const client = createAnthropicClient();
   if (!client) return null;
@@ -965,6 +991,28 @@ export async function scoreAuthority(
     title: s.title,
     expertise: s.expertise,
   }));
+
+  const weightedScoreLine = metrics.weightedVisibilityScore !== undefined && metrics.weightedVisibilityScore !== metrics.visibilityScore
+    ? `\nINTENT-WEIGHTED SCORE: ${metrics.weightedVisibilityScore} (buyer-intent probes weighted 1.5x, sector probes 1.0x, identity probe 0.5x — give this more weight than the raw presence % when setting the Authority Index, because buyer-intent mentions are more commercially significant)`
+    : "";
+
+  const narrativeContextBlock = narrativeContext && (narrativeContext.gptContexts.length > 0 || narrativeContext.claudeContexts.length > 0)
+    ? `
+
+NARRATIVE CONTEXT (sentences from probe responses where the brand appeared — use these ONLY to extract adjectives and framings; do not invent or embellish):
+ChatGPT mention contexts:
+${narrativeContext.gptContexts.slice(0, 6).map((c, i) => `${i + 1}. ${c}`).join("\n") || "(brand did not appear in ChatGPT probes)"}
+
+Claude mention contexts:
+${narrativeContext.claudeContexts.slice(0, 6).map((c, i) => `${i + 1}. ${c}`).join("\n") || "(brand did not appear in Claude probes)"}`
+    : "";
+
+  const failedQuestionsBlock = narrativeContext && narrativeContext.failedQuestions.length > 0
+    ? `
+
+QUERIES WHERE THE BRAND WAS ABSENT (exact question strings — use these to populate failedProbes on each priorityAction):
+${narrativeContext.failedQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    : "";
 
   const prompt = `You are scoring the AI authority of a brand for a PR team, using ONLY the evidence and project data below.
 
@@ -996,10 +1044,15 @@ Return STRICT JSON only - no prose before or after, no markdown fences. Exactly 
   "summary": "<2 to 3 sentence executive summary in plain British English>",
   "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
   "topGaps": ["<the most important visibility gap>", ... up to 5],
-  "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low" }, ... up to 5],
+  "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... up to 5],
   "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence],
   "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows — do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
-  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query — do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say — frameworks, dominant terminology, competitor context — not on what the brand failed to do.]
+  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query — do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say — frameworks, dominant terminology, competitor context — not on what the brand failed to do.],
+  "narrativeSignals": {
+    "gpt": ["<adjective or short framing used by ChatGPT to describe the brand>", ... 2-6 items, or [] if brand was absent in GPT probes],
+    "claude": ["<adjective or short framing used by Claude to describe the brand>", ... 2-6 items, or [] if brand was absent in Claude probes],
+    "divergence": "<one plain sentence describing a material difference in how GPT and Claude frame the brand, or null if the signals are broadly similar or both engines have no data>"
+  }
 }
 
 BRAND: ${companyName}
@@ -1022,7 +1075,7 @@ BRAND WEBSITE AND EVIDENCE URLS (these are web addresses belonging to or citing 
 ${JSON.stringify(projectData.evidenceUrls || [], null, 1)}
 
 PRECOMPUTED METRICS (from the probes, for reference - you may refine the index):
-${JSON.stringify(metrics, null, 1)}
+${JSON.stringify(metrics, null, 1)}${weightedScoreLine}
 
 ENTITY CLARITY (how clearly the brand name resolves to this company for AI engines):
 ${entityClarity
@@ -1037,6 +1090,7 @@ ${entityClarity
         1,
       )
     : "not assessed"}
+${narrativeContextBlock}${failedQuestionsBlock}
 
 PROBE EVIDENCE (one entry per query):
 ${JSON.stringify(evidence, null, 1)}`;
@@ -1044,7 +1098,7 @@ ${JSON.stringify(evidence, null, 1)}`;
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 4000,
+      max_tokens: 5000,
       system:
         "You are a precise AI visibility analyst. You never fabricate evidence. You return strict JSON only, with British spelling, no em dashes and no emojis.",
       messages: [{ role: "user", content: prompt }],
@@ -1345,6 +1399,20 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     const anchoredGenerated = disambiguateBuyerQuestions(generated, identity);
     const questions = [...new Set([...buyerQuestions, ...anchoredGenerated])].slice(0, MAX_QUESTIONS);
 
+    // Tag each question with its intent tier so the weighted Authority Index
+    // can give buyer-intent probes more influence than generic sector probes.
+    // - buyer: verbatim ICP buyer questions (the highest-signal tier)
+    // - identity: the direct "What do you know about [brand]?" probe (anchored, less diagnostic)
+    // - sector: generated category/recommendation probes
+    const buyerQuestionSet = new Set(buyerQuestions);
+    const identityProbeText = anchoredGenerated[0]; // first generated question is always the identity probe
+    const questionTiers = new Map<string, "buyer" | "sector" | "identity">();
+    for (const q of questions) {
+      if (q === identityProbeText) questionTiers.set(q, "identity");
+      else if (buyerQuestionSet.has(q)) questionTiers.set(q, "buyer");
+      else questionTiers.set(q, "sector");
+    }
+
     // Track which questions were rewritten by disambiguation so probeOpenAI /
     // probeClaude can relax the corroboration check for anchored probes. A
     // question is "anchored" when disambiguation changed it (i.e. it now
@@ -1381,7 +1449,10 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     }
 
     const results = await Promise.all(probePromises);
-    const validResults = results.filter((r): r is ProbeResult => r !== null);
+    // Attach intent tier to each result using the question→tier map.
+    const validResults = results
+      .filter((r): r is ProbeResult => r !== null)
+      .map((r) => ({ ...r, intentTier: questionTiers.get(r.question) ?? "sector" as "sector" }));
 
     const {
       chatgptProbes,
@@ -1394,6 +1465,18 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       presence,
       shareOfVoice,
     } = computeVisibilityMetrics(validResults);
+
+    // Compute a weighted visibility score that reflects probe intent:
+    // buyer-intent questions count 1.5x, sector 1.0x, identity 0.5x.
+    const TIER_WEIGHTS: Record<string, number> = { buyer: 1.5, sector: 1.0, identity: 0.5 };
+    let wNumerator = 0;
+    let wDenominator = 0;
+    for (const r of validResults) {
+      const w = TIER_WEIGHTS[r.intentTier ?? "sector"] ?? 1.0;
+      wDenominator += w;
+      if (r.mentioned) wNumerator += w;
+    }
+    const weightedVisibilityScore = wDenominator > 0 ? Math.round((wNumerator / wDenominator) * 100) : visibilityScore;
 
     const topCompetitors = aggregateTopCompetitors(validResults);
 
@@ -1426,6 +1509,25 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       claude: e.claude,
     }));
 
+    // Build narrative context: mention contexts grouped by model (for narrative
+    // signals extraction), and the list of questions where the brand was absent
+    // (for probe-linked recommendations).
+    const gptContexts = validResults
+      .filter((r) => r.model.includes("GPT") && r.mentioned && r.mentionContext)
+      .map((r) => r.mentionContext!)
+      .filter((c, i, arr) => arr.indexOf(c) === i);
+    const claudeContexts = validResults
+      .filter((r) => r.model.includes("Claude") && r.mentioned && r.mentionContext)
+      .map((r) => r.mentionContext!)
+      .filter((c, i, arr) => arr.indexOf(c) === i);
+    // Failed questions: unique question strings where the brand never appeared
+    const failedQuestionSet = new Set<string>();
+    for (const r of validResults) {
+      if (!r.mentioned) failedQuestionSet.add(r.question);
+    }
+    const appearedQuestionSet = new Set(validResults.filter((r) => r.mentioned).map((r) => r.question));
+    const failedQuestions = [...failedQuestionSet].filter((q) => !appearedQuestionSet.has(q));
+
     const entityClarity = await entityClarityPromise;
 
     const assessment = await scoreAuthority(
@@ -1436,9 +1538,11 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         presence,
         shareOfVoice,
         visibilityScore,
+        weightedVisibilityScore,
         topCompetitors,
       },
       entityClarity,
+      { gptContexts, claudeContexts, failedQuestions },
     );
 
     const summary = {

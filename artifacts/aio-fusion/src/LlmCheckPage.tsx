@@ -81,10 +81,11 @@ interface AuthorityAssessment {
   summary: string;
   dimensions: AssessmentDimension[];
   topGaps: string[];
-  priorityActions: { action: string; rationale: string; priority: string }[];
+  priorityActions: { action: string; rationale: string; priority: string; failedProbes?: string[] }[];
   queryTable: { query: string; appeared: boolean; notes: string }[];
   competitorInsights?: { name: string; description: string }[];
   categoryFraming?: { query: string; themes: string }[];
+  narrativeSignals?: { gpt: string[]; claude: string[]; divergence: string | null };
 }
 
 interface EntityClarity {
@@ -462,6 +463,56 @@ function highlightName(text: string, name: string): React.ReactNode {
     ) : (
       <span key={i}>{part}</span>
     )
+  );
+}
+
+function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string[]; claude: string[]; divergence: string | null }; companyName: string }) {
+  const hasGpt = signals.gpt.length > 0;
+  const hasClaude = signals.claude.length > 0;
+  if (!hasGpt && !hasClaude) return null;
+  return (
+    <ReportSection
+      icon={<Repeat size={14} style={{ color: vars.accent }} />}
+      title="Narrative signals"
+      subtitle="How each AI engine describes this brand when it does surface — and whether they agree"
+      defaultOpen={true}
+    >
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.g400 }}>ChatGPT frames {companyName} as…</p>
+          {hasGpt ? (
+            <div className="flex flex-wrap gap-1.5">
+              {signals.gpt.map((tag, i) => (
+                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#E0F2F7", color: vars.navy, border: `1px solid ${vars.teal}30` }}>{tag}</span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in ChatGPT probes — no framing to extract.</p>
+          )}
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: vars.g400 }}>Claude frames {companyName} as…</p>
+          {hasClaude ? (
+            <div className="flex flex-wrap gap-1.5">
+              {signals.claude.map((tag, i) => (
+                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#F3E8FF", color: "#6B21A8", border: "1px solid #D8B4FE30" }}>{tag}</span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in Claude probes — no framing to extract.</p>
+          )}
+        </div>
+      </div>
+      {signals.divergence && (
+        <div className="rounded-xl p-3 flex gap-2.5" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
+          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#D97706" }} />
+          <div>
+            <p className="text-[11px] font-bold mb-0.5" style={{ color: "#92400E" }}>Positioning divergence</p>
+            <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>{signals.divergence} This suggests inconsistent positioning in AI training data — a PR opportunity to reinforce a unified narrative.</p>
+          </div>
+        </div>
+      )}
+    </ReportSection>
   );
 }
 
@@ -951,13 +1002,42 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         ? `<div class="card">
       <h2>Prioritised actions</h2>
       <ol class="actions">${assess.priorityActions
-        .map(
-          (a) =>
-            `<li><span class="prio prio-${a.priority}">${escapeHtml((a.priority || "medium").toUpperCase())}</span> <strong>${escapeHtml(a.action)}</strong>${a.rationale ? `<br /><span class="muted">${escapeHtml(a.rationale)}</span>` : ""}</li>`,
-        )
+        .map((a) => {
+          const displayedProbes = (a.failedProbes || []).slice(0, 3);
+          const extraProbes = (a.failedProbes || []).length - 3;
+          const failedProbesHtml = displayedProbes.length > 0
+            ? `<br /><span class="absent-label">Absent on:</span> ${displayedProbes.map((q) => `<span class="absent-chip">${escapeHtml(q)}</span>`).join(" ")}${extraProbes > 0 ? ` <span class="muted">+${extraProbes} more</span>` : ""}`
+            : "";
+          return `<li><span class="prio prio-${a.priority}">${escapeHtml((a.priority || "medium").toUpperCase())}</span> <strong>${escapeHtml(a.action)}</strong>${a.rationale ? `<br /><span class="muted">${escapeHtml(a.rationale)}</span>` : ""}${failedProbesHtml}</li>`;
+        })
         .join("")}</ol>
     </div>`
         : "";
+
+    const ns = assess?.narrativeSignals;
+    const narrativeSignalsBlock = ns && (ns.gpt.length > 0 || ns.claude.length > 0)
+      ? `<div class="card">
+      <h2>Narrative signals</h2>
+      <p class="lead" style="margin-bottom:12px;">How each AI engine describes ${escapeHtml(result.companyName)} when it does surface — and whether they agree.</p>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:${ns.divergence ? "14px" : "0"}">
+        <div style="flex:1;min-width:180px;">
+          <p class="meta-line" style="margin-bottom:6px;"><strong>ChatGPT frames ${escapeHtml(result.companyName)} as&hellip;</strong></p>
+          ${ns.gpt.length > 0
+            ? ns.gpt.map((t) => `<span class="ns-tag ns-gpt">${escapeHtml(t)}</span>`).join(" ")
+            : `<span class="muted">Brand did not surface in ChatGPT probes.</span>`}
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <p class="meta-line" style="margin-bottom:6px;"><strong>Claude frames ${escapeHtml(result.companyName)} as&hellip;</strong></p>
+          ${ns.claude.length > 0
+            ? ns.claude.map((t) => `<span class="ns-tag ns-claude">${escapeHtml(t)}</span>`).join(" ")
+            : `<span class="muted">Brand did not surface in Claude probes.</span>`}
+        </div>
+      </div>
+      ${ns.divergence
+        ? `<div class="divergence-box"><strong>Positioning divergence:</strong> ${escapeHtml(ns.divergence)} This suggests inconsistent positioning in AI training data &mdash; a PR opportunity to reinforce a unified narrative.</div>`
+        : ""}
+    </div>`
+      : "";
 
     const ec = result.entityClarity || null;
     const entityClarityBlock =
@@ -1053,6 +1133,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   .actions li { font-size: 13px; color: #374151; margin-bottom: 10px; line-height: 1.5; }
   .prio { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 6px; border-radius: 6px; margin-right: 6px; vertical-align: middle; }
   .prio-high { background: #FEE2E2; color: #B91C1C; }
+  .absent-label { font-size: 10px; font-weight: 600; color: #6B7280; }
+  .absent-chip { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; margin: 2px 2px 0 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+  .ns-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; margin: 2px 2px 0 0; }
+  .ns-gpt { background: #E0F2F7; color: #0F2A3F; border: 1px solid rgba(20,158,188,0.18); }
+  .ns-claude { background: #F3E8FF; color: #6B21A8; border: 1px solid rgba(216,180,254,0.18); }
+  .divergence-box { margin-top: 12px; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #78350F; }
   .prio-medium { background: #FEFCE8; color: #A16207; }
   .prio-low { background: #F3F4F6; color: #6B7280; }
   .footer { font-size: 11px; color: #9CA3AF; margin-top: 18px; border-top: 1px solid #E5E5E5; padding-top: 12px; }
@@ -1083,12 +1169,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
       </div>
       <div style="margin-top:14px;font-size:11px;color:#6B7280;">ChatGPT: ${result.byModel.chatgpt.rate}% &middot; Claude: ${result.byModel.claude.rate}% &middot; Cycle ${cycleData.cycle}</div>
+      <p style="margin-top:10px;font-size:10px;color:#9CA3AF;">Methodology: the Authority Index applies intent-tier weighting &mdash; buyer-intent queries (1.5&times;) carry more signal than sector queries (1.0&times;) or the direct identity probe (0.5&times;).</p>
     </div>
     <div class="card">
       <h2>Executive summary</h2>
       <p class="lead">${summaryHtml}</p>
       ${result.icp ? `<p class="meta-line" style="margin-top:12px;"><strong>Ideal customer profile:</strong> ${escapeHtml(result.icp)}</p>` : ""}
     </div>
+    ${narrativeSignalsBlock}
     ${entityClarityBlock}
     ${scorecardBlock}
     ${actionsBlock}
@@ -1854,6 +1942,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <p className="text-[11px] mt-4 pt-3 border-t" style={{ borderColor: vars.g100, color: vars.g400 }}>
           Non-branded category queries ({rd.appearedCount} of {rd.totalQueries}) vs named competitors{rd.trackedCount > 0 ? ` · ${rd.trackedCount} tracked competitors` : ""} · ChatGPT {result.byModel.chatgpt.rate}% · Claude {result.byModel.claude.rate}% · Cycle {cycleData.cycle}
         </p>
+        <p className="text-[10px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
+          <Info size={10} className="flex-shrink-0 mt-0.5" />
+          Methodology: the Authority Index applies intent-tier weighting — buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.
+        </p>
       </div>
 
       {/* Executive summary */}
@@ -1874,6 +1966,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           </p>
         )}
       </ReportSection>
+
+      {/* Narrative signals */}
+      {rd.assess?.narrativeSignals && (
+        <NarrativeSignalsCard signals={rd.assess.narrativeSignals} companyName={result.companyName} />
+      )}
 
       {/* Entity clarity */}
       {result.entityClarity && result.entityClarity.isAmbiguous && (
@@ -2042,14 +2139,27 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           <div className="flex flex-col gap-2">
             {rd.assess.priorityActions.map((a, i) => {
               const pc = a.priority === "high" ? { bg: "#FEE2E2", c: "#B91C1C" } : a.priority === "low" ? { bg: vars.g100, c: vars.g500 } : { bg: "#FEFCE8", c: "#A16207" };
+              const displayedProbes = (a.failedProbes || []).slice(0, 3);
+              const extraProbes = (a.failedProbes || []).length - 3;
               return (
                 <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg border" style={{ borderColor: vars.g200 }}>
                   <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ background: pc.bg, color: pc.c }}>
                     {(a.priority || "medium").toUpperCase()}
                   </span>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-[12px] font-medium" style={{ color: vars.navy }}>{a.action}</p>
                     {a.rationale && <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>{a.rationale}</p>}
+                    {displayedProbes.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        <span className="text-[10px] font-semibold shrink-0" style={{ color: vars.g400 }}>Absent on:</span>
+                        {displayedProbes.map((q, qi) => (
+                          <span key={qi} className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "#FEE2E2", color: "#991B1B", border: "1px solid #FECACA", maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={q}>{q}</span>
+                        ))}
+                        {extraProbes > 0 && (
+                          <span className="text-[10px]" style={{ color: vars.g400 }}>+{extraProbes} more</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
