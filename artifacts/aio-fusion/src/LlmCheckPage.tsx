@@ -1462,8 +1462,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 </p>
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {pendingForce
-                    ? "This will override the 21-day lock and consume LLM credits. Continue?"
-                    : "This will query Claude and ChatGPT across up to 8 questions. It typically takes 1–3 minutes and consumes LLM credits."}
+                    ? "This will override the 21-day lock. Continue?"
+                    : "This will query Claude and ChatGPT across up to 8 questions. It typically takes 1–3 minutes."}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
