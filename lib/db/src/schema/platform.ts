@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // Platform accounts are the AIO Fusion application logins (an agency and the
 // client sub-accounts it creates). They are separate from the Replit Auth
@@ -13,11 +13,15 @@ import { pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 //  - `parent`       is the lowercased username of the account that created this
 //                   one, set only for sub-accounts. It powers the agency ->
 //                   client visibility hierarchy.
+//  - `maxSeats`     is the optional cap on how many sub-accounts may exist
+//                   under this account. NULL = no limit. Only meaningful for
+//                   agency-type accounts.
 export const platformAccountsTable = pgTable("platform_accounts", {
   username: varchar("username").primaryKey(),
   passwordHash: text("password_hash").notNull(),
   role: varchar("role").notNull().default("user"),
   parent: varchar("parent"),
+  maxSeats: integer("max_seats"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -26,10 +30,18 @@ export const platformAccountsTable = pgTable("platform_accounts", {
 // Server-issued sessions for platform accounts. Kept separate from the OIDC
 // `sessions` table so the two auth systems never interfere. The session id is a
 // random token stored in an httpOnly cookie.
+//
+//  - `ipHint`   is the first two octets of the login IP (e.g. "192.168.x.x")
+//               stored so the sessions list can show approximate origin without
+//               persisting a full IP address.
 export const platformSessionsTable = pgTable("platform_sessions", {
   sid: varchar("sid").primaryKey(),
   username: varchar("username").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  ipHint: varchar("ip_hint"),
 });
 
 // A tiny key/value table for one-off platform flags (e.g. whether the one-time

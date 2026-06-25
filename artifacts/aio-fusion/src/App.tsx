@@ -26,9 +26,14 @@ import {
   serverSetDisplayName,
   serverArchiveUser,
   serverChangeRole,
+  serverSetSeatCap,
+  serverGetSessions,
+  serverGetAccountSessions,
+  serverRevokeSession,
   refreshAccountsCache,
   canCreateSubAccounts,
   bootstrapAuth,
+  type SessionInfo,
 } from "./lib/auth";
 import step1Img from "./assets/photos/photo-diagnose.jpg";
 import step2Img from "./assets/photos/photo-strategy.jpg";
@@ -116,6 +121,7 @@ import {
   Undo2,
   ArchiveRestore,
   RefreshCw,
+  MonitorSmartphone,
 } from "lucide-react";
 
 export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
@@ -8726,6 +8732,33 @@ function PlatformHomePage({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showSessions, setShowSessions] = useState(false);
+  const [mySessions, setMySessions] = useState<SessionInfo[] | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [revokingSession, setRevokingSession] = useState<string | null>(null);
+
+  const loadMySessions = () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    void serverGetSessions()
+      .then((r) => {
+        if (r.ok) setMySessions(r.sessions);
+        else setSessionsError(r.error);
+      })
+      .finally(() => setSessionsLoading(false));
+  };
+
+  const handleRevokeSession = (sid: string) => {
+    setRevokingSession(sid);
+    void serverRevokeSession(sid)
+      .then((r) => {
+        if (!r.ok) { setSessionsError(r.error); return; }
+        setMySessions((prev) => prev ? prev.filter((s) => s.sid !== sid) : prev);
+      })
+      .finally(() => setRevokingSession(null));
+  };
+
   const loopSteps: { label: string; sub: string; icon: any }[] = [
     { label: "Set-Up", sub: "Project Data", icon: ClipboardPaste },
     { label: "Audit", sub: "Earned + Site", icon: Search },
@@ -8895,6 +8928,88 @@ function PlatformHomePage({
                 </button>
               </div>
             </div>
+
+            {/* MY SESSIONS — expandable panel inside the signed-in card */}
+            <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
+              <button
+                onClick={() => {
+                  const next = !showSessions;
+                  setShowSessions(next);
+                  if (next && mySessions === null) loadMySessions();
+                }}
+                className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+                style={{ color: vars.g500 }}
+              >
+                <MonitorSmartphone size={14} />
+                {showSessions ? "Hide" : "My Sessions"}
+              </button>
+
+              {showSessions && (
+                <div className="mt-4">
+                  {sessionsLoading && (
+                    <div className="flex items-center gap-2 text-[13px]" style={{ color: vars.g400 }}>
+                      <Loader2 size={13} className="animate-spin" /> Loading sessions…
+                    </div>
+                  )}
+                  {sessionsError && (
+                    <p className="text-[12px] font-medium" style={{ color: vars.red }}>{sessionsError}</p>
+                  )}
+                  {!sessionsLoading && mySessions !== null && (
+                    mySessions.length === 0 ? (
+                      <p className="text-[12px] font-light" style={{ color: vars.g400 }}>No active sessions found.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
+                        <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                              <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Started</th>
+                              <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Expires</th>
+                              <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>IP</th>
+                              <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {mySessions.map((s, i) => (
+                              <tr key={s.sid} style={{ background: i % 2 === 0 ? "white" : vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                                <td className="px-3 py-2 whitespace-nowrap font-mono" style={{ color: ink }}>
+                                  {new Date(s.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                  {" "}
+                                  {new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                  {s.isCurrent && (
+                                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-[0.14em]" style={{ background: vars.green + "20", color: vars.green }}>
+                                      This session
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                                  {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                                  {s.ipHint ?? "—"}
+                                </td>
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  {!s.isCurrent && (
+                                    <button
+                                      onClick={() => handleRevokeSession(s.sid)}
+                                      disabled={revokingSession === s.sid}
+                                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-40"
+                                      style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                                    >
+                                      {revokingSession === s.sid ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                                      Revoke
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -9062,6 +9177,58 @@ function UsersAdminPage({
   const [roleUser, setRoleUser] = useState<string | null>(null);
   const [roleValue, setRoleValue] = useState<LocalRole>("agency");
   const [roleError, setRoleError] = useState<string | null>(null);
+
+  // ── Seat cap state ────────────────────────────────────────────────────
+  const [seatCapUser, setSeatCapUser] = useState<string | null>(null);
+  const [seatCapValue, setSeatCapValue] = useState<string>("");
+  const [seatCapError, setSeatCapError] = useState<string | null>(null);
+
+  const handleSaveSeatCap = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSeatCapError(null);
+    if (!seatCapUser) return;
+    const parsed = seatCapValue.trim() === "" ? null : parseInt(seatCapValue.trim(), 10);
+    if (seatCapValue.trim() !== "" && (isNaN(parsed as number) || (parsed as number) < 0)) {
+      setSeatCapError("Must be a non-negative number or blank (no limit).");
+      return;
+    }
+    void (async () => {
+      const result = await serverSetSeatCap(seatCapUser, parsed);
+      if (!result.ok) { setSeatCapError(result.error); return; }
+      setSeatCapUser(null);
+      setSeatCapValue("");
+      refresh();
+    })();
+  };
+
+  // ── Per-account sessions state ────────────────────────────────────────
+  const [sessionsUser, setSessionsUser] = useState<string | null>(null);
+  const [accountSessions, setAccountSessions] = useState<SessionInfo[] | null>(null);
+  const [accountSessionsLoading, setAccountSessionsLoading] = useState(false);
+  const [accountSessionsError, setAccountSessionsError] = useState<string | null>(null);
+  const [revokingAccountSession, setRevokingAccountSession] = useState<string | null>(null);
+
+  const loadAccountSessions = (username: string) => {
+    setAccountSessionsLoading(true);
+    setAccountSessionsError(null);
+    void serverGetAccountSessions(username)
+      .then((r) => {
+        if (r.ok) setAccountSessions(r.sessions);
+        else setAccountSessionsError(r.error);
+      })
+      .finally(() => setAccountSessionsLoading(false));
+  };
+
+  const handleRevokeAccountSession = (sid: string) => {
+    if (!sessionsUser) return;
+    setRevokingAccountSession(sid);
+    void serverRevokeSession(sid, sessionsUser)
+      .then((r) => {
+        if (!r.ok) { setAccountSessionsError(r.error); return; }
+        setAccountSessions((prev) => prev ? prev.filter((s) => s.sid !== sid) : prev);
+      })
+      .finally(() => setRevokingAccountSession(null));
+  };
 
   // ── Generate-from-URL state ───────────────────────────────────────────
   const [genUrl, setGenUrl] = useState("");
@@ -9492,6 +9659,8 @@ function UsersAdminPage({
               const editingPw = pwUser === u.username;
               const editingName = nameUser === u.username;
               const editingRole = roleUser === u.username;
+              const editingSeatCap = seatCapUser === u.username;
+              const viewingSessions = sessionsUser === u.username;
               const hasDisplayName = !!(u.displayName && u.displayName.trim());
               return (
                 <li
@@ -9550,6 +9719,28 @@ function UsersAdminPage({
                           <Shield size={12} /> {editingRole ? "Cancel" : "Change role"}
                         </button>
                       )}
+                      {u.role !== "admin" && (
+                        <button
+                          onClick={() => { setSeatCapUser(editingSeatCap ? null : u.username); setSeatCapValue(""); setSeatCapError(null); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                        >
+                          <Users size={12} /> {editingSeatCap ? "Cancel" : "Seat cap"}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          const opening = !viewingSessions;
+                          setSessionsUser(opening ? u.username : null);
+                          setAccountSessions(null);
+                          setAccountSessionsError(null);
+                          if (opening) loadAccountSessions(u.username);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                      >
+                        <MonitorSmartphone size={12} /> {viewingSessions ? "Close" : "Sessions"}
+                      </button>
                       <button
                         onClick={() => handleDelete(u.username)}
                         disabled={isMe}
@@ -9659,6 +9850,88 @@ function UsersAdminPage({
                       </button>
                       {roleError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{roleError}</span>}
                     </form>
+                  )}
+                  {editingSeatCap && (
+                    <form onSubmit={handleSaveSeatCap} className="mt-3 flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={seatCapValue}
+                          onChange={(e) => setSeatCapValue(e.target.value)}
+                          placeholder="No limit (leave blank)"
+                          className="w-44 px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                        />
+                        <span className="text-[12px]" style={{ color: vars.g500 }}>max sub-accounts (blank = no limit)</span>
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                        style={{ background: accent }}
+                      >
+                        Save
+                      </button>
+                      {seatCapError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{seatCapError}</span>}
+                    </form>
+                  )}
+                  {viewingSessions && (
+                    <div className="mt-3">
+                      {accountSessionsLoading && (
+                        <div className="flex items-center gap-2 text-[12px]" style={{ color: vars.g400 }}>
+                          <Loader2 size={12} className="animate-spin" /> Loading sessions…
+                        </div>
+                      )}
+                      {accountSessionsError && (
+                        <p className="text-[12px] font-medium" style={{ color: vars.red }}>{accountSessionsError}</p>
+                      )}
+                      {!accountSessionsLoading && accountSessions !== null && (
+                        accountSessions.length === 0 ? (
+                          <p className="text-[12px] font-light" style={{ color: vars.g400 }}>No active sessions.</p>
+                        ) : (
+                          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
+                            <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Started</th>
+                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Expires</th>
+                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>IP</th>
+                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {accountSessions.map((s, i) => (
+                                  <tr key={s.sid} style={{ background: i % 2 === 0 ? "white" : vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                                    <td className="px-3 py-2 whitespace-nowrap font-mono" style={{ color: ink }}>
+                                      {new Date(s.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                      {" "}
+                                      {new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                                      {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                                      {s.ipHint ?? "—"}
+                                    </td>
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                      <button
+                                        onClick={() => handleRevokeAccountSession(s.sid)}
+                                        disabled={revokingAccountSession === s.sid}
+                                        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-40"
+                                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                                      >
+                                        {revokingAccountSession === s.sid ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                                        Revoke
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      )}
+                    </div>
                   )}
                 </li>
               );

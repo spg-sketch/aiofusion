@@ -3,10 +3,11 @@ import {
   db,
   platformAccountsTable,
   platformMetaTable,
+  platformSessionsTable,
   projectsTable,
   adminEventsTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -20,9 +21,12 @@ import {
   ensureDefaultAdmin,
   createPlatformSession,
   deletePlatformSession,
+  listPlatformSessions,
+  revokeOtherSessions,
   getPlatformSessionId,
   setPlatformCookie,
   clearPlatformCookie,
+  makeIpHint,
   type Role,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -168,7 +172,9 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       res.status(403).json({ error: "This account has been archived. Contact your administrator." });
       return;
     }
-    const sid = await createPlatformSession(account.username);
+    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+      ?? req.socket.remoteAddress;
+    const sid = await createPlatformSession(account.username, makeIpHint(rawIp));
     setPlatformCookie(res, sid);
     res.json({ account: { username: account.username, role: account.role } });
   } catch {
@@ -263,6 +269,25 @@ router.post(
         res.status(409).json({ error: "That username already exists." });
         return;
       }
+
+      // Seat-cap enforcement: if the parent account has a maxSeats limit, count
+      // existing direct sub-accounts and reject if the cap is already reached.
+      if (actor.role !== "admin") {
+        const parentAccount = await getAccount(normUsername(actor.username));
+        if (parentAccount?.maxSeats != null) {
+          const [{ value: currentSeats }] = await db
+            .select({ value: count() })
+            .from(platformAccountsTable)
+            .where(eq(platformAccountsTable.parent, normUsername(actor.username)));
+          if (currentSeats >= parentAccount.maxSeats) {
+            res.status(403).json({
+              error: `Seat cap reached (${parentAccount.maxSeats} ${parentAccount.maxSeats === 1 ? "seat" : "seats"} allowed). Contact your administrator to increase the limit.`,
+            });
+            return;
+          }
+        }
+      }
+
       await db.insert(platformAccountsTable).values({
         username,
         passwordHash: hashPassword(password),
@@ -436,6 +461,162 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete account" });
+    }
+  },
+);
+
+// Set (or clear) the seat cap for an agency account. Admin-only.
+// PATCH /api/platform/accounts/:username/seat-cap
+// Body: { maxSeats: number | null }   — null clears the limit
+router.patch(
+  "/platform/accounts/:username/seat-cap",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      if (actor.role !== "admin") {
+        res.status(403).json({ error: "Only an admin can set seat caps." });
+        return;
+      }
+      const target = normUsername(req.params.username);
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      const raw = req.body?.maxSeats;
+      let maxSeats: number | null;
+      if (raw === null || raw === undefined || raw === "") {
+        maxSeats = null;
+      } else {
+        const n = Number(raw);
+        if (!Number.isInteger(n) || n < 0) {
+          res.status(400).json({ error: "maxSeats must be a non-negative integer or null." });
+          return;
+        }
+        maxSeats = n;
+      }
+      await db
+        .update(platformAccountsTable)
+        .set({ maxSeats })
+        .where(eq(platformAccountsTable.username, target));
+      res.json({ ok: true, maxSeats });
+    } catch {
+      res.status(500).json({ error: "Failed to update seat cap" });
+    }
+  },
+);
+
+// --- Sessions API -----------------------------------------------------------
+
+// Helper: mask all but the last 8 chars of a session id before sending to
+// the browser (reduces exposure of the actual token).
+function maskSid(sid: string): string {
+  if (sid.length <= 8) return "*".repeat(sid.length);
+  return "*".repeat(sid.length - 8) + sid.slice(-8);
+}
+
+function sessionToPublic(s: { sid: string; createdAt: Date; expiresAt: Date; ipHint: string | null }, currentSid: string) {
+  return {
+    sid: maskSid(s.sid),
+    isCurrent: s.sid === currentSid,
+    createdAt: s.createdAt.toISOString(),
+    expiresAt: s.expiresAt.toISOString(),
+    ipHint: s.ipHint ?? null,
+  };
+}
+
+// Return the calling user's own active sessions.
+// GET /api/platform/sessions
+router.get(
+  "/platform/sessions",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const account = req.account!;
+      const currentSid = getPlatformSessionId(req) ?? "";
+      const sessions = await listPlatformSessions(account.username);
+      res.json({ sessions: sessions.map((s) => sessionToPublic(s, currentSid)) });
+    } catch {
+      res.status(500).json({ error: "Failed to load sessions" });
+    }
+  },
+);
+
+// Return active sessions for any account. Admin-only.
+// GET /api/platform/accounts/:username/sessions
+router.get(
+  "/platform/accounts/:username/sessions",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      if (actor.role !== "admin") {
+        res.status(403).json({ error: "Admin access required." });
+        return;
+      }
+      const target = normUsername(req.params.username);
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      const currentSid = getPlatformSessionId(req) ?? "";
+      const sessions = await listPlatformSessions(target);
+      res.json({ sessions: sessions.map((s) => sessionToPublic(s, currentSid)) });
+    } catch {
+      res.status(500).json({ error: "Failed to load sessions" });
+    }
+  },
+);
+
+// Revoke a specific session by masked sid suffix. The caller may revoke their
+// own non-current sessions; admins may revoke any session on any account.
+// DELETE /api/platform/sessions/:sid
+router.delete(
+  "/platform/sessions/:sid",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const currentSid = getPlatformSessionId(req) ?? "";
+      // The client sends the masked sid (last 8 chars). We need to resolve it
+      // to a real sid. We search among the caller's own sessions first; admins
+      // may also specify a username query param to revoke from another account.
+      const targetUsername = typeof req.query.username === "string"
+        ? normUsername(req.query.username)
+        : normUsername(actor.username);
+
+      // Only admins may revoke other users' sessions.
+      if (targetUsername !== normUsername(actor.username) && actor.role !== "admin") {
+        res.status(403).json({ error: "You can only revoke your own sessions." });
+        return;
+      }
+
+      const maskedParam = req.params.sid;
+      const sessions = await listPlatformSessions(targetUsername);
+      const match = sessions.find((s) => maskSid(s.sid) === maskedParam);
+      if (!match) {
+        res.status(404).json({ error: "Session not found." });
+        return;
+      }
+      // Non-admins cannot revoke their current session here (they use logout).
+      if (match.sid === currentSid && actor.role !== "admin") {
+        res.status(400).json({ error: "Use logout to end your current session." });
+        return;
+      }
+      await deletePlatformSession(match.sid);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to revoke session" });
     }
   },
 );

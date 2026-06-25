@@ -432,3 +432,86 @@ export async function serverChangeRole(
   await refreshAccountsCache();
   return { ok: true };
 }
+
+// Set (or clear, when null) the seat cap on an agency account. Admin-only.
+export async function serverSetSeatCap(
+  username: string,
+  maxSeats: number | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/seat-cap`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ maxSeats }),
+    });
+    let json: any = null;
+    try { json = await resp.json(); } catch { /* no body */ }
+    if (!resp.ok) return { ok: false, error: json?.error || "Failed to update seat cap." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to update seat cap." };
+  }
+}
+
+export type SessionInfo = {
+  sid: string;
+  isCurrent: boolean;
+  createdAt: string;
+  expiresAt: string;
+  ipHint: string | null;
+};
+
+// Fetch the calling user's own active sessions.
+export async function serverGetSessions(): Promise<{ ok: true; sessions: SessionInfo[] } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/sessions`, { credentials: "include" });
+    if (!resp.ok) {
+      let json: any = null;
+      try { json = await resp.json(); } catch { /* no body */ }
+      return { ok: false, error: json?.error || "Failed to load sessions." };
+    }
+    const json = (await resp.json()) as { sessions: SessionInfo[] };
+    return { ok: true, sessions: json.sessions ?? [] };
+  } catch {
+    return { ok: false, error: "Failed to load sessions." };
+  }
+}
+
+// Fetch active sessions for any account. Admin-only.
+export async function serverGetAccountSessions(
+  username: string,
+): Promise<{ ok: true; sessions: SessionInfo[] } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/sessions`, {
+      credentials: "include",
+    });
+    if (!resp.ok) {
+      let json: any = null;
+      try { json = await resp.json(); } catch { /* no body */ }
+      return { ok: false, error: json?.error || "Failed to load sessions." };
+    }
+    const json = (await resp.json()) as { sessions: SessionInfo[] };
+    return { ok: true, sessions: json.sessions ?? [] };
+  } catch {
+    return { ok: false, error: "Failed to load sessions." };
+  }
+}
+
+// Revoke a session by its masked sid. Optionally specify a username (admin-only)
+// to revoke from another account.
+export async function serverRevokeSession(
+  maskedSid: string,
+  username?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const url = `${apiBase()}/api/platform/sessions/${encodeURIComponent(maskedSid)}${username ? `?username=${encodeURIComponent(username)}` : ""}`;
+    const resp = await fetch(url, { method: "DELETE", credentials: "include" });
+    let json: any = null;
+    try { json = await resp.json(); } catch { /* no body */ }
+    if (!resp.ok) return { ok: false, error: json?.error || "Failed to revoke session." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to revoke session." };
+  }
+}

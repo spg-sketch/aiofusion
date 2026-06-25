@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, platformAccountsTable, platformSessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -71,27 +71,29 @@ export function normUsername(username: unknown): string {
 
 export const USERNAME_RE = /^[a-zA-Z0-9_.-]{2,32}$/;
 
+// --- IP hint ----------------------------------------------------------------
+
+// Reduce a raw IP (v4 or v6) to a coarse hint so we never store a full
+// address. For IPv4 we keep the first two octets (e.g. "192.168.x.x"). For
+// IPv6 we keep the first group (e.g. "2001:xxxx"). Strips IPv6 brackets.
+export function makeIpHint(rawIp: string | undefined): string | null {
+  if (!rawIp) return null;
+  const clean = rawIp.trim().replace(/^\[|\]$/g, "");
+  if (clean.includes(".")) {
+    const parts = clean.split(".");
+    if (parts.length >= 2) return `${parts[0]}.${parts[1]}.x.x`;
+  } else if (clean.includes(":")) {
+    const parts = clean.split(":");
+    if (parts.length >= 1 && parts[0]) return `${parts[0]}:xxxx`;
+  }
+  return null;
+}
+
 // --- Default admin seed -----------------------------------------------------
 
-// Matches the credentials the browser system seeded so the agency can always
-// sign in even before any migration has run.
 export const DEFAULT_ADMIN_USERNAME = "admin";
-// The credential the browser system seeded. Used only as a development
-// convenience fallback so the local app works out of the box; never used to
-// seed a production admin (see ensureDefaultAdmin).
 const DEV_FALLBACK_ADMIN_PASSWORD = "K9mt-4Rxq-7NzPv2";
 
-// Ensure at least one admin exists so the platform is never locked out. Inserts
-// the default admin only when no admin account is present, and never overwrites
-// an existing account's password.
-//
-// In production the bootstrap password MUST come from PLATFORM_ADMIN_PASSWORD:
-// we never seed a publicly known credential there. If it is unset on a fresh
-// production database we skip seeding and log a warning, so the operator sets a
-// strong password rather than inheriting a guessable default. (The live
-// database is already migrated and has its real admin, so this only affects
-// brand-new deployments.) In development we fall back to the known credential
-// for convenience.
 export async function ensureDefaultAdmin(): Promise<void> {
   const accounts = await db
     .select({ role: platformAccountsTable.role })
@@ -122,7 +124,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
 // --- Accounts ---------------------------------------------------------------
 
 export async function getAccount(username: string): Promise<
-  | { username: string; passwordHash: string; role: Role; parent: string | null }
+  | { username: string; passwordHash: string; role: Role; parent: string | null; maxSeats: number | null }
   | null
 > {
   const u = normUsername(username);
@@ -138,6 +140,7 @@ export async function getAccount(username: string): Promise<
     passwordHash: row.passwordHash,
     role: normalizeRole(row.role),
     parent: row.parent,
+    maxSeats: row.maxSeats ?? null,
   };
 }
 
@@ -194,12 +197,33 @@ export async function canManage(
 
 // --- Sessions ---------------------------------------------------------------
 
-export async function createPlatformSession(username: string): Promise<string> {
+// Session shape returned by the sessions list endpoints.
+export type SessionInfo = {
+  sid: string;
+  createdAt: Date;
+  expiresAt: Date;
+  ipHint: string | null;
+};
+
+// Create a new session for the given username. Single-session enforcement:
+// all existing sessions for the account are deleted first so only one device
+// can hold an active session at a time.
+export async function createPlatformSession(
+  username: string,
+  ipHint?: string | null,
+): Promise<string> {
+  const u = normUsername(username);
+  // Kill every existing session for this account before issuing a new one.
+  await db
+    .delete(platformSessionsTable)
+    .where(eq(platformSessionsTable.username, u));
+
   const sid = crypto.randomBytes(32).toString("hex");
   await db.insert(platformSessionsTable).values({
     sid,
-    username: normUsername(username),
+    username: u,
     expiresAt: new Date(Date.now() + PLATFORM_SESSION_TTL),
+    ipHint: ipHint ?? null,
   });
   return sid;
 }
@@ -231,6 +255,44 @@ export async function getPlatformSessionAccount(
 export async function deletePlatformSession(sid: string): Promise<void> {
   if (!sid) return;
   await db.delete(platformSessionsTable).where(eq(platformSessionsTable.sid, sid));
+}
+
+// List active (non-expired) sessions for a given username. Returns them newest
+// first. The sid is returned in full for revoke operations; callers that expose
+// it to the browser should mask all but the last 8 chars.
+export async function listPlatformSessions(username: string): Promise<SessionInfo[]> {
+  const u = normUsername(username);
+  const now = new Date();
+  const rows = await db
+    .select({
+      sid: platformSessionsTable.sid,
+      createdAt: platformSessionsTable.createdAt,
+      expiresAt: platformSessionsTable.expiresAt,
+      ipHint: platformSessionsTable.ipHint,
+    })
+    .from(platformSessionsTable)
+    .where(eq(platformSessionsTable.username, u));
+  return rows
+    .filter((r) => r.expiresAt > now)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+// Revoke all sessions for a username except the one the caller is currently
+// using. Used when an admin resets a password or archives an account so other
+// sessions are invalidated.
+export async function revokeOtherSessions(
+  username: string,
+  keepSid: string,
+): Promise<void> {
+  const u = normUsername(username);
+  await db
+    .delete(platformSessionsTable)
+    .where(
+      and(
+        eq(platformSessionsTable.username, u),
+        ne(platformSessionsTable.sid, keepSid),
+      ),
+    );
 }
 
 export function getPlatformSessionId(req: Request): string | undefined {
