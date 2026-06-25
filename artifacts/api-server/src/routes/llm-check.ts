@@ -1183,6 +1183,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
         if (nextAvailableAt > new Date()) {
           const isAdmin = req.account?.role === "admin";
           if (!force || !isAdmin) {
+            const retryAfterSecs = Math.max(1, Math.ceil((nextAvailableAt.getTime() - Date.now()) / 1000));
+            res.setHeader("Retry-After", retryAfterSecs);
             res.status(429).json({
               error: `This audit was last run on ${lastRunAt.toLocaleDateString("en-GB")}. The next run is available on ${nextAvailableAt.toLocaleDateString("en-GB")}.`,
               locked: true,

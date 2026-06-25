@@ -702,6 +702,22 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ error: "Check failed" }));
+        if (resp.status === 429 && data.locked) {
+          const retryAfterHeader = resp.headers.get("Retry-After");
+          const retryAfterSecs = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
+          const nextAvailableAt = !isNaN(retryAfterSecs)
+            ? new Date(Date.now() + retryAfterSecs * 1000).toISOString()
+            : (data.nextAvailableAt as string | undefined);
+          const daysRemaining = !isNaN(retryAfterSecs)
+            ? Math.ceil(retryAfterSecs / 86400)
+            : (data.daysRemaining as number | undefined);
+          setAuditLock({
+            locked: true,
+            lastRunAt: data.lastRunAt as string | undefined,
+            nextAvailableAt,
+            daysRemaining,
+          });
+        }
         throw new Error(data.error || `HTTP ${resp.status}`);
       }
 

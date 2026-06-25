@@ -1,4 +1,18 @@
 import rateLimit from "express-rate-limit";
+import type { Request, Response, NextFunction } from "express";
+import type { Options } from "express-rate-limit";
+
+function retryAfterHandler(message: string) {
+  return (req: Request, res: Response, _next: NextFunction, options: Options) => {
+    const rl = (req as any).rateLimit as { resetTime?: Date } | undefined;
+    const resetTime = rl?.resetTime;
+    const retryAfter = resetTime instanceof Date
+      ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000))
+      : Math.ceil((options.windowMs as number) / 1000);
+    res.setHeader("Retry-After", retryAfter);
+    res.status(options.statusCode as number).json({ error: message });
+  };
+}
 
 // General API limit — covers all data routes (project sync, accounts, store,
 // etc.). Set high enough that normal interactive use never hits it. A single
@@ -9,7 +23,7 @@ export const generalLimiter = rateLimit({
   max: 500,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many requests. Please try again later." },
+  handler: retryAfterHandler("Too many requests. Please try again later."),
 });
 
 // Login-specific limit — tight to prevent brute-force password guessing.
@@ -27,7 +41,7 @@ export const sessionTokenLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many token requests. Please try again later." },
+  handler: retryAfterHandler("Too many token requests. Please try again later."),
 });
 
 export const diagnosticLimiter = rateLimit({
@@ -35,7 +49,7 @@ export const diagnosticLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many analysis requests. Please wait before running another analysis." },
+  handler: retryAfterHandler("Too many analysis requests. Please wait before running another analysis."),
 });
 
 export const llmCheckLimiter = rateLimit({
@@ -43,7 +57,7 @@ export const llmCheckLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many LLM check requests. Please wait before running another check." },
+  handler: retryAfterHandler("Too many LLM check requests. Please wait before running another check."),
 });
 
 export const seoAuditLimiter = rateLimit({
@@ -51,7 +65,7 @@ export const seoAuditLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many audit requests. Please wait before running another audit." },
+  handler: retryAfterHandler("Too many audit requests. Please wait before running another audit."),
 });
 
 export const aiAssistLimiter = rateLimit({
@@ -59,7 +73,7 @@ export const aiAssistLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many AI draft requests. Please wait a moment before trying again." },
+  handler: retryAfterHandler("Too many AI draft requests. Please wait a moment before trying again."),
 });
 
 export const contentAiLimiter = rateLimit({
@@ -67,5 +81,5 @@ export const contentAiLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many content requests. Please wait a moment before trying again." },
+  handler: retryAfterHandler("Too many content requests. Please wait a moment before trying again."),
 });
