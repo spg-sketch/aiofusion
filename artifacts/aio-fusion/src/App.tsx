@@ -25,6 +25,7 @@ import {
   serverAssignOwner,
   serverSetDisplayName,
   serverArchiveUser,
+  serverChangeRole,
   refreshAccountsCache,
   canCreateSubAccounts,
   bootstrapAuth,
@@ -9053,6 +9054,9 @@ function UsersAdminPage({
   const [nameUser, setNameUser] = useState<string | null>(null);
   const [nameValue, setNameValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [roleUser, setRoleUser] = useState<string | null>(null);
+  const [roleValue, setRoleValue] = useState<LocalRole>("agency");
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   // ── Generate-from-URL state ───────────────────────────────────────────
   const [genUrl, setGenUrl] = useState("");
@@ -9222,6 +9226,21 @@ function UsersAdminPage({
       }
       setNameUser(null);
       setNameValue("");
+      refresh();
+    })();
+  };
+
+  const handleSaveRole = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRoleError(null);
+    if (!roleUser) return;
+    void (async () => {
+      const result = await serverChangeRole(roleUser, roleValue);
+      if (!result.ok) {
+        setRoleError(result.error);
+        return;
+      }
+      setRoleUser(null);
       refresh();
     })();
   };
@@ -9430,6 +9449,7 @@ function UsersAdminPage({
               const isMe = u.username.toLowerCase() === session.username.toLowerCase();
               const editingPw = pwUser === u.username;
               const editingName = nameUser === u.username;
+              const editingRole = roleUser === u.username;
               const hasDisplayName = !!(u.displayName && u.displayName.trim());
               return (
                 <li
@@ -9479,6 +9499,15 @@ function UsersAdminPage({
                       >
                         <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
                       </button>
+                      {!isMe && (
+                        <button
+                          onClick={() => { setRoleUser(editingRole ? null : u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                        >
+                          <Shield size={12} /> {editingRole ? "Cancel" : "Change role"}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(u.username)}
                         disabled={isMe}
@@ -9565,6 +9594,28 @@ function UsersAdminPage({
                         Save
                       </button>
                       {pwError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{pwError}</span>}
+                    </form>
+                  )}
+                  {editingRole && (
+                    <form onSubmit={handleSaveRole} className="mt-3 flex flex-wrap items-center gap-2">
+                      <select
+                        value={roleValue}
+                        onChange={(e) => setRoleValue(e.target.value as LocalRole)}
+                        className="px-3 py-2 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
+                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                      >
+                        <option value="admin">Master (Admin)</option>
+                        <option value="agency">Agency</option>
+                        <option value="client">Direct Client</option>
+                      </select>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                        style={{ background: accent }}
+                      >
+                        Save
+                      </button>
+                      {roleError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{roleError}</span>}
                     </form>
                   )}
                 </li>

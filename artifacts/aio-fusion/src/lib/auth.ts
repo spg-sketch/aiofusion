@@ -422,3 +422,13 @@ export async function serverChangePassword(
   if (!ok) return { ok: false, error: json?.error || "Failed to change password." };
   return { ok: true };
 }
+
+export async function serverChangeRole(
+  username: string,
+  role: Role,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/role", { username, role });
+  if (!ok) return { ok: false, error: json?.error || "Failed to change role." };
+  await refreshAccountsCache();
+  return { ok: true };
+}
