@@ -4,6 +4,8 @@ import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
+import { db, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
+import { isNull } from "drizzle-orm";
 
 const contentAiRouter = Router();
 
@@ -658,6 +660,79 @@ contentAiRouter.post(
 );
 
 // ── Endpoint 4: Media Research (target media list) ────────────────────────
+//
+// Helper: fetch verified outlets + contacts from the media database.
+// Only global records (accountId IS NULL) are used here — these are
+// populated by admins and are visible to all accounts.
+// Returns a formatted block to inject into the prompt, or "" if empty.
+async function fetchMediaDbContext(mediaCategories: string[]): Promise<string> {
+  try {
+    const outlets = await db
+      .select()
+      .from(mediaOutletsTable)
+      .where(isNull(mediaOutletsTable.deletedAt));
+
+    const globalOutlets = outlets.filter((o) => o.accountId === null);
+
+    // Filter to outlets whose category matches any requested media category.
+    const catLower = mediaCategories.map((c) => c.toLowerCase().trim());
+    const relevant =
+      catLower.length > 0
+        ? globalOutlets.filter((o) => {
+            const oCat = o.category.toLowerCase();
+            return catLower.some(
+              (c) => oCat.includes(c) || c.includes(oCat) || oCat === c,
+            );
+          })
+        : globalOutlets;
+
+    if (relevant.length === 0) return "";
+
+    const outletIds = new Set(relevant.map((o) => o.id));
+
+    const contacts = await db
+      .select()
+      .from(mediaContactsTable)
+      .where(isNull(mediaContactsTable.deletedAt));
+
+    const contactsByOutlet = new Map<number, typeof contacts>();
+    for (const c of contacts) {
+      if (c.outletId && outletIds.has(c.outletId)) {
+        if (!contactsByOutlet.has(c.outletId)) contactsByOutlet.set(c.outletId, []);
+        contactsByOutlet.get(c.outletId)!.push(c);
+      }
+    }
+
+    const lines: string[] = [
+      `VERIFIED MEDIA DATABASE (${relevant.length} outlet${relevant.length === 1 ? "" : "s"} matching the selected categories — prefer these publications over training-knowledge guesses):`,
+    ];
+    for (const outlet of relevant) {
+      const outletContacts = (contactsByOutlet.get(outlet.id) ?? []).slice(0, 1);
+      const meta = [
+        outlet.category || null,
+        outlet.website || null,
+        outlet.reachBand ? `reach: ${outlet.reachBand}` : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      lines.push(
+        `- ${outlet.name}${meta ? ` (${meta})` : ""}${outlet.description ? `: ${outlet.description}` : ""}`,
+      );
+      for (const c of outletContacts) {
+        const name = [c.firstName, c.lastName].filter(Boolean).join(" ");
+        const detail = [c.role || null, c.email ? `email: ${c.email}` : null]
+          .filter(Boolean)
+          .join(", ");
+        lines.push(`    Contact [VERIFIED]: ${name}${detail ? ` — ${detail}` : ""}`);
+      }
+    }
+    return lines.join("\n");
+  } catch (err) {
+    // Non-fatal — fall back to LLM-only if the DB is unavailable.
+    logger.warn({ err }, "content-ai: media-db lookup failed, proceeding without DB context");
+    return "";
+  }
+}
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
   const n = typeof v === "number" ? v : typeof v === "string" ? parseInt(v, 10) : NaN;
   if (Number.isNaN(n)) return fallback;
@@ -673,7 +748,7 @@ function normaliseMediaList(raw: unknown): any[] {
       const journalists = Array.isArray(m.journalists)
         ? m.journalists
             .filter((j: any) => j && typeof j.name === "string" && j.name.trim())
-            .slice(0, 3)
+            .slice(0, 1)
             .map((j: any) => {
               const conf = j.confidence === "V" || j.confidence === "P" || j.confidence === "U" ? j.confidence : "U";
               return {
@@ -743,10 +818,24 @@ contentAiRouter.post(
       ? mediaCategories.join(", ")
       : "(none selected - infer suitable UK trade and business categories from the Project Data)";
 
+    // DB-first: load verified outlets/contacts; LLM fills any gaps.
+    const mediaDbContext = await fetchMediaDbContext(mediaCategories);
+    const hasDbContext = mediaDbContext.length > 0;
+
+    const contactNote = hasDbContext
+      ? `CONTACT RULES:\n` +
+        `1. Publications marked [VERIFIED] in the Media Database above MUST be prioritised. Use those outlet names and contacts exactly as supplied; set confidence "V" for any journalist listed there.\n` +
+        `2. If the database supplies fewer than 5 relevant publications, supplement with training-knowledge to reach 5 total. Any contact drawn from training knowledge MUST carry confidence "U" (Unverified).\n` +
+        `3. Do NOT fabricate journalist names. If you have no training-knowledge of a relevant beat reporter for a supplementary outlet, leave journalists empty and provide a noBeatContactNote.\n`
+      : `CONTACT RULES:\n` +
+        `1. You do not have live web access in this run. You MAY draw on training-knowledge to supply beat journalists for UK outlets, but every contact MUST carry confidence "U" (Unverified).\n` +
+        `2. Do NOT fabricate journalist names. If you have no training-knowledge of a relevant beat reporter for an outlet, leave journalists empty and provide a noBeatContactNote.\n`;
+
     const prompt =
       `${reviewedPrompt || "You are a senior UK PR media-list builder. Build a target media list for the content item below."}\n\n` +
       `${BRITISH_RULE}\n\n` +
-      `Note: you do not have live web access in this run. You MAY draw on training-knowledge to supply beat journalists, but every contact returned from training knowledge MUST carry confidence "U" (Unverified). Only omit a contact entirely if you have no training-knowledge of a relevant beat reporter for that outlet — do not fabricate names. Be honest with the confidence flags.\n\n` +
+      (hasDbContext ? `${mediaDbContext}\n\n` : "") +
+      `${contactNote}\n` +
       `CONTENT ITEM:\n` +
       `Title: ${title || "(untitled)"}\n` +
       `Content type: ${contentType}\n` +
@@ -764,7 +853,7 @@ contentAiRouter.post(
       `5. Do not include a publication just because it covers the sector; only include it if the topic of this article is genuinely on its agenda.\n` +
       `\nReturn JSON only, no commentary, in exactly this shape:\n` +
       `{"items": [{"rank": 1, "publication": "...", "url": "https://...", "category": "...", "categoryRank": 1, "description": "one sentence on the title", "readership": "one sentence on the readership", "reach": "approximate audience figure or 'not publicly available'", "reachVerified": false, "journalists": [{"name": "...", "title": "...", "email": "...", "confidence": "V"|"P"|"U"}], "noBeatContactNote": "only if journalists is empty", "authority": 0-100, "authorityNote": "justify scores above 90 or below 60", "pitchAngle": "one sentence tailored to this publication's readers", "suggestedPlacement": "specific section, column or format within this publication"}]}\n` +
-      `Order items overall by likelihood of pickup for this specific article. Return between 5 and 8 publications, with up to 3 journalists per publication.`;
+      `Order items overall by likelihood of pickup for this specific article. Return exactly 5 publications, with 1 journalist per publication where available.`;
 
     // 5–8 publications × 3 journalists × ~300 tokens each + JSON overhead ≈ 3,500
     const MEDIA_LIST_MAX_TOKENS = 4000;
