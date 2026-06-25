@@ -2638,7 +2638,7 @@ Engine used:
                 <p className="text-xs font-light mb-3" style={{ color: "#7A5800" }}>
                   {diagPendingForce
                     ? "This will override the 21-day lock and consume LLM credits. Continue?"
-                    : "This will fetch and analyse your website with Claude. It typically takes 15–30 seconds and consumes LLM credits."}
+                    : "This will fetch and analyse your website with Claude. It typically takes 15–30 seconds."}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
