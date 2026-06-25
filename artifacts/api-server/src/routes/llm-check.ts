@@ -48,6 +48,7 @@ export interface ProbeResult {
   mentioned: boolean;
   mentionContext: string | null;
   competitors: string[];
+  anchored?: boolean;
 }
 
 const RUNS_PER_QUESTION = 2;
@@ -477,6 +478,7 @@ export interface ProbeSummary {
   mentionContext: string | null;
   responsePreview: string;
   competitors: string[];
+  anchored?: boolean;
 }
 
 export interface VisibilityMetrics {
@@ -548,6 +550,7 @@ export function groupProbesByQuery(results: ProbeResult[]): ProbeSummary[] {
       mentionContext: repr.mentionContext,
       responsePreview: repr.response.substring(0, 300) + (repr.response.length > 300 ? "..." : ""),
       competitors: [...competitorMap.values()].slice(0, 12),
+      anchored: runs.some((r) => r.anchored),
     };
   });
 }
@@ -618,6 +621,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
       mentioned,
       mentionContext: findMentionContext(text, identity),
       competitors: extractCompetitors(text, identity),
+      anchored: probeWasAnchored,
     };
   } catch (err: any) {
     logger.error({ err, question }, "OpenAI probe failed");
@@ -656,6 +660,7 @@ async function probeClaude(question: string, identity: BrandIdentity, probeWasAn
       mentioned,
       mentionContext: findMentionContext(text, identity),
       competitors: extractCompetitors(text, identity),
+      anchored: probeWasAnchored,
     };
   } catch (err: any) {
     logger.error({ err, question }, "Claude probe failed");

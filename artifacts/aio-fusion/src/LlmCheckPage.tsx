@@ -30,6 +30,7 @@ import {
   Loader2,
   Wand2,
   Lock,
+  Anchor,
 } from "lucide-react";
 
 const vars = {
@@ -64,6 +65,7 @@ interface ProbeItem {
   mentionContext: string | null;
   responsePreview: string;
   competitors?: string[];
+  anchored?: boolean;
 }
 
 interface AssessmentDimension {
@@ -319,6 +321,7 @@ function ReportSection({
 
 function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: string }) {
   const [expanded, setExpanded] = useState(false);
+  const [anchorTooltipVisible, setAnchorTooltipVisible] = useState(false);
 
   return (
     <div className="border rounded-xl overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
@@ -335,6 +338,25 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
           <p className="text-[11px] mt-0.5" style={{ color: vars.g400 }}>{probe.model}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {probe.anchored && (
+            <span
+              className="relative"
+              onClick={(e) => { e.stopPropagation(); setAnchorTooltipVisible((v) => !v); }}
+              onMouseEnter={() => setAnchorTooltipVisible(true)}
+              onMouseLeave={() => setAnchorTooltipVisible(false)}
+              title="This question was automatically clarified to ensure AI engines answered about your company, not a namesake"
+            >
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #BFDBFE" }}>
+                <Anchor size={10} />
+                Anchored
+              </span>
+              {anchorTooltipVisible && (
+                <span className="absolute right-0 top-full mt-1 z-10 w-56 text-[11px] leading-relaxed p-2.5 rounded-lg shadow-lg" style={{ background: vars.navy, color: "white" }}>
+                  This question was automatically clarified to ensure AI engines answered about your company, not a namesake.
+                </span>
+              )}
+            </span>
+          )}
           {probe.runCount && probe.runCount > 1 && (
             <span className="text-[10px] hidden sm:inline" style={{ color: vars.g400 }}>
               {probe.mentionRuns}/{probe.runCount} runs
@@ -351,6 +373,14 @@ function ProbeRow({ probe, companyName }: { probe: ProbeItem; companyName: strin
       </button>
       {expanded && (
         <div className="px-4 pb-4 border-t" style={{ borderColor: vars.g100 }}>
+          {probe.anchored && (
+            <div className="mt-3 p-3 rounded-lg flex gap-2.5" style={{ background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+              <Anchor size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#1D4ED8" }} />
+              <p className="text-[12px] leading-relaxed" style={{ color: "#1E3A5F" }}>
+                <span className="font-semibold">Question clarified automatically.</span> The company name was appended with its domain to ensure AI engines answered about your company, not a namesake with a similar name.
+              </p>
+            </div>
+          )}
           {probe.mentionContext && (
             <div className="mt-3 p-3 rounded-lg" style={{ background: "#ECFDF5", border: "1px solid #D1FAE5" }}>
               <p className="text-[11px] font-semibold mb-1" style={{ color: vars.green }}>Mention context:</p>
