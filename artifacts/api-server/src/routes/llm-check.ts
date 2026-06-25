@@ -221,7 +221,7 @@ function detectionAliases(identity: BrandIdentity): string[] {
   return [...new Set([...nameAliases, ...legalAliases])];
 }
 
-export function isMentioned(text: string, brand: BrandIdentity | string): boolean {
+export function isMentioned(text: string, brand: BrandIdentity | string, probeWasAnchored = false): boolean {
   if (!text) return false;
   const identity = asIdentity(brand);
   const hasContext = corroborationSignals(identity).length > 0;
@@ -229,6 +229,12 @@ export function isMentioned(text: string, brand: BrandIdentity | string): boolea
     if (!aliasRegex(alias).test(text)) continue;
     // A strong (multi-word or distinctive) alias is a confident match.
     if (!isWeakAlias(alias)) return true;
+    // When the probe question was already anchored (e.g. "Is SMG (smg.com)
+    // trustworthy?"), the AI engine has been told which company is meant, so
+    // any alias match in its answer refers to the right company. Skip the
+    // corroboration check — requiring the domain to appear in the *answer*
+    // would silently discard genuine mentions and collapse scores to near-zero.
+    if (probeWasAnchored) return true;
     // A weak acronym match only counts when we have no disambiguation context
     // (legacy behaviour) or when a brand-specific signal corroborates it, so an
     // unrelated namesake sharing the acronym is not credited as the brand.
@@ -574,7 +580,7 @@ export function computeVisibilityMetrics(results: ProbeResult[]): VisibilityMetr
   };
 }
 
-async function probeOpenAI(question: string, identity: BrandIdentity): Promise<ProbeResult | null> {
+async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAnchored = false): Promise<ProbeResult | null> {
   const client = createOpenAIClient();
   if (!client) return null;
 
@@ -603,7 +609,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity): Promise<P
         "OpenAI probe hit the output token limit; answer may be truncated",
       );
     }
-    const mentioned = isMentioned(text, identity);
+    const mentioned = isMentioned(text, identity, probeWasAnchored);
 
     return {
       question,
@@ -619,7 +625,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity): Promise<P
   }
 }
 
-async function probeClaude(question: string, identity: BrandIdentity): Promise<ProbeResult | null> {
+async function probeClaude(question: string, identity: BrandIdentity, probeWasAnchored = false): Promise<ProbeResult | null> {
   const client = createAnthropicClient();
   if (!client) return null;
 
@@ -641,7 +647,7 @@ async function probeClaude(question: string, identity: BrandIdentity): Promise<P
         "Claude probe hit the output token limit; answer may be truncated",
       );
     }
-    const mentioned = isMentioned(text, identity);
+    const mentioned = isMentioned(text, identity, probeWasAnchored);
 
     return {
       question,
@@ -1264,9 +1270,26 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // the buyer questions first, and cap the total so the run stays bounded.
     // Disambiguate confusable names (e.g. "SMG", "Blue Halo") by appending the
     // company's website domain so the AI engines answer about the right company.
+    // Apply the same anchoring to generated questions so detection is consistent
+    // across all probe types for confusable names.
     const rawBuyerQuestions = (authorityData.buyerQuestions || []).slice(0, 12);
     const buyerQuestions = disambiguateBuyerQuestions(rawBuyerQuestions, identity);
-    const questions = [...new Set([...buyerQuestions, ...generated])].slice(0, MAX_QUESTIONS);
+    const anchoredGenerated = disambiguateBuyerQuestions(generated, identity);
+    const questions = [...new Set([...buyerQuestions, ...anchoredGenerated])].slice(0, MAX_QUESTIONS);
+
+    // Track which questions were rewritten by disambiguation so probeOpenAI /
+    // probeClaude can relax the corroboration check for anchored probes. A
+    // question is "anchored" when disambiguation changed it (i.e. it now
+    // contains the domain hint). When the AI was told which company is meant,
+    // requiring the domain to also appear in the *answer* is unnecessary and
+    // silently discards genuine mentions, collapsing scores to near-zero.
+    const anchoredQuestions = new Set<string>();
+    for (let i = 0; i < rawBuyerQuestions.length; i++) {
+      if (buyerQuestions[i] !== rawBuyerQuestions[i]) anchoredQuestions.add(buyerQuestions[i]);
+    }
+    for (let i = 0; i < generated.length; i++) {
+      if (anchoredGenerated[i] !== generated[i]) anchoredQuestions.add(anchoredGenerated[i]);
+    }
 
     // Total individual LLM calls: one per (question × run × model).
     const totalProbeCount = questions.length * RUNS_PER_QUESTION * 2;
@@ -1282,9 +1305,10 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
     const probePromises: Promise<ProbeResult | null>[] = [];
     for (const q of questions) {
+      const anchored = anchoredQuestions.has(q);
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(trackProbe(probeOpenAI(q, identity)));
-        probePromises.push(trackProbe(probeClaude(q, identity)));
+        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored)));
+        probePromises.push(trackProbe(probeClaude(q, identity, anchored)));
       }
     }
 

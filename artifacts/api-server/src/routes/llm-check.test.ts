@@ -621,6 +621,56 @@ describe("isMentioned with a BrandIdentity (namesake hardening)", () => {
   });
 });
 
+describe("isMentioned — anchored-probe path", () => {
+  const identity: BrandIdentity = {
+    name: "SMG",
+    legalName: "Sports Media Group",
+    website: "https://sportsmediagroup.co.uk",
+    descriptor: "sports marketing agency",
+    sectors: ["sports media"],
+  };
+
+  it("credits a bare acronym when probeWasAnchored=true, even without domain in response", () => {
+    // The question said "Is SMG (sportsmediagroup.co.uk) trustworthy?" so the AI
+    // knows which SMG is meant. A bare alias match should suffice.
+    expect(
+      isMentioned("SMG is a well-regarded sports marketing agency.", identity, true),
+    ).toBe(true);
+  });
+
+  it("still rejects a bare acronym for a clearly unrelated context when probeWasAnchored=false", () => {
+    expect(
+      isMentioned("SMG is a large investment holding company in Asia.", identity, false),
+    ).toBe(false);
+  });
+
+  it("does not require corroboration for an anchored probe even when corroboration would normally be needed", () => {
+    // Generic sector mention that would otherwise fail the corroboration check.
+    expect(
+      isMentioned("The sports media space is competitive; SMG operates there too.", identity, true),
+    ).toBe(true);
+  });
+
+  it("probeWasAnchored=true does not affect strong multi-word aliases (still matched normally)", () => {
+    expect(
+      isMentioned("Sports Media Group is a top agency.", identity, true),
+    ).toBe(true);
+    expect(
+      isMentioned("Sports Media Group is a top agency.", identity, false),
+    ).toBe(true);
+  });
+
+  it("probeWasAnchored=true does not affect an unambiguous brand — corroboration was never required", () => {
+    const acme: BrandIdentity = { name: "Acme Widgets", legalName: "Acme Widgets Ltd" };
+    expect(isMentioned("I recommend Acme Widgets.", acme, true)).toBe(true);
+    expect(isMentioned("I recommend Acme Widgets.", acme, false)).toBe(true);
+  });
+
+  it("empty response returns false regardless of anchored flag", () => {
+    expect(isMentioned("", identity, true)).toBe(false);
+  });
+});
+
 describe("parseEntityList", () => {
   it("parses 'Name - description' lines, tolerating bullets and numbering", () => {
     const text = "1. Sinclair Media Group - a US broadcaster\n- Scott Media Group - a UK PR firm\n* **SMG Holdings** - an Asian conglomerate";
