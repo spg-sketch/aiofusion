@@ -2,6 +2,9 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureDefaultAdmin } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
+import { pruneExpiredSessions } from "./lib/auth";
+
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const rawPort = process.env["PORT"];
 
@@ -34,4 +37,14 @@ app.listen(port, (err) => {
   ensureAuditLocksTable().catch((err) => {
     logger.error({ err }, "Failed to ensure audit_locks table");
   });
+
+  pruneExpiredSessions().catch((err) => {
+    logger.error({ err }, "Failed to prune expired sessions on startup");
+  });
+
+  setInterval(() => {
+    pruneExpiredSessions().catch((err) => {
+      logger.error({ err }, "Failed to prune expired sessions (scheduled)");
+    });
+  }, PRUNE_INTERVAL_MS).unref();
 });

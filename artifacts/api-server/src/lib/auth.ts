@@ -2,12 +2,12 @@ import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
-export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
 
 export interface SessionData {
   user: AuthUser;
@@ -67,6 +67,10 @@ export async function updateSession(
 
 export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
+}
+
+export async function pruneExpiredSessions(): Promise<void> {
+  await db.delete(sessionsTable).where(lt(sessionsTable.expire, new Date()));
 }
 
 export async function clearSession(

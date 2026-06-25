@@ -2,6 +2,12 @@ import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+//
+// `expire` is the canonical session-TTL column (equivalent to `expiresAt`).
+// All new sessions are written with `expire = now + SESSION_TTL` (30 days).
+// `getSession()` rejects and deletes any row whose `expire` is in the past.
+// `pruneExpiredSessions()` bulk-deletes stale rows on startup and daily.
+// The Replit Auth convention uses this column name; do not rename it.
 export const sessionsTable = pgTable(
   "sessions",
   {
