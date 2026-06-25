@@ -1404,7 +1404,7 @@ function ClientSelectorPage({
         </div>
 
         {/* Three primary actions - visible in both empty and populated states */}
-        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isAdmin ? "md:grid-cols-4" : isClient ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isClient ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
           {!isClient && (
           <button
             onClick={onCreateProject}
@@ -1421,23 +1421,6 @@ function ClientSelectorPage({
             </div>
             <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
           </button>
-          )}
-          {isAdmin && onGenerateFromUrl && (
-            <button
-              onClick={onGenerateFromUrl}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
-              style={{ background: "#102B36", color: "white" }}
-            >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.12)" }}>
-                <Zap size={20} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">Admin tool</p>
-                <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Generate from URL</p>
-                <p className="text-[12px] font-light mt-0.5 opacity-70">Auto-populate + score in one click.</p>
-              </div>
-              <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
-            </button>
           )}
           <button
             onClick={onArchivedProjects}
