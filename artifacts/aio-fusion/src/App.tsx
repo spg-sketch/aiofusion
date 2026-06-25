@@ -4898,7 +4898,7 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
           <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
           </button>
-          <div className="hidden md:flex items-center gap-7">
+          <div className="hidden lg:flex items-center gap-7">
             {[
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
@@ -4914,12 +4914,12 @@ function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; 
               {isAuthed ? <><User size={14} /> My Account</> : <>Platform Login</>}
             </button>
           </div>
-          <button className="md:hidden" style={{ color: ink }} onClick={() => setMenuOpen(!menuOpen)}>
+          <button className="lg:hidden" style={{ color: ink }} onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
         {menuOpen && (
-          <div className="md:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
+          <div className="lg:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
             {[
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
