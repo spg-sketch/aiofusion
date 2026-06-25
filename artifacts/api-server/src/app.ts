@@ -7,6 +7,7 @@ import { logger } from "./lib/logger";
 import { generalLimiter } from "./middleware/rate-limit";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { resolvePlatformAccount } from "./middleware/platform-auth";
+import { cspMiddleware } from "./middleware/csp";
 
 const app: Express = express();
 
@@ -64,6 +65,8 @@ const corsOptionsDelegate: cors.CorsOptionsDelegate<Request> = (req, callback) =
     callback(new Error("CORS: origin not allowed"));
   }
 };
+
+app.use(cspMiddleware);
 
 app.use(
   pinoHttp({
