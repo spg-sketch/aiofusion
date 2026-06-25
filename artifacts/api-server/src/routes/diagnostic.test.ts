@@ -386,6 +386,7 @@ describe("POST /api/diagnostic", () => {
 
     const app = express();
     app.use(express.json());
+    app.use((req: any, _res: any, next: any) => { req.account = { username: "testuser", role: "client" }; next(); });
     app.use("/api", diagnosticRouter);
     await new Promise<void>((resolve) => {
       server = app.listen(0, () => {
@@ -530,7 +531,7 @@ describe("POST /api/diagnostic — audit-lock gate", () => {
     messagesCreate.mockReset();
     chatCompletionsCreate.mockReset();
     auditLocks.length = 0;
-    account = undefined;
+    account = { username: "testuser", role: "client" };
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = "https://example.test";
     process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY = "test-key";
     delete process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;

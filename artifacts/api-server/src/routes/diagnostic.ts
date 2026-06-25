@@ -244,6 +244,11 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
 }
 
 diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {
+  if (!req.account) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
   const { content, url } = req.body;
   const confirmedEntity = sanitizeConfirmedEntity(req.body?.confirmedEntity);
   const projectId = typeof req.body.projectId === "string" ? req.body.projectId.trim() : "";

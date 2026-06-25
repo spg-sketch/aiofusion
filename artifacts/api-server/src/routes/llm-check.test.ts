@@ -1074,7 +1074,7 @@ describe("llm-check HTTP routes — audit-lock", () => {
 
   beforeEach(async () => {
     auditLocks.length = 0;
-    account = undefined;
+    account = { username: "testuser", role: "client" };
     messagesCreate.mockReset();
     chatCompletionsCreate.mockReset();
 

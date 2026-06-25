@@ -212,6 +212,7 @@ contentAiRouter.post(
   "/content/optimise",
   contentAiLimiter,
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const headline = asString(body.headline);
     const standfirst = asString(body.standfirst);
@@ -323,6 +324,7 @@ contentAiRouter.post(
   "/content/creator-field",
   contentAiLimiter,
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const fieldKey = asString(body.fieldKey, 40);
     if (!CREATOR_FIELDS.has(fieldKey)) {
@@ -504,6 +506,7 @@ contentAiRouter.post(
   "/content/generate",
   contentAiLimiter,
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const contentType = asString(body.contentType, 80) || "Article";
     const projectName = asString(body.projectName, 300);
@@ -789,6 +792,7 @@ contentAiRouter.post(
   "/content/media-list",
   contentAiLimiter,
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const content = (body.content ?? {}) as Record<string, unknown>;
     const title = asString(content.title, 400);
@@ -889,6 +893,7 @@ contentAiRouter.post(
   "/content/llm-queries",
   contentAiLimiter,
   async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
     const companyName = asString(body.companyName, 200);
     const descriptor = asString(body.descriptor, 2000);

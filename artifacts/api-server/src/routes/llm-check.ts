@@ -631,7 +631,7 @@ export function computeVisibilityMetrics(results: ProbeResult[]): VisibilityMetr
   };
 }
 
-async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAnchored = false): Promise<ProbeResult | null> {
+async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal): Promise<ProbeResult | null> {
   const client = createOpenAIClient();
   if (!client) return null;
 
@@ -651,7 +651,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
         },
         { role: "user", content: question },
       ],
-    });
+    }, { signal });
 
     const text = response.choices[0]?.message?.content || "";
     if (response.choices[0]?.finish_reason === "length") {
@@ -677,7 +677,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
   }
 }
 
-async function probeClaude(question: string, identity: BrandIdentity, probeWasAnchored = false): Promise<ProbeResult | null> {
+async function probeClaude(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal): Promise<ProbeResult | null> {
   const client = createAnthropicClient();
   if (!client) return null;
 
@@ -689,7 +689,7 @@ async function probeClaude(question: string, identity: BrandIdentity, probeWasAn
       max_tokens: 4000,
       system: "You are a knowledgeable business advisor. Answer questions directly and thoroughly, naming specific companies where relevant. Be factual and comprehensive.",
       messages: [{ role: "user", content: question }],
-    });
+    }, { signal });
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
@@ -1245,6 +1245,11 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
 // Called by the frontend on page load so it can show the last-run date and block
 // the run button before the user even tries to fire the audit.
 llmCheckRouter.get("/audit-lock", async (req: Request, res: Response) => {
+  if (!req.account) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
   const projectId = typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
   const auditType = typeof req.query.auditType === "string" ? req.query.auditType.trim() : "visibility";
 
@@ -1285,6 +1290,11 @@ llmCheckRouter.get("/audit-lock", async (req: Request, res: Response) => {
 });
 
 llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, async (req: Request, res: Response) => {
+  if (!req.account) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
   const { companyName, sector, sectors, keywords, icp, location, persona, projectData, businessType: rawBusinessType, projectId: rawProjectId, force: rawForce } = req.body;
   const businessType: BusinessType = (rawBusinessType === "service" || rawBusinessType === "product" || rawBusinessType === "consumer") ? rawBusinessType : "";
   const projectId = typeof rawProjectId === "string" ? rawProjectId.trim() : "";
@@ -1434,6 +1444,11 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       if (anchoredGenerated[i] !== generated[i]) anchoredQuestions.add(anchoredGenerated[i]);
     }
 
+    // Abort in-flight API calls if the client disconnects mid-audit so we do
+    // not keep consuming LLM credits for a response nobody will receive.
+    const probeAbort = new AbortController();
+    res.on("close", () => probeAbort.abort());
+
     // Total individual LLM calls: one per (question × run × model).
     const totalProbeCount = questions.length * RUNS_PER_QUESTION * 2;
     let completedProbes = 0;
@@ -1450,8 +1465,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     for (const q of questions) {
       const anchored = anchoredQuestions.has(q);
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored)));
-        probePromises.push(trackProbe(probeClaude(q, identity, anchored)));
+        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored, probeAbort.signal)));
+        probePromises.push(trackProbe(probeClaude(q, identity, anchored, probeAbort.signal)));
       }
     }
 
