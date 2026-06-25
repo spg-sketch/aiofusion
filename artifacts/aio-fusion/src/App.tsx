@@ -9084,11 +9084,23 @@ function UsersAdminPage({
   const [auditEvents, setAuditEvents] = useState<AdminEvent[] | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActorFilter, setAuditActorFilter] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("");
+  const [auditFrom, setAuditFrom] = useState("");
+  const [auditTo, setAuditTo] = useState("");
+  const [auditExporting, setAuditExporting] = useState(false);
 
   const loadAuditEvents = () => {
     setAuditLoading(true);
     setAuditError(null);
-    void fetch(`${apiBase()}/api/platform/admin-events`, { credentials: "include" })
+    const params = new URLSearchParams();
+    if (auditActorFilter.trim()) params.set("actor", auditActorFilter.trim());
+    if (auditActionFilter.trim()) params.set("action", auditActionFilter.trim());
+    if (auditFrom.trim()) params.set("from", auditFrom.trim());
+    if (auditTo.trim()) params.set("to", auditTo.trim());
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    void fetch(`${apiBase()}/api/platform/admin-events${qs}`, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error("Failed to load audit log");
         const data = await r.json() as { events: AdminEvent[] };
@@ -9096,6 +9108,31 @@ function UsersAdminPage({
       })
       .catch(() => setAuditError("Could not load audit log. Please try again."))
       .finally(() => setAuditLoading(false));
+  };
+
+  const exportAuditCsv = async () => {
+    setAuditExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (auditActorFilter.trim()) params.set("actor", auditActorFilter.trim());
+      if (auditActionFilter.trim()) params.set("action", auditActionFilter.trim());
+      if (auditFrom.trim()) params.set("from", auditFrom.trim());
+      if (auditTo.trim()) params.set("to", auditTo.trim());
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      const r = await fetch(`${apiBase()}/api/platform/admin-events/export${qs}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Export failed");
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setAuditError("Could not export audit log. Please try again.");
+    } finally {
+      setAuditExporting(false);
+    }
   };
 
   const ACTION_LABELS: Record<string, string> = {
@@ -9639,20 +9676,82 @@ function UsersAdminPage({
               <div>
                 <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Audit log</h2>
                 <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
-                  Read-only record of privileged admin actions. The 100 most recent events, newest first.
+                  Read-only record of privileged admin actions. Up to 500 events, newest first.
                 </p>
               </div>
             </div>
-            <button
-              onClick={loadAuditEvents}
-              disabled={auditLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40 shrink-0"
-              style={{ borderColor: vars.g200, color: vars.navy }}
-            >
-              {auditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              {auditEvents === null ? "Load" : "Refresh"}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => { void exportAuditCsv(); }}
+                disabled={auditExporting}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                style={{ borderColor: vars.g200, color: vars.g600 }}
+                title="Export matching events as CSV"
+              >
+                {auditExporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                Export CSV
+              </button>
+              <button
+                onClick={loadAuditEvents}
+                disabled={auditLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                style={{ borderColor: vars.g200, color: vars.navy }}
+              >
+                {auditLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {auditEvents === null ? "Load" : "Refresh"}
+              </button>
+            </div>
           </div>
+
+          {/* Filter bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <input
+              type="text"
+              placeholder="Filter actor…"
+              value={auditActorFilter}
+              onChange={e => setAuditActorFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+              style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
+            />
+            <input
+              type="text"
+              placeholder="Filter action…"
+              value={auditActionFilter}
+              onChange={e => setAuditActionFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+              style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
+            />
+            <input
+              type="date"
+              value={auditFrom}
+              onChange={e => setAuditFrom(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+              style={{ borderColor: vars.g200, color: auditFrom ? ink : vars.g400, background: vars.g100 }}
+              title="From date"
+            />
+            <input
+              type="date"
+              value={auditTo}
+              onChange={e => setAuditTo(e.target.value)}
+              className="px-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+              style={{ borderColor: vars.g200, color: auditTo ? ink : vars.g400, background: vars.g100 }}
+              title="To date"
+            />
+          </div>
+          {/* Quick search across loaded results */}
+          {auditEvents !== null && auditEvents.length > 0 && (
+            <div className="relative mb-4">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" color={vars.g400} />
+              <input
+                type="text"
+                placeholder="Search actor, action, target, detail…"
+                value={auditSearch}
+                onChange={e => setAuditSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1"
+                style={{ borderColor: vars.g200, color: ink, background: vars.g100 }}
+              />
+            </div>
+          )}
 
           {auditError && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl mb-4" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
@@ -9662,47 +9761,67 @@ function UsersAdminPage({
           )}
 
           {auditEvents === null && !auditLoading && !auditError && (
-            <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>Click Load to fetch the audit log.</p>
+            <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>Set filters above then click Load, or Load to fetch all recent events.</p>
           )}
 
-          {auditEvents !== null && auditEvents.length === 0 && (
-            <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>No admin events recorded yet.</p>
-          )}
+          {auditEvents !== null && (() => {
+            const needle = auditSearch.trim().toLowerCase();
+            const filtered = needle
+              ? auditEvents.filter(ev => {
+                  const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "";
+                  const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" ") : "";
+                  return (
+                    ev.actorUsername.toLowerCase().includes(needle) ||
+                    ev.action.toLowerCase().includes(needle) ||
+                    target.toLowerCase().includes(needle) ||
+                    detail.toLowerCase().includes(needle)
+                  );
+                })
+              : auditEvents;
 
-          {auditEvents !== null && auditEvents.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
-              <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
-                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Time</th>
-                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Actor</th>
-                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Action</th>
-                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Target</th>
-                    <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Detail</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditEvents.map((ev, i) => {
-                    const rowBg = i % 2 === 0 ? "white" : vars.g100;
-                    const ts = new Date(ev.createdAt);
-                    const timeStr = ts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + " " + ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-                    const actionLabel = ACTION_LABELS[ev.action] ?? ev.action;
-                    const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "—";
-                    const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" · ").slice(0, 120) : "";
-                    return (
-                      <tr key={ev.id} style={{ background: rowBg, borderBottom: `1px solid ${vars.g200}` }}>
-                        <td className="px-4 py-2.5 whitespace-nowrap font-mono" style={{ color: vars.g600 }}>{timeStr}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap font-semibold" style={{ color: ink }}>{ev.actorUsername}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: vars.navy }}>{actionLabel}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>{target}</td>
-                        <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+            if (filtered.length === 0) {
+              return <p className="text-[13px] font-light text-center py-6" style={{ color: vars.g400 }}>No events match your filters.</p>;
+            }
+            return (
+              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
+                <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                      <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Time</th>
+                      <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Actor</th>
+                      <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Action</th>
+                      <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Target</th>
+                      <th className="px-4 py-2.5 font-bold uppercase tracking-[0.14em] text-[10px]" style={{ color: vars.g500 }}>Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((ev, i) => {
+                      const rowBg = i % 2 === 0 ? "white" : vars.g100;
+                      const ts = new Date(ev.createdAt);
+                      const timeStr = ts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + " " + ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+                      const actionLabel = ACTION_LABELS[ev.action] ?? ev.action;
+                      const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "—";
+                      const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" · ").slice(0, 120) : "";
+                      return (
+                        <tr key={ev.id} style={{ background: rowBg, borderBottom: `1px solid ${vars.g200}` }}>
+                          <td className="px-4 py-2.5 whitespace-nowrap font-mono" style={{ color: vars.g600 }}>{timeStr}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap font-semibold" style={{ color: ink }}>{ev.actorUsername}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: vars.navy }}>{actionLabel}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>{target}</td>
+                          <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {needle && (
+                  <p className="px-4 py-2 text-[11px]" style={{ color: vars.g400, borderTop: `1px solid ${vars.g200}` }}>
+                    Showing {filtered.length} of {auditEvents.length} loaded events
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
       </div>

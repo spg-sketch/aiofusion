@@ -6,7 +6,7 @@ import {
   projectsTable,
   adminEventsTable,
 } from "@workspace/db";
-import { desc, eq, sql, like } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -590,7 +590,45 @@ router.post(
 
 // --- Admin events (audit log) -----------------------------------------------
 
-// Return the 100 most recent admin events, newest first. Admin-only.
+function buildAuditConditions(query: Request["query"]) {
+  const { action, actor, from, to } = query;
+  const conditions = [];
+  if (typeof action === "string" && action.trim()) {
+    conditions.push(ilike(adminEventsTable.action, `%${action.trim()}%`));
+  }
+  if (typeof actor === "string" && actor.trim()) {
+    conditions.push(ilike(adminEventsTable.actorUsername, `%${actor.trim()}%`));
+  }
+  if (typeof from === "string" && from.trim()) {
+    const d = new Date(from.trim());
+    if (!isNaN(d.getTime())) conditions.push(gte(adminEventsTable.createdAt, d));
+  }
+  if (typeof to === "string" && to.trim()) {
+    const d = new Date(to.trim());
+    if (!isNaN(d.getTime())) {
+      // If a date-only string was supplied (no time component), treat it as
+      // end-of-day so the full selected day is included in results.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to.trim())) {
+        d.setUTCHours(23, 59, 59, 999);
+      }
+      conditions.push(lte(adminEventsTable.createdAt, d));
+    }
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+const AUDIT_COLS = {
+  id: adminEventsTable.id,
+  actorUsername: adminEventsTable.actorUsername,
+  action: adminEventsTable.action,
+  targetId: adminEventsTable.targetId,
+  targetType: adminEventsTable.targetType,
+  metadata: adminEventsTable.metadata,
+  createdAt: adminEventsTable.createdAt,
+} as const;
+
+// Return up to 500 admin events (filtered). Admin-only.
+// Query params: action, actor, from (ISO), to (ISO)
 router.get(
   "/platform/admin-events",
   requirePlatformAuth,
@@ -600,22 +638,72 @@ router.get(
         res.status(403).json({ error: "Admin access required." });
         return;
       }
+      const where = buildAuditConditions(req.query);
       const rows = await db
-        .select({
-          id: adminEventsTable.id,
-          actorUsername: adminEventsTable.actorUsername,
-          action: adminEventsTable.action,
-          targetId: adminEventsTable.targetId,
-          targetType: adminEventsTable.targetType,
-          metadata: adminEventsTable.metadata,
-          createdAt: adminEventsTable.createdAt,
-        })
+        .select(AUDIT_COLS)
         .from(adminEventsTable)
+        .where(where)
         .orderBy(desc(adminEventsTable.createdAt))
-        .limit(100);
+        .limit(500);
       res.json({ events: rows });
     } catch {
       res.status(500).json({ error: "Failed to load audit log" });
+    }
+  },
+);
+
+function csvEscape(v: unknown): string {
+  return `"${String(v ?? "").replace(/"/g, '""')}"`;
+}
+
+// Stream all matching events as CSV. Admin-only.
+// Query params: action, actor, from (ISO), to (ISO)
+router.get(
+  "/platform/admin-events/export",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (req.account!.role !== "admin") {
+        res.status(403).json({ error: "Admin access required." });
+        return;
+      }
+      const where = buildAuditConditions(req.query);
+      const rows = await db
+        .select(AUDIT_COLS)
+        .from(adminEventsTable)
+        .where(where)
+        .orderBy(desc(adminEventsTable.createdAt));
+
+      const dateSlug = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="audit-log-${dateSlug}.csv"`,
+      );
+
+      res.write("id,time,actor,action,target_type,target_id,detail\n");
+      for (const row of rows) {
+        const detail =
+          row.metadata
+            ? Object.entries(row.metadata as Record<string, unknown>)
+                .map(([k, v]) => `${k}: ${String(v)}`)
+                .join(" | ")
+            : "";
+        res.write(
+          [
+            csvEscape(row.id),
+            csvEscape(row.createdAt),
+            csvEscape(row.actorUsername),
+            csvEscape(row.action),
+            csvEscape(row.targetType ?? ""),
+            csvEscape(row.targetId ?? ""),
+            csvEscape(detail),
+          ].join(",") + "\n",
+        );
+      }
+      res.end();
+    } catch {
+      res.status(500).json({ error: "Failed to export audit log" });
     }
   },
 );
