@@ -673,7 +673,7 @@ function normaliseMediaList(raw: unknown): any[] {
       const journalists = Array.isArray(m.journalists)
         ? m.journalists
             .filter((j: any) => j && typeof j.name === "string" && j.name.trim())
-            .slice(0, 12)
+            .slice(0, 3)
             .map((j: any) => {
               const conf = j.confidence === "V" || j.confidence === "P" || j.confidence === "U" ? j.confidence : "U";
               return {
@@ -720,7 +720,9 @@ contentAiRouter.post(
     const contentType = asString(content.contentType, 80) || "Press release";
     const headline = asString(content.headline, 2000);
     const standfirst = asString(content.standfirst, 4000);
-    const bodyCopy = asString(content.bodyCopy, 16000);
+    // Truncate body copy — the model only needs enough to understand the topic
+    // and angle; sending the full article inflates the prompt and response time.
+    const bodyCopy = asString(content.bodyCopy, 3000);
     const mediaCategories = asStringArray(body.mediaCategories);
     const keyMessages = asStringArray(body.keyMessages);
     const projectData = asString(body.projectData, MAX_PROJECT_DATA_CHARS);
@@ -762,11 +764,14 @@ contentAiRouter.post(
       `5. Do not include a publication just because it covers the sector; only include it if the topic of this article is genuinely on its agenda.\n` +
       `\nReturn JSON only, no commentary, in exactly this shape:\n` +
       `{"items": [{"rank": 1, "publication": "...", "url": "https://...", "category": "...", "categoryRank": 1, "description": "one sentence on the title", "readership": "one sentence on the readership", "reach": "approximate audience figure or 'not publicly available'", "reachVerified": false, "journalists": [{"name": "...", "title": "...", "email": "...", "confidence": "V"|"P"|"U"}], "noBeatContactNote": "only if journalists is empty", "authority": 0-100, "authorityNote": "justify scores above 90 or below 60", "pitchAngle": "one sentence tailored to this publication's readers", "suggestedPlacement": "specific section, column or format within this publication"}]}\n` +
-      `Order items overall by likelihood of pickup for this specific article. Return between 6 and 15 publications.`;
+      `Order items overall by likelihood of pickup for this specific article. Return between 5 and 8 publications, with up to 3 journalists per publication.`;
+
+    // 5–8 publications × 3 journalists × ~300 tokens each + JSON overhead ≈ 3,500
+    const MEDIA_LIST_MAX_TOKENS = 4000;
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt);
+      const raw = await streamModelText(res, client, prompt, MEDIA_LIST_MAX_TOKENS);
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
