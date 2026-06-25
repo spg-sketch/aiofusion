@@ -1,0 +1,118 @@
+Published your App
+
+
+
+5 messages & 15 actions
+
+Checkpoint made
+26 minutes ago
+
+Worked for 3 minutes
+When creating contents or optimising content when you're using the LLM, can we change the prompt to include a note to say please don't put quotations in from spokes people in any situation unless this has been done manually by a user that make sense?
+
+26 minutes ago
+
+7 messages & 19 actions
+
+Checkpoint made
+24 minutes ago
+
+Worked for 1 minute
+Spencer Gallagher completed: Export and search the admin audit log
+Updated environment
+
+Checkpoint made
+23 minutes ago
+
+Attached Image
+This is timomin out, Patrick is currently sourcing the database to help this feature work in the meantime if you don't have any data in the database you will need to use the LLM to try and find me Contacts however at the moment it appears to be timing out could we maybe be lim three journalists at a time or something or is there a better way we could do this? Can you give me some
+
+22 minutes ago
+
+7 messages & 17 actions
+
+Checkpoint made
+20 minutes ago
+
+Worked for 2 minutes
+So this ideally should work by first of all searching the media database which we know is an updated and then if there aren't contacts in the media database that are relevant we should use the LLM to help find them to help the user get their content out I think for the moment can we find five publications and one journalist from each and will just test how long that takes?
+
+12 minutes ago
+
+12 messages & 42 actions
+
+Checkpoint made
+8 minutes ago
+
+Worked for 4 minutes
+
+Published your app
+6 minutes ago
+CAN TH ETOKEN CAP BE EXCEEDED? Type Target Token cap
+Article 900 words 2,500
+Press release 900 words 2,500
+Blog post 700 words 2,000
+Whitepaper 2,000 words 5,000
+Social post 600 words 1,500
+Case study 800 words 2,200
+Pitch/Speaker/Award ~400–700 words 1,500–2,000
+
+5 minutes ago
+
+3 messages & 11 actions
+
+Worked for 1 minute
+I've just looked in the SMG account and a lot of the contents is missing. Is that because of the work we did when we rebuilt the database? I think there's only one article in there for example now is there anyway you can restore those easily? Those missing articles across all accounts?
+
+4 minutes ago
+
+Planning database integrity checks (16 seconds)
+Let me check a few things in parallel — what content is DB-backed vs. localStorage, what's currently in the database for the SMG account, and what backup scripts exist:
+
+
+4 actions
+Important — my memory note says Archive is localStorage-only but the schema shows a proper archive_items table. That means a DB migration happened at some point. Let me check the actual state of the data right now:
+
+
+7 actions
+The archive_items table has zero rows — completely empty. The content is almost certainly still sitting in the browser's localStorage, but the app was migrated to read from the database. So the data exists, it's just not visible because the app now looks in the DB (empty) instead of localStorage.
+
+Let me confirm by checking how the frontend currently loads archive data:
+
+
+3 actions
+The DB archive_items table is completely empty — 0 rows. But the frontend code still calls loadArchive() using localStorage. Let me check whether the frontend has been switched to DB-backed or is still purely localStorage, and where serverArchiveUser comes from:
+
+
+3 actions
+Let me read the exact loadArchive/saveArchive functions and the DB-sync code around lines 5290–5420:
+
+
+2 actions
+Now I have the complete picture. Let me find the migration guard key:
+
+
+2 actions
+I now have the complete picture. Let me explain clearly what happened and how to fix it:
+
+What happened:
+
+The Archive was migrated from localStorage to the database — a one-time migration uploaded each browser's localStorage content to the DB
+The DB was rebuilt/reset at some point, which wiped the archive_items table back to zero
+The migration has a guard key (aio.store.migrated.v1 in localStorage) that prevents it re-running — so the re-upload never happened
+Crucially: the content still exists in localStorage on whichever browsers it was originally created on — the migration never deletes from localStorage, it only copies to the server
+How to restore it:
+
+On each browser where content was originally created, open the browser's developer console (F12 → Console) and run this one line:
+
+localStorage.removeItem('aio.store.migrated.v1')
+
+Then refresh the page. The app will re-run the migration automatically and upload all the localStorage Archive and Planner content back to the database. It only needs to be done once per browser that has content on it.
+
+Browsers/devices to check:
+
+Wherever the SMG account content was created
+Any other accounts where content is missing — same process, logged in as that account
+Once done, the content will be back in the DB and visible from any browser/device (since it's now DB-backed, not localStorage-only).
+
+This would be worth doing before the next DB maintenance so you don't lose it again. Once the content is back in the DB, it's properly backed up by the daily backup scripts and safe from browser-local data loss.
