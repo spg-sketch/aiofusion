@@ -25,6 +25,7 @@ import {
   type Role,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import { loginLimiter } from "../middleware/rate-limit";
 
 const router: IRouter = Router();
 
@@ -143,7 +144,7 @@ router.get("/platform/status", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/platform/login", async (req: Request, res: Response) => {
+router.post("/platform/login", loginLimiter, async (req: Request, res: Response) => {
   try {
     const username = normUsername(req.body?.username);
     const password = typeof req.body?.password === "string" ? req.body.password : "";

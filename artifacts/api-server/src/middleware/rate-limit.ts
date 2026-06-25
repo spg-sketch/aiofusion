@@ -1,11 +1,25 @@
 import rateLimit from "express-rate-limit";
 
+// General API limit — covers all data routes (project sync, accounts, store,
+// etc.). Set high enough that normal interactive use never hits it. A single
+// page load can fire 10–15 requests; a user with many projects fires more on
+// sync. 500 per 15 minutes = ~33/minute, well above any legitimate session.
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again later." },
+});
+
+// Login-specific limit — tight to prevent brute-force password guessing.
+// 20 attempts per 15 minutes per IP is generous for a human, strict for a bot.
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many sign-in attempts. Please wait a few minutes and try again." },
 });
 
 export const sessionTokenLimiter = rateLimit({
