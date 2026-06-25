@@ -1,6 +1,6 @@
 import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import CountdownBanner from "./components/CountdownBanner";
-import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject } from "./lib/projectSync";
+import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import ReportPage from "./ReportPage";
@@ -10083,8 +10083,16 @@ function App() {
       // NULL-owned row) before showing the list, so it is attributed to the
       // master instead of silently vanishing.
       await migrateAssignOwnerlessToAdmin();
-      setStoredProjects(loadStoredProjects() as unknown as Client[]);
+      const merged = loadStoredProjects() as unknown as Client[];
+      setStoredProjects(merged);
       setClientLogos(result.logos);
+      // Update the module-level known-IDs cache so the integrity check inside
+      // setActiveProjectId always compares against the current project list,
+      // then run a proactive check in case the active ID drifted since the
+      // last sync (e.g. after a login change on another device).
+      const ids = merged.map((p) => p.id);
+      setKnownProjectIds(ids);
+      assertActiveProjectConsistency(ids);
     }
   }, []);
 
@@ -10151,7 +10159,11 @@ function App() {
 
   const confirmCreateProject = async (name: string, logo?: string) => {
     const project = createStoredProject(name);
-    setStoredProjects(loadStoredProjects());
+    const afterCreate = loadStoredProjects();
+    setStoredProjects(afterCreate);
+    // Update the known-IDs cache BEFORE setActiveProjectId so the integrity
+    // check inside that call sees the newly created project as valid.
+    setKnownProjectIds(afterCreate.map((p) => p.id));
     setActiveProjectId(project.id);
     setNamingProject(false);
     if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
@@ -10167,6 +10179,8 @@ function App() {
       const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
       saveStoredProjects(rolled);
       setStoredProjects(rolled);
+      // Sync cache to rolled-back list before switching active ID.
+      setKnownProjectIds(rolled.map((p) => p.id));
       const prev = rolled[0] ?? null;
       setActiveProjectId(prev?.id ?? null);
       setActiveClient(prev ?? null);

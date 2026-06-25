@@ -29,7 +29,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
-import { markIntakeSaved, ensureDefaultIntakeMigrated } from "./lib/projectSync";
+import { markIntakeSaved, ensureDefaultIntakeMigrated, assertActiveProjectConsistencyFromCache } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
@@ -234,8 +234,18 @@ function currentIntakeKey(): string {
 
 // Set which project's intake data is active. Call this before navigating into
 // the intake form or dashboard so reads and writes target the right project.
-export function setActiveProjectId(id: string): void {
-  try { localStorage.setItem(ACTIVE_PROJECT_KEY, id); } catch { /* noop */ }
+// After writing the value, a lightweight consistency check verifies the new ID
+// is in the user's known project list (populated by setKnownProjectIds on each
+// sync). If it is not, the stale value is cleared and a warning is emitted.
+export function setActiveProjectId(id: string | null): void {
+  try {
+    if (id == null) {
+      localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    } else {
+      localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+    }
+  } catch { /* noop */ }
+  assertActiveProjectConsistencyFromCache();
 }
 
 // Read which project is currently active, so other stores (planner, archive)

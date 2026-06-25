@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { syncIntakeForProject, ensureDefaultIntakeMigrated } from "./projectSync";
+import { syncIntakeForProject, ensureDefaultIntakeMigrated, assertActiveProjectConsistency, setKnownProjectIds, assertActiveProjectConsistencyFromCache } from "./projectSync";
 
 // A fully populated Set-Up blob (a real project's answers).
 const FULL = {
@@ -110,5 +110,79 @@ describe("default project key migration + recovery", () => {
     // ...and pushed back up to restore the server copy.
     expect(pushed).toHaveLength(1);
     expect(pushed[0].intake).toEqual(FULL);
+  });
+});
+
+describe("assertActiveProjectConsistency", () => {
+  const KEY = "aio.activeProjectId";
+
+  it("happy path: valid stored ID is kept untouched", () => {
+    localStorage.setItem(KEY, "proj-abc");
+    assertActiveProjectConsistency(["proj-abc", "proj-xyz"]);
+    expect(localStorage.getItem(KEY)).toBe("proj-abc");
+  });
+
+  it("stale ID: stored ID not in the list is cleared with a console warning", () => {
+    localStorage.setItem(KEY, "proj-stale");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    assertActiveProjectConsistency(["proj-abc", "proj-xyz"]);
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0][0]).toContain("proj-stale");
+    warnSpy.mockRestore();
+  });
+
+  it("missing ID: nothing stored is a no-op (no warning, nothing cleared)", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    assertActiveProjectConsistency(["proj-abc"]);
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("empty project list: treated as not yet loaded — no-op even with a stored ID", () => {
+    localStorage.setItem(KEY, "proj-abc");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    assertActiveProjectConsistency([]);
+    expect(localStorage.getItem(KEY)).toBe("proj-abc");
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});
+
+describe("assertActiveProjectConsistencyFromCache (module-level cache)", () => {
+  const KEY = "aio.activeProjectId";
+
+  it("uses the cached project IDs registered via setKnownProjectIds", () => {
+    setKnownProjectIds(["proj-a", "proj-b"]);
+    localStorage.setItem(KEY, "proj-a");
+    assertActiveProjectConsistencyFromCache();
+    expect(localStorage.getItem(KEY)).toBe("proj-a");
+  });
+
+  it("clears a stale ID using the cached list", () => {
+    setKnownProjectIds(["proj-a", "proj-b"]);
+    localStorage.setItem(KEY, "proj-old");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    assertActiveProjectConsistencyFromCache();
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledOnce();
+    warnSpy.mockRestore();
+  });
+
+  it("create-project flow: cache updated before switch keeps the new ID intact", () => {
+    // Simulates confirmCreateProject: existing cache has proj-a only,
+    // a new project proj-new is created, cache is updated to include it,
+    // then setActiveProjectId (via assertActiveProjectConsistencyFromCache)
+    // must not clear the new ID.
+    setKnownProjectIds(["proj-a"]);
+    // Simulate cache update that happens in confirmCreateProject before the switch
+    setKnownProjectIds(["proj-a", "proj-new"]);
+    localStorage.setItem(KEY, "proj-new");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    assertActiveProjectConsistencyFromCache();
+    expect(localStorage.getItem(KEY)).toBe("proj-new");
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

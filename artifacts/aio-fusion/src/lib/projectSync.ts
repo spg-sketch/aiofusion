@@ -18,6 +18,57 @@ const LOGOS_KEY = "aio.clientLogos.v1";
 // decide whether the server copy or the local copy is newer.
 const INTAKE_TIMES_KEY = "aio.intake.updatedAt.v1";
 
+const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
+
+// ---------------------------------------------------------------------------
+// Active-project integrity check
+// ---------------------------------------------------------------------------
+
+// Module-level cache of project IDs currently accessible to the signed-in
+// user. Updated via setKnownProjectIds after every project sync so that the
+// check inside setActiveProjectId always compares against the latest list.
+let _knownProjectIds: Set<string> = new Set();
+
+// Register the set of project IDs that are valid for the current user. Call
+// this after every project sync (syncProjectsOnLoad) so the integrity check
+// inside setActiveProjectId stays current.
+export function setKnownProjectIds(ids: string[]): void {
+  _knownProjectIds = new Set(ids);
+}
+
+// Pure utility: reads aio.activeProjectId from localStorage and clears it with
+// a console warning when the stored ID is not in projectIds. A missing ID (no
+// value stored) is a no-op — nothing to validate. An empty projectIds list is
+// treated as "not yet loaded" and is also a no-op.
+export function assertActiveProjectConsistency(projectIds: string[]): void {
+  if (projectIds.length === 0) return;
+  const ids = new Set(projectIds);
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(ACTIVE_PROJECT_KEY);
+  } catch {
+    return;
+  }
+  if (!stored) return;
+  if (!ids.has(stored)) {
+    console.warn(
+      `[AIO] Active project ID "${stored}" is not in the current user's project list. Clearing stale value.`,
+    );
+    try {
+      localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    } catch {
+      /* noop */
+    }
+  }
+}
+
+// Convenience wrapper used inside setActiveProjectId (IntakeForm.tsx): runs
+// the consistency check against the module-level cache so the caller does not
+// need to pass the list explicitly on every switch.
+export function assertActiveProjectConsistencyFromCache(): void {
+  assertActiveProjectConsistency([..._knownProjectIds]);
+}
+
 type StoredProject = Record<string, unknown> & { id: string; name?: string };
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
