@@ -8070,7 +8070,6 @@ Deliverable:
 - A structured list on a Word document.`;
 
 function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
-  const [annual, setAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const paper = "#FBF6EC";
@@ -8078,133 +8077,122 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const teal = vars.teal;
+  const agenticGold = "#7C6A3A";
 
-  type PlanFeature = { label: string; solo: string | boolean; starter: string | boolean; agency: string | boolean; enterprise: string | boolean };
+  type PlanFeature = { label: string; inhouse: string | boolean; agency: string | boolean; agentic: string | boolean; section?: boolean };
 
-  const PLANS = [
+  const STANDARD_PLANS = [
     {
-      name: "Solo",
-      tagline: "Try the platform hands-on. Great for freelancers and individuals exploring GEO.",
-      monthly: 49,
-      annual: 39,
-      color: vars.gold,
-      highlight: false,
-      cta: "Start Free Trial",
-      seats: "1 user",
-      projects: "1 brand / project",
-      badge: null,
-      includes: [
-        "Project Set-Up and brand profile",
-        "LLM Visibility Check — 2 runs per month",
-        "AI content generations — 5 per month",
-        "Content Optimiser",
-        "Content Creator",
-        "Email support",
-      ],
-      excludes: ["Comms Planner", "Coverage Tracker", "Earned Media Authority Audit", "Marketing Intelligence", "Media Database"],
-    },
-    {
-      name: "Starter",
-      tagline: "For solo practitioners and small in-house teams getting started with GEO.",
-      monthly: 149,
-      annual: 119,
+      key: "inhouse",
+      name: "Standard",
+      sub: "In-House",
+      tagline: "For B2B and B2C in-house teams building AI authority for a single brand.",
+      annualTotal: 4000,
+      monthly: 333,
       color: teal,
       highlight: false,
-      cta: "Start Free Trial",
-      seats: "1 user",
+      cta: "Book a Demo",
       projects: "1 brand / project",
-      badge: null,
+      competitorNote: "CisionOne AI from £15,000–£40,000+/yr. AIO Fusion pays for itself in one client engagement.",
       includes: [
-        "Everything in Solo, plus:",
-        "LLM Visibility Check — 5 runs per month",
-        "AI content generations — 15 per month",
-        "Comms Planner",
-        "Coverage Tracker and reporting",
+        "Full Standard platform — all 10 modules",
+        "AI Visibility Audit + GEO strategy builder",
+        "Comms Planner — plan, score and manage schedules",
+        "Content Optimiser and Editor",
+        "Content Creator — articles, pitches and ideation",
+        "Media Research — AI-recommended journalists",
+        "Marketing Intelligence — awards and conferences",
+        "Website Content GEO and Technical GEO",
+        "Measure and Report — PR impact and AI authority",
+        "Archive — long-term content curation",
+        "Email support",
       ],
-      excludes: ["Earned Media Authority Audit", "Marketing Intelligence", "Media Database", "Client sub-accounts"],
     },
     {
-      name: "Agency",
-      tagline: "For PR agencies and marketing teams running multiple client brands.",
-      monthly: 499,
-      annual: 399,
+      key: "agency",
+      name: "Standard",
+      sub: "Agency",
+      tagline: "For PR agencies running AI visibility programmes for multiple clients.",
+      annualTotal: 5000,
+      monthly: 417,
       color: accent,
       highlight: true,
-      cta: "Start Free Trial",
-      seats: "5 user seats",
-      projects: "Up to 3 brands / projects",
+      cta: "Book a Demo",
+      projects: "3 projects included",
+      competitorNote: "Typically recovered by billing a single client £500/month for AI visibility services.",
       includes: [
-        "Everything in Starter, plus:",
-        "LLM Visibility Check — 30 runs per month",
-        "Unlimited AI content generations",
-        "Earned Media Authority Audit — run every 21 days per project",
-        "Marketing Intelligence search",
-        "Media Database (outlets and contacts)",
-        "Client sub-accounts",
+        "Everything in Standard In-House, plus:",
+        "Multi-client architecture and agency dashboard",
+        "3 projects included — each a full brand workspace",
+        "Additional projects at £500/yr each (10 projects = £9,500/yr)",
+        "Client sub-accounts and reporting",
         "Priority email and chat support",
       ],
-      excludes: ["Unlimited AI runs", "White-label", "Custom AI configuration", "Dedicated account manager"],
-    },
-    {
-      name: "Enterprise",
-      tagline: "For larger organisations needing scale, security and dedicated support.",
-      monthly: null,
-      annual: null,
-      color: ink,
-      highlight: false,
-      cta: "Contact Sales",
-      seats: "Unlimited seats",
-      projects: "Unlimited brands / projects",
-      includes: [
-        "Everything in Agency, plus:",
-        "Unlimited LLM Visibility Checks",
-        "Unlimited AI content generations",
-        "Earned Media Authority Audit — unlimited",
-        "Custom AI model configuration",
-        "White-label option",
-        "Dedicated account manager",
-        "SLA guarantee",
-        "API access",
-        "SSO and enterprise security",
-      ],
-      excludes: [],
     },
   ];
 
+  const AGENTIC_PLAN = {
+    key: "agentic",
+    name: "With Agents",
+    sub: "Agentic Layer",
+    tagline: "Autonomous PR and marketing programme management with trained specialist agents, governed by human approval gates.",
+    annualFrom: 7000,
+    color: agenticGold,
+    highlight: false,
+    cta: "Join the Waitlist",
+    launch: "Q2 2027",
+    upgradeOffer: "50% off the first 6 months for Standard clients upgrading to With Agents.",
+    competitorNote: "Enterprise AI deployments cost £50,000–£150,000+/yr. No autonomous PR agent alternative exists at this price.",
+    includes: [
+      "Everything in Standard Agency, plus:",
+      "20-agent autonomous team per project",
+      "Always-on AI visibility monitoring",
+      "AI-assisted draft content and GEO fixes",
+      "Human approval gates throughout",
+      "Journalist and Media AI Authority Score",
+      "Full AI Media Database — multi-market",
+      "Release Gateway and Wire API integrations",
+      "Tactical Media Relations — live opportunity response",
+      "Authority-building content engine",
+    ],
+  };
+
   const TABLE_ROWS: PlanFeature[] = [
-    { label: "Brands / projects", solo: "1", starter: "1", agency: "Up to 10", enterprise: "Unlimited" },
-    { label: "User seats", solo: "1", starter: "1", agency: "5", enterprise: "Unlimited" },
-    { label: "Project Set-Up and brand profile", solo: true, starter: true, agency: true, enterprise: true },
-    { label: "LLM Visibility Checks", solo: "2 / month", starter: "5 / month", agency: "30 / month", enterprise: "Unlimited" },
-    { label: "AI content generations", solo: "5 / month", starter: "15 / month", agency: "Unlimited", enterprise: "Unlimited" },
-    { label: "Content Optimiser", solo: true, starter: true, agency: true, enterprise: true },
-    { label: "Content Creator", solo: true, starter: true, agency: true, enterprise: true },
-    { label: "Comms Planner", solo: false, starter: true, agency: true, enterprise: true },
-    { label: "Coverage Tracker and reporting", solo: false, starter: true, agency: true, enterprise: true },
-    { label: "Earned Media Authority Audit", solo: false, starter: false, agency: true, enterprise: true },
-    { label: "Marketing Intelligence search", solo: false, starter: false, agency: true, enterprise: true },
-    { label: "Media Database", solo: false, starter: false, agency: true, enterprise: true },
-    { label: "Client sub-accounts", solo: false, starter: false, agency: true, enterprise: true },
-    { label: "Custom AI model configuration", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "White-label option", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "API access", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "SSO and enterprise security", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "Dedicated account manager", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "SLA guarantee", solo: false, starter: false, agency: false, enterprise: true },
-    { label: "Support", solo: "Email", starter: "Email", agency: "Priority email and chat", enterprise: "Dedicated" },
+    { label: "Brands / projects", inhouse: "1", agency: "3 included (+£500/yr each)", agentic: "3 included (+£500/yr each)" },
+    { label: "AI Visibility Audit + GEO strategy", inhouse: true, agency: true, agentic: true },
+    { label: "Comms Planner", inhouse: true, agency: true, agentic: true },
+    { label: "Content Optimiser and Editor", inhouse: true, agency: true, agentic: true },
+    { label: "Content Creator", inhouse: true, agency: true, agentic: true },
+    { label: "Media Research", inhouse: true, agency: true, agentic: true },
+    { label: "Marketing Intelligence", inhouse: true, agency: true, agentic: true },
+    { label: "Website Content GEO", inhouse: true, agency: true, agentic: true },
+    { label: "Website Technical GEO", inhouse: true, agency: true, agentic: true },
+    { label: "Measure and Report", inhouse: true, agency: true, agentic: true },
+    { label: "Archive", inhouse: true, agency: true, agentic: true },
+    { label: "Multi-client architecture", inhouse: false, agency: true, agentic: true },
+    { label: "Client sub-accounts", inhouse: false, agency: true, agentic: true },
+    { label: "Autonomous agent orchestration", inhouse: false, agency: false, agentic: true },
+    { label: "Always-on visibility monitoring", inhouse: false, agency: false, agentic: true },
+    { label: "AI-assisted draft content + GEO fixes", inhouse: false, agency: false, agentic: true },
+    { label: "Journalist and Media AI Authority Score", inhouse: false, agency: false, agentic: true },
+    { label: "Full AI Media Database", inhouse: false, agency: false, agentic: true },
+    { label: "Release Gateway + Wire API integrations", inhouse: false, agency: false, agentic: true },
+    { label: "Support", inhouse: "Email", agency: "Priority email and chat", agentic: "Priority email and chat" },
   ];
 
   const FAQS = [
-    { q: "What counts as an LLM Visibility Check?", a: "Each LLM Visibility Check runs your brand or a specific piece of content through multiple AI engines (Claude, ChatGPT, Perplexity, Gemini and CoPilot) simultaneously and scores the responses. Because each check involves multiple live API calls, we cap them per tier to keep pricing predictable for you." },
-    { q: "What happens if I reach my monthly AI run limit?", a: "You will receive a notification when you are approaching your limit. You will not be automatically charged. You can either wait for the limit to reset at the start of your next billing cycle, or contact us to discuss upgrading your plan." },
-    { q: "Is there a free trial?", a: "Yes — all paid plans include a 14-day free trial with full access to that tier's features. No credit card required to start." },
-    { q: "Can I change plan at any time?", a: "Yes. You can upgrade or downgrade at any point. Upgrades take effect immediately and are prorated. Downgrades take effect at the end of your current billing period." },
-    { q: "Are prices per user or per account?", a: "Prices are per account, not per seat. Each plan includes a set number of user seats so your team can collaborate. Additional seats beyond the plan allowance are available on the Agency and Enterprise plans." },
-    { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details to apply." },
+    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform — all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Archive. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
+    { q: "What does With Agents add?", a: "With Agents introduces an autonomous agentic layer that runs your PR and marketing programme using trained specialist agents, all governed by human approval gates. It adds always-on monitoring, AI-assisted draft content, GEO fixes, a Journalist and Media AI Authority Score, the full AI Media Database, Release Gateway integrations and a tactical media relations capability. Launching Q2 2027." },
+    { q: "How does the With Agents upgrade offer work?", a: "Standard clients who upgrade to With Agents when it launches in Q2 2027 receive 50% off their subscription for the first six months. We will contact all active Standard clients ahead of launch with the details." },
+    { q: "What counts as an LLM Visibility Check?", a: "Each Earned Media Authority Audit runs your brand through multiple AI engines — Claude and ChatGPT — simultaneously, scoring how often and how accurately each engine cites your brand. Because each audit involves multiple live API calls per probe question, runs are available every 21 days per project to manage costs and ensure meaningful data between runs." },
+    { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 projects. You can add further projects at £500/yr each. For example, 10 projects would total £9,500/yr." },
+    { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },
+    { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details." },
   ];
 
-  function Cell({ v }: { v: string | boolean }) {
-    if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: `${teal}22` }}><Check size={12} color={teal} strokeWidth={2.5} /></span></span>;
+  function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
+    const color = agentic ? agenticGold : teal;
+    if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: `${color}22` }}><Check size={12} color={color} strokeWidth={2.5} /></span></span>;
     if (v === false) return <span className="flex justify-center text-[18px] font-light" style={{ color: vars.g300 }}>—</span>;
     return <span className="text-[12px] font-medium text-center block" style={{ color: ink }}>{v}</span>;
   }
@@ -8254,86 +8242,112 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
         <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.1] mb-4 max-w-3xl mx-auto" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
           Plans built for PR and marketing teams
         </h1>
-        <p className="text-[15px] font-light max-w-xl mx-auto mb-8 leading-relaxed" style={{ color: vars.g600 }}>
-          No hidden costs. AI usage limits are clearly defined per plan so you can budget with confidence.
+        <p className="text-[15px] font-light max-w-xl mx-auto mb-4 leading-relaxed" style={{ color: vars.g600 }}>
+          Annual subscriptions. No hidden costs. All prices exclude VAT.
         </p>
-        <div className="inline-flex items-center rounded-full p-1 gap-1" style={{ background: vars.g100 }}>
-          <button onClick={() => setAnnual(false)} className="px-5 py-2 rounded-full text-[13px] font-semibold transition-all" style={{ background: annual ? "transparent" : "white", color: annual ? vars.g500 : ink, boxShadow: annual ? "none" : "0 1px 4px rgba(0,0,0,0.1)" }}>Monthly</button>
-          <button onClick={() => setAnnual(true)} className="px-5 py-2 rounded-full text-[13px] font-semibold transition-all flex items-center gap-2" style={{ background: annual ? "white" : "transparent", color: annual ? ink : vars.g500, boxShadow: annual ? "0 1px 4px rgba(0,0,0,0.1)" : "none" }}>
-            Annual
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${teal}22`, color: teal }}>Save 20%</span>
-          </button>
-        </div>
       </section>
 
       {/* Pricing cards */}
       <section className="pb-16 px-4 sm:px-8">
-        <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
-          {PLANS.map((plan) => (
-            <div key={plan.name} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.highlight ? `2px solid ${accent}` : `1px solid ${vars.g200}`, background: plan.highlight ? "white" : paper, boxShadow: plan.highlight ? `0 20px 48px -12px ${accent}40` : "none", position: "relative" }}>
-              {plan.highlight && (
-                <div className="text-center py-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ background: accent, color: "white" }}>Most Popular</div>
-              )}
-              <div className="p-7">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <h2 className="text-[22px]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.name}</h2>
-                  <span className="text-[11px] font-medium mt-1" style={{ color: vars.g400 }}>{plan.projects}</span>
-                </div>
-                <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{plan.tagline}</p>
-                {plan.monthly !== null ? (
+        <div className="max-w-5xl mx-auto">
+
+          {/* Standard plans group label */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: teal }}>Standard</span>
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-5 mb-8">
+            {STANDARD_PLANS.map((plan) => (
+              <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.highlight ? `2px solid ${accent}` : `1px solid ${vars.g200}`, background: plan.highlight ? "white" : paper, boxShadow: plan.highlight ? `0 20px 48px -12px ${accent}30` : "none" }}>
+                {plan.highlight && (
+                  <div className="text-center py-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ background: accent, color: "white" }}>Most Popular</div>
+                )}
+                <div className="p-7 flex flex-col flex-1">
+                  <div className="mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: plan.color }}>{plan.name}</span>
+                    <h2 className="text-[26px] mt-0.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.sub}</h2>
+                  </div>
+                  <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{plan.tagline}</p>
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
                       <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
-                      <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{annual ? plan.annual : plan.monthly}</span>
+                      <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{plan.monthly}</span>
                       <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
                     </div>
-                    {annual && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Billed annually — save £{((plan.monthly - plan.annual!) * 12).toLocaleString()}/yr</p>}
-                    {!annual && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Or £{plan.annual}/mo billed annually</p>}
+                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>£{plan.annualTotal.toLocaleString()}/yr billed annually · {plan.projects}</p>
                   </div>
-                ) : (
-                  <div className="mb-6">
-                    <span className="text-[36px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Custom</span>
-                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Tailored to your organisation</p>
-                  </div>
-                )}
-                <button onClick={plan.cta === "Contact Sales" ? () => onNavigate("contact") : onLogin} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6" style={{ background: plan.highlight ? accent : ink, color: "white" }}>
-                  {plan.cta}
-                </button>
-                <div className="flex items-center gap-2 mb-5 pb-5" style={{ borderBottom: `1px solid ${vars.g100}` }}>
-                  <Users size={13} color={vars.g400} />
-                  <span className="text-[12px]" style={{ color: vars.g500 }}>{plan.seats}</span>
+                  <button onClick={() => onNavigate("contact")} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6" style={{ background: plan.highlight ? accent : ink, color: "white" }}>
+                    {plan.cta}
+                  </button>
+                  <ul className="space-y-3 flex-1">
+                    {plan.includes.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-[13px]">
+                        {i === 0 && item.includes("Everything") ? (
+                          <span className="text-[12px] font-semibold italic" style={{ color: vars.g400 }}>{item}</span>
+                        ) : (
+                          <>
+                            <Check size={14} color={plan.color} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
+                            <span className="font-light leading-snug" style={{ color: ink }}>{item}</span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] mt-6 pt-5 leading-relaxed" style={{ color: vars.g400, borderTop: `1px solid ${vars.g100}` }}>{plan.competitorNote}</p>
                 </div>
-                <ul className="space-y-3">
-                  {plan.includes.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-[13px]" style={{ color: i === 0 && item.includes("Everything") ? vars.g400 : ink }}>
-                      {i === 0 && item.includes("Everything") ? (
-                        <span className="text-[12px] font-semibold italic flex-1">{item}</span>
-                      ) : (
-                        <>
-                          <Check size={14} color={plan.color} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
-                          <span className="font-light leading-snug">{item}</span>
-                        </>
-                      )}
-                    </li>
-                  ))}
-                </ul>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* LLM usage note */}
-      <section className="py-10 px-4 sm:px-8" style={{ background: `${teal}0D` }}>
-        <div className="max-w-3xl mx-auto flex gap-4 items-start">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${teal}22` }}>
-            <Info size={18} color={teal} />
+            ))}
           </div>
-          <div>
-            <p className="text-[13px] font-semibold mb-1" style={{ color: ink }}>About AI usage limits</p>
-            <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
-              Each LLM Visibility Check and Earned Media Audit involves live calls to multiple AI engines — Claude, ChatGPT, Perplexity, Gemini and CoPilot — which carry real API costs. We pass these limits through transparently rather than building them into a higher flat fee. Content generation (Optimiser, Creator) is less expensive per run, which is why it has a separate, more generous allowance on Starter and is unlimited on Agency and above. If you need more runs, contact us and we can discuss options.
-            </p>
+
+          {/* With Agents group label */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: agenticGold }}>With Agents</span>
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+          </div>
+
+          {/* Agentic card */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${agenticGold}55`, background: "#FDFAF4" }}>
+            <div className="flex items-center gap-3 px-7 py-3" style={{ background: `${agenticGold}15`, borderBottom: `1px solid ${agenticGold}30` }}>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: agenticGold }}>Launching {AGENTIC_PLAN.launch}</span>
+              <span className="text-[10px] font-light" style={{ color: agenticGold }}>·</span>
+              <span className="text-[11px] font-light" style={{ color: agenticGold }}>{AGENTIC_PLAN.upgradeOffer}</span>
+            </div>
+            <div className="p-7 sm:flex sm:gap-10">
+              <div className="sm:w-64 flex-shrink-0 mb-6 sm:mb-0">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: agenticGold }}>{AGENTIC_PLAN.name}</span>
+                <h2 className="text-[26px] mt-0.5 mb-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{AGENTIC_PLAN.sub}</h2>
+                <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{AGENTIC_PLAN.tagline}</p>
+                <div className="mb-6">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>From £</span>
+                    <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{(AGENTIC_PLAN.annualFrom / 12).toFixed(0)}</span>
+                    <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>From £{AGENTIC_PLAN.annualFrom.toLocaleString()}/yr billed annually</p>
+                </div>
+                <button onClick={() => onNavigate("contact")} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: agenticGold, color: "white" }}>
+                  {AGENTIC_PLAN.cta}
+                </button>
+                <p className="text-[11px] mt-5 leading-relaxed" style={{ color: vars.g400 }}>{AGENTIC_PLAN.competitorNote}</p>
+              </div>
+              <ul className="space-y-3 flex-1">
+                {AGENTIC_PLAN.includes.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-[13px]">
+                    {i === 0 && item.includes("Everything") ? (
+                      <span className="text-[12px] font-semibold italic" style={{ color: vars.g400 }}>{item}</span>
+                    ) : (
+                      <>
+                        <Check size={14} color={agenticGold} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
+                        <span className="font-light leading-snug" style={{ color: ink }}>{item}</span>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
@@ -8346,21 +8360,27 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
             <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything included, at a glance</h2>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
-            <div className="grid grid-cols-5" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
+            <div className="grid grid-cols-4" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
               <div className="p-4" />
-              {PLANS.map((p) => (
-                <div key={p.name} className="p-4 text-center">
-                  <p className="text-[13px] font-bold" style={{ color: p.highlight ? accent : ink }}>{p.name}</p>
-                </div>
-              ))}
+              <div className="p-4 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: teal }}>Standard</p>
+                <p className="text-[12px] font-semibold mt-0.5" style={{ color: ink }}>In-House</p>
+              </div>
+              <div className="p-4 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Standard</p>
+                <p className="text-[12px] font-semibold mt-0.5" style={{ color: ink }}>Agency</p>
+              </div>
+              <div className="p-4 text-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: agenticGold }}>With Agents</p>
+                <p className="text-[10px] font-medium mt-0.5" style={{ color: agenticGold }}>Q2 2027</p>
+              </div>
             </div>
             {TABLE_ROWS.map((row, i) => (
-              <div key={row.label} className="grid grid-cols-5 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
+              <div key={row.label} className="grid grid-cols-4 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
                 <div className="p-4 text-[13px] font-light" style={{ color: ink }}>{row.label}</div>
-                <div className="p-4"><Cell v={row.solo} /></div>
-                <div className="p-4"><Cell v={row.starter} /></div>
+                <div className="p-4"><Cell v={row.inhouse} /></div>
                 <div className="p-4"><Cell v={row.agency} /></div>
-                <div className="p-4"><Cell v={row.enterprise} /></div>
+                <div className="p-4"><Cell v={row.agentic} agentic /></div>
               </div>
             ))}
           </div>
@@ -8394,11 +8414,11 @@ function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; o
 
       {/* CTA */}
       <section className="py-16 px-4 sm:px-8 text-center" style={{ background: ink }}>
-        <h2 className="text-3xl md:text-4xl mb-4" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>Ready to win AI visibility?</h2>
-        <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Start your 14-day free trial today. No credit card required.</p>
+        <h2 className="text-3xl md:text-4xl mb-4" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>Ready to build AI authority?</h2>
+        <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button onClick={onLogin} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Start Free Trial</button>
-          <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-white/10" style={{ border: "1.5px solid rgba(251,246,236,0.35)", color: "#FBF6EC" }}>Talk to Sales</button>
+          <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Book a Demo</button>
+          <button onClick={onLogin} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-white/10" style={{ border: "1.5px solid rgba(251,246,236,0.35)", color: "#FBF6EC" }}>{isAuthed ? "My Account" : "Platform Login"}</button>
         </div>
       </section>
 
