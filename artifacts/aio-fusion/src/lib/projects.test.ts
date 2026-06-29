@@ -84,6 +84,34 @@ describe("loadClientLogos / saveClientLogos", () => {
     saveClientLogos({ p1: "img" });
     expect(localStorage.getItem(CLIENT_LOGOS_KEY)).not.toBeNull();
   });
+
+  it("calls window.alert when localStorage throws a QuotaExceededError", () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementationOnce(() => {
+        const err = new DOMException("QuotaExceededError", "QuotaExceededError");
+        throw err;
+      });
+
+    saveClientLogos({ p1: "data:image/png;base64,verylarge" });
+
+    expect(alertSpy).toHaveBeenCalledOnce();
+    expect(alertSpy.mock.calls[0][0]).toMatch(/too large/i);
+
+    alertSpy.mockRestore();
+    setItemSpy.mockRestore();
+  });
+
+  it("does not call window.alert on a successful save", () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    saveClientLogos({ p1: "data:image/png;base64,small" });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+
+    alertSpy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------
