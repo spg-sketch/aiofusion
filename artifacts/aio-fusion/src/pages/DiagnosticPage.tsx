@@ -258,28 +258,25 @@ Engine used:
           </p>
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="max-w-lg mx-auto">
-            <div className="flex items-center gap-2 mb-6">
-              <Globe size={18} style={{ color: vars.g400 }} />
-              <span className="text-sm font-medium" style={{ color: vars.g500 }}>
-                Enter your homepage URL to analyse
-              </span>
-            </div>
+          <div>
+            <label className="text-[13px] font-bold uppercase tracking-[0.14em] mb-3 flex items-center gap-2" style={{ color: vars.navy }}>
+              <Globe size={18} style={{ color: vars.teal }} />
+              Enter your homepage URL
+            </label>
             <div className="mb-4">
-              <label className="text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5 block" style={{ color: vars.g500 }}>Homepage URL</label>
-              <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                <Globe size={16} style={{ color: vars.g400 }} />
+              <div className="flex items-center gap-3 px-4 py-4 rounded-xl border-2 transition-colors focus-within:border-blue-400" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                <Globe size={20} style={{ color: vars.teal }} />
                 <input
                   type="text"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   placeholder="https://example.com"
-                  className="flex-1 text-sm bg-transparent outline-none"
+                  className="flex-1 text-[15px] bg-transparent outline-none font-medium"
                   style={{ color: vars.navy }}
                 />
               </div>
-              <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: vars.g400 }}>
-                <Info size={11} className="flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] mt-2 flex items-start gap-1.5" style={{ color: vars.g400 }}>
+                <Info size={12} className="flex-shrink-0 mt-0.5" />
                 <span>We fetch your homepage automatically, along with its robots.txt and sitemap, and analyse them for AI visibility.</span>
               </p>
             </div>

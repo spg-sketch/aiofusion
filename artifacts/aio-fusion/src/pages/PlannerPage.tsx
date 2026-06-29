@@ -82,7 +82,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   };
 
   const startWeek = getISOWeek(new Date());
-  const weeks = Array.from({ length: 12 }, (_, i) => startWeek + i);
+  const weeks = Array.from({ length: 8 }, (_, i) => startWeek + i);
 
   const totals = projects.reduce(
     (acc, p) => {
@@ -274,7 +274,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   style={{ background: slotBg, borderColor: "white", color: vars.g300, minHeight: 28 }}
                                   title={c === 0 ? `Add project to ${label}` : undefined}
                                 >
-                                  {c === 0 && i === wkProjects.length ? <button className="text-[11px] font-semibold px-2 py-1 rounded" style={{ color: vars.teal, background: "rgba(79,143,255,0.08)", border: `1px solid rgba(79,143,255,0.2)` }}>+ Add project</button> : ""}
+                                  {c === 0 && i === wkProjects.length ? <button className="text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
                                 </td>
                               ))
                             )}
@@ -314,7 +314,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     </td>
                     <td className="px-3 py-3">
                       {wkProjects.length === 0 ? (
-                        <button onClick={() => sendToOptimiser()} className="text-[11px] font-medium px-2 py-1 rounded border border-dashed" style={{ color: vars.g400, borderColor: vars.g300 }}>+ Add to w/c {wcLabel}</button>
+                        <button onClick={() => sendToOptimiser()} className="text-[13px] font-bold px-4 py-2 rounded-lg border-2" style={{ color: vars.teal, borderColor: "rgba(79,143,255,0.4)", background: "rgba(79,143,255,0.06)" }}>+ Add to w/c {wcLabel}</button>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {wkProjects.map((p) => {

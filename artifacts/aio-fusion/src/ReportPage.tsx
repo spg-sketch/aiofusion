@@ -415,15 +415,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-xl border mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1.5 rounded-xl mb-6" style={{ background: vars.navy }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className="px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors"
+            className="px-3 py-3 rounded-lg text-[13px] font-semibold transition-all hover:bg-white/15"
             style={{
               background: activeTab === tab.id ? vars.accent : "transparent",
-              color: activeTab === tab.id ? "white" : vars.g500,
+              color: activeTab === tab.id ? "white" : "rgba(255,255,255,0.6)",
             }}
           >
             {tab.label}

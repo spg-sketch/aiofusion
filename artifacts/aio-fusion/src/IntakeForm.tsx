@@ -1847,13 +1847,14 @@ export default function IntakePage() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-        {/* Sidebar */}
-        <div className="w-full lg:w-72 lg:flex-shrink-0">
+      <div className="flex flex-col gap-6">
+        {/* Sections nav — horizontal strip above the form */}
+        <div className="w-full">
           <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-            <div className="px-4 py-3 border-b-2" style={{ background: "#102B36", borderColor: "#102B36" }}>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Sections</span>
+            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#0a1628", borderColor: "#0a1628" }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Sections</span>
             </div>
+            <div className="flex flex-wrap gap-2 p-3">
             {visibleSections.map((sec, idx) => {
               const isActive = idx === activeSection;
               const isDone = completed.has(idx);
@@ -1862,87 +1863,71 @@ export default function IntakePage() {
                 <button
                   key={sec.id}
                   onClick={() => setActiveSection(idx)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors border-b last:border-b-0"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all border"
                   style={{
-                    borderColor: vars.g100,
+                    borderColor: isActive ? "#C8497A" : vars.g200,
                     background: isActive ? "#FBE3ED" : "transparent",
-                    borderLeft: `3px solid ${isActive ? "#C8497A" : "transparent"}`,
                   }}
                 >
                   <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
                     style={{
                       background: isDone ? vars.green : isActive ? "#C8497A" : vars.g200,
                       color: isDone || isActive ? "white" : vars.g500,
                     }}
                   >
-                    {isDone ? <Check size={14} /> : sec.number}
+                    {isDone ? <Check size={12} /> : sec.number}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold truncate" style={{ color: isActive ? "#102B36" : vars.g600 }}>{sec.title}</p>
-                  </div>
+                  <p className="text-[12px] font-semibold whitespace-nowrap" style={{ color: isActive ? "#102B36" : vars.g600 }}>{sec.title}</p>
                   {!isDone && hasData && (
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: vars.amber }} title="In progress" />
                   )}
                 </button>
               );
             })}
+            </div>
           </div>
 
-          {/* Project Data Actions - moved under Sections (stacked for the narrow column) */}
-          <div className="mt-6 rounded-2xl border-2 overflow-hidden no-print" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#102B36", borderColor: "#102B36" }}>
+          {/* Project Data Actions - horizontal strip */}
+          <div className="mt-4 rounded-2xl border-2 overflow-hidden no-print" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
+            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#0a1628", borderColor: "#0a1628" }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#FBF6EC" }}>Project Data Actions</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Project Data Actions</span>
             </div>
-            <div className="p-4">
+            <div className="px-4 py-3 flex flex-wrap items-center gap-3">
             {optimiseError && (
-              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl mb-4" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
+              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
                 <Info size={12} className="flex-shrink-0 mt-0.5" />
                 <span>{optimiseError}</span>
               </div>
             )}
-
-            {/* Save progress */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Save progress</p>
-            <div className="grid grid-cols-1 gap-2 mb-4">
               <button
                 onClick={saveDraft}
                 title="Save your progress so you can finish later"
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border-2"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border-2"
                 style={{
-                  borderColor: justSaved ? vars.green : "#102B36",
-                  color: justSaved ? vars.green : "#102B36",
+                  borderColor: justSaved ? vars.green : "#0a1628",
+                  color: justSaved ? vars.green : "#0a1628",
                   background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
                 }}
               >
                 {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
               </button>
-            </div>
-
-            {/* Group 1 - Sign off the data */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Sign off</p>
-            <div className="grid grid-cols-1 gap-2 mb-4">
               <button
                 onClick={acceptProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
                 style={{ background: vars.green }}
                 title="Sign off the Project Data and save it to the Project Data archive"
               >
-                <FileCheck2 size={13} /> Accept
+                <FileCheck2 size={13} /> Accept &amp; Sign Off
               </button>
-            </div>
-
-            {/* Group 2 - Manage and export the data */}
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pl-0.5" style={{ color: vars.g500 }}>Manage &amp; export</p>
-            <div className="grid grid-cols-1 gap-2">
               <button
                 onClick={downloadProjectData}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
-                style={{ background: "white", color: "#102B36", borderColor: "rgba(16,43,54,0.2)" }}
-                title="Open the print dialog so you can save the full Project Data as a PDF - every answer is shown in full"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                style={{ background: "white", color: "#0a1628", borderColor: "rgba(16,43,54,0.2)" }}
+                title="Open the print dialog so you can save the full Project Data as a PDF"
               >
-                <Download size={13} /> Download as PDF
+                <Download size={13} /> Download PDF
               </button>
               <button
                 onClick={() => {
@@ -1952,13 +1937,12 @@ export default function IntakePage() {
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                   }
                 }}
-                className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
                 style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
-                title="Clear everything and start a new project - you will lose all the data entered here"
+                title="Clear everything and start a new project"
               >
-                <Plus size={13} /> Create New Project
+                <Plus size={13} /> New Project
               </button>
-            </div>
             </div>
           </div>
         </div>
