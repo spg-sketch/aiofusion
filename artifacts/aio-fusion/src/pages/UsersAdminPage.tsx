@@ -53,6 +53,40 @@ function UsersAdminPage({
       })
       .catch(() => {});
   }, [session.role]);
+
+  // Audit locks keyed by projectId (admin only).
+  const AUDIT_TYPE_LABELS: Record<string, string> = {
+    website: "Website Visibility Audit",
+    visibility: "GEO / LLM Check",
+  };
+  const [auditLocks, setAuditLocks] = useState<Record<string, { auditType: string; lastRunAt: string }[]>>({});
+  const fetchAuditLocks = useCallback(() => {
+    if (session.role !== "admin") return;
+    void fetch(`${apiBase()}/api/admin/audit-locks`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { rows: { projectId: string; auditType: string; lastRunAt: string }[] }) => {
+        const grouped: Record<string, { auditType: string; lastRunAt: string }[]> = {};
+        for (const row of data.rows ?? []) {
+          if (!grouped[row.projectId]) grouped[row.projectId] = [];
+          grouped[row.projectId].push({ auditType: row.auditType, lastRunAt: row.lastRunAt });
+        }
+        setAuditLocks(grouped);
+      })
+      .catch(() => {});
+  }, [session.role]);
+  useEffect(() => { fetchAuditLocks(); }, [fetchAuditLocks]);
+
+  const clearAuditLock = useCallback((projectId: string, auditType: string) => {
+    void fetch(`${apiBase()}/api/admin/audit-lock`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ projectId, auditType }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(() => { fetchAuditLocks(); })
+      .catch(() => {});
+  }, [fetchAuditLocks]);
   // Re-read projects on every tick so owner reassignments show immediately.
   const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
@@ -697,24 +731,42 @@ function UsersAdminPage({
                         ) : (
                           <div className="flex flex-col gap-2">
                             {owned.map((p) => (
-                              <div key={p.id} className="flex flex-wrap items-center gap-2">
-                                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
-                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
-                                  {p.name}
-                                </span>
-                                <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
-                                <select
-                                  value={(p.owner || "").toLowerCase()}
-                                  onChange={(e) => handleAssign(p.id, e.target.value)}
-                                  className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
-                                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                                >
-                                  {users.map((o) => (
-                                    <option key={o.username} value={o.username.toLowerCase()}>
-                                      {accountLabel(o)} ({roleLabel(o.role)})
-                                    </option>
-                                  ))}
-                                </select>
+                              <div key={p.id} className="flex flex-col gap-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
+                                    {p.name}
+                                  </span>
+                                  <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
+                                  <select
+                                    value={(p.owner || "").toLowerCase()}
+                                    onChange={(e) => handleAssign(p.id, e.target.value)}
+                                    className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
+                                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                                  >
+                                    {users.map((o) => (
+                                      <option key={o.username} value={o.username.toLowerCase()}>
+                                        {accountLabel(o)} ({roleLabel(o.role)})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {(auditLocks[p.id] ?? []).map((lk) => (
+                                  <div key={lk.auditType} className="flex items-center gap-2 pl-1">
+                                    <Lock size={10} style={{ color: vars.g400 }} />
+                                    <span className="text-[10px]" style={{ color: vars.g500 }}>
+                                      {AUDIT_TYPE_LABELS[lk.auditType] ?? lk.auditType} locked
+                                      {" — "}{new Date(lk.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                    </span>
+                                    <button
+                                      onClick={() => clearAuditLock(p.id, lk.auditType)}
+                                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded border hover:opacity-80"
+                                      style={{ borderColor: vars.g300, color: vars.g500, background: vars.g100 }}
+                                    >
+                                      Clear lock
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
                             ))}
                           </div>

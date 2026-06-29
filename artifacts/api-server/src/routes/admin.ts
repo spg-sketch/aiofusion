@@ -623,6 +623,33 @@ adminRouter.get(
   },
 );
 
+// List all audit locks (admin only).
+adminRouter.get(
+  "/admin/audit-locks",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    try {
+      const rows = await db
+        .select({
+          projectId: auditLocksTable.projectId,
+          auditType: auditLocksTable.auditType,
+          owner: auditLocksTable.owner,
+          lastRunAt: auditLocksTable.lastRunAt,
+        })
+        .from(auditLocksTable)
+        .orderBy(auditLocksTable.lastRunAt);
+      res.json({ rows });
+    } catch (err) {
+      logger.error({ err }, "admin audit-locks: query failed");
+      res.status(500).json({ error: "Could not load audit locks." });
+    }
+  },
+);
+
 // Clear an audit lock so admin can force a re-run for a given project+type.
 adminRouter.delete(
   "/admin/audit-lock",
