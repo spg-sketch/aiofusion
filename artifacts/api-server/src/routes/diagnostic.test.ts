@@ -79,7 +79,7 @@ vi.mock("@workspace/db", () => {
       }),
     }),
   };
-  return { db, auditLocksTable };
+  return { db, auditLocksTable, tokenUsageTable: {}, adminEventsTable: {} };
 });
 
 import diagnosticRouter, { normaliseResult, extractJSON, sanitizeConfirmedEntity, buildIdentityAnchor } from "./diagnostic";

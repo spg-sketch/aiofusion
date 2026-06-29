@@ -69,7 +69,7 @@ vi.mock("@workspace/db", () => {
       }),
     }),
   };
-  return { db, auditLocksTable };
+  return { db, auditLocksTable, tokenUsageTable: {}, adminEventsTable: {} };
 });
 
 // Pass-through middleware mocks so the route tests exercise handler logic

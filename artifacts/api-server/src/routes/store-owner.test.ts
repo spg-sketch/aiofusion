@@ -67,6 +67,9 @@ vi.mock("@workspace/db", () => {
         return builder;
       },
     }),
+    insert: () => ({
+      values: () => Promise.resolve(),
+    }),
     update: (table: unknown) => ({
       set: (values: Record<string, unknown>) => ({
         where: (pred: any) => {
@@ -98,6 +101,7 @@ vi.mock("@workspace/db", () => {
     platformAccountsTable: h.platformAccountsTable,
     platformSessionsTable: {},
     platformMetaTable: {},
+    adminEventsTable: {},
   };
 });
 
