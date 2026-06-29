@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  ChevronRight, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X,
+  ChevronRight, ChevronLeft, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X, ChevronsRight,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadSavedAudits } from "../LlmCheckPage";
@@ -10,14 +10,14 @@ import type { Client, NavItem, NavSection } from "../types";
 export const navSections: NavSection[] = [
   {
     section: "Project Set-Up",
-    color: "#1f748f",
+    color: "#4f8fff",
     items: [
       { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
     ],
   },
   {
     section: "Visibility Audits",
-    color: "#1f748f",
+    color: "#4f8fff",
     items: [
       { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
@@ -70,6 +70,8 @@ function SidebarContent({
   onOpenSavedDiagnostic,
   onOpenSavedContentGeo,
   onOpenSavedTechGeo,
+  wide,
+  onToggleWide,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -81,6 +83,8 @@ function SidebarContent({
   onOpenSavedDiagnostic?: (id: string) => void;
   onOpenSavedContentGeo?: (id: string) => void;
   onOpenSavedTechGeo?: (id: string) => void;
+  wide?: boolean;
+  onToggleWide?: () => void;
 }) {
   const recentAudits = loadSavedAudits(activeClient.id).slice(0, 3);
   const recentDiagnostics = loadSavedDiagnostics(activeClient.id).slice(0, 3);
@@ -109,7 +113,7 @@ function SidebarContent({
     <>
       <div className="flex flex-col gap-1 px-6 py-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 object-contain self-start" />
-        <span className="text-[11px] font-medium tracking-wide uppercase mt-1" style={{ color: "#94a3b8" }}>The AI Authority Platform</span>
+        <span className="text-[13px] font-semibold tracking-wide mt-1" style={{ color: "#94a3b8" }}>The AI Authority Platform</span>
       </div>
       <div className="flex items-stretch border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
         <button
@@ -162,7 +166,7 @@ function SidebarContent({
           <div key={section.section}>
             <div className="px-3 pb-3 flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: section.color }} />
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: section.color }}>
+              <span className="text-[12px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
                 {section.section}
               </span>
             </div>
@@ -196,7 +200,7 @@ function SidebarContent({
                         )}
                       </div>
                       {item.sub && (
-                        <div className="text-[11px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : "#94a3b8" }}>
+                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : "#94a3b8" }}>
                           {item.sub}
                         </div>
                       )}
@@ -291,14 +295,26 @@ function SidebarContent({
         ))}
       </nav>
       <div className="px-4 py-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
-            SP
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
+              SP
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-white">Admin</span>
+              <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Intelligence Tier</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-white">Admin</span>
-            <span className="text-[11px] font-medium" style={{ color: "#94a3b8" }}>Intelligence Tier</span>
-          </div>
+          {onToggleWide && (
+            <button
+              onClick={onToggleWide}
+              title={wide ? "Collapse sidebar" : "Expand sidebar"}
+              className="p-2 rounded-lg transition-colors hover:bg-white/10 flex-shrink-0"
+              style={{ color: "#64748b" }}
+            >
+              {wide ? <ChevronLeft size={16} /> : <ChevronsRight size={16} />}
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -327,6 +343,7 @@ export function Sidebar({
   onOpenSavedTechGeo?: (id: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [wide, setWide] = useState(false);
 
   return (
     <>
@@ -340,14 +357,17 @@ export function Sidebar({
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-[280px] h-full flex flex-col" style={{ background: vars.navy }} onClick={(e) => e.stopPropagation()}>
             <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
           </div>
         </div>
       )}
 
-      <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}>
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
+      <aside
+        className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 transition-all duration-300"
+        style={{ width: wide ? "340px" : "260px", borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
+      >
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} wide={wide} onToggleWide={() => setWide((w) => !w)} />
       </aside>
     </>
   );

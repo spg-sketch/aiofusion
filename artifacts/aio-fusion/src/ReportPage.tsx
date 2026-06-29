@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 const vars = {
-  navy: "#102B36",
+  navy: "#0a1628",
   accent: "#C8497A",
   teal: "#C8497A",
   green: "#3D9B6B",
@@ -33,14 +33,14 @@ const vars = {
   red: "#C94A3E",
   coral: "#C8497A",
   gold: "#C9A04E",
-  cream: "#FBF6EC",
-  g50: "#FAFAFA",
-  g100: "#F3F3F3",
-  g200: "#E5E5E5",
-  g300: "#D4D4D4",
-  g400: "#9CA3AF",
-  g500: "#6B7280",
-  g600: "#374151",
+  cream: "#f8fafc",
+  g50: "#f8fafc",
+  g100: "#f1f5f9",
+  g200: "#e2e8f0",
+  g300: "#cbd5e1",
+  g400: "#64748B",
+  g500: "#475569",
+  g600: "#334155",
 };
 
 type Client = {
