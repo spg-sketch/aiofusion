@@ -29,6 +29,8 @@ export type User = {
   parent?: string;
   // Soft-deactivated accounts are hidden from the active list and cannot log in.
   archived?: boolean;
+  // Optional cap on the number of client seats an agency account may create.
+  seatCap?: number | null;
 };
 
 export type Session = {
