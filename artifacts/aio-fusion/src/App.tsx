@@ -112,9 +112,6 @@ import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
 import { TokenUsageAdminPage, type TokenUsageRow } from "./pages/TokenUsageAdminPage";
 import type { Client } from "./lib/projectTypes";
 import {
-  CREATED_PROJECTS_KEY, PROJECT_COLORS, CLIENT_LOGOS_KEY,
-  deriveInitials, getProjectSectorLabel,
-  loadStoredProjects, saveStoredProjects,
   loadClientLogos, saveClientLogos,
   migrateLegacyIntakeToProject, createStoredProject,
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
@@ -209,65 +206,6 @@ type TokenUsageRow = {
   totalCost: string;
   callCount: number;
 };
-
-function TokenUsageAdminPage({
-  rows,
-  loading,
-  error,
-  onBack,
-  onRefresh,
-}: {
-  rows: TokenUsageRow[] | null;
-  loading: boolean;
-  error: string | null;
-  onBack: () => void;
-  onRefresh: () => void;
-}) {
-  return (
-    <div className="min-h-screen bg-[#F7F8FA] p-6">
-      <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1">
-        ← Back
-      </button>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Token Usage</h1>
-        <button onClick={onRefresh} disabled={loading} className="px-4 py-2 text-sm font-semibold bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-          {loading ? "Loading…" : "Refresh"}
-        </button>
-      </div>
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
-      {!rows && !loading && !error && <p className="text-gray-500 text-sm">No data yet.</p>}
-      {rows && rows.length === 0 && <p className="text-gray-500 text-sm">No token usage recorded.</p>}
-      {rows && rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50">
-              <tr>
-                {["Account", "Month", "Operation", "Model", "Calls", "Input tokens", "Output tokens", "Cost (GBP)"].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left font-semibold text-gray-600">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((r, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono">{r.accountId}</td>
-                  <td className="px-4 py-2">{r.month}</td>
-                  <td className="px-4 py-2">{r.operation}</td>
-                  <td className="px-4 py-2">{r.model}</td>
-                  <td className="px-4 py-2">{r.callCount}</td>
-                  <td className="px-4 py-2">{r.totalInput.toLocaleString()}</td>
-                  <td className="px-4 py-2">{r.totalOutput.toLocaleString()}</td>
-                  <td className="px-4 py-2">£{r.totalCost}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
->>>>>>> d59a4c6 (Register full-workspace typecheck validation + fix all pre-existing TS errors)
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");
@@ -1340,10 +1278,29 @@ function ClientSelectorPage({
 }
 
 
+import { GuidancePage } from "./pages/GuidancePage";
+import { ArchivedProjectsPage } from "./pages/ArchivedProjectsPage";
+import { MediaResearchPage } from "./pages/MediaResearchPage";
+import { MarketingIntelligencePage } from "./pages/MarketingIntelligencePage";
+import { PlatformHomePage } from "./pages/PlatformHomePage";
+import { UsersAdminPage } from "./pages/UsersAdminPage";
+import { SubAccountsPage } from "./pages/SubAccountsPage";
+import { MediaDatabasePage } from "./pages/MediaDatabasePage";
+import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
+import { AuthorityDonut, DashboardPage } from "./pages/DashboardPage";
+import { DiagnosticPage } from "./pages/DiagnosticPage";
+import { OptimiserPage } from "./pages/OptimiserPage";
+import { PlannerPage } from "./pages/PlannerPage";
+import { ReleaseGatewayPage } from "./pages/ReleaseGatewayPage";
+import { ArchivePage } from "./pages/ArchivePage";
+import { GeoContentPage } from "./pages/GeoContentPage";
+import { ContentCreatorPage } from "./pages/ContentCreatorPage";
+import { apiBase } from "./lib/apiHelpers";
+import { CreateProjectModal } from "./components/CreateProjectModal";
+import { GenerateFromUrlModal } from "./components/GenerateFromUrlModal";
+import { Sidebar } from "./components/Sidebar";
+import ClientSelectorPage from "./pages/ClientSelectorPage";
 // --- URL <-> view mapping for the public marketing pages ------------------
-// The app navigates via internal state, but the public pages should also live
-// at real URLs (e.g. /about, /for-agents) so they can be linked to, typed in
-// directly, refreshed and shared. These maps translate between the two.
 const VIEW_TO_SLUG: Record<string, string> = {
   landing: "",
   about: "about",
@@ -1355,7 +1312,6 @@ const VIEW_TO_SLUG: Record<string, string> = {
   "for-agents": "for-agents",
 };
 
-// Canonical slugs plus a few friendly aliases so common guesses resolve too.
 const SLUG_TO_VIEW: Record<string, PublicView> = {
   "": "landing",
   home: "landing",
@@ -1374,12 +1330,11 @@ const SLUG_TO_VIEW: Record<string, PublicView> = {
 };
 
 function appBase(): string {
-  // import.meta.env.BASE_URL always ends with a trailing slash ("/" or "/foo/").
   return import.meta.env.BASE_URL || "/";
 }
 
 function slugFromLocation(): string {
-  const base = appBase().replace(/\/+$/, ""); // "" or "/foo"
+  const base = appBase().replace(/\/+$/, "");
   let p = window.location.pathname;
   if (base && (p === base || p.startsWith(base + "/"))) p = p.slice(base.length);
   return p.replace(/^\/+/, "").replace(/\/+$/, "").split("/")[0].toLowerCase();
@@ -1390,9 +1345,12 @@ function publicViewFromLocation(): PublicView | null {
 }
 
 function viewToUrl(v: string): string {
-  // Non-public (platform/admin) views have no dedicated URL; keep them at base.
   return appBase() + (VIEW_TO_SLUG[v] ?? "");
 }
+
+
+
+
 
 
 function App() {
