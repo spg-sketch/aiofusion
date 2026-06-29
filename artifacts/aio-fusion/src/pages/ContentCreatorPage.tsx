@@ -473,14 +473,16 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <PenLine size={20} color={vars.coral} />
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
+      <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <PenLine size={24} color={vars.teal} />
+            <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
+          </div>
+          <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: vars.g600 }}>
+            Turn raw notes and transcripts into polished pitches, articles and case studies that are written to be AI friendly from the start. Content built this way is ready to earn citations the moment it goes live, rather than needing fixing later. Your signed-off Project Data is used as the authority brief.
+          </p>
         </div>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
-          Turn raw notes and transcripts into polished pitches, articles and case studies that are written to be AI friendly from the start. Content built this way is ready to earn citations the moment it goes live, rather than needing fixing later. Your signed-off Project Data is used as the authority brief.
-        </p>
       </div>
 
       <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5" style={{ borderColor: vars.g200 }}>
@@ -754,8 +756,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={createDraft}
             disabled={generating || optimisingField !== null}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: vars.coral }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.teal }}
             title="Write a full draft from your headline, the brief and your Project Data"
           >
             {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
@@ -763,7 +765,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-bold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ borderColor: vars.navy, color: vars.navy }}
             title="Download the current draft as a Word document"
           >
@@ -772,7 +774,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={() => setShowDownloadNotesModal(true)}
             disabled={changeLog.length === 0}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ borderColor: vars.g200, color: vars.navy }}
             title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece with a change log explaining where each key message was embedded - as Word or PDF"}
           >
@@ -781,7 +783,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={shareDraftFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ borderColor: vars.g200, color: vars.navy }}
             title="Open your email client with the current draft ready to send for review"
           >
@@ -790,8 +792,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={acceptAndArchive}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ borderColor: vars.g200, color: vars.navy }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.gold }}
             title="Sign off this piece and save it to the Archive"
           >
             <Archive size={14} /> Archive
@@ -799,8 +801,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={sendToMediaResearchFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ borderColor: vars.gold, color: "#7A5E25", background: "rgba(201,160,78,0.06)" }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: vars.navy, color: vars.navy }}
             title="Save the draft and jump to Media Research to find target publications and journalists"
           >
             <Target size={14} /> Media Research
@@ -808,8 +810,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={pushToCommsPlanner}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold ml-auto disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold ml-auto text-white hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: vars.accent }}
             title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}
           >
             <Calendar size={14} /> Push to Comms Planner

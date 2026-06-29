@@ -13,7 +13,7 @@ const GENERATE_STEPS: { key: GenerateStep; label: string }[] = [
   { key: "done", label: "Complete" },
 ];
 
-const ink = "#102B36";
+const ink = "#0a1628";
 const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
 

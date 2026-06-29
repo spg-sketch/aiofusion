@@ -779,7 +779,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: "#FBF6EC" }}>
+    <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc" }}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={setCurrentPage}
@@ -791,7 +791,7 @@ function App() {
         onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
       />
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#FBF6EC" }}>
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#f8fafc" }}>
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}

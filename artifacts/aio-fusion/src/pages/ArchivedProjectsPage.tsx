@@ -7,8 +7,8 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
         <div className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </div>
-        <button onClick={onBack} className="text-[12px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.g500 }}>
-          <ArrowLeft size={14} /> Back to platform home
+        <button onClick={onBack} className="text-[14px] font-medium flex items-center gap-1.5 hover:underline" style={{ color: vars.teal }}>
+          <ArrowLeft size={16} /> Back to platform home
         </button>
       </header>
       <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-5xl mx-auto">
@@ -24,11 +24,11 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
           </p>
         </div>
         <div className="rounded-2xl border p-12 text-center" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: vars.lightBg, color: vars.accent }}>
-            <Archive size={20} />
+          <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: "rgba(79, 143, 255, 0.1)", color: vars.teal }}>
+            <Archive size={28} />
           </div>
-          <h3 className="text-[15px] font-bold mb-1" style={{ color: vars.navy }}>No archived projects yet</h3>
-          <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>
+          <h3 className="text-[16px] font-bold mb-2" style={{ color: vars.navy }}>No archived projects yet</h3>
+          <p className="text-[14px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>
             Once you complete or pause a project from the Project Hub it will appear here, with full intake, content and report history preserved.
           </p>
         </div>

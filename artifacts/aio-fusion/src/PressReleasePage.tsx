@@ -27,19 +27,19 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } fro
 import { saveAs } from "file-saver";
 
 const vars = {
-  navy: "#165265",
-  accent: "#1f748f",
-  teal: "#2896b9",
-  green: "#3D9B6B",
-  amber: "#D4922A",
-  red: "#C94A3E",
+  navy: "#0a1628",
+  accent: "#4f8fff",
+  teal: "#4f8fff",
+  green: "#22c55e",
+  amber: "#f59e0b",
+  red: "#ef4444",
   g50: "#FAFAFA",
-  g100: "#F3F3F3",
-  g200: "#E5E5E5",
-  g300: "#D4D4D4",
-  g400: "#9CA3AF",
-  g500: "#6B7280",
-  g600: "#374151",
+  g100: "#F1F5F9",
+  g200: "#E2E8F0",
+  g300: "#CBD5E1",
+  g400: "#64748B",
+  g500: "#475569",
+  g600: "#334155",
 };
 
 type PressReleaseDoc = {

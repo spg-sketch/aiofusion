@@ -21,10 +21,10 @@ function AuthorityDonut({ score, size = 160, light = false }: { score: number; s
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
   const pct = score / 100;
-  const scoreColor = light ? "#FFFFFF" : (score >= 70 ? vars.green : score >= 40 ? vars.amber : vars.red);
+  const scoreColor = light ? "#FFFFFF" : (score >= 70 ? vars.green : score >= 40 ? vars.amber : vars.g400);
   const trackColor = light ? "rgba(255,255,255,0.18)" : vars.g200;
   const numColor = light ? "#FFFFFF" : vars.navy;
-  const subColor = light ? "rgba(255,255,255,0.7)" : vars.g400;
+  const subColor = light ? "rgba(255,255,255,0.7)" : vars.g500;
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="absolute">
@@ -34,8 +34,8 @@ function AuthorityDonut({ score, size = 160, light = false }: { score: number; s
           transform={`rotate(-90 ${size/2} ${size/2})`} className="transition-all duration-700" />
       </svg>
       <div className="text-center z-10">
-        <span className="text-4xl font-bold" style={{ color: numColor }}>{score}</span>
-        <span className="text-sm font-light" style={{ color: subColor }}>/100</span>
+        <span className="text-5xl font-bold tracking-tight" style={{ color: numColor }}>{score}</span>
+        <span className="text-base font-medium ml-1" style={{ color: subColor }}>/100</span>
       </div>
     </div>
   );
@@ -474,18 +474,18 @@ function DashboardPage({
             tip: "Change in website visibility score between the last two audits.",
           },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl border p-4 sm:p-5" style={{ background: "white", borderColor: vars.g200 }}>
+          <div key={stat.label} className="rounded-2xl border p-4 sm:p-5 transition-all hover:shadow-md hover:-translate-y-0.5" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] flex items-center" style={{ color: vars.g400 }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] flex items-center" style={{ color: vars.g500 }}>
                 {stat.label}
                 <InfoTip text={stat.tip} />
               </span>
-              <stat.icon size={14} color={stat.hasData ? (stat.positive ? vars.green : vars.red) : vars.g300} />
+              <stat.icon size={16} color={stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g300} />
             </div>
-            <span className="text-2xl sm:text-3xl font-bold" style={{ color: stat.hasData ? (stat.positive ? vars.green : vars.red) : vars.g400 }}>
+            <span className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g400 }}>
               {stat.value}
             </span>
-            {!stat.hasData && <p className="text-[10px] mt-0.5" style={{ color: vars.g400 }}>Run 2+ audits to see trend</p>}
+            {!stat.hasData && <p className="text-[11px] mt-1 font-medium" style={{ color: vars.g500 }}>Run 2+ audits to see trend</p>}
           </div>
         ))}
       </div>
@@ -496,15 +496,15 @@ function DashboardPage({
           { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project." },
           { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Archive items currently in draft — not yet finalised." },
           { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Archive items marked Final — approved and ready to send." },
-          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: "#4A72AF", tip: "Items in the Comms Planner across all statuses." },
+          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses." },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border p-3 sm:p-4 flex items-center gap-3" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${s.color}12` }}>
-              <s.icon size={16} color={s.color} />
+          <div key={s.label} className="rounded-2xl border p-4 sm:p-5 flex items-center gap-3.5 transition-all hover:shadow-md hover:-translate-y-0.5" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${s.color}15` }}>
+              <s.icon size={20} color={s.color} />
             </div>
             <div className="min-w-0">
-              <p className="text-xl font-bold leading-none mb-0.5" style={{ color: vars.navy }}>{s.value}</p>
-              <p className="text-[10px] font-medium flex items-center gap-1" style={{ color: vars.g400 }}>
+              <p className="text-2xl font-bold leading-none mb-1 tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: vars.g500 }}>
                 {s.label}
                 <InfoTip text={s.tip} />
               </p>
@@ -513,46 +513,46 @@ function DashboardPage({
         ))}
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+      <div className="rounded-2xl border p-5 sm:p-7 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg sm:text-xl font-bold flex items-center gap-1.5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
             Activity Pipeline
             <InfoTip text="Your most recent content items from the Archive, sorted by date created. Click any item to open it." />
           </h3>
-          <button onClick={() => onNavigate("archive")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            View all <ArrowRight size={11} />
+          <button onClick={() => onNavigate("archive")} className="text-[13px] font-bold uppercase tracking-wider flex items-center gap-1 hover:underline" style={{ color: vars.teal }}>
+            View all <ArrowRight size={14} />
           </button>
         </div>
         {pipelineItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <FileText size={32} color={vars.g300} className="mb-3" />
-            <p className="text-sm font-medium mb-1" style={{ color: vars.g500 }}>No content created yet</p>
-            <p className="text-[12px] font-light mb-4" style={{ color: vars.g400 }}>Content you create in the Optimiser or Creator will appear here.</p>
-            <button onClick={() => onNavigate("optimiser")} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-semibold text-white" style={{ background: vars.accent }}>
-              <FileEdit size={12} /> Create content
+          <div className="flex flex-col items-center justify-center py-10 text-center bg-slate-50 rounded-xl">
+            <FileText size={40} color={vars.g300} className="mb-4" />
+            <p className="text-base font-semibold mb-1" style={{ color: vars.navy }}>No content created yet</p>
+            <p className="text-[14px] font-medium mb-5" style={{ color: vars.g500 }}>Content you create in the Optimiser or Creator will appear here.</p>
+            <button onClick={() => onNavigate("optimiser")} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-wider text-white transition-all hover:shadow-md hover:-translate-y-0.5" style={{ background: vars.teal }}>
+              <FileEdit size={14} /> Create content
             </button>
           </div>
         ) : (
           <div className="space-y-3">
             {pipelineItems.map((item) => {
               const statusStyles = {
-                "draft": { bg: "rgba(212,146,42,0.08)", color: vars.amber, label: "Draft" },
-                "approved": { bg: "rgba(61,155,107,0.08)", color: vars.green, label: "Final" },
+                "draft": { bg: "rgba(245,158,11,0.1)", color: vars.amber, label: "Draft" },
+                "approved": { bg: "rgba(34,197,94,0.1)", color: vars.green, label: "Final" },
               };
               const st = statusStyles[item.status];
               return (
-                <button key={item.id} onClick={() => onNavigate("archive")} className="w-full flex items-center gap-3 p-3 rounded-xl border text-left hover:bg-gray-50 transition-colors" style={{ borderColor: vars.g200 }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
-                    <FileText size={14} color={st.color} />
+                <button key={item.id} onClick={() => onNavigate("archive")} className="w-full flex items-center gap-4 p-4 rounded-xl border text-left hover:bg-slate-50 transition-all hover:shadow-sm" style={{ borderColor: vars.g200 }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
+                    <FileText size={18} color={st.color} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: vars.navy }}>{item.title}</p>
-                    <p className="text-[11px] font-light" style={{ color: vars.g400 }}>{item.type}{item.date ? ` · ${item.date}` : ""}</p>
+                    <p className="text-[15px] font-semibold truncate" style={{ color: vars.navy }}>{item.title}</p>
+                    <p className="text-[13px] font-medium mt-0.5" style={{ color: vars.g500 }}>{item.type}{item.date ? ` · ${item.date}` : ""}</p>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold flex-shrink-0" style={{ background: st.bg, color: st.color }}>
+                  <span className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider flex-shrink-0" style={{ background: st.bg, color: st.color }}>
                     {st.label}
                   </span>
-                  <ArrowRight size={14} color={vars.g400} />
+                  <ArrowRight size={16} className="ml-2" color={vars.g400} />
                 </button>
               );
             })}
@@ -560,16 +560,16 @@ function DashboardPage({
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
         {quickActions.map((link) => (
           <div key={link.label} onClick={() => onNavigate(link.action)}
-            className="rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+            className="rounded-2xl border p-5 sm:p-6 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 group"
             style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(31,116,143,0.06)" }}>
-              <link.icon size={20} color={vars.accent} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110" style={{ background: "rgba(79,143,255,0.1)" }}>
+              <link.icon size={24} color={vars.teal} />
             </div>
-            <p className="text-sm font-semibold" style={{ color: vars.navy }}>{link.label}</p>
-            <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{link.sub}</p>
+            <p className="text-[15px] font-bold leading-tight" style={{ color: vars.navy }}>{link.label}</p>
+            <p className="text-[12px] font-medium mt-1.5 leading-snug" style={{ color: vars.g500 }}>{link.sub}</p>
           </div>
         ))}
       </div>

@@ -27,8 +27,8 @@ function UsersAdminPage({
   onAssignProjectOwner: (id: string, owner: string) => void;
   onProjectCreated?: () => void;
 }) {
-  const paper = "#FBF6EC";
-  const ink = "#102B36";
+  const paper = "#f8fafc";
+  const ink = "#0a1628";
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const green = vars.green;

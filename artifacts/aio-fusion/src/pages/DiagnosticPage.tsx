@@ -453,32 +453,32 @@ Engine used:
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
           <div className="flex flex-col items-center flex-shrink-0">
             <div className="relative" style={{ width: 130, height: 130 }}>
-              <svg width={130} height={130}>
-                <circle cx={65} cy={65} r={54} fill="none" stroke={vars.g200} strokeWidth={9} />
-                <circle cx={65} cy={65} r={54} fill="none"
+              <svg width={160} height={160}>
+                <circle cx={80} cy={80} r={70} fill="none" stroke={vars.g200} strokeWidth={12} />
+                <circle cx={80} cy={80} r={70} fill="none"
                   stroke={result.overallScore >= 70 ? vars.green : result.overallScore >= 40 ? vars.amber : vars.red}
-                  strokeWidth={9} strokeDasharray={`${(result.overallScore / 100) * 339} 339`}
-                  strokeLinecap="round" transform="rotate(-90 65 65)" />
+                  strokeWidth={12} strokeDasharray={`${(result.overallScore / 100) * 440} 440`}
+                  strokeLinecap="round" transform="rotate(-90 80 80)" />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold" style={{ color: vars.navy }}>{result.overallScore}</span>
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: vars.g400 }}>/100</span>
+                <span className="text-5xl font-bold" style={{ color: vars.navy }}>{result.overallScore}</span>
+                <span className="text-[14px] uppercase tracking-wider mt-1" style={{ color: vars.g400 }}>/100</span>
               </div>
             </div>
-            <span className="text-xs font-semibold mt-1" style={{ color: vars.navy }}>Authority Score</span>
+            <span className="text-[14px] font-semibold mt-2" style={{ color: vars.navy }}>Authority Score</span>
           </div>
           <div className="flex-1 w-full">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {(result.categories || []).map((cat) => {
                 const Icon = statusIcon(cat.status);
                 return (
-                  <div key={cat.name} className="p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Icon size={14} color={statusColor(cat.status)} />
-                      <span className="text-[11px] font-semibold" style={{ color: statusColor(cat.status) }}>{statusLabel(cat.status)}</span>
+                  <div key={cat.name} className="p-4 rounded-xl border hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Icon size={16} color={statusColor(cat.status)} />
+                      <span className="text-[13px] font-semibold" style={{ color: statusColor(cat.status) }}>{statusLabel(cat.status)}</span>
                     </div>
-                    <p className="text-xs font-medium truncate" style={{ color: vars.navy }}>{cat.name}</p>
-                    <p className="text-lg font-bold" style={{ color: vars.navy }}>{cat.score}<span className="text-xs font-normal" style={{ color: vars.g400 }}>/{cat.max}</span></p>
+                    <p className="text-[14px] font-medium truncate mb-1" style={{ color: vars.navy }}>{cat.name}</p>
+                    <p className="text-2xl font-bold" style={{ color: vars.navy }}>{cat.score}<span className="text-[13px] font-normal" style={{ color: vars.g400 }}>/{cat.max}</span></p>
                   </div>
                 );
               })}
@@ -505,18 +505,18 @@ Engine used:
           { label: "Sitemap URLs", value: f.sitemapUrlCount === null ? "No sitemap found" : String(f.sitemapUrlCount) },
         ];
         return (
-          <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
+          <div className="rounded-2xl border p-4 sm:p-6 mb-6 hover:shadow-sm transition-shadow" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
+              <h3 className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
             </div>
-            <p className="text-xs font-light mb-4" style={{ color: vars.g500 }}>
+            <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
               These figures are counted directly from your live page, not estimated. They are the same every time the page is checked.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {facts.map((item) => (
-                <div key={item.label} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <span className="text-xs" style={{ color: vars.g500 }}>{item.label}</span>
-                  <span className="text-xs font-semibold text-right" style={{ color: vars.navy }}>{item.value}</span>
+                <div key={item.label} className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border hover:bg-slate-100 transition-colors" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                  <span className="text-[13px]" style={{ color: vars.g500 }}>{item.label}</span>
+                  <span className="text-[13px] font-semibold text-right" style={{ color: vars.navy }}>{item.value}</span>
                 </div>
               ))}
             </div>
@@ -561,25 +561,25 @@ Engine used:
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Category Detail</h3>
+        <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Category Detail</h3>
         <div className="space-y-4">
           {(result.categories || []).map((cat) => (
-            <div key={cat.name} className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: vars.g50 }}>
+            <div key={cat.name} className="rounded-xl border p-5 hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200, background: vars.g50 }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold" style={{ color: vars.navy }}>{cat.name}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: statusColor(cat.status) + "18", color: statusColor(cat.status) }}>
+                  <span className="text-[16px] font-semibold" style={{ color: vars.navy }}>{cat.name}</span>
+                  <span className="px-3 py-1 rounded-full text-[12px] font-bold" style={{ background: statusColor(cat.status) + "18", color: statusColor(cat.status) }}>
                     {cat.score}/{cat.max}
                   </span>
                 </div>
               </div>
               {cat.findings.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: vars.g400 }}>Findings</p>
-                  <ul className="space-y-1">
+                <div className="mb-4">
+                  <p className="text-[12px] font-bold uppercase tracking-wider mb-2" style={{ color: vars.g500 }}>Findings</p>
+                  <ul className="space-y-1.5">
                     {cat.findings.map((f, i) => (
-                      <li key={i} className="text-xs leading-relaxed flex items-start gap-2" style={{ color: vars.g600 }}>
-                        <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: vars.g400 }} />
+                      <li key={i} className="text-[14px] leading-relaxed flex items-start gap-2" style={{ color: vars.g600 }}>
+                        <span className="mt-2 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: vars.g400 }} />
                         {f}
                       </li>
                     ))}
@@ -588,11 +588,11 @@ Engine used:
               )}
               {cat.recommendations.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: vars.accent }}>Recommendations</p>
-                  <ul className="space-y-1">
+                  <p className="text-[12px] font-bold uppercase tracking-wider mb-2" style={{ color: vars.teal }}>Recommendations</p>
+                  <ul className="space-y-1.5">
                     {cat.recommendations.map((r, i) => (
-                      <li key={i} className="text-xs leading-relaxed flex items-start gap-2" style={{ color: vars.accent }}>
-                        <ArrowRight size={10} className="mt-1 flex-shrink-0" />
+                      <li key={i} className="text-[14px] leading-relaxed flex items-start gap-2" style={{ color: vars.teal }}>
+                        <ArrowRight size={14} className="mt-1 flex-shrink-0" />
                         {r}
                       </li>
                     ))}
@@ -606,20 +606,20 @@ Engine used:
 
       {(result.priorityActions || []).length > 0 && (
         <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
-          <div className="space-y-2">
+          <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
+          <div className="space-y-3">
             {(result.priorityActions || []).map((action, i) => {
-              const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : vars.accent;
+              const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : vars.teal;
               return (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border" style={{ borderColor: vars.g200 }}>
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className="w-5 h-5 rounded-full border-2 flex-shrink-0" style={{ borderColor: prioColor }} />
-                    <span className="text-sm" style={{ color: vars.navy }}>{action.action}</span>
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200 }}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-6 h-6 rounded-full border-4 flex-shrink-0" style={{ borderColor: prioColor }} />
+                    <span className="text-[15px]" style={{ color: vars.navy }}>{action.action}</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 ml-7 sm:ml-0">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: prioColor + "18", color: prioColor }}>{action.priority}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>{action.timeframe}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: vars.g100, color: vars.g500 }}>{action.category}</span>
+                  <div className="flex flex-wrap items-center gap-2 ml-9 sm:ml-0">
+                    <span className="px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: prioColor + "18", color: prioColor }}>{action.priority}</span>
+                    <span className="px-3 py-1 rounded-full text-[12px] font-medium" style={{ background: vars.g100, color: vars.g600 }}>{action.timeframe}</span>
+                    <span className="px-3 py-1 rounded-full text-[12px] font-medium" style={{ background: vars.g100, color: vars.g600 }}>{action.category}</span>
                   </div>
                 </div>
               );

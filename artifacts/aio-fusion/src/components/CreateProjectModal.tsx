@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Plus, ArrowRight, Upload, Image as ImageIcon } from "lucide-react";
 import { vars } from "../marketing/vars";
 
-const ink = "#102B36";
+const ink = "#0a1628";
 const accent = "#C8497A";
 
 export function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {

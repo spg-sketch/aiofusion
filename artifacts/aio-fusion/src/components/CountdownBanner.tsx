@@ -70,32 +70,32 @@ export default function CountdownBanner({
     >
       <div
         className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
-        style={{ background: "rgba(31,116,143,0.12)" }}
+        style={{ background: "rgba(79,143,255,0.12)" }}
       >
-        <Clock size={18} style={{ color: "#1f748f" }} />
+        <Clock size={18} style={{ color: "#4f8fff" }} />
       </div>
       <div className="flex-1 min-w-0">
         {finished ? (
           <>
-            <p className="text-[13px] font-semibold" style={{ color: "#102B36" }}>
+            <p className="text-[13px] font-semibold" style={{ color: "#0a1628" }}>
               Still working — almost there…
             </p>
-            <p className="text-[11px] mt-0.5 font-light" style={{ color: "#374151" }}>
+            <p className="text-[11px] mt-0.5 font-light" style={{ color: "#475569" }}>
               You can switch tabs but please keep this tab open.
             </p>
           </>
         ) : (
           <>
-            <p className="text-[13px] font-semibold" style={{ color: "#102B36" }}>
+            <p className="text-[13px] font-semibold" style={{ color: "#0a1628" }}>
               {label} — ready in approximately{" "}
-              <span style={{ color: "#1f748f", fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: "#4f8fff", fontVariantNumeric: "tabular-nums" }}>
                 {formatMmSs(remaining)}
               </span>
             </p>
-            <p className="text-[11px] mt-0.5 font-light" style={{ color: "#374151" }}>
+            <p className="text-[11px] mt-0.5 font-light" style={{ color: "#475569" }}>
               You can switch tabs but please keep this tab open.
               {basisNote && (
-                <span style={{ color: "#6b7280" }}>{" "}· {basisNote}</span>
+                <span style={{ color: "#64748b" }}>{" "}· {basisNote}</span>
               )}
             </p>
           </>
@@ -103,7 +103,7 @@ export default function CountdownBanner({
       </div>
       <div
         className="flex-shrink-0 text-[18px] font-bold tabular-nums"
-        style={{ color: "#1f748f", minWidth: 52, textAlign: "right" }}
+        style={{ color: "#4f8fff", minWidth: 52, textAlign: "right" }}
         aria-hidden="true"
       >
         {finished ? (

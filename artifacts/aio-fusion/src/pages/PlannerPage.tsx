@@ -178,19 +178,19 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       </div>
 
       <div className="rounded-2xl border-2 overflow-hidden mb-6" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-        <div className="px-5 py-3 flex items-center gap-3" style={{ background: ink }}>
-          <span className="w-1 h-5 rounded-full" style={{ background: accentPink }} />
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Score Breakdown by Content Type</p>
-          <span className="text-[10px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.6)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
+        <div className="px-5 py-4 flex items-center gap-3" style={{ background: ink }}>
+          <span className="w-1.5 h-6 rounded-full" style={{ background: accentPink }} />
+          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Score Breakdown by Content Type</p>
+          <span className="text-[12px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.6)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
         </div>
-        <div className="p-5 flex flex-wrap gap-2">
+        <div className="p-6 flex flex-wrap gap-3">
           {Object.keys(cfg.typeWeights).sort((a, b) => (totals.byType[b] || 0) - (totals.byType[a] || 0)).map((t) => {
             const s = totals.byType[t] || 0;
             const hasScore = s > 0;
             return (
-              <div key={t} className="flex items-center gap-2 px-3 py-1.5 rounded-full border" style={{ background: hasScore ? accentSoft : paper, borderColor: hasScore ? `${accentPink}40` : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
-                <span className="text-[12px] font-semibold" style={{ color: ink }}>{t}</span>
-                <span className="text-[12px] font-bold" style={{ color: hasScore ? accentPink : vars.g400 }}>{Math.round(s)}</span>
+              <div key={t} className="flex items-center gap-2.5 px-4 py-2 rounded-full border" style={{ background: hasScore ? accentSoft : paper, borderColor: hasScore ? `${accentPink}40` : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
+                <span className="text-[14px] font-semibold" style={{ color: ink }}>{t}</span>
+                <span className="text-[14px] font-bold" style={{ color: hasScore ? accentPink : vars.g400 }}>{Math.round(s)}</span>
               </div>
             );
           })}
@@ -251,30 +251,30 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                             )}
                             {p ? (
                               <>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
-                                <td className="px-2 py-1.5 border" style={{ background: slotBg, borderColor: "white" }}>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white" }}>
                                   <div className="flex items-center gap-1">
-                                    <span onClick={() => sendToOptimiser(p.id)} className="cursor-pointer hover:underline flex-1 min-w-0 truncate" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold opacity-40 hover:opacity-100 transition-opacity" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
+                                    <span onClick={() => sendToOptimiser(p.id)} className="cursor-pointer hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-[12px] font-bold opacity-40 hover:opacity-100 transition-opacity hover:bg-red-50" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
                                   </div>
                                 </td>
-                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-2 py-1.5 border cursor-pointer text-center" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 220 }}>{p.keyMessage || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500 }}>{p.spokesperson || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer text-right font-bold" style={{ background: slotBg, borderColor: "white", color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g400, fontWeight: 400 }}>/50</span></td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-2 py-1.5 border cursor-pointer" style={{ background: slotBg, borderColor: "white", color: vars.g500, maxWidth: 240 }}>{p.notes || ""}</td>
+                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-3 py-2 border cursor-pointer text-center hover:brightness-95 transition-all" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600 }}>{p.spokesperson || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: "white", color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}>/50</span></td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
                               </>
                             ) : (
                               Array.from({ length: 8 }).map((__, c) => (
                                 <td
                                   key={c}
                                   onClick={c === 0 ? () => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); } : undefined}
-                                  className={`px-2 py-1.5 border ${c === 0 ? "cursor-pointer" : ""}`}
-                                  style={{ background: slotBg, borderColor: "white", color: vars.g300, minHeight: 24 }}
+                                  className={`px-3 py-2 border ${c === 0 ? "cursor-pointer hover:bg-slate-100 transition-colors" : ""}`}
+                                  style={{ background: slotBg, borderColor: "white", color: vars.g300, minHeight: 28 }}
                                   title={c === 0 ? `Add project to ${label}` : undefined}
                                 >
-                                  {c === 0 && i === wkProjects.length ? <span style={{ fontSize: 10, color: vars.g400 }}>+ Add project</span> : ""}
+                                  {c === 0 && i === wkProjects.length ? <button className="text-[11px] font-semibold px-2 py-1 rounded" style={{ color: vars.teal, background: "rgba(79,143,255,0.08)", border: `1px solid rgba(79,143,255,0.2)` }}>+ Add project</button> : ""}
                                 </td>
                               ))
                             )}

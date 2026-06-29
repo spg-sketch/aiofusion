@@ -107,65 +107,66 @@ function SidebarContent({
   };
   return (
     <>
-      <div className="flex items-center gap-3 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
-        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 md:h-20" />
+      <div className="flex flex-col gap-1 px-6 py-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+        <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 object-contain self-start" />
+        <span className="text-[11px] font-medium tracking-wide uppercase mt-1" style={{ color: "#94a3b8" }}>The AI Authority Platform</span>
       </div>
-      <div className="flex items-stretch border-b" style={{ borderColor: vars.g200 }}>
+      <div className="flex items-stretch border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
         <button
           onClick={onBackToClients}
-          className="flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 flex-1 min-w-0"
+          className="flex items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-white/5 flex-1 min-w-0"
         >
-          <ArrowLeft size={14} style={{ color: vars.g400 }} />
+          <ArrowLeft size={16} style={{ color: "#94a3b8" }} />
           <div className="relative group/sblogo flex-shrink-0">
             {activeClient.logo ? (
-              <div className="w-8 h-8 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
+              <div className="w-10 h-10 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: "rgba(255,255,255,0.1)", background: "white" }}>
                 <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold text-white" style={{ background: activeClient.color }}>
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[12px] font-bold text-white shadow-sm" style={{ background: activeClient.color }}>
                 {activeClient.initials}
               </div>
             )}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
-            <span className="text-[11px] font-light truncate" style={{ color: vars.g400 }}>Switch project</span>
+            <span className="text-[15px] font-semibold truncate text-white">{activeClient.name}</span>
+            <span className="text-[12px] font-medium truncate" style={{ color: "#94a3b8" }}>Switch project</span>
           </div>
         </button>
         {onLogoUpdate && (
           <button
             onClick={handleLogoUpload}
-            className="px-3 border-l flex items-center justify-center transition-colors hover:bg-slate-50"
-            style={{ borderColor: vars.g200, color: vars.accent }}
+            className="px-4 border-l flex items-center justify-center transition-colors hover:bg-white/5"
+            style={{ borderColor: "rgba(255,255,255,0.08)", color: vars.teal }}
             title={activeClient.logo ? "Replace client logo" : "Upload client logo"}
           >
-            <Upload size={14} />
+            <Upload size={16} />
           </button>
         )}
       </div>
-      <nav className="flex-1 py-3 px-3 space-y-4 overflow-y-auto">
+      <nav className="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
         <button
           onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
-          className="flex items-center gap-2.5 w-full rounded-lg px-4 py-3 text-[14px] font-bold transition-colors"
+          className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-[14px] font-bold transition-all hover:bg-white/5"
           style={{
-            background: currentPage === "dashboard" ? "rgba(31,116,143,0.08)" : "transparent",
-            color: currentPage === "dashboard" ? vars.accent : vars.navy,
-            border: `1px solid ${currentPage === "dashboard" ? vars.accent : vars.g200}`,
+            background: currentPage === "dashboard" ? "rgba(79,143,255,0.15)" : "transparent",
+            color: currentPage === "dashboard" ? vars.teal : "white",
+            border: `1px solid ${currentPage === "dashboard" ? "rgba(79,143,255,0.3)" : "transparent"}`,
           }}
         >
-          <BarChart3 size={16} />
+          <BarChart3 size={18} />
           <span className="flex-1 text-left">Dashboard</span>
-          {currentPage === "dashboard" && <ChevronRight size={14} />}
+          {currentPage === "dashboard" && <ChevronRight size={16} />}
         </button>
         {navSections.map((section) => (
           <div key={section.section}>
-            <div className="px-3 pb-2 flex items-center gap-2">
+            <div className="px-3 pb-3 flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: section.color }} />
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: section.color }}>
                 {section.section}
               </span>
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               {section.items.map((item) => {
                 const isActive = currentPage === item.id;
                 const isLocked = !!item.locked;
@@ -176,46 +177,46 @@ function SidebarContent({
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
-                    className="flex items-start gap-3 w-full rounded-lg px-3 py-2 text-left transition-colors"
+                    className="flex items-start gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all hover:bg-white/5"
                     style={{
-                      background: isActive ? `${section.color}10` : "transparent",
-                      borderLeft: `3px solid ${isActive ? section.color : "transparent"}`,
-                      color: isActive ? section.color : isLocked ? vars.g400 : vars.g600,
+                      background: isActive ? "rgba(79,143,255,0.15)" : "transparent",
+                      borderLeft: `3px solid ${isActive ? vars.teal : "transparent"}`,
+                      color: isActive ? vars.teal : isLocked ? "#64748b" : "#e2e8f0",
                       cursor: isLocked ? "not-allowed" : "pointer",
                       opacity: isLocked ? 0.6 : 1,
                     }}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center gap-2">
                         <span className="text-[13px] font-semibold truncate">{item.label}</span>
                         {isLocked && (
-                          <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g500 }}>
-                            <Lock size={9} /> V2
+                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                            <Lock size={10} /> V2
                           </span>
                         )}
                       </div>
                       {item.sub && (
-                        <div className="text-[10.5px] font-light leading-snug mt-0.5" style={{ color: isActive ? section.color : vars.g400 }}>
+                        <div className="text-[11px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : "#94a3b8" }}>
                           {item.sub}
                         </div>
                       )}
                     </div>
-                    {isActive && <ChevronRight size={14} className="mt-0.5 flex-shrink-0" />}
+                    {isActive && <ChevronRight size={16} className="mt-1 flex-shrink-0" />}
                   </button>
                   {item.id === "llm-check" && recentAudits.length > 0 && (
-                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
                       {recentAudits.map((a) => (
                         <button
                           key={a.id}
                           onClick={() => { onOpenSavedAudit?.(a.id); onItemClick?.(); }}
-                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
                           title={`Open saved audit (${a.result.visibilityScore}% visibility)`}
                         >
-                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
                             {new Date(a.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(a.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
                             {a.result.visibilityScore}%
                           </span>
                         </button>
@@ -223,19 +224,19 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "diagnostic" && recentDiagnostics.length > 0 && (
-                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
                       {recentDiagnostics.map((d) => (
                         <button
                           key={d.id}
                           onClick={() => { onOpenSavedDiagnostic?.(d.id); onItemClick?.(); }}
-                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
                           title={`Open saved audit (${d.result.overallScore}% readiness)`}
                         >
-                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
                             {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
                             {d.result.overallScore}%
                           </span>
                         </button>
@@ -243,19 +244,19 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "geo-content" && recentContentGeo.length > 0 && (
-                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
                       {recentContentGeo.map((s) => (
                         <button
                           key={s.id}
                           onClick={() => { onOpenSavedContentGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
                           title={`Open saved audit (${s.score}% readiness)`}
                         >
-                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
                             {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
                             {s.score}%
                           </span>
                         </button>
@@ -263,19 +264,19 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "seo-audit" && recentTechGeo.length > 0 && (
-                    <div className="mt-0.5 mb-1 ml-4 pl-3 border-l space-y-0.5" style={{ borderColor: vars.g200 }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
                       {recentTechGeo.map((s) => (
                         <button
                           key={s.id}
                           onClick={() => { onOpenSavedTechGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-50"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
                           title={`Open saved audit (${s.score}% readiness)`}
                         >
-                          <Clock size={10} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[10.5px] font-light truncate flex-1" style={{ color: vars.g500 }}>
+                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
                             {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: vars.accent }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
                             {s.score}%
                           </span>
                         </button>
@@ -289,14 +290,14 @@ function SidebarContent({
           </div>
         ))}
       </nav>
-      <div className="px-3 py-4 border-t" style={{ borderColor: vars.g200 }}>
+      <div className="px-4 py-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
         <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "linear-gradient(135deg, #1f748f, #165265)" }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
             SP
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-medium" style={{ color: vars.navy }}>Admin</span>
-            <span className="text-[10px]" style={{ color: vars.g400 }}>Intelligence Tier</span>
+            <span className="text-sm font-semibold text-white">Admin</span>
+            <span className="text-[11px] font-medium" style={{ color: "#94a3b8" }}>Intelligence Tier</span>
           </div>
         </div>
       </div>
@@ -345,7 +346,7 @@ export function Sidebar({
         </div>
       )}
 
-      <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: vars.g200, background: "white" }}>
+      <aside className="hidden md:flex flex-col border-r w-[260px] flex-shrink-0 h-screen sticky top-0" style={{ borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}>
         <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
       </aside>
     </>

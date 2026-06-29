@@ -18,9 +18,9 @@ function ReleaseGatewayPage() {
   useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
   const finals = archive.filter((i) => i.status === "Final");
   const wires = [
-    { name: "PR Newswire", desc: "Global newswire distribution.", color: "#1f748f" },
+    { name: "PR Newswire", desc: "Global newswire distribution.", color: "#4f8fff" },
     { name: "Business Wire", desc: "Berkshire Hathaway global distribution.", color: "#2896b9" },
-    { name: "GlobeNewswire", desc: "Multi-region disclosure & PR distribution.", color: "#165265" },
+    { name: "GlobeNewswire", desc: "Multi-region disclosure & PR distribution.", color: "#0a1628" },
     { name: "Newsfile", desc: "Cost-effective US/CA distribution.", color: "#3D9B6B" },
     { name: "ACCESS Newswire", desc: "Issuer & PR newswire.", color: "#6366F1" },
     { name: "EIN Presswire", desc: "Industry & vertical wire.", color: "#D4922A" },

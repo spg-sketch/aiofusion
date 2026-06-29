@@ -14,7 +14,7 @@
 
   body {
     @apply font-sans antialiased;
-    background: #FAFAFA;
+    background: #f8fafc;
     color: #1C1C1C;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -38,7 +38,7 @@
 [contenteditable] h1 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #165265;
+  color: #0a1628;
   margin-bottom: 0.75rem;
   font-family: 'Alice', Georgia, serif;
 }
@@ -46,7 +46,7 @@
 [contenteditable] h2 {
   font-size: 1.15rem;
   font-weight: 600;
-  color: #165265;
+  color: #0a1628;
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
   font-family: 'Alice', Georgia, serif;
@@ -69,21 +69,21 @@
 }
 
 [contenteditable] blockquote {
-  border-left: 3px solid #2896b9;
+  border-left: 3px solid #4f8fff;
   padding-left: 1rem;
   margin: 1rem 0;
-  color: #6B7280;
+  color: #475569;
   font-style: italic;
 }
 
 [contenteditable] strong {
   font-weight: 600;
-  color: #165265;
+  color: #0a1628;
 }
 
 [contenteditable] em {
   font-style: italic;
-  color: #6B7280;
+  color: #475569;
 }
 
 /* Marketing top-nav hover - clear visual feedback */

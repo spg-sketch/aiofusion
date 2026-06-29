@@ -430,21 +430,21 @@ OUTPUT INSTRUCTIONS:
 
   return (
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-        <div className="mb-6 flex items-start justify-between flex-wrap gap-3">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <FileEdit size={20} color={vars.teal} />
-              <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+        <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-3">
+              <FileEdit size={24} color={vars.teal} />
+              <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
                 Content Optimiser & Editor
-                <InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} />
+                <span className="ml-3"><InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} /></span>
               </h1>
             </div>
-            <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+            <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: vars.g600 }}>
               Paste your own human-written draft below — a press release, article, case study or any other copy — then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
             </p>
           </div>
-          <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-            <Archive size={14} /> Retrieve content draft
+          <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all shadow-sm whitespace-nowrap" style={{ background: vars.teal }}>
+            <Archive size={16} /> Retrieve content draft
           </button>
         </div>
 
@@ -688,33 +688,33 @@ OUTPUT INSTRUCTIONS:
             )}
 
             {/* Action bar */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t" style={{ borderColor: vars.g100 }}>
-              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ background: vars.coral }}>
+            <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t" style={{ borderColor: vars.g100 }}>
+              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all disabled:opacity-60" style={{ background: vars.teal }}>
                 {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
               </button>
               {optimised && (
-                <button onClick={rejectOptimised} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: "#B03D33" }}>
+                <button onClick={rejectOptimised} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all" style={{ background: "#B03D33" }}>
                   <X size={14} /> Reject Optimised
                 </button>
               )}
-              <button onClick={downloadDraft} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border bg-white" style={{ borderColor: vars.navy, color: vars.navy }}>
+              <button onClick={downloadDraft} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-bold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.navy, color: vars.navy }}>
                 <Download size={14} /> Download
               </button>
-              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border bg-white disabled:opacity-50 disabled:cursor-not-allowed" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" style={{ borderColor: vars.g200, color: vars.navy }}>
                 <FileText size={14} /> Optimised Notes
               </button>
-              <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>
                 <Send size={14} /> Share draft
               </button>
-              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all" style={{ background: vars.gold }}>
                 <Archive size={14} /> Archive
               </button>
               {canResearch && (
-                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold border bg-white" style={{ borderColor: vars.gold, color: "#7A5E25", background: "rgba(201,160,78,0.06)" }}>
+                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.navy, color: vars.navy }}>
                   <Target size={14} /> Media Research
                 </button>
               )}
-              <button onClick={pushToPlanner} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold ml-auto" style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}>
+              <button onClick={pushToPlanner} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold ml-auto text-white hover:brightness-110 transition-all" style={{ background: vars.accent }}>
                 <Calendar size={14} /> Push to Comms Planner
               </button>
             </div>
