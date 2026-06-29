@@ -1,16 +1,21 @@
-import { useState, useEffect } from "react";
-import { Archive, Search } from "lucide-react";
-import { vars } from "../marketing/vars";
+import { useState, useMemo, useEffect } from "react";
 import {
-  useContentStore, loadArchive, saveArchive, loadPlannerProjects,
-  savePlannerProjects, getISOWeek, weekDateLabel, _contentStoreReady,
-} from "../lib/contentStore";
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
+import { vars } from "../marketing/vars";
+import { loadArchive, saveArchive, useContentStore, type ArchiveItem, splitArchiveBody, loadPlannerProjects, savePlannerProjects, getISOWeek, weekDateLabel, type PlannerProject } from "../lib/contentStore";
+import CountdownBanner from "../components/CountdownBanner";
 import { loadIntakeData, getKeyMessages, getSpokespeople } from "../IntakeForm";
+import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
-import { CONTENT_TYPES } from "../lib/appHelpers";
-import type { ArchiveItem, PlannerProject } from "../types";
-
-export default function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
+function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const contentVersion = useContentStore();
   const intake = loadIntakeData();
   const projectName = (intake?.formData["4.1"] as string) || "your project";
@@ -85,6 +90,9 @@ export default function ArchivePage({ onNavigate }: { onNavigate: (p: string) =>
     const releaseDate = (item.releasedAt || item.createdAt || "").slice(0, 10);
     const currentWeek = getISOWeek(new Date());
     const rawWeek = getISOWeek(new Date(releaseDate || Date.now()));
+    // Planner only renders a 12-week window starting from the current ISO week.
+    // Archive items are usually dated in the past, so clamp older dates to the current week
+    // (otherwise the row would save to localStorage but never appear in the visible calendar).
     const wk = rawWeek < currentWeek ? currentWeek : rawWeek;
     const km = keyMessages[0]?.short || keyMessages[0]?.long || "";
     const proj: PlannerProject = {
@@ -120,6 +128,7 @@ export default function ArchivePage({ onNavigate }: { onNavigate: (p: string) =>
         </p>
       </div>
 
+      {/* Search panel */}
       <div className="bg-white border rounded-2xl p-5 mb-6" style={{ borderColor: vars.g200 }}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[14px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
@@ -192,8 +201,8 @@ export default function ArchivePage({ onNavigate }: { onNavigate: (p: string) =>
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={28} color={vars.g400} className="mx-auto mb-3" />
-          <p className="text-[14px] font-medium" style={{ color: vars.navy }}>{!_contentStoreReady ? "Loading your content…" : archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
-          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{!_contentStoreReady ? "Fetching your saved pieces from the server." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
+          <p className="text-[14px] font-medium" style={{ color: vars.navy }}>{!contentVersion ? "Loading your content…" : archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
+          <p className="text-[13px] font-light mt-1" style={{ color: vars.g500 }}>{!contentVersion ? "Fetching your saved pieces from the server." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -236,3 +245,5 @@ export default function ArchivePage({ onNavigate }: { onNavigate: (p: string) =>
     </div>
   );
 }
+
+export { ArchivePage };

@@ -1,7 +1,6 @@
-import { ArrowLeft, BookOpen } from "lucide-react";
 import { vars } from "../marketing/vars";
-
-export function GuidancePage({ onBack }: { onBack: () => void }) {
+import { ArrowLeft, BookOpen } from "lucide-react";
+function GuidancePage({ onBack }: { onBack: () => void }) {
   const articles = [
     { title: "Getting started with AIO Fusion", desc: "A walk-through of the platform, from intake to measurement.", type: "Article" },
     { title: "Running an AIO Diagnostic", desc: "How to interpret the diagnostic score and pick the first fixes.", type: "Article" },
@@ -48,3 +47,5 @@ export function GuidancePage({ onBack }: { onBack: () => void }) {
     </div>
   );
 }
+
+export { GuidancePage };

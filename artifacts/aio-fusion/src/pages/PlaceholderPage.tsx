@@ -1,7 +1,6 @@
 import { Check } from "lucide-react";
 import { vars } from "../marketing/vars";
-
-export default function PlaceholderPage({
+function PlaceholderPage({
   title,
   intro,
   features,
@@ -14,7 +13,7 @@ export default function PlaceholderPage({
   features: { heading: string; copy: string }[];
   badge?: string;
   badgeColor?: string;
-  icon: React.ComponentType<{ size?: number; color?: string }>;
+  icon: any;
 }) {
   return (
     <div className="p-6 sm:p-10 max-w-5xl mx-auto">
@@ -54,3 +53,5 @@ export default function PlaceholderPage({
     </div>
   );
 }
+
+export { PlaceholderPage };

@@ -1,14 +1,107 @@
-import { useState, useEffect } from "react";
-import { Plus, Loader2, Building2, Users, PenLine, Trash2, Download, FileText } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
 import { vars } from "../marketing/vars";
-import { apiBase, escapeHtml } from "../lib/apiHelpers";
-import { getProjectMediaCategories } from "../IntakeForm";
+import { apiBase } from "../lib/contentAi";
+import { getSession as getLocalSession } from "../lib/auth";
+import { CategoryPickerModal } from "./shared";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
-import type { Outlet, Contact } from "../types";
-import { SearchableOutletPicker } from "../components/SearchableOutletPicker";
-import { CategoryPickerModal } from "../components/CategoryPickerModal";
+import { getProjectMediaCategories } from "../IntakeForm";
+import { escapeHtml } from "../lib/contentAi";
+// ---------------------------------------------------------------------------
+// Searchable outlet combobox for the contact modal
+// ---------------------------------------------------------------------------
+export function SearchableOutletPicker({
+  outlets, value, onChange,
+}: {
+  outlets: { id: number; name: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = outlets.find((o) => String(o.id) === value);
 
-export function MediaDatabasePage() {
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const filtered = outlets.filter((o) => !search || o.name.toLowerCase().includes(search.toLowerCase())).slice(0, 50);
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        className="flex items-center w-full px-3 py-2 rounded-lg border text-[13px] cursor-pointer gap-2"
+        style={{ borderColor: open ? vars.accent : vars.g200 }}
+        onClick={() => { setOpen(!open); setSearch(""); }}
+      >
+        <span style={{ color: selected ? vars.navy : vars.g400 }} className="flex-1 truncate">
+          {selected ? selected.name : "No outlet linked"}
+        </span>
+        {selected && (
+          <button className="text-[16px] leading-none" style={{ color: vars.g400 }} onClick={(e) => { e.stopPropagation(); onChange(""); setOpen(false); }}>&times;</button>
+        )}
+        <ChevronRight size={13} color={vars.g400} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg" style={{ borderColor: vars.g200 }}>
+          <div className="p-2 border-b" style={{ borderColor: vars.g100 }}>
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search outlets..."
+              className="w-full px-2 py-1.5 rounded-lg border text-[12px]"
+              style={{ borderColor: vars.g200 }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            <button
+              className="w-full text-left px-3 py-2 rounded-lg text-[12px] hover:bg-gray-50"
+              style={{ color: vars.g500 }}
+              onClick={() => { onChange(""); setOpen(false); }}
+            >
+              No outlet linked
+            </button>
+            {filtered.map((o) => (
+              <button
+                key={o.id}
+                className="w-full text-left px-3 py-2 rounded-lg text-[12px] hover:bg-gray-50"
+                style={{ color: vars.navy, background: String(o.id) === value ? "rgba(31,116,143,0.08)" : undefined }}
+                onClick={() => { onChange(String(o.id)); setOpen(false); setSearch(""); }}
+              >
+                {o.name}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="text-[12px] px-3 py-2" style={{ color: vars.g400 }}>No outlets match</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Media Database page — outlets, contacts and custom categories
+// ---------------------------------------------------------------------------
+type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
+type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string; outletName?: string; outletCategory?: string };
+
+function MediaDatabasePage() {
   const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("outlets");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -58,6 +151,7 @@ export function MediaDatabasePage() {
 
   useEffect(() => { void loadData(); }, []);
 
+  // Outlets
   const filteredOutlets = outlets.filter((o) => {
     if (outletCatFilter && o.category !== outletCatFilter) return false;
     if (outletSearch && !o.name.toLowerCase().includes(outletSearch.toLowerCase()) && !o.category.toLowerCase().includes(outletSearch.toLowerCase())) return false;
@@ -94,6 +188,7 @@ export function MediaDatabasePage() {
     setDeletingOutletId(null);
   };
 
+  // Contacts
   const filteredContacts = contacts.filter((c) => {
     if (contactOutletFilter && String(c.outletId) !== contactOutletFilter) return false;
     const q = contactSearch.toLowerCase();
@@ -131,6 +226,7 @@ export function MediaDatabasePage() {
     setDeletingContactId(null);
   };
 
+  // Export contacts
   const exportContacts = async (format: "xlsx" | "word") => {
     const rows = filteredContacts;
     if (format === "xlsx") {
@@ -160,6 +256,7 @@ export function MediaDatabasePage() {
 
   return (
     <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* Header */}
       <div className="mb-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1" style={{ color: vars.accent }}>Content Management</p>
         <h1 className="text-[28px] font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
@@ -408,7 +505,7 @@ export function MediaDatabasePage() {
         </div>
       )}
 
-      {/* Category picker */}
+      {/* Category picker for outlet form */}
       {showCatPicker && (
         <CategoryPickerModal
           all={TRADE_MEDIA_CATEGORIES}
@@ -421,3 +518,6 @@ export function MediaDatabasePage() {
     </div>
   );
 }
+
+export { MediaDatabasePage };
+export type { Outlet, Contact };

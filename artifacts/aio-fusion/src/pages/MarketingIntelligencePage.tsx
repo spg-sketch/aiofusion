@@ -1,10 +1,42 @@
 import { useState } from "react";
-import { Award, XCircle } from "lucide-react";
+import {
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
 import { vars } from "../marketing/vars";
-import { getProjectMediaCategories } from "../IntakeForm";
-import type { EventConfirmFlag, EventItem, EventOpportunity } from "../types";
-import { Labelled } from "../components/SharedUI";
-import { CategoryPickerModal } from "../components/CategoryPickerModal";
+import { streamContent, buildProjectDataText, escapeHtml, safeHttpUrl, GenerationProgress, downloadWordDocument } from "../lib/contentAi";
+import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
+import { getKeyMessages, getProjectMediaCategories } from "../IntakeForm";
+import { Labelled, CategoryPickerModal } from "./shared";
+type EventConfirmFlag = "C" | "U";
+type EventOpportunity = {
+  type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
+  cost: string;
+  deadline: string;
+  contactDetails?: string;
+  notes?: string;
+  actionable?: boolean;
+};
+type EventItem = {
+  rank: number;
+  name: string;
+  url: string;
+  category: string;
+  date: string;
+  audience: string;
+  titleDescription: string;
+  location: string;
+  confirmStatus: EventConfirmFlag;
+  authority: number;
+  relevanceReason: string;
+  opportunities: EventOpportunity[];
+};
 
 const EVENTS_RESEARCH_LLM_PROMPT_V2 = `You are acting as a senior UK PR event attendance and participation-list builder.
 Produce an exhaustive list of marketing types chosen
@@ -38,10 +70,7 @@ Hard rules:
 Deliverable:
 - A sortable Excel with one row per opportunity - include multiple opportunities for each event.
 - A structured list on a Word document.`;
-
-void EVENTS_RESEARCH_LLM_PROMPT_V2;
-
-export function MarketingIntelligencePage() {
+function MarketingIntelligencePage() {
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const projectCategories = getProjectMediaCategories();
   const [marketingType, setMarketingType] = useState<string[]>(["Trade Conferences"]);
@@ -62,9 +91,10 @@ export function MarketingIntelligencePage() {
       setSearching(false);
     }, 700);
   };
+  void EVENTS_RESEARCH_LLM_PROMPT_V2;
 
   const actionableOps = (results || []).flatMap((e) =>
-    e.opportunities.filter((o: EventOpportunity) => o.actionable).map((o: EventOpportunity) => ({ event: e, op: o }))
+    e.opportunities.filter((o) => o.actionable).map((o) => ({ event: e, op: o }))
   ).slice(0, 3);
 
   const confirmStyle = (c: EventConfirmFlag) =>
@@ -76,7 +106,7 @@ export function MarketingIntelligencePage() {
     if (!results) return;
     const itemsHtml = results.map((e) => {
       const cs = confirmStyle(e.confirmStatus);
-      const opsHtml = e.opportunities.map((o: EventOpportunity) => `
+      const opsHtml = e.opportunities.map((o) => `
         <li><b>${o.type}</b> - <b>Cost:</b> ${o.cost} · <b>Deadline:</b> ${o.deadline}
           ${o.contactDetails ? `<br/><i style="color:#666;">Contact: ${o.contactDetails}</i>` : ""}
           ${o.notes ? `<br/><i style="color:#666;">${o.notes}</i>` : ""}
@@ -121,9 +151,10 @@ export function MarketingIntelligencePage() {
 
   const downloadExcelReport = () => {
     if (!results) return;
+    // One row per opportunity
     const rows = results.flatMap((e) => {
       const cs = confirmStyle(e.confirmStatus);
-      return e.opportunities.map((o: EventOpportunity) => `
+      return e.opportunities.map((o) => `
         <tr>
           <td>${e.rank}</td>
           <td>${e.name}</td>
@@ -211,25 +242,23 @@ export function MarketingIntelligencePage() {
               </div>
             )}
           </div>
-          <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border" style={{ borderColor: vars.g200, color: vars.g600 }}>
-            + Add / change categories
-          </button>
+          <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Choose categories</button>
         </Labelled>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Labelled label="Period">
-            <div className="flex gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Labelled label="Period" hint="Search 6-month or 12-month windows.">
+            <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: vars.g200 }}>
               {(["6m", "12m"] as const).map((p) => (
-                <button key={p} onClick={() => setPeriod(p)} className="flex-1 px-3 py-2 rounded-lg border text-[12px] font-semibold transition-colors" style={{ borderColor: period === p ? vars.coral : vars.g200, background: period === p ? "rgba(224,120,86,0.1)" : "white", color: period === p ? vars.coral : vars.g500 }}>
+                <button key={p} onClick={() => setPeriod(p)} className="px-4 py-1.5 rounded text-[12px] font-semibold" style={{ background: period === p ? vars.coral : "transparent", color: period === p ? "white" : vars.g500 }}>
                   {p === "6m" ? "Next 6 months" : "Next 12 months"}
                 </button>
               ))}
             </div>
           </Labelled>
-          <Labelled label="Region">
-            <div className="flex gap-2">
+          <Labelled label="Region" hint="UK or North America (more in V2).">
+            <div className="inline-flex rounded-lg border p-0.5" style={{ borderColor: vars.g200 }}>
               {(["UK", "NA"] as const).map((r) => (
-                <button key={r} onClick={() => setRegion(r)} className="flex-1 px-3 py-2 rounded-lg border text-[12px] font-semibold transition-colors" style={{ borderColor: region === r ? vars.coral : vars.g200, background: region === r ? "rgba(224,120,86,0.1)" : "white", color: region === r ? vars.coral : vars.g500 }}>
+                <button key={r} onClick={() => setRegion(r)} className="px-4 py-1.5 rounded text-[12px] font-semibold" style={{ background: region === r ? vars.gold : "transparent", color: region === r ? "white" : vars.g500 }}>
                   {r === "UK" ? "United Kingdom" : "North America"}
                 </button>
               ))}
@@ -237,68 +266,142 @@ export function MarketingIntelligencePage() {
           </Labelled>
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <button onClick={search} disabled={searching || marketingType.length === 0} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold text-white disabled:opacity-40" style={{ background: vars.coral }}>
-            {searching ? "Searching…" : "Find Opportunities"}
-          </button>
-          <button onClick={() => setShowLLMBrief(!showLLMBrief)} className="text-[11px] font-semibold underline" style={{ color: vars.g500 }}>
-            {showLLMBrief ? "Hide" : "View"} LLM brief
-          </button>
-        </div>
-
-        {showLLMBrief && (
-          <div className="rounded-xl border p-4 mt-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>LLM Prompt</p>
-            <pre className="text-[11px] font-mono whitespace-pre-wrap" style={{ color: vars.navy }}>{EVENTS_RESEARCH_LLM_PROMPT_V2}</pre>
+        <div className="pt-3 border-t" style={{ borderColor: vars.g100 }}>
+          <div className="flex flex-wrap gap-2 mb-2">
+            <button onClick={search} disabled={searching} className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-70 disabled:cursor-default" style={{ background: vars.coral }}>
+              {searching ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Searching...</>
+              ) : (
+                <><Search size={14} /> Search Events</>
+              )}
+            </button>
+            <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.accent }}>
+              <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
+            </button>
           </div>
-        )}
+          <p className="text-[11px] font-light leading-relaxed" style={{ color: vars.g500 }}>
+            Builds an exhaustive, web-verified list of UK PR events for the chosen marketing types and business categories, with one row per opportunity (entry, award, speaker, sponsorship). Events confirmed in the next 12 months are flagged <strong style={{ color: "#1F7244" }}>[C] Confirmed</strong>; events held in the previous 24 months but not yet confirmed forward are flagged <strong style={{ color: "#A04040" }}>[U] Unconfirmed</strong>. Each event carries an LLM authority score (0-100), a relevance summary and named-contact details verified at search time. No URLs, events, titles or emails are invented.
+          </p>
+          {showLLMBrief && (
+            <pre className="mt-3 p-3 rounded-lg text-[11px] font-mono leading-relaxed whitespace-pre-wrap overflow-auto max-h-[320px]" style={{ background: vars.g50, border: `1px solid ${vars.g100}`, color: vars.g600 }}>{EVENTS_RESEARCH_LLM_PROMPT_V2}</pre>
+          )}
+        </div>
       </div>
 
       {/* Results */}
-      {results !== null && (
-        results.length === 0 ? (
-          <div className="bg-white rounded-2xl border p-8 text-center" style={{ borderColor: vars.g200 }}>
-            <p className="text-[15px] font-semibold mb-1" style={{ color: vars.navy }}>No results yet</p>
-            <p className="text-[13px] font-light" style={{ color: vars.g500 }}>
-              This feature uses real-time web search. Results will appear here once the search is live.
-            </p>
-          </div>
-        ) : (
-          <div>
-            {actionableOps.length > 0 && (
-              <div className="bg-white rounded-2xl border p-5 mb-5" style={{ borderColor: vars.g200 }}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-3" style={{ color: vars.coral }}>★ Top 3 immediately actionable</p>
-                <ol className="space-y-2">
-                  {actionableOps.map(({ event: e, op: o }, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>{idx + 1}</span>
-                      <p className="text-[13px] font-light" style={{ color: vars.navy }}><b>{e.name}</b> — {o.type} — deadline: <b>{o.deadline}</b></p>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+      {results && (
+        <div className="space-y-4">
+          {results.length === 0 ? (
+            <div className="rounded-2xl border p-10 text-center" style={{ background: "white", borderColor: vars.g200 }}>
+              <Search size={28} color={vars.g300} className="mx-auto mb-3" />
+              <p className="text-sm font-medium mb-1" style={{ color: vars.g500 }}>No events found for this search</p>
+              <p className="text-[12px]" style={{ color: vars.g400 }}>Try adjusting the marketing type, categories, or time period and search again.</p>
+            </div>
+          ) : (
+          <>
+          <div className="rounded-2xl p-5" style={{ background: "rgba(224,120,86,0.08)", border: `1px solid rgba(224,120,86,0.25)` }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
+            {actionableOps.length === 0 ? (
+              <p className="text-[12px] italic" style={{ color: vars.g500 }}>No live windows flagged at search time.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {actionableOps.map((a, i) => (
+                  <li key={i} className="text-[13px]" style={{ color: vars.navy }}>
+                    <span className="font-semibold">{a.event.name}</span> - {a.op.type} - deadline: {a.op.deadline}
+                  </li>
+                ))}
+              </ul>
             )}
+          </div>
+
+          <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
+            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100 }}>
+              <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
+              <span className="text-[11px]" style={{ color: vars.g400 }}>Ranked by LLM authority + category fit</span>
+            </div>
+            <div className="divide-y" style={{ borderColor: vars.g100 }}>
+              {results.map((e) => {
+                const cs = confirmStyle(e.confirmStatus);
+                return (
+                  <div key={e.name} className="p-5">
+                    <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>
+                          {e.rank}. {e.name}
+                        </p>
+                        <a href={e.url} target="_blank" rel="noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{e.url}</a>
+                        <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+                          {e.category} · {e.date} · {e.location}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: cs.bg, color: cs.color }}>{cs.label}</span>
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>Authority {e.authority}/100</span>
+                      </div>
+                    </div>
+                    <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Audience:</strong> {e.audience}
+                    </p>
+                    <p className="text-[12px] font-light leading-relaxed mb-1" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Title / owner:</strong> {e.titleDescription}
+                    </p>
+                    <p className="text-[12px] font-light leading-relaxed mb-2" style={{ color: vars.g600 }}>
+                      <strong style={{ color: vars.navy }}>Why relevant:</strong> {e.relevanceReason}
+                    </p>
+                    <div className="mt-2 rounded-lg" style={{ background: vars.g50, border: `1px solid ${vars.g100}` }}>
+                      <p className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] border-b" style={{ color: vars.g500, borderColor: vars.g100 }}>Opportunities ({e.opportunities.length})</p>
+                      <ul className="divide-y" style={{ borderColor: vars.g100 }}>
+                        {e.opportunities.map((o, i) => (
+                          <li key={i} className="px-3 py-2 text-[12px]" style={{ color: vars.g600 }}>
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <strong style={{ color: vars.navy }}>{o.type}</strong>
+                              {o.actionable && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(224,120,86,0.12)", color: vars.coral }}>★ Top 3 actionable</span>
+                              )}
+                            </div>
+                            <p className="mt-0.5"><strong>Cost:</strong> {o.cost}</p>
+                            <p><strong>Deadline:</strong> <span style={{ color: o.actionable ? vars.coral : vars.g600 }}>{o.deadline}</span></p>
+                            {o.contactDetails && <p className="italic" style={{ color: vars.g500 }}>Contact: {o.contactDetails}</p>}
+                            {o.notes && <p className="italic" style={{ color: vars.g500 }}>{o.notes}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Download buttons */}
             <div className="px-5 py-4 border-t flex flex-wrap items-center gap-3" style={{ borderColor: vars.g100, background: vars.g50 }}>
+              <p className="text-[11px] font-light flex-1 min-w-[200px]" style={{ color: vars.g500 }}>
+                Both formats include a methodology and source caveats. Excel exports one row per opportunity for sorting.
+              </p>
               <button onClick={downloadWordReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                Download Word report
+                <FileText size={13} color="#2B579A" /> Download Report (Word)
               </button>
               <button onClick={downloadExcelReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                Download Excel report
+                <FileText size={13} color="#1F7244" /> Download Report (Excel)
               </button>
             </div>
           </div>
-        )
+          </>
+          )}
+        </div>
       )}
 
       {showCatPicker && (
         <CategoryPickerModal
-          all={[]}
+          all={TRADE_MEDIA_CATEGORIES}
           selected={categories}
           projectSet={projectCategories}
           onClose={() => setShowCatPicker(false)}
           onSave={(next) => { setCategories(next); setShowCatPicker(false); }}
         />
       )}
+
     </div>
   );
 }
+
+export { MarketingIntelligencePage };

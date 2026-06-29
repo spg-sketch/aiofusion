@@ -1,17 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Sparkles, Eye, Globe, Calendar, TrendingUp, FileText,
-  FileEdit, CheckCircle2, XCircle, AlertTriangle, ArrowRight,
-  BarChart3, ClipboardPaste, Search, Lock, Circle,
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, FileCheck, FolderCheck,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
+import { loadSavedAudits } from "../LlmCheckPage";
 import { loadSavedDiagnostics } from "../lib/diagnosticStore";
-import { loadSavedAudits } from "../lib/auditStore";
+import { loadArchive, loadPlannerProjects, useContentStore } from "../lib/contentStore";
 import { loadIntakeData } from "../IntakeForm";
+import { loadCycle } from "../lib/cycleHistory";
+import type { Client } from "../lib/projectTypes";
 import InfoTip from "../InfoTip";
-import type { Client } from "../types";
-
 function AuthorityDonut({ score, size = 160, light = false }: { score: number; size?: number; light?: boolean }) {
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
@@ -36,7 +41,7 @@ function AuthorityDonut({ score, size = 160, light = false }: { score: number; s
   );
 }
 
-export default function DashboardPage({
+function DashboardPage({
   onNavigate,
   activeClient,
 }: {
@@ -45,6 +50,7 @@ export default function DashboardPage({
 }) {
   useContentStore();
 
+  // ── Audit-lock state (fetched from server) ────────────────────────────────
   type AuditLockInfo = { locked: boolean; lastRunAt?: string; nextAvailableAt?: string; daysRemaining?: number };
   const [earnedAuditLock, setEarnedAuditLock] = useState<AuditLockInfo>({ locked: false });
   const [websiteAuditLock, setWebsiteAuditLock] = useState<AuditLockInfo>({ locked: false });
@@ -62,6 +68,7 @@ export default function DashboardPage({
       .catch(() => {});
   }, [activeClient.id]);
 
+  // ── Live audit data ───────────────────────────────────────────────────────
   const savedAudits = loadSavedAudits(activeClient.id);
   const latestAudit = savedAudits.length > 0 ? savedAudits[savedAudits.length - 1] : null;
   const prevAudit = savedAudits.length > 1 ? savedAudits[savedAudits.length - 2] : null;
@@ -70,6 +77,7 @@ export default function DashboardPage({
   const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[savedDiagnostics.length - 1] : null;
   const prevDiagnostic = savedDiagnostics.length > 1 ? savedDiagnostics[savedDiagnostics.length - 2] : null;
 
+  // ── Live archive + planner ─────────────────────────────────────────────
   const allArchiveItems = loadArchive(activeClient.id).filter((a) => !a.id.startsWith("seed-"));
   const archiveDraft = allArchiveItems.filter((a) => a.status === "Draft").length;
   const archiveFinal = allArchiveItems.filter((a) => a.status === "Final").length;
@@ -79,6 +87,7 @@ export default function DashboardPage({
   const plannerDrafting = livePlannerProjects.filter((p) => p.status === "Drafting" || p.status === "Review").length;
   const plannerPlanned = livePlannerProjects.filter((p) => p.status === "Planned").length;
 
+  // ── Intake completion ─────────────────────────────────────────────────
   const intakeData = loadIntakeData();
   const fd = intakeData?.formData ?? {};
   const duals = intakeData?.duals ?? {};
@@ -93,6 +102,7 @@ export default function DashboardPage({
   const intakeCompleted = intakeSections.filter(([, done]) => done).length;
   const intakePct = Math.round((intakeCompleted / intakeSections.length) * 100);
 
+  // ── Scores ────────────────────────────────────────────────────────────
   const earnedScore: number | null = latestAudit?.result.visibilityScore ?? null;
   const websiteScore: number | null = latestDiagnostic?.result.overallScore ?? null;
   const authorityScore = activeClient.avgScore ||
@@ -105,6 +115,7 @@ export default function DashboardPage({
     ? latestDiagnostic.result.overallScore - prevDiagnostic.result.overallScore : null;
   const totalTrend = activeClient.scoreTrend;
 
+  // ── LLM model data from latest audit ─────────────────────────────────
   const llmModels = latestAudit
     ? [
         { name: "ChatGPT", mentioned: latestAudit.result.byModel.chatgpt.mentions > 0 },
@@ -126,6 +137,7 @@ export default function DashboardPage({
     ? new Date(websiteAuditLock.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : null;
 
+  // ── Website top categories ────────────────────────────────────────────
   const topDiagCategories = latestDiagnostic
     ? [...latestDiagnostic.result.categories]
         .map((c) => ({ name: c.name, pct: c.max > 0 ? c.score / c.max : 0 }))
@@ -133,6 +145,7 @@ export default function DashboardPage({
         .slice(0, 3)
     : [];
 
+  // ── Comms planner summary ─────────────────────────────────────────────
   const plannerBreakdown = {
     total: livePlannerProjects.length,
     optimised: plannerApproved,
@@ -140,6 +153,7 @@ export default function DashboardPage({
     planned: plannerPlanned,
   };
 
+  // ── Predicted authority ───────────────────────────────────────────────
   const authorityDelta = Math.min(40, livePlannerProjects.length * 3);
   const plannerByType = livePlannerProjects.reduce<Record<string, number>>((acc, p) => {
     const key = p.contentType || "Other";
@@ -153,6 +167,7 @@ export default function DashboardPage({
     byType: Object.entries(plannerByType).slice(0, 4),
   };
 
+  // ── Activity pipeline: real archive items ─────────────────────────────
   const fmtDate = (iso: string) => {
     if (!iso) return "";
     try { return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
@@ -475,6 +490,7 @@ export default function DashboardPage({
         ))}
       </div>
 
+      {/* Content Activity stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
           { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project." },
@@ -523,48 +539,44 @@ export default function DashboardPage({
                 "draft": { bg: "rgba(212,146,42,0.08)", color: vars.amber, label: "Draft" },
                 "approved": { bg: "rgba(61,155,107,0.08)", color: vars.green, label: "Final" },
               };
-              const style = statusStyles[item.status];
+              const st = statusStyles[item.status];
               return (
-                <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border" style={{ borderColor: vars.g100 }}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: style.color }} />
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{item.title}</p>
-                      <p className="text-[11px] font-light" style={{ color: vars.g400 }}>{item.type} · {item.date}</p>
-                    </div>
+                <button key={item.id} onClick={() => onNavigate("archive")} className="w-full flex items-center gap-3 p-3 rounded-xl border text-left hover:bg-gray-50 transition-colors" style={{ borderColor: vars.g200 }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
+                    <FileText size={14} color={st.color} />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0" style={{ background: style.bg, color: style.color }}>{style.label}</span>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" style={{ color: vars.navy }}>{item.title}</p>
+                    <p className="text-[11px] font-light" style={{ color: vars.g400 }}>{item.type}{item.date ? ` · ${item.date}` : ""}</p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold flex-shrink-0" style={{ background: st.bg, color: st.color }}>
+                    {st.label}
+                  </span>
+                  <ArrowRight size={14} color={vars.g400} />
+                </button>
               );
             })}
           </div>
         )}
       </div>
 
-      <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <h3 className="text-base sm:text-lg font-semibold mb-5 flex items-center gap-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          Quick Actions
-          <InfoTip text="Jump directly to the key features of AIO Fusion." />
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {quickActions.map((qa) => (
-            <button
-              key={qa.action}
-              onClick={() => onNavigate(qa.action)}
-              className="flex items-start gap-3 p-3 rounded-xl border text-left transition-all hover:shadow-md hover:-translate-y-0.5"
-              style={{ borderColor: vars.g200, background: "white" }}
-            >
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: vars.g50 }}>
-                <qa.icon size={16} color={vars.accent} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[12px] font-semibold leading-tight" style={{ color: vars.navy }}>{qa.label}</p>
-                <p className="text-[10px] font-light mt-0.5 leading-snug" style={{ color: vars.g400 }}>{qa.sub}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {quickActions.map((link) => (
+          <div key={link.label} onClick={() => onNavigate(link.action)}
+            className="rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+            style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "rgba(31,116,143,0.06)" }}>
+              <link.icon size={20} color={vars.accent} />
+            </div>
+            <p className="text-sm font-semibold" style={{ color: vars.navy }}>{link.label}</p>
+            <p className="text-[11px] font-light mt-0.5" style={{ color: vars.g500 }}>{link.sub}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
+
+type Rating = "green" | "amber" | "red";
+
+export { AuthorityDonut, DashboardPage };

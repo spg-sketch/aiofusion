@@ -1,33 +1,20 @@
 import { useState, useEffect } from "react";
-import { Search, Globe, Download, CheckCircle2, Zap, Save } from "lucide-react";
+import {
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
 import { vars } from "../marketing/vars";
-import type { SavedScored, Client } from "../types";
-
-function contentGeoKey(projectId: string) {
-  return projectId && projectId !== "default" ? `aio.content-geo::${projectId}` : "aio.content-geo";
-}
-
-function loadSavedScored(key: string): SavedScored[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistSavedScored(key: string, items: SavedScored[]): boolean {
-  try {
-    localStorage.setItem(key, JSON.stringify(items));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export default function GeoContentPage({
+import { apiBase } from "../lib/contentAi";
+import { contentGeoKey, techGeoKey, loadSavedScored, persistSavedScored, type SavedScored } from "../lib/diagnosticStore";
+import type { Client } from "../lib/projectTypes";
+import { getActiveProjectId } from "../IntakeForm";
+function GeoContentPage({
   activeClient,
   pendingContentGeoId,
   onConsumePendingContentGeo,
@@ -38,6 +25,7 @@ export default function GeoContentPage({
 }) {
   const [scanning, setScanning] = useState(false);
   const [hasResults, setHasResults] = useState(false);
+  const [showLLMBrief, setShowLLMBrief] = useState(false);
   const [savedContentGeo, setSavedContentGeo] = useState<SavedScored[]>(() => loadSavedScored(contentGeoKey(activeClient.id)));
   const [justSaved, setJustSaved] = useState(false);
   const corePages = [
@@ -72,6 +60,7 @@ export default function GeoContentPage({
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     onConsumePendingContentGeo?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingContentGeoId, savedContentGeo]);
 
   function saveContentGeo() {
@@ -148,7 +137,7 @@ export default function GeoContentPage({
             <div className="overflow-x-auto">
               <table className="w-full text-[12.5px]">
                 <thead>
-                  <tr style={{ color: vars.g500 }} className="text-left border-b">
+                  <tr style={{ color: vars.g500 }} className="text-left border-b" >
                     <th className="py-2 pr-3 font-medium">Page</th>
                     <th className="py-2 pr-3 font-medium">URL</th>
                     <th className="py-2 pr-3 font-medium">Content Score</th>
@@ -196,6 +185,10 @@ export default function GeoContentPage({
           <p className="text-[13px] font-light max-w-md mx-auto" style={{ color: vars.g500 }}>Click <strong>Scan Site Content</strong> to audit your core message pages against your Project Data PR sections 2.5–2.7 inputs and generate an itemised action report.</p>
         </div>
       )}
+
     </div>
   );
 }
+
+
+export { GeoContentPage };

@@ -1,7 +1,6 @@
-import { ArrowLeft, Archive } from "lucide-react";
 import { vars } from "../marketing/vars";
-
-export function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
+import { ArrowLeft, Archive } from "lucide-react";
+function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <header className="border-b px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderColor: vars.g200 }}>
@@ -37,3 +36,5 @@ export function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
     </div>
   );
 }
+
+export { ArchivedProjectsPage };

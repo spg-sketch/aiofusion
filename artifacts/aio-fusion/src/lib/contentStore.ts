@@ -1,22 +1,73 @@
 import { useState, useEffect } from "react";
 import { getActiveProjectId } from "../IntakeForm";
-import type { ArchiveItem, PlannerProject, ScoringConfig } from "../types";
-import { apiBase } from "./apiHelpers";
+import { apiBase } from "./contentAi";
+import { stripEmDashes, normaliseAddedData } from "./utils";
+export type ArchiveItem = {
+  id: string;
+  title: string;
+  contentType: string;
+  spokesperson?: string;
+  status: "Draft" | "Final";
+  tags: string[];
+  body: string;
+  headline?: string;
+  standfirst?: string;
+  bodyCopy?: string;
+  selectedMessages?: string[];
+  mediaCats?: string[];
+  pubDate?: string;
+  createdAt: string;
+  releasedAt?: string;
+  releaseChannel?: string;
+  source?: "optimiser" | "creator";
+  projectId?: string;
+};
 
-export const CONTENT_STORE_MIGRATED_KEY = "aio.store.migrated.v1";
-export const ARCHIVE_KEY  = "aio.archive.v1";
-export const PROJECTS_KEY = "aio.planner.projects.v1";
+export function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
+  // Strip any em dashes left in previously saved drafts so retrieved content is clean.
+  if (arc.headline !== undefined || arc.standfirst !== undefined || arc.bodyCopy !== undefined) {
+    return {
+      headline: stripEmDashes(arc.headline || ""),
+      standfirst: stripEmDashes(arc.standfirst || ""),
+      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy || arc.body || "")),
+    };
+  }
+  const parts = (arc.body || "").split(/\n\n+/);
+  if (parts.length >= 3) return { headline: stripEmDashes(parts[0]), standfirst: stripEmDashes(parts[1]), bodyCopy: normaliseAddedData(stripEmDashes(parts.slice(2).join("\n\n"))) };
+  if (parts.length === 2) return { headline: stripEmDashes(parts[0]), standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(parts[1])) };
+  return { headline: "", standfirst: "", bodyCopy: normaliseAddedData(stripEmDashes(arc.body || "")) };
+}
+
+// ---------------------------------------------------------------------------
+// Content store — archive, planner and scoring config
+// ---------------------------------------------------------------------------
+// Items live in a module-level in-memory cache populated from the server on
+// login. All reads return synchronously from the cache so existing call sites
+// (useMemo, useState initialisers, etc.) keep working without change.
+// Mutations fire REST calls in the background, update the cache immediately,
+// and dispatch `aio:content-store-changed` so subscribed components re-render.
+// ---------------------------------------------------------------------------
+
+const CONTENT_STORE_MIGRATED_KEY = "aio.store.migrated.v1";
+// Legacy localStorage keys — kept so the one-time migration can find them.
+const ARCHIVE_KEY  = "aio.archive.v1";
+const PROJECTS_KEY = "aio.planner.projects.v1";
 
 let _archiveCache:  (ArchiveItem & { projectId: string })[] | null = null;
 let _plannerCache:  (PlannerProject & { projectId: string })[] | null = null;
 let _scoringCache:  ScoringConfig | null = null;
 let _contentStoreReady = false;
 
+// Resolve the effective project id for a given clientId argument (mirrors the
+// old scopedStoreKey logic so call sites that pass client.id still work).
 export function effectiveProjectId(clientId?: string): string {
   const id = clientId ?? getActiveProjectId();
   return id && id !== "default" ? id : "default";
 }
 
+// Subscribe to content-store changes and force a re-render. Returns a version
+// counter that increments on every change so components can use it as a
+// useEffect dependency.
 export function useContentStore(): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -27,6 +78,8 @@ export function useContentStore(): number {
   return version;
 }
 
+// Load all content for this session from the server. Fires
+// `aio:content-store-changed` when done so all subscribed components refresh.
 export async function initContentStore(): Promise<void> {
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
@@ -58,6 +111,8 @@ export async function initContentStore(): Promise<void> {
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
+// One-time migration: upload any data still only in this browser's localStorage
+// to the server, then set a guard key so it only runs once per browser.
 export async function migrateLocalStorageContentToServer(): Promise<void> {
   try { if (localStorage.getItem(CONTENT_STORE_MIGRATED_KEY)) return; } catch { return; }
   try {
@@ -103,7 +158,9 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
   }
 }
 
-function stripProjectId(item: ArchiveItem | PlannerProject): ArchiveItem | PlannerProject {
+// Strip projectId for comparison so items fetched from the cache (which have
+// projectId) compare equal to the same item without the server-added field.
+export function stripProjectId(item: ArchiveItem | PlannerProject): ArchiveItem | PlannerProject {
   const { projectId: _p, ...rest } = item as typeof item & { projectId?: string };
   return rest as ArchiveItem | PlannerProject;
 }
@@ -154,6 +211,22 @@ export function saveArchive(newItems: ArchiveItem[], clientId?: string) {
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
+export type PlannerStatus = "Planned" | "Drafting" | "Review" | "Approved";
+
+export type PlannerProject = {
+  id: string;
+  title: string;
+  contentType: string;
+  spokesperson: string;
+  keyMessage: string;
+  audience: string;
+  channels: string[];
+  week: number;
+  status: PlannerStatus;
+  releaseDate: string;
+  notes: string;
+};
+
 export function loadPlannerProjects(clientId?: string): PlannerProject[] {
   if (_plannerCache === null) return [];
   const pid = effectiveProjectId(clientId);
@@ -200,8 +273,13 @@ export function savePlannerProjects(newItems: PlannerProject[], clientId?: strin
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
-export const SEED_PURGED_KEY = "aio.seed.demo.purged.v1";
+const SEED_PURGED_KEY = "aio.seed.demo.purged.v1";
 
+// Remove legacy demo/seed content. Earlier builds seeded example archive and
+// planner items (ids prefixed "seed-") into the default project store. The app
+// no longer seeds demo data; this one-time cleanup strips any such items from
+// every project archive and planner so each project only ever shows the
+// content actually created in it.
 export function removeDemoSeedData() {
   if (typeof window === "undefined") return;
   try {
@@ -260,6 +338,18 @@ export function weekDateLabel(weekNumber: number, year: number = new Date().getF
   return `${target.getUTCDate()}-${months[target.getUTCMonth()]}`;
 }
 
+export type ScoringConfig = {
+  typeWeights: Record<string, { vis: number; auth: number }>;
+  channels: string[];
+  channelBase: number;
+  channelStep: number;
+  channelCap: number;
+  statusMultipliers: Record<PlannerStatus, number>;
+};
+
+// Default scoring table per Patrick's d2 brief - Authority and Visibility scored
+// independently, with Combined as the shown average. Article (Trade Publication)
+// is the gold standard at 9/9 → 9.0 combined.
 export const DEFAULT_SCORING: ScoringConfig = {
   typeWeights: {
     "Press release":      { vis: 8, auth: 6 },
@@ -283,7 +373,6 @@ export const DEFAULT_SCORING: ScoringConfig = {
 export function loadScoringConfig(): ScoringConfig {
   return _scoringCache ?? DEFAULT_SCORING;
 }
-
 export function saveScoringConfig(cfg: ScoringConfig) {
   _scoringCache = cfg;
   fetch(`${apiBase()}/api/store/scoring-config`, {
@@ -304,11 +393,9 @@ export function scoreProject(p: PlannerProject, cfg: ScoringConfig = loadScoring
   return { visibility: Math.min(50, visibility * 5), authority: Math.min(50, authority * 5) };
 }
 
-export const STATUS_COLOURS: Record<string, { bg: string; fg: string }> = {
+export const STATUS_COLOURS: Record<PlannerStatus, { bg: string; fg: string }> = {
   Planned:  { bg: "rgba(156,163,175,0.18)", fg: "#6B7280" },
   Drafting: { bg: "rgba(212,146,42,0.18)",  fg: "#D4922A" },
   Review:   { bg: "rgba(99,102,241,0.18)",  fg: "#6366F1" },
   Approved: { bg: "rgba(61,155,107,0.18)",  fg: "#3D9B6B" },
 };
-
-export { _contentStoreReady };

@@ -1,14 +1,50 @@
 import { useState, useEffect } from "react";
-import { Target, X, FileText, Plus } from "lucide-react";
+import {
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
 import { vars } from "../marketing/vars";
-import { apiBase, buildProjectDataText, streamContent, escapeHtml } from "../lib/apiHelpers";
+import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
+import { streamContent, buildProjectDataText, escapeHtml, safeHttpUrl, GenerationProgress, downloadWordDocument, apiBase } from "../lib/contentAi";
 import { loadArchive, useContentStore } from "../lib/contentStore";
 import { getKeyMessages, getProjectMediaCategories } from "../IntakeForm";
 import { getSession as getLocalSession } from "../lib/auth";
-import type { ConfidenceFlag, MediaJournalist, MediaListItem, Contact, Outlet } from "../types";
-import { SummaryRow } from "../components/SharedUI";
-import { GenerationProgress } from "../components/GenerationProgress";
-import { SearchableOutletPicker } from "../components/SearchableOutletPicker";
+import type { Contact, Outlet } from "./MediaDatabasePage";
+import { SearchableOutletPicker } from "./MediaDatabasePage";
+import { SummaryRow } from "./shared";
+type ConfidenceFlag = "V" | "P" | "U";
+
+type MediaJournalist = {
+  name: string;
+  title: string;
+  email: string;
+  confidence: ConfidenceFlag;
+  roleCurrency: string;
+};
+
+type MediaListItem = {
+  rank: number;
+  publication: string;
+  url: string;
+  category: string;
+  categoryRank: number;
+  description: string;
+  readership: string;
+  reach: string;
+  reachVerified: boolean;
+  journalists: MediaJournalist[];
+  noBeatContactNote?: string;
+  authority: number;
+  authorityNote?: string;
+  pitchAngle: string;
+  suggestedPlacement?: string;
+};
 
 const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
 Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
@@ -38,7 +74,7 @@ Deliverable:
 - A sortable Excel with one row per publication and a multi-line journalists cell; methodology tab; first-wave outreach sequence.
 - A structured list in a Word document.`;
 
-export function MediaResearchPage() {
+function MediaResearchPage() {
   useContentStore();
   const [showLLMBrief, setShowLLMBrief] = useState(false);
   const archive = loadArchive().filter((a) => ["Press release", "Article", "Case study", "Whitepaper", "Blog post"].includes(a.contentType));
@@ -52,6 +88,7 @@ export function MediaResearchPage() {
   const [mediaChars, setMediaChars] = useState(0);
   const [mediaError, setMediaError] = useState("");
 
+  // Media Database cross-reference
   const sessionUser = getLocalSession();
   const isAdminUser = sessionUser?.role === "admin";
   const [dbContacts, setDbContacts] = useState<Contact[]>([]);
@@ -69,10 +106,6 @@ export function MediaResearchPage() {
       if (cd?.contacts) setDbContacts(cd.contacts as Contact[]);
       if (od?.outlets) setDbOutlets((od.outlets as Outlet[]).map((o) => ({ id: o.id, name: o.name })));
     }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
   }, []);
 
   const normStr = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
@@ -125,6 +158,10 @@ export function MediaResearchPage() {
     } catch {}
     setAddToDbSaving(false);
   };
+
+  useEffect(() => {
+    try { localStorage.removeItem("aio.research.preload"); } catch { /* noop */ }
+  }, []);
 
   const selected = archive.find((a) => a.id === selectedId);
 
@@ -284,9 +321,6 @@ export function MediaResearchPage() {
   const ink = "#102B36";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
-
-  void showLLMBrief;
-
   return (
     <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
       <div className="mb-6">
@@ -569,6 +603,9 @@ export function MediaResearchPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
+
+export { MediaResearchPage };

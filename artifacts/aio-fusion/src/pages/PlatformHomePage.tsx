@@ -1,21 +1,18 @@
 import { useState } from "react";
 import {
-  ArrowLeft, ArrowRight, LogOut, Users, ChevronRight, Repeat,
-  BookOpen, Search, FileEdit, Calendar, Target, Send, BarChart3,
-  Loader2, X, MonitorSmartphone,
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import {
-  type Session as LocalSession,
-  canCreateSubAccounts,
-  serverGetSessions,
-  serverRevokeSession,
-  getUsers as getLocalUsers,
-  type SessionInfo,
-} from "../lib/auth";
-import { roleLabel, accountLabel } from "../components/SharedUI";
-
-export function PlatformHomePage({
+import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { roleLabel, accountLabel } from "../lib/accountLabels";
+function PlatformHomePage({
   onCreateProject,
   onContinueToProjects,
   onArchivedProjects,
@@ -46,8 +43,6 @@ export function PlatformHomePage({
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
-
-  void username; void password; void setUsername; void setPassword; void loginError; void setLoginError; void onLoginSuccess;
 
   const loadMySessions = () => {
     setSessionsLoading(true);
@@ -100,12 +95,100 @@ export function PlatformHomePage({
       </header>
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
-        {session && (
-          <div className="bg-white rounded-2xl border p-6 sm:p-8 mb-8 sm:mb-10" style={{ borderColor: vars.g200, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-0">
+        <div className="mb-8 sm:mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+            <Sparkles size={12} color={accent} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Platform Home</span>
+          </div>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+            Welcome to <span style={{ color: accent }}>AIO Fusion</span>
+          </h1>
+          <p className="text-[16px] sm:text-[17px] font-light mt-4 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+            Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
+          </p>
+        </div>
+
+        {/* LOGIN / SESSION - full-width across the page */}
+        {!session ? (
+          <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                <LogIn size={18} />
+              </div>
+              <div>
+                <h2 className="text-[20px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
+                <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setLoginError(null);
+                void (async () => {
+                  const result = await serverLogin(username, password);
+                  if (result.ok) {
+                    setUsername("");
+                    setPassword("");
+                    onLoginSuccess(result.session);
+                  } else {
+                    setLoginError(result.error);
+                  }
+                })();
+              }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
+            >
+              <div className="lg:col-span-5">
+                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Username</label>
+                <div className="relative">
+                  <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="username"
+                    autoComplete="username"
+                    className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                  />
+                </div>
+              </div>
+              <div className="lg:col-span-4">
+                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Password</label>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-3 py-3 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                  />
+                </div>
+              </div>
+              <div className="lg:col-span-3">
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                  style={{ background: accent, boxShadow: `0 12px 28px ${accent}40` }}
+                >
+                  <LogIn size={15} /> Sign in
+                </button>
+              </div>
+              {loginError && (
+                <p className="lg:col-span-12 text-[12px] font-semibold text-center" style={{ color: accent }}>
+                  {loginError}
+                </p>
+              )}
+            </form>
+          </div>
+        ) : (
+          <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0" style={{ background: accentSoft }}>
-                  <Users size={20} color={accent} />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
+                  <User size={20} />
                 </div>
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Signed in as</p>
@@ -152,7 +235,7 @@ export function PlatformHomePage({
               </div>
             </div>
 
-            {/* MY SESSIONS */}
+            {/* MY SESSIONS — expandable panel inside the signed-in card */}
             <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
               <button
                 onClick={() => {
@@ -236,7 +319,7 @@ export function PlatformHomePage({
           </div>
         )}
 
-        {/* AIO MARKETING LOOP */}
+        {/* AIO MARKETING LOOP - full-width below login so all 7 steps fit */}
         <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
           <div className="flex items-center gap-3 mb-6 sm:mb-7">
             <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)" }}>
@@ -273,7 +356,7 @@ export function PlatformHomePage({
           </p>
         </div>
 
-        {/* HOW AIO FUSION WORKS */}
+        {/* HOW AIO FUSION WORKS - four guidance articles */}
         <div className="flex items-end justify-between mb-5 sm:mb-6">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Guidance</span>
@@ -321,11 +404,4 @@ export function PlatformHomePage({
   );
 }
 
-function ClipboardPaste({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-    </svg>
-  );
-}
+export { PlatformHomePage };

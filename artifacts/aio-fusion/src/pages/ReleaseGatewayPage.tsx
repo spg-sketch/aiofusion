@@ -1,10 +1,18 @@
-import { useState, useEffect } from "react";
-import { Send, Download, Radio } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import {
+  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
+  ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+} from "lucide-react";
 import { vars } from "../marketing/vars";
-import { useContentStore, loadArchive, saveArchive } from "../lib/contentStore";
-import type { ArchiveItem } from "../types";
-
-export default function ReleaseGatewayPage() {
+import { loadArchive, saveArchive, useContentStore, type ArchiveItem } from "../lib/contentStore";
+import { getSpokespeople } from "../IntakeForm";
+function ReleaseGatewayPage() {
   const contentVersion = useContentStore();
   const [archive, setArchive] = useState<ArchiveItem[]>(() => loadArchive());
   useEffect(() => { setArchive(loadArchive()); }, [contentVersion]);
@@ -121,3 +129,5 @@ export default function ReleaseGatewayPage() {
     </div>
   );
 }
+
+export { ReleaseGatewayPage };
