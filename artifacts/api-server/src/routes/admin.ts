@@ -593,7 +593,7 @@ adminRouter.get(
     try {
       const rows = await db
         .select({
-          accountId: tokenUsageTable.accountId,
+          accountId: sql<string>`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
           month: sql<string>`to_char(date_trunc('month', ${tokenUsageTable.createdAt}), 'YYYY-MM')`,
           operation: tokenUsageTable.operation,
           model: tokenUsageTable.model,
@@ -603,15 +603,16 @@ adminRouter.get(
           callCount: sql<number>`count(*)::int`,
         })
         .from(tokenUsageTable)
+        .leftJoin(projectsTable, eq(tokenUsageTable.projectId, projectsTable.id))
         .groupBy(
-          tokenUsageTable.accountId,
+          sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
           sql`date_trunc('month', ${tokenUsageTable.createdAt})`,
           tokenUsageTable.operation,
           tokenUsageTable.model,
         )
         .orderBy(
           sql`date_trunc('month', ${tokenUsageTable.createdAt}) desc`,
-          tokenUsageTable.accountId,
+          sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
         )
         .limit(1000);
       res.json({ rows });
