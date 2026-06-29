@@ -1,11 +1,8 @@
-import IntakePage, { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
+import { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import CountdownBanner from "./components/CountdownBanner";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
-import ReportPage from "./ReportPage";
-import PressReleasePage from "./PressReleasePage";
-import SeoAuditPage from "./SeoAuditPage";
-import LlmCheckPage, { loadSavedAudits } from "./LlmCheckPage";
+import { loadSavedAudits } from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
 import {
   type Session as LocalSession,
@@ -25,15 +22,7 @@ import {
   type SessionInfo,
 } from "./lib/auth";
 import { vars } from "./marketing/vars";
-import LandingPageC from "./marketing/LandingPage";
-import PricingPage from "./marketing/PricingPage";
-import MarketingPage from "./marketing/MarketingPage";
-import ForInhousePage from "./marketing/ForInhousePage";
-import ForAgenciesPage from "./marketing/ForAgenciesPage";
-import InsightsPage from "./marketing/InsightsPage";
-import AboutPage from "./marketing/AboutPage";
-import ContactPage from "./marketing/ContactPage";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy } from "react";
 import {
   ChevronRight,
   Lock,
@@ -131,26 +120,79 @@ import {
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
   migrateStoredIntakeKeys,
 } from "./lib/projects";
-import { GuidancePage } from "./pages/GuidancePage";
-import { ArchivedProjectsPage } from "./pages/ArchivedProjectsPage";
-import { MediaResearchPage } from "./pages/MediaResearchPage";
-import { MarketingIntelligencePage } from "./pages/MarketingIntelligencePage";
-import { PlatformHomePage } from "./pages/PlatformHomePage";
-import { UsersAdminPage } from "./pages/UsersAdminPage";
-import { SubAccountsPage } from "./pages/SubAccountsPage";
-import { MediaDatabasePage } from "./pages/MediaDatabasePage";
 import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive } from "./lib/contentStore";
 import { MiniDonut } from "./pages/shared";
-import { AuthorityDonut, DashboardPage } from "./pages/DashboardPage";
-import { DiagnosticPage } from "./pages/DiagnosticPage";
-import { OptimiserPage } from "./pages/OptimiserPage";
-import { PlannerPage } from "./pages/PlannerPage";
-import { ReleaseGatewayPage } from "./pages/ReleaseGatewayPage";
-import { ArchivePage } from "./pages/ArchivePage";
-import { GeoContentPage } from "./pages/GeoContentPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
-import { ContentCreatorPage } from "./pages/ContentCreatorPage";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "./lib/diagnosticStore";
+
+// ---------------------------------------------------------------------------
+// Route-level lazy chunks — each page is only downloaded when first visited.
+// ---------------------------------------------------------------------------
+const IntakePage = lazy(() => import("./IntakeForm"));
+const ReportPage = lazy(() => import("./ReportPage"));
+const PressReleasePage = lazy(() => import("./PressReleasePage"));
+const SeoAuditPage = lazy(() => import("./SeoAuditPage"));
+const LlmCheckPage = lazy(() => import("./LlmCheckPage"));
+
+const LandingPageC = lazy(() => import("./marketing/LandingPage"));
+const PricingPage = lazy(() => import("./marketing/PricingPage"));
+const MarketingPage = lazy(() => import("./marketing/MarketingPage"));
+const ForInhousePage = lazy(() => import("./marketing/ForInhousePage"));
+const ForAgenciesPage = lazy(() => import("./marketing/ForAgenciesPage"));
+const InsightsPage = lazy(() => import("./marketing/InsightsPage"));
+const AboutPage = lazy(() => import("./marketing/AboutPage"));
+const ContactPage = lazy(() => import("./marketing/ContactPage"));
+
+const DashboardPage = lazy(() =>
+  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
+);
+const DiagnosticPage = lazy(() =>
+  import("./pages/DiagnosticPage").then((m) => ({ default: m.DiagnosticPage }))
+);
+const OptimiserPage = lazy(() =>
+  import("./pages/OptimiserPage").then((m) => ({ default: m.OptimiserPage }))
+);
+const PlannerPage = lazy(() =>
+  import("./pages/PlannerPage").then((m) => ({ default: m.PlannerPage }))
+);
+const ReleaseGatewayPage = lazy(() =>
+  import("./pages/ReleaseGatewayPage").then((m) => ({ default: m.ReleaseGatewayPage }))
+);
+const ArchivePage = lazy(() =>
+  import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage }))
+);
+const GeoContentPage = lazy(() =>
+  import("./pages/GeoContentPage").then((m) => ({ default: m.GeoContentPage }))
+);
+const PlaceholderPage = lazy(() =>
+  import("./pages/PlaceholderPage").then((m) => ({ default: m.PlaceholderPage }))
+);
+const ContentCreatorPage = lazy(() =>
+  import("./pages/ContentCreatorPage").then((m) => ({ default: m.ContentCreatorPage }))
+);
+const MediaResearchPage = lazy(() =>
+  import("./pages/MediaResearchPage").then((m) => ({ default: m.MediaResearchPage }))
+);
+const MarketingIntelligencePage = lazy(() =>
+  import("./pages/MarketingIntelligencePage").then((m) => ({ default: m.MarketingIntelligencePage }))
+);
+const PlatformHomePage = lazy(() =>
+  import("./pages/PlatformHomePage").then((m) => ({ default: m.PlatformHomePage }))
+);
+const UsersAdminPage = lazy(() =>
+  import("./pages/UsersAdminPage").then((m) => ({ default: m.UsersAdminPage }))
+);
+const SubAccountsPage = lazy(() =>
+  import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }))
+);
+const GuidancePage = lazy(() =>
+  import("./pages/GuidancePage").then((m) => ({ default: m.GuidancePage }))
+);
+const ArchivedProjectsPage = lazy(() =>
+  import("./pages/ArchivedProjectsPage").then((m) => ({ default: m.ArchivedProjectsPage }))
+);
+const MediaDatabasePage = lazy(() =>
+  import("./pages/MediaDatabasePage").then((m) => ({ default: m.MediaDatabasePage }))
+);
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
 // user-created projects loaded from localStorage.
