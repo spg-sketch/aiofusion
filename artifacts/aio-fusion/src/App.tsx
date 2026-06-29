@@ -119,18 +119,27 @@ import type {
   EventConfirmFlag, EventOpportunity, EventItem, PublicView,
   Outlet, Contact,
 } from "./types";
-import { recordCycle, type CycleHistory } from "./lib/cycles";
+import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
 import { TokenUsageAdminPage, type TokenUsageRow } from "./pages/TokenUsageAdminPage";
-
 import type { Client } from "./lib/projectTypes";
-import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
-  getProjectSectorLabel, loadClientLogos, saveClientLogos,
+  CREATED_PROJECTS_KEY, PROJECT_COLORS, CLIENT_LOGOS_KEY,
+  deriveInitials, getProjectSectorLabel,
+  loadStoredProjects, saveStoredProjects,
+  loadClientLogos, saveClientLogos,
   migrateLegacyIntakeToProject, createStoredProject,
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
+  migrateStoredIntakeKeys,
 } from "./lib/projects";
+import { GuidancePage } from "./pages/GuidancePage";
+import { ArchivedProjectsPage } from "./pages/ArchivedProjectsPage";
+import { MediaResearchPage } from "./pages/MediaResearchPage";
+import { MarketingIntelligencePage } from "./pages/MarketingIntelligencePage";
+import { PlatformHomePage } from "./pages/PlatformHomePage";
+import { UsersAdminPage } from "./pages/UsersAdminPage";
+import { SubAccountsPage } from "./pages/SubAccountsPage";
+import { MediaDatabasePage } from "./pages/MediaDatabasePage";
 import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive } from "./lib/contentStore";
-import { loadCycle } from "./lib/cycleHistory";
 import { MiniDonut } from "./pages/shared";
 import { AuthorityDonut, DashboardPage } from "./pages/DashboardPage";
 import { DiagnosticPage } from "./pages/DiagnosticPage";
@@ -141,24 +150,12 @@ import { ArchivePage } from "./pages/ArchivePage";
 import { GeoContentPage } from "./pages/GeoContentPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { ContentCreatorPage } from "./pages/ContentCreatorPage";
-import { MediaResearchPage } from "./pages/MediaResearchPage";
-import { MarketingIntelligencePage } from "./pages/MarketingIntelligencePage";
-import { PlatformHomePage } from "./pages/PlatformHomePage";
-import { UsersAdminPage } from "./pages/UsersAdminPage";
-import { SubAccountsPage } from "./pages/SubAccountsPage";
-import { GuidancePage } from "./pages/GuidancePage";
-import { ArchivedProjectsPage } from "./pages/ArchivedProjectsPage";
-import { MediaDatabasePage } from "./pages/MediaDatabasePage";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "./lib/diagnosticStore";
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
 // user-created projects loaded from localStorage.
 
-// ---------------------------------------------------------------------------
-// Created (real) projects. These are saved by the user when they set up a new
-// project and persist in localStorage so they show in the Project Hub. They
-// live alongside the demo clients above.
-// ---------------------------------------------------------------------------
+migrateStoredIntakeKeys();
 
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
