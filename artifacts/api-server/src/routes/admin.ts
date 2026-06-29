@@ -583,7 +583,7 @@ Rules:
 );
 
 adminRouter.get(
-  "/token-usage",
+  "/admin/token-usage",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     if (req.account?.role !== "admin") {

@@ -26,6 +26,5 @@ router.use(contentAiRouter);
 router.use(storeRouter);
 router.use(storeContentRouter);
 router.use(mediaDbRouter);
-router.use(adminRouter);
 
 export default router;
