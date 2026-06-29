@@ -196,17 +196,6 @@ const MediaDatabasePage = lazy(() =>
 
 migrateStoredIntakeKeys();
 
-type TokenUsageRow = {
-  accountId: string;
-  month: string;
-  operation: string;
-  model: string;
-  totalInput: number;
-  totalOutput: number;
-  totalCost: string;
-  callCount: number;
-};
-
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<string | null>(null);
