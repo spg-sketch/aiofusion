@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -34,6 +34,25 @@ function UsersAdminPage({
   const green = vars.green;
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
+
+  // Per-account token totals fetched once on mount (admin only).
+  const [tokenTotals, setTokenTotals] = useState<Record<string, { calls: number; cost: number }>>({});
+  useEffect(() => {
+    if (session.role !== "admin") return;
+    void fetch(`${apiBase()}/api/admin/token-usage`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { rows: { accountId: string; callCount: number; totalCost: string }[] }) => {
+        const totals: Record<string, { calls: number; cost: number }> = {};
+        for (const row of data.rows ?? []) {
+          const key = row.accountId.toLowerCase();
+          if (!totals[key]) totals[key] = { calls: 0, cost: 0 };
+          totals[key].calls += row.callCount;
+          totals[key].cost += parseFloat(row.totalCost ?? "0");
+        }
+        setTokenTotals(totals);
+      })
+      .catch(() => {});
+  }, [session.role]);
   // Re-read projects on every tick so owner reassignments show immediately.
   const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
@@ -597,6 +616,15 @@ function UsersAdminPage({
                           {u.parent && (
                             <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
                           )}
+                          {(() => {
+                            const t = tokenTotals[u.username.toLowerCase()];
+                            if (!t || t.calls === 0) return null;
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
+                                {t.calls.toLocaleString()} {t.calls === 1 ? "call" : "calls"} &middot; £{t.cost.toFixed(4)}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
