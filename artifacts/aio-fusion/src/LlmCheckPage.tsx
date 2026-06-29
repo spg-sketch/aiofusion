@@ -1447,7 +1447,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               <div className="mb-3 flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={generateQueriesOnPage}
+                  onClick={() => void generateQueriesOnPage()}
                   disabled={llmQueriesGenerating}
                   className="self-start flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{ background: vars.accent }}
