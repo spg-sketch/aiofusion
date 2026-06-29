@@ -23,6 +23,7 @@ function PlatformHomePage({
   onSignOut,
   onManageUsers,
   onManageSubAccounts,
+  onTokenUsage,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -34,6 +35,7 @@ function PlatformHomePage({
   onSignOut: () => void;
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
+  onTokenUsage: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -209,13 +211,22 @@ function PlatformHomePage({
                   Continue to Project Hub <ArrowRight size={14} />
                 </button>
                 {session.role === "admin" ? (
-                  <button
-                    onClick={onManageUsers}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                    style={{ color: ink, border: `1.5px solid ${ink}30` }}
-                  >
-                    <Users size={14} /> Manage Accounts
-                  </button>
+                  <>
+                    <button
+                      onClick={onManageUsers}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                      style={{ color: ink, border: `1.5px solid ${ink}30` }}
+                    >
+                      <Users size={14} /> Manage Accounts
+                    </button>
+                    <button
+                      onClick={onTokenUsage}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                      style={{ color: ink, border: `1.5px solid ${ink}30` }}
+                    >
+                      Token Usage
+                    </button>
+                  </>
                 ) : canCreateSubAccounts(session.role) ? (
                   <button
                     onClick={onManageSubAccounts}
