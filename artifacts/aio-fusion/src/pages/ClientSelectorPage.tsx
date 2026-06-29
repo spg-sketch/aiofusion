@@ -106,8 +106,8 @@ export default function ClientSelectorPage({
           </div>
         </div>
 
-        <div className={`grid grid-cols-1 gap-3 sm:gap-4 mb-8 sm:mb-10 ${isClient ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
-          {!isClient && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-8 sm:mb-10">
+          {(!isClient || displayClients.length < 3) && (
           <button
             onClick={onCreateProject}
             className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
@@ -180,7 +180,7 @@ export default function ClientSelectorPage({
               A project is a single brand, product or campaign you want to optimise.
               You'll set up its messaging, audience and content plan once - then everything you publish flows through it.
             </p>
-            {!isClient && (
+            {(!isClient || displayClients.length < 3) && (
             <button
               onClick={onCreateProject}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all hover:brightness-110"

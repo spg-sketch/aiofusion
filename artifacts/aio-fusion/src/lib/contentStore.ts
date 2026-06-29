@@ -81,6 +81,11 @@ export function useContentStore(): number {
 // Load all content for this session from the server. Fires
 // `aio:content-store-changed` when done so all subscribed components refresh.
 export async function initContentStore(): Promise<void> {
+  // Always reset caches before fetching so that switching accounts on the
+  // same browser never leaks one account's data into another's view.
+  _archiveCache = null;
+  _plannerCache = null;
+  _scoringCache = null;
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
       fetch(`${apiBase()}/api/store/archive`,       { credentials: "include" }),
@@ -88,9 +93,9 @@ export async function initContentStore(): Promise<void> {
       fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" }),
     ]);
     if (archRes.ok)  _archiveCache  = (await archRes.json()).items  ?? [];
-    else             _archiveCache  = _archiveCache  ?? [];
+    else             _archiveCache  = [];
     if (planRes.ok)  _plannerCache  = (await planRes.json()).items  ?? [];
-    else             _plannerCache  = _plannerCache  ?? [];
+    else             _plannerCache  = [];
     if (cfgRes.ok) {
       const raw = (await cfgRes.json()).config as Partial<ScoringConfig> | null;
       _scoringCache = raw
@@ -100,19 +105,20 @@ export async function initContentStore(): Promise<void> {
             channels:    raw.channels    ?? DEFAULT_SCORING.channels }
         : DEFAULT_SCORING;
     } else {
-      _scoringCache = _scoringCache ?? DEFAULT_SCORING;
+      _scoringCache = DEFAULT_SCORING;
     }
   } catch {
-    _archiveCache  = _archiveCache  ?? [];
-    _plannerCache  = _plannerCache  ?? [];
-    _scoringCache  = _scoringCache  ?? DEFAULT_SCORING;
+    _archiveCache  = [];
+    _plannerCache  = [];
+    _scoringCache  = DEFAULT_SCORING;
   }
   _contentStoreReady = true;
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
 // One-time migration: upload any data still only in this browser's localStorage
-// to the server, then set a guard key so it only runs once per browser.
+// to the server, then purge the localStorage keys so they cannot be uploaded
+// again under a different account's session.
 export async function migrateLocalStorageContentToServer(): Promise<void> {
   try { if (localStorage.getItem(CONTENT_STORE_MIGRATED_KEY)) return; } catch { return; }
   try {
@@ -121,37 +127,56 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
       const k = localStorage.key(i);
       if (k) keys.push(k);
     }
-    for (const key of keys.filter((k) => k === ARCHIVE_KEY || k.startsWith(ARCHIVE_KEY + "::"))) {
-      const projectId = key.includes("::") ? key.split("::").pop()! : "default";
-      const items: ArchiveItem[] = JSON.parse(localStorage.getItem(key) || "[]");
-      for (const item of items) {
-        if (item.id.startsWith("seed-")) continue;
-        await fetch(`${apiBase()}/api/store/archive`, {
-          method: "POST", credentials: "include",
+
+    // Only migrate if the server currently has no archive items for this
+    // account — if items already exist, the localStorage data almost certainly
+    // belongs to a different account and must not be uploaded here.
+    const serverIsEmpty = (_archiveCache ?? []).length === 0 && (_plannerCache ?? []).length === 0;
+
+    if (serverIsEmpty) {
+      for (const key of keys.filter((k) => k === ARCHIVE_KEY || k.startsWith(ARCHIVE_KEY + "::"))) {
+        const projectId = key.includes("::") ? key.split("::").pop()! : "default";
+        const items: ArchiveItem[] = JSON.parse(localStorage.getItem(key) || "[]");
+        for (const item of items) {
+          if (item.id.startsWith("seed-")) continue;
+          await fetch(`${apiBase()}/api/store/archive`, {
+            method: "POST", credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...item, projectId }),
+          });
+        }
+      }
+      for (const key of keys.filter((k) => k === PROJECTS_KEY || k.startsWith(PROJECTS_KEY + "::"))) {
+        const projectId = key.includes("::") ? key.split("::").pop()! : "default";
+        const items: PlannerProject[] = JSON.parse(localStorage.getItem(key) || "[]");
+        for (const item of items) {
+          await fetch(`${apiBase()}/api/store/planner`, {
+            method: "POST", credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...item, projectId }),
+          });
+        }
+      }
+      const rawCfg = localStorage.getItem("aio.scoring.v1");
+      if (rawCfg) {
+        await fetch(`${apiBase()}/api/store/scoring-config`, {
+          method: "PUT", credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...item, projectId }),
+          body: JSON.stringify({ config: JSON.parse(rawCfg) }),
         });
       }
     }
-    for (const key of keys.filter((k) => k === PROJECTS_KEY || k.startsWith(PROJECTS_KEY + "::"))) {
-      const projectId = key.includes("::") ? key.split("::").pop()! : "default";
-      const items: PlannerProject[] = JSON.parse(localStorage.getItem(key) || "[]");
-      for (const item of items) {
-        await fetch(`${apiBase()}/api/store/planner`, {
-          method: "POST", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...item, projectId }),
-        });
-      }
+
+    // Always purge legacy localStorage keys after this check, whether or not
+    // we migrated — keeping them risks a future account picking them up.
+    for (const key of keys.filter((k) =>
+      k === ARCHIVE_KEY || k.startsWith(ARCHIVE_KEY + "::") ||
+      k === PROJECTS_KEY || k.startsWith(PROJECTS_KEY + "::") ||
+      k === "aio.scoring.v1"
+    )) {
+      try { localStorage.removeItem(key); } catch { /* ignore */ }
     }
-    const rawCfg = localStorage.getItem("aio.scoring.v1");
-    if (rawCfg) {
-      await fetch(`${apiBase()}/api/store/scoring-config`, {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: JSON.parse(rawCfg) }),
-      });
-    }
+
     localStorage.setItem(CONTENT_STORE_MIGRATED_KEY, "1");
   } catch {
     // Will retry on next load if the guard key was not set.
