@@ -20,8 +20,11 @@ import {
   migrateStoredIntakeKeys,
   migrateLegacyIntakeToProject,
   createStoredProject,
+  migrateAssignOwnerlessToAdmin,
 } from "./projects";
 import type { Client } from "../types";
+import { getUsers } from "./auth";
+import { pushProjectMeta } from "./projectSync";
 
 const baseProject = (): Client => ({
   id: "p1",
@@ -266,6 +269,80 @@ describe("migrateLegacyIntakeToProject", () => {
     migrateLegacyIntakeToProject();
 
     expect(loadStoredProjects().filter((p) => p.id === "default")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// migrateAssignOwnerlessToAdmin
+// ---------------------------------------------------------------------------
+describe("migrateAssignOwnerlessToAdmin", () => {
+  const adminUser = { username: "admin", password: "x", role: "admin" as const, createdAt: 0 };
+  const agencyUser = { username: "agency", password: "x", role: "agency" as const, createdAt: 0 };
+  const ownerlessProject = (): Client => ({ ...baseProject(), id: "op1", owner: undefined });
+  const ownedProject = (): Client => ({ ...baseProject(), id: "op2", owner: "someone" });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getUsers).mockReturnValue([adminUser]);
+    vi.mocked(pushProjectMeta).mockResolvedValue({ ok: true });
+  });
+
+  it("is a no-op when all projects already have owners", async () => {
+    saveStoredProjects([ownedProject()]);
+
+    await migrateAssignOwnerlessToAdmin();
+
+    expect(pushProjectMeta).not.toHaveBeenCalled();
+    const stored = loadStoredProjects();
+    expect(stored[0].owner).toBe("someone");
+  });
+
+  it("claims ownerless projects and assigns them to the admin user", async () => {
+    saveStoredProjects([ownerlessProject(), ownedProject()]);
+
+    await migrateAssignOwnerlessToAdmin();
+
+    expect(pushProjectMeta).toHaveBeenCalledOnce();
+    const stored = loadStoredProjects();
+    const healed = stored.find((p) => p.id === "op1");
+    expect(healed?.owner).toBe("admin");
+    const untouched = stored.find((p) => p.id === "op2");
+    expect(untouched?.owner).toBe("someone");
+  });
+
+  it("leaves the project ownerless when pushProjectMeta fails, enabling retry on next sync", async () => {
+    vi.mocked(pushProjectMeta).mockResolvedValue({ ok: false });
+    saveStoredProjects([ownerlessProject()]);
+
+    await migrateAssignOwnerlessToAdmin();
+
+    expect(pushProjectMeta).toHaveBeenCalledOnce();
+    const stored = loadStoredProjects();
+    expect(stored[0].owner).toBeUndefined();
+  });
+
+  it("is a no-op when there is no admin user in the local users list", async () => {
+    vi.mocked(getUsers).mockReturnValue([agencyUser]);
+    saveStoredProjects([ownerlessProject()]);
+
+    await migrateAssignOwnerlessToAdmin();
+
+    expect(pushProjectMeta).not.toHaveBeenCalled();
+    expect(loadStoredProjects()[0].owner).toBeUndefined();
+  });
+
+  it("handles multiple ownerless projects independently — a push failure on one does not prevent healing another", async () => {
+    const op2: Client = { ...baseProject(), id: "op2-ownerless", owner: undefined };
+    vi.mocked(pushProjectMeta)
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true });
+    saveStoredProjects([ownerlessProject(), op2]);
+
+    await migrateAssignOwnerlessToAdmin();
+
+    const stored = loadStoredProjects();
+    expect(stored.find((p) => p.id === "op1")?.owner).toBeUndefined();
+    expect(stored.find((p) => p.id === "op2-ownerless")?.owner).toBe("admin");
   });
 });
 
