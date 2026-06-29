@@ -46,7 +46,7 @@ function UsersAdminPage({
         for (const row of data.rows ?? []) {
           const key = row.accountId.toLowerCase();
           if (!totals[key]) totals[key] = { calls: 0, cost: 0 };
-          totals[key].calls += row.callCount;
+          totals[key].calls += Number(row.callCount);
           totals[key].cost += parseFloat(row.totalCost ?? "0");
         }
         setTokenTotals(totals);
