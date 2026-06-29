@@ -118,12 +118,9 @@ import {
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
   migrateStoredIntakeKeys,
 } from "./lib/projects";
-import { apiBase } from "./lib/apiHelpers";
 import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive } from "./lib/contentStore";
 import { MiniDonut } from "./pages/shared";
-import { AuthorityDonut } from "./pages/DashboardPage";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "./lib/diagnosticStore";
-import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { GenerateFromUrlModal } from "./components/GenerateFromUrlModal";
 import { Sidebar } from "./components/Sidebar";

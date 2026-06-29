@@ -95,22 +95,18 @@ export const DEFAULT_ADMIN_USERNAME = "admin";
 const DEV_FALLBACK_ADMIN_PASSWORD = "K9mt-4Rxq-7NzPv2";
 
 export async function ensureDefaultAdmin(): Promise<void> {
-  const accounts = await db
-    .select({ role: platformAccountsTable.role })
-    .from(platformAccountsTable);
-  if (accounts.some((a) => a.role === "admin")) return;
-
   const isProd = process.env.NODE_ENV === "production";
   const envPassword = process.env.PLATFORM_ADMIN_PASSWORD;
   const password = isProd ? envPassword : envPassword || DEV_FALLBACK_ADMIN_PASSWORD;
   if (!password) {
     console.warn(
-      "[platform-auth] No admin account and PLATFORM_ADMIN_PASSWORD is not set; " +
-        "skipping default-admin seed. Set PLATFORM_ADMIN_PASSWORD to bootstrap the first admin.",
+      "[platform-auth] PLATFORM_ADMIN_PASSWORD is not set; " +
+        "skipping admin seed/sync. Set PLATFORM_ADMIN_PASSWORD to bootstrap the first admin.",
     );
     return;
   }
 
+  // Insert the admin account if it does not exist yet.
   await db
     .insert(platformAccountsTable)
     .values({
@@ -119,6 +115,14 @@ export async function ensureDefaultAdmin(): Promise<void> {
       role: "admin",
     })
     .onConflictDoNothing({ target: platformAccountsTable.username });
+
+  // Always sync the password hash to the current env var so that rotating
+  // PLATFORM_ADMIN_PASSWORD takes effect on the next server restart without
+  // needing a manual DB update.
+  await db
+    .update(platformAccountsTable)
+    .set({ passwordHash: hashPassword(password) })
+    .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME));
 }
 
 // --- Accounts ---------------------------------------------------------------
