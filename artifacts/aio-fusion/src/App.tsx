@@ -111,14 +111,17 @@ import type {
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
 import { TokenUsageAdminPage, type TokenUsageRow } from "./pages/TokenUsageAdminPage";
 import type { Client } from "./lib/projectTypes";
+import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
-  loadClientLogos, saveClientLogos,
+  getProjectSectorLabel, loadClientLogos, saveClientLogos,
   migrateLegacyIntakeToProject, createStoredProject,
   assignProjectOwner, migrateAssignOwnerlessToAdmin,
   migrateStoredIntakeKeys,
 } from "./lib/projects";
+import { apiBase } from "./lib/apiHelpers";
 import { initContentStore, migrateLocalStorageContentToServer, removeDemoSeedData, loadArchive, loadPlannerProjects, useContentStore, saveArchive } from "./lib/contentStore";
 import { MiniDonut } from "./pages/shared";
+import { AuthorityDonut } from "./pages/DashboardPage";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "./lib/diagnosticStore";
 
 // ---------------------------------------------------------------------------
@@ -1267,28 +1270,6 @@ function ClientSelectorPage({
 }
 
 
-import { GuidancePage } from "./pages/GuidancePage";
-import { ArchivedProjectsPage } from "./pages/ArchivedProjectsPage";
-import { MediaResearchPage } from "./pages/MediaResearchPage";
-import { MarketingIntelligencePage } from "./pages/MarketingIntelligencePage";
-import { PlatformHomePage } from "./pages/PlatformHomePage";
-import { UsersAdminPage } from "./pages/UsersAdminPage";
-import { SubAccountsPage } from "./pages/SubAccountsPage";
-import { MediaDatabasePage } from "./pages/MediaDatabasePage";
-import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
-import { AuthorityDonut, DashboardPage } from "./pages/DashboardPage";
-import { DiagnosticPage } from "./pages/DiagnosticPage";
-import { OptimiserPage } from "./pages/OptimiserPage";
-import { PlannerPage } from "./pages/PlannerPage";
-import { ReleaseGatewayPage } from "./pages/ReleaseGatewayPage";
-import { ArchivePage } from "./pages/ArchivePage";
-import { GeoContentPage } from "./pages/GeoContentPage";
-import { ContentCreatorPage } from "./pages/ContentCreatorPage";
-import { apiBase } from "./lib/apiHelpers";
-import { CreateProjectModal } from "./components/CreateProjectModal";
-import { GenerateFromUrlModal } from "./components/GenerateFromUrlModal";
-import { Sidebar } from "./components/Sidebar";
-import ClientSelectorPage from "./pages/ClientSelectorPage";
 // --- URL <-> view mapping for the public marketing pages ------------------
 const VIEW_TO_SLUG: Record<string, string> = {
   landing: "",
