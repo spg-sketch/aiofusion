@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectsTable, tokenUsageTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, auditLocksTable, projectsTable, tokenUsageTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername } from "../lib/platform-auth";
@@ -619,6 +619,33 @@ adminRouter.get(
     } catch (err) {
       logger.error({ err }, "admin token-usage: query failed");
       res.status(500).json({ error: "Could not load token usage data." });
+    }
+  },
+);
+
+// Clear an audit lock so admin can force a re-run for a given project+type.
+adminRouter.delete(
+  "/admin/audit-lock",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const { projectId, auditType } = req.body as { projectId?: string; auditType?: string };
+    if (!projectId || !auditType) {
+      res.status(400).json({ error: "projectId and auditType are required" });
+      return;
+    }
+    try {
+      await db
+        .delete(auditLocksTable)
+        .where(and(eq(auditLocksTable.projectId, projectId), eq(auditLocksTable.auditType, auditType)));
+      logger.info({ projectId, auditType, by: req.account.username }, "Audit lock cleared by admin");
+      res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, "admin clear-audit-lock: failed");
+      res.status(500).json({ error: "Could not clear audit lock." });
     }
   },
 );
