@@ -122,287 +122,27 @@ import {
   RefreshCw,
   MonitorSmartphone,
 } from "lucide-react";
+import type {
+  Client, GenerateStep, NavItem, NavSection, Rating,
+  DiagnosticResult, SavedDiagnostic, SavedScored,
+  ArchiveItem, PlannerStatus, PlannerProject, ScoringConfig,
+  CreatorFieldKey, ConfidenceFlag, MediaJournalist, MediaListItem,
+  EventConfirmFlag, EventOpportunity, EventItem, PublicView,
+  Outlet, Contact,
+} from "./types";
+import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
+import {
+  CREATED_PROJECTS_KEY, PROJECT_COLORS, CLIENT_LOGOS_KEY,
+  deriveInitials, getProjectSectorLabel,
+  loadStoredProjects, saveStoredProjects,
+  loadClientLogos, saveClientLogos,
+  migrateLegacyIntakeToProject, createStoredProject,
+  assignProjectOwner, migrateAssignOwnerlessToAdmin,
+  migrateStoredIntakeKeys,
+} from "./lib/projects";
 
-export type CycleHistory = { cycle: number; history: { date: string; score: number }[] };
-const cycleKey = (clientId: string) => `aio.cycle.${clientId}`;
-export function loadCycle(clientId: string): CycleHistory {
-  try {
-    const raw = localStorage.getItem(cycleKey(clientId));
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { cycle: 0, history: [] };
-}
-export function recordCycle(clientId: string, score: number): CycleHistory {
-  const cur = loadCycle(clientId);
-  const next: CycleHistory = {
-    cycle: cur.cycle + 1,
-    history: [...cur.history, { date: new Date().toISOString(), score }].slice(-12),
-  };
-  localStorage.setItem(cycleKey(clientId), JSON.stringify(next));
-  return next;
-}
-
-type Client = {
-  id: string;
-  name: string;
-  sector: string;
-  initials: string;
-  color: string;
-  contentCount: number;
-  avgScore: number;
-  scoreTrend: number;
-  activePlans: number;
-  lastActive: string;
-  recentActivity: string;
-  logo?: string;
-  owner?: string;
-};
-
-// Sample/demo agencies have been removed. The Project Hub now shows only real,
-// user-created projects loaded from localStorage.
-
-// ---------------------------------------------------------------------------
-// Created (real) projects. These are saved by the user when they set up a new
-// project and persist in localStorage so they show in the Project Hub. They
-// live alongside the demo clients above.
-// ---------------------------------------------------------------------------
-const CREATED_PROJECTS_KEY = "aio.projects.v1";
-const PROJECT_COLORS = ["#C8497A", "#1f748f", "#2896b9", "#165265", "#D4922A", "#3D9B6B"];
-
-function deriveInitials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "P";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0][0] + words[1][0]).toUpperCase();
-}
-
-// Read the most meaningful sector label for a project card directly from that
-// project's stored intake data, without changing the active project. Falls back
-// gracefully at every step so the card never crashes.
-function getProjectSectorLabel(projectId: string): string {
-  try {
-    const key = projectId === "default"
-      ? "aio.intake.v2"
-      : `aio.intake.v2::${projectId}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) return "Awaiting set-up";
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed.intakeStatus === "Accepted") return "Completed";
-    const sectors = (parsed.businessCategories as string[] | undefined) || [];
-    if (sectors.length > 0) return sectors[0];
-    if (parsed.intakeStatus === "Optimised") return "Optimised";
-  } catch { /* noop */ }
-  return "Awaiting set-up";
-}
-
-function loadStoredProjects(): Client[] {
-  try {
-    const raw = localStorage.getItem(CREATED_PROJECTS_KEY);
-    if (raw) return JSON.parse(raw) as Client[];
-  } catch { /* noop */ }
-  return [];
-}
-
-function saveStoredProjects(list: Client[]): void {
-  try { localStorage.setItem(CREATED_PROJECTS_KEY, JSON.stringify(list)); } catch { /* noop */ }
-}
-
-// Project logos are stored separately (keyed by project id) because they are
-// large data URLs. Persisted to localStorage so they survive a page refresh.
-const CLIENT_LOGOS_KEY = "aio.clientLogos.v1";
-
-function loadClientLogos(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(CLIENT_LOGOS_KEY);
-    if (raw) return JSON.parse(raw) as Record<string, string>;
-  } catch { /* noop */ }
-  return {};
-}
-
-function saveClientLogos(map: Record<string, string>): void {
-  try {
-    localStorage.setItem(CLIENT_LOGOS_KEY, JSON.stringify(map));
-  } catch {
-    // Most likely the browser storage limit was hit by a large logo image.
-    if (typeof window !== "undefined") {
-      window.alert("This logo could not be saved because it is too large for browser storage. Please try a smaller image (under 1MB).");
-    }
-  }
-}
-
-// One-time migration: if the user already completed an intake before projects
-// were saveable, that data lives under the bare "aio.intake.v2" key. Surface it
-// in the hub as a real "default" project so it is not orphaned.
-function migrateLegacyIntakeToProject(): void {
-  const projects = loadStoredProjects();
-  if (projects.some((p) => p.id === "default")) return;
-  let raw: string | null = null;
-  try { raw = localStorage.getItem("aio.intake.v2"); } catch { /* noop */ }
-  if (!raw) return;
-  let name = "New Project";
-  try {
-    const fd = JSON.parse(raw).formData || {};
-    if (typeof fd["4.1"] === "string" && fd["4.1"].trim()) name = fd["4.1"].trim();
-  } catch { /* noop */ }
-  projects.unshift({
-    id: "default",
-    name,
-    sector: "Awaiting set-up",
-    initials: deriveInitials(name),
-    color: PROJECT_COLORS[0],
-    contentCount: 0,
-    avgScore: 0,
-    scoreTrend: 0,
-    activePlans: 0,
-    lastActive: "Today",
-    recentActivity: "Set-up saved",
-  });
-  saveStoredProjects(projects);
-}
-
-function createStoredProject(name: string): Client {
-  const projects = loadStoredProjects();
-  const clean = name.trim() || "New Project";
-  const owner = getLocalSession()?.username;
-  const project: Client = {
-    id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name: clean,
-    sector: "Awaiting set-up",
-    initials: deriveInitials(clean),
-    color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
-    contentCount: 0,
-    avgScore: 0,
-    scoreTrend: 0,
-    activePlans: 0,
-    lastActive: "Just now",
-    recentActivity: "Project created",
-    ...(owner ? { owner } : {}),
-  };
-  saveStoredProjects([project, ...projects]);
-  return project;
-}
-
-// Hand a project to a different account (e.g. an agency assigning a project to
-// one of its client sub-accounts). Updates the owner in local storage and
-// returns the updated project so the caller can mirror it to the shared store.
-function assignProjectOwner(id: string, owner: string): Client | null {
-  const projects = loadStoredProjects();
-  const idx = projects.findIndex((p) => p.id === id);
-  if (idx === -1) return null;
-  const updated: Client = { ...projects[idx], owner };
-  projects[idx] = updated;
-  saveStoredProjects(projects);
-  return updated;
-}
-
-// Self-heal projects that have no owner. Projects created before ownership was
-// tracked (and legacy rows whose owner column is still NULL on the server) have
-// no owner, so they are attributed to nobody in User Management and no agency or
-// client can ever see them. Assign each to the master account so it shows under
-// that account again.
-//
-// This deliberately runs on EVERY load rather than once behind a flag: an
-// ownerless project can arrive at any time from the shared store sync (a legacy
-// row the server returns to the master because NULL owner is treated as
-// admin-only), long after a one-time migration would have run. A per-project,
-// idempotent heal is the only thing that stops such a project silently
-// "disappearing again". Only the master's browser caches an admin-role account,
-// so only the master ever claims here, and the matching server-side coalesce
-// only fills a NULL owner (it never reassigns a real one), so the claim is safe.
-async function migrateAssignOwnerlessToAdmin(): Promise<void> {
-  try {
-    const ownerless = loadStoredProjects().filter((p) => !p.owner);
-    if (!ownerless.length) return;
-    const admin = getLocalUsers().find((u) => u.role === "admin");
-    if (!admin) return; // only the master may claim ownerless projects
-    for (const p of ownerless) {
-      const claimed = { ...p, owner: admin.username } as Client;
-      // Persist the claim locally only once the shared store confirms it. A
-      // transient push failure then leaves the project ownerless so it retries
-      // on the next sync, rather than going NULL-owned on the server forever.
-      const result = await pushProjectMeta(claimed as unknown as Record<string, unknown> & { id: string });
-      if (!result.ok) continue;
-      const current = loadStoredProjects();
-      const idx = current.findIndex((x) => x.id === p.id);
-      if (idx !== -1 && !current[idx].owner) {
-        current[idx] = { ...current[idx], owner: admin.username };
-        saveStoredProjects(current);
-      }
-    }
-  } catch { /* noop */ }
-}
-
-// Self-healing intake field renumbering. Field ids double as storage keys, and
-// this runs at module load (before any component reads intake data) so the
-// renamed keys are in place on the very first render.
-//
-// The live form no longer has fields 1.11 (ICP) or 1.12 (locations) - both were
-// moved into section 3. So the presence of a "1.11" or "1.12" key in a stored
-// project is an unambiguous signal that THAT project predates the move and still
-// needs migrating. We detect the move per project by that key, rather than a
-// single one-time browser flag, so a project saved, imported or synced after the
-// original migration ran still gets repaired on its next load instead of leaving
-// the answer orphaned under the old key. Because each step only fires when its
-// old source key is still present, the pass is idempotent and never double-shifts
-// an already-migrated project.
-function remapIntakeContainer(obj: unknown, remap: Record<string, string>): unknown {
-  if (!obj || typeof obj !== "object") return obj;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) out[remap[k] ?? k] = v;
-  return out;
-}
-
-function projectHasIntakeKey(parsed: Record<string, unknown>, fieldId: string): boolean {
-  const has = (o: unknown) =>
-    !!o && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, fieldId);
-  return has(parsed.formData) || has(parsed.duals) || has(parsed.dualLists);
-}
-
-function applyIntakeRemap(parsed: Record<string, unknown>, remap: Record<string, string>): void {
-  if (parsed.formData) parsed.formData = remapIntakeContainer(parsed.formData, remap);
-  if (parsed.duals) parsed.duals = remapIntakeContainer(parsed.duals, remap);
-  if (parsed.dualLists) parsed.dualLists = remapIntakeContainer(parsed.dualLists, remap);
-  if (Array.isArray(parsed.optimisedFields)) {
-    parsed.optimisedFields = (parsed.optimisedFields as string[]).map((id) => remap[id] ?? id);
-  }
-  const snap = parsed.preOptimiseSnapshot as Record<string, unknown> | null | undefined;
-  if (snap && typeof snap === "object") {
-    if (snap.formData) snap.formData = remapIntakeContainer(snap.formData, remap);
-    if (snap.duals) snap.duals = remapIntakeContainer(snap.duals, remap);
-    if (snap.dualLists) snap.dualLists = remapIntakeContainer(snap.dualLists, remap);
-  }
-}
-
-// Step 1: ICP (1.11) -> 3.2. Step 2: locations (1.12) -> 3.3. Each step also
-// shifts the following section-3 fields down by one to make room. Order matters:
-// step 1 produces the intermediate numbering that step 2 expects, so both run in
-// sequence on the same project within a single pass.
-const INTAKE_RENUMBER_STEPS: { trigger: string; remap: Record<string, string> }[] = [
-  { trigger: "1.11", remap: { "1.11": "3.2", "3.2": "3.3", "3.3": "3.4", "3.4": "3.5" } },
-  { trigger: "1.12", remap: { "1.12": "3.3", "3.3": "3.4", "3.4": "3.5", "3.5": "3.6" } },
-];
-
-function migrateStoredIntakeKeys(): void {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith("aio.intake.v2")) continue;
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      let parsed: Record<string, unknown>;
-      try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { continue; }
-      if (!parsed || typeof parsed !== "object") continue;
-      let changed = false;
-      for (const step of INTAKE_RENUMBER_STEPS) {
-        if (projectHasIntakeKey(parsed, step.trigger)) {
-          applyIntakeRemap(parsed, step.remap);
-          changed = true;
-        }
-      }
-      if (changed) localStorage.setItem(key, JSON.stringify(parsed));
-    }
-  } catch { /* noop */ }
-}
+// Run the intake key migration immediately on module load (before any component
+// reads intake data) so renamed keys are in place on the very first render.
 migrateStoredIntakeKeys();
 
 function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
@@ -516,8 +256,6 @@ function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCr
 }
 
 const GENERATE_FROM_URL_TIMEOUT_MS = 130_000;
-
-type GenerateStep = "idle" | "scraping" | "generating" | "saving" | "scoring" | "done" | "error";
 
 const GENERATE_STEPS: { key: GenerateStep; label: string }[] = [
   { key: "scraping", label: "Scraping site" },
@@ -939,9 +677,6 @@ function CategoryPickerModal({
     </div>
   );
 }
-
-type NavItem = { label: string; id: string; locked?: boolean; sub?: string };
-type NavSection = { section: string; color: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
@@ -2216,7 +1951,6 @@ function DashboardPage({
   );
 }
 
-type Rating = "green" | "amber" | "red";
 const ratingConfig = {
   green: {
     bg: "#EFF7F2",
@@ -2237,57 +1971,6 @@ const ratingConfig = {
     label: "Critical",
   },
 };
-
-type DiagnosticResult = {
-  overallScore: number;
-  categories: Array<{
-    name: string;
-    score: number;
-    max: number;
-    status: string;
-    findings: string[];
-    recommendations: string[];
-  }>;
-  strengths: string[];
-  warnings: string[];
-  criticalGaps: string[];
-  priorityActions: Array<{
-    priority: string;
-    action: string;
-    timeframe: string;
-    impact: string;
-    category: string;
-  }>;
-  summary: string;
-  provider?: string;
-  fetchedUrl?: string;
-  pagesFetched?: string[];
-  pageFacts?: {
-    metaTitle: string;
-    hasMetaDescription: boolean;
-    hasCanonical: boolean;
-    openGraphTagCount: number;
-    jsonLdBlockCount: number;
-    jsonLdTypes: string[];
-    microdataCount: number;
-    h1Count: number;
-    h2Count: number;
-    h3Count: number;
-    imagesTotal: number;
-    imagesWithAlt: number;
-    imagesWithoutAlt: number;
-    listCount: number;
-    tableCount: number;
-    hasRobotsTxt: boolean;
-    sitemapUrlCount: number | null;
-  };
-  sources?: {
-    claude?: { score: number; summary: string };
-    openai?: { score: number; summary: string };
-  };
-};
-
-type SavedDiagnostic = { id: string; savedAt: string; result: DiagnosticResult };
 
 const savedDiagnosticsKey = (clientId: string) => `aio.savedDiagnostics.${clientId}`;
 
@@ -2310,8 +1993,6 @@ function persistSavedDiagnostics(clientId: string, list: SavedDiagnostic[]): boo
     return false;
   }
 }
-
-type SavedScored = { id: string; savedAt: string; score: number };
 
 const contentGeoKey = (clientId: string) => `aio.savedContentGeo.${clientId}`;
 export const techGeoKey = (clientId: string) => `aio.savedTechGeo.${clientId}`;
@@ -4834,27 +4515,6 @@ function ScoringSettingsModal({ cfg, onSave, onClose }: { cfg: ScoringConfig; on
 }
 
 
-type ArchiveItem = {
-  id: string;
-  title: string;
-  contentType: string;
-  spokesperson?: string;
-  status: "Draft" | "Final";
-  tags: string[];
-  body: string;
-  headline?: string;
-  standfirst?: string;
-  bodyCopy?: string;
-  selectedMessages?: string[];
-  mediaCats?: string[];
-  pubDate?: string;
-  createdAt: string;
-  releasedAt?: string;
-  releaseChannel?: string;
-  source?: "optimiser" | "creator";
-  projectId?: string;
-};
-
 function splitArchiveBody(arc: { body?: string; headline?: string; standfirst?: string; bodyCopy?: string }): { headline: string; standfirst: string; bodyCopy: string } {
   // Strip any em dashes left in previously saved drafts so retrieved content is clean.
   if (arc.headline !== undefined || arc.standfirst !== undefined || arc.bodyCopy !== undefined) {
@@ -5043,22 +4703,6 @@ function saveArchive(newItems: ArchiveItem[], clientId?: string) {
   window.dispatchEvent(new Event("aio:content-store-changed"));
 }
 
-type PlannerStatus = "Planned" | "Drafting" | "Review" | "Approved";
-
-type PlannerProject = {
-  id: string;
-  title: string;
-  contentType: string;
-  spokesperson: string;
-  keyMessage: string;
-  audience: string;
-  channels: string[];
-  week: number;
-  status: PlannerStatus;
-  releaseDate: string;
-  notes: string;
-};
-
 function loadPlannerProjects(clientId?: string): PlannerProject[] {
   if (_plannerCache === null) return [];
   const pid = effectiveProjectId(clientId);
@@ -5169,15 +4813,6 @@ function weekDateLabel(weekNumber: number, year: number = new Date().getFullYear
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${target.getUTCDate()}-${months[target.getUTCMonth()]}`;
 }
-
-type ScoringConfig = {
-  typeWeights: Record<string, { vis: number; auth: number }>;
-  channels: string[];
-  channelBase: number;
-  channelStep: number;
-  channelCap: number;
-  statusMultipliers: Record<PlannerStatus, number>;
-};
 
 // Default scoring table per Patrick's d2 brief - Authority and Visibility scored
 // independently, with Combined as the shown average. Article (Trade Publication)
@@ -5810,8 +5445,6 @@ function PlaceholderPage({
     </div>
   );
 }
-
-type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
 const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
   headline: "headline",
@@ -6700,34 +6333,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     </div>
   );
 }
-
-type ConfidenceFlag = "V" | "P" | "U";
-
-type MediaJournalist = {
-  name: string;
-  title: string;
-  email: string;
-  confidence: ConfidenceFlag;
-  roleCurrency: string;
-};
-
-type MediaListItem = {
-  rank: number;
-  publication: string;
-  url: string;
-  category: string;
-  categoryRank: number;
-  description: string;
-  readership: string;
-  reach: string;
-  reachVerified: boolean;
-  journalists: MediaJournalist[];
-  noBeatContactNote?: string;
-  authority: number;
-  authorityNote?: string;
-  pitchAngle: string;
-  suggestedPlacement?: string;
-};
 
 const MEDIA_LIST_LLM_PROMPT_V2 = `You are acting as a senior UK PR media-list builder.
 Using the Content Item selected and referencing the business information on the Project Data document, produce a target media list using the media categories selected in section 1.9. of the Project Data document to support its distribution.
@@ -7624,30 +7229,6 @@ function MarketingIntelligencePage() {
     </div>
   );
 }
-
-type EventConfirmFlag = "C" | "U";
-type EventOpportunity = {
-  type: "Conference entry" | "Award entry" | "Speaker" | "Sponsorship";
-  cost: string;
-  deadline: string;
-  contactDetails?: string;
-  notes?: string;
-  actionable?: boolean;
-};
-type EventItem = {
-  rank: number;
-  name: string;
-  url: string;
-  category: string;
-  date: string;
-  audience: string;
-  titleDescription: string;
-  location: string;
-  confirmStatus: EventConfirmFlag;
-  authority: number;
-  relevanceReason: string;
-  opportunities: EventOpportunity[];
-};
 
 const EVENTS_RESEARCH_LLM_PROMPT_V2 = `You are acting as a senior UK PR event attendance and participation-list builder.
 Produce an exhaustive list of marketing types chosen
@@ -9539,10 +9120,6 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
 // The app navigates via internal state, but the public pages should also live
 // at real URLs (e.g. /about, /for-agents) so they can be linked to, typed in
 // directly, refreshed and shared. These maps translate between the two.
-type PublicView =
-  | "landing" | "about" | "contact" | "insights" | "pricing"
-  | "for-inhouse" | "for-agencies" | "for-agents";
-
 const VIEW_TO_SLUG: Record<string, string> = {
   landing: "",
   about: "about",
@@ -10209,9 +9786,6 @@ function SearchableOutletPicker({
 // ---------------------------------------------------------------------------
 // Media Database page — outlets, contacts and custom categories
 // ---------------------------------------------------------------------------
-type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
-type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string; outletName?: string; outletCategory?: string };
-
 function MediaDatabasePage() {
   const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("outlets");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
