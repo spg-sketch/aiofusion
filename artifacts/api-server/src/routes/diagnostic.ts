@@ -9,6 +9,7 @@ import { deepStripEmDashes } from "../lib/text-sanitise";
 import { diagnosticLimiter } from "../middleware/rate-limit";
 import { diagnosticConcurrencyGuard } from "../middleware/concurrency-guard";
 import { logAdminEvent } from "../lib/admin-events";
+import { logTokenUsage } from "../lib/token-usage";
 
 const AUDIT_LOCK_DAYS = 21;
 
@@ -192,7 +193,7 @@ function buildUserMessage(content: string, facts?: GeoAuditFacts | null, confirm
   return `Analyse the following web page content for GEO readiness. Return only valid JSON.${anchor ? `\n\n${anchor}` : ""}${factsBlock ? `\n\n${factsBlock}` : ""}\n\n<content>\n${content}\n</content>`;
 }
 
-export async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null): Promise<any> {
+export async function analyseWithClaude(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null, opts?: { accountId?: string; projectId?: string }): Promise<any> {
   const client = createAnthropicClient();
   if (!client) throw new Error("Anthropic integration not configured");
 
@@ -209,13 +210,17 @@ export async function analyseWithClaude(content: string, facts?: GeoAuditFacts |
     ],
   });
 
+  if (opts?.accountId) {
+    void logTokenUsage(opts.accountId, "diagnostic", "claude-sonnet-4-5", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, opts.projectId);
+  }
+
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("No text response from Claude");
 
   return normaliseResult(extractJSON(textBlock.text));
 }
 
-async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null): Promise<any> {
+async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null, opts?: { accountId?: string; projectId?: string }): Promise<any> {
   const client = createOpenAIClient();
   if (!client) throw new Error("OpenAI integration not configured");
 
@@ -236,6 +241,10 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
       },
     ],
   });
+
+  if (opts?.accountId && response.usage) {
+    void logTokenUsage(opts.accountId, "diagnostic-openai", "gpt-5", response.usage.prompt_tokens, response.usage.completion_tokens, opts.projectId);
+  }
 
   const text = response.choices[0]?.message?.content;
   if (!text) throw new Error("No response from OpenAI");
@@ -345,7 +354,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     // one engine, temperature 0.
     let result: any;
     try {
-      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts, confirmedEntity);
+      const claudeValue = await analyseWithClaude(textToAnalyse, pageFacts, confirmedEntity, { accountId: req.account?.username, projectId });
       result = {
         ...claudeValue,
         provider: "claude",
@@ -354,7 +363,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
     } catch (claudeErr: any) {
       logger.warn({ err: claudeErr?.message }, "Claude failed, falling back to OpenAI");
       try {
-        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts, confirmedEntity);
+        const openaiValue = await analyseWithOpenAI(textToAnalyse, pageFacts, confirmedEntity, { accountId: req.account?.username, projectId });
         result = {
           ...openaiValue,
           provider: "openai",

@@ -4,6 +4,7 @@ import { logger } from "../lib/logger";
 import { aiAssistLimiter } from "../middleware/rate-limit";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
 import { stripEmDashes, deepStripEmDashes } from "../lib/text-sanitise";
+import { logTokenUsage } from "../lib/token-usage";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 
 const aiAssistRouter = Router();
@@ -104,6 +105,7 @@ aiAssistRouter.post(
         temperature: 0,
         messages: [{ role: "user", content: prompt }],
       });
+      void logTokenUsage(req.account?.username ?? "anonymous", "ai-assist-draft", "claude-sonnet-4-6", message.usage?.input_tokens ?? 0, message.usage?.output_tokens ?? 0);
       const block = message.content[0];
       const raw = block && block.type === "text" ? block.text : "";
       const parsed = extractJson(raw);
@@ -278,6 +280,7 @@ aiAssistRouter.post(
         temperature: 0,
         messages: [{ role: "user", content: prompt }],
       });
+      void logTokenUsage(req.account?.username ?? "anonymous", "ai-assist-optimise", "claude-sonnet-4-6", message.usage?.input_tokens ?? 0, message.usage?.output_tokens ?? 0);
       const block = message.content[0];
       const raw = block && block.type === "text" ? block.text : "";
       const parsed = extractJson(raw);

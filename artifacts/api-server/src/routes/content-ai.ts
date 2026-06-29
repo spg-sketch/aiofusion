@@ -6,6 +6,7 @@ import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
 import { db, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
 import { isNull } from "drizzle-orm";
+import { logTokenUsage } from "../lib/token-usage";
 
 const contentAiRouter = Router();
 
@@ -991,6 +992,10 @@ contentAiRouter.post(
           setTimeout(() => reject(new Error("timeout")), STREAM_TIMEOUT_MS),
         ),
       ]);
+      if (req.account) {
+        const usedMsg = message as { usage?: { input_tokens?: number; output_tokens?: number } };
+        void logTokenUsage(req.account.username, "llm-queries", MODEL, usedMsg.usage?.input_tokens ?? 0, usedMsg.usage?.output_tokens ?? 0);
+      }
       const raw =
         (message as { content?: { type?: string; text?: string }[] }).content?.[0]?.type === "text"
           ? (message as { content: { type: string; text: string }[] }).content[0].text

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectsTable } from "@workspace/db";
+import { db, projectsTable, tokenUsageTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -543,7 +543,7 @@ Rules:
       let geoScore: number | null = null;
       try {
         const geoCtx = await fetchGeoAuditContext(normalised);
-        const geoResult = await analyseWithClaude(geoCtx.text, geoCtx.facts);
+        const geoResult = await analyseWithClaude(geoCtx.text, geoCtx.facts, undefined, { accountId: req.account?.username ?? "admin" });
         geoScore = geoResult.overallScore ?? null;
 
         if (geoScore !== null) {
@@ -578,6 +578,46 @@ Rules:
         error: "Something went wrong generating the project. Please try again.",
       });
       res.end();
+    }
+  },
+);
+
+adminRouter.get(
+  "/token-usage",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    try {
+      const rows = await db
+        .select({
+          accountId: tokenUsageTable.accountId,
+          month: sql<string>`to_char(date_trunc('month', ${tokenUsageTable.createdAt}), 'YYYY-MM')`,
+          operation: tokenUsageTable.operation,
+          model: tokenUsageTable.model,
+          totalInput: sql<number>`sum(${tokenUsageTable.inputTokens})::int`,
+          totalOutput: sql<number>`sum(${tokenUsageTable.outputTokens})::int`,
+          totalCost: sql<string>`round(sum(${tokenUsageTable.costGbpEstimate}::numeric), 4)::text`,
+          callCount: sql<number>`count(*)::int`,
+        })
+        .from(tokenUsageTable)
+        .groupBy(
+          tokenUsageTable.accountId,
+          sql`date_trunc('month', ${tokenUsageTable.createdAt})`,
+          tokenUsageTable.operation,
+          tokenUsageTable.model,
+        )
+        .orderBy(
+          sql`date_trunc('month', ${tokenUsageTable.createdAt}) desc`,
+          tokenUsageTable.accountId,
+        )
+        .limit(1000);
+      res.json({ rows });
+    } catch (err) {
+      logger.error({ err }, "admin token-usage: query failed");
+      res.status(500).json({ error: "Could not load token usage data." });
     }
   },
 );
