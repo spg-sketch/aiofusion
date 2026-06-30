@@ -458,17 +458,17 @@ const GEN_LENGTH_2: Record<string, string> = {
 // At ~1.3 tokens/word: 900 w ≈ 1,170 body tokens + ~600 JSON overhead = ~1,770
 // → rounded up with extra safety margin.
 const GEN_MAX_TOKENS: Record<string, number> = {
-  "Press release": 2500,
-  "Case study": 2200,
-  "Speaker submission": 2000,
-  "Award submission": 2000,
-  "Event copy": 1800,
-  "Directory entry": 1500,
-  Article: 2500,
-  Whitepaper: 5000,
-  "Blog post": 2000,
-  "Social post": 1500,
-  "Article Media Pitch": 1500,
+  "Press release": 3500,
+  "Case study": 3500,
+  "Speaker submission": 2500,
+  "Award submission": 2500,
+  "Event copy": 2500,
+  "Directory entry": 2000,
+  Article: 4500,
+  Whitepaper: 6000,
+  "Blog post": 3000,
+  "Social post": 2000,
+  "Article Media Pitch": 2000,
 };
 
 const GEN_OBJECTIVES_1 =

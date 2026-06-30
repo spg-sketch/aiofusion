@@ -18,3 +18,4 @@
 - [AIO Fusion brand-name confusion](aio-fusion-brand-name-confusion.md) — acronym mentions need domain/full-legal-name corroboration; never use suffix-stripped legal name (group/holdings→sector) for detection; entity-clarity + no web grounding.
 - [AIO Fusion DB backups](aio-fusion-db-backups.md) — verified pg_dump → object-storage backups in scripts/; gate compares projects-in-dump vs live count, quarantines on mismatch; runs as Replit Scheduled Deployment.
 - [AIO Fusion LLM queries field 1.6](aio-fusion-llm-queries.md) — 1.6 is now structured LlmQueries {v,discovery,shortlist,comparison}; getLlmSearchQueries() is the canonical read; /api/content/llm-queries uses non-streaming Anthropic call (no SSE); 3.4 removed.
+- [AIO Fusion content gen token limits + intake field mapping](aio-fusion-content-gen-tokens.md) — GEN_MAX_TOKENS must include JSON-wrapper overhead or extractJson fails; intake sector/name live in formData["4.4"/"4.1"], not top-level.

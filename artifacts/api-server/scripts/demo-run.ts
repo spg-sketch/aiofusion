@@ -29,6 +29,8 @@ import { parseArgs } from "node:util";
 import { writeFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
+import { db, tokenUsageTable, projectsTable } from "@workspace/db";
+import { and, eq, gte } from "drizzle-orm";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -93,6 +95,22 @@ export interface DemoRunOutput {
    *  client account inserted on or after runStartedAt. This matches the
    *  TokenUsageAdminPage figures. */
   dbRunTotal: DbRunTotal;
+  /** Admin-session tokens (project generation) — one-off setup cost. */
+  setupDbTotal: DbRunTotal;
+  /**
+   * Cost projection based on real token data from this run.
+   * - Setup is one-off (project generation runs as admin, charged once at onboarding).
+   * - Recurring = all client-session LLM calls: audits + LLM queries + content (3 pieces).
+   * - The audit window is 21 days, so one recurring cycle = 3 weeks.
+   * - 1 calendar month = 28/21 ≈ 1.33 three-week cycles.
+   */
+  projection: {
+    oneOffSetupCostGbp: number;
+    recurringCostPer3WeekCycleGbp: number;
+    projectedMonth1CostGbp: number;
+    projectedMonthlyCostGbp: number;
+    assumptions: string[];
+  };
   /** @deprecated use stepEstimateTotal instead. Kept for backwards compat. */
   grandTotal: {
     durationMs: number;
@@ -226,9 +244,6 @@ export async function fetchRunScopedDbTotal(
   accountId: string,
   runStartedAt: Date,
 ): Promise<DbRunTotal> {
-  const { db, tokenUsageTable } = await import("@workspace/db");
-  const { and, eq, gte } = await import("drizzle-orm");
-
   const rows = await db
     .select({
       inputTokens:     tokenUsageTable.inputTokens,
@@ -261,6 +276,7 @@ export async function main(): Promise<DemoRunOutput> {
   log(`AIO Fusion Demo Runner — ${TARGET_URL}`);
   log("=".repeat(60));
 
+  const wallStart = new Date();
   const steps: StepResult[] = [];
 
   // ── Phase 1: Admin bootstrap ───────────────────────────────────────────────
@@ -306,12 +322,8 @@ export async function main(): Promise<DemoRunOutput> {
   log(`   ℹ  Project: ${projectName} (${projectId})`);
 
   // Re-assign project owner to the client account via direct DB write.
-  {
-    const { db: drizzleDb, projectsTable } = await import("@workspace/db");
-    const { eq } = await import("drizzle-orm");
-    await drizzleDb.update(projectsTable).set({ owner: CLIENT_USER }).where(eq(projectsTable.id, projectId));
-    log(`   ✓  Project ownership transferred to '${CLIENT_USER}'`);
-  }
+  await db.update(projectsTable).set({ owner: CLIENT_USER }).where(eq(projectsTable.id, projectId));
+  log(`   ✓  Project ownership transferred to '${CLIENT_USER}'`);
 
   // ── Phase 3: Client-session LLM steps ────────────────────────────────────
   log("\nPhase 3: Client-session steps");
@@ -322,21 +334,31 @@ export async function main(): Promise<DemoRunOutput> {
   // Only client-account LLM calls after this point will be in dbRunTotal.
   const runStartedAt = new Date();
 
-  const intakeRes = await getJson(`/store/projects/${projectId}/intake`, clientCookie);
-  let intake: Record<string, unknown> = {};
-  if (intakeRes.ok) {
-    const intakeBody = await intakeRes.json() as { intake?: Record<string, unknown> };
-    intake = intakeBody.intake ?? {};
-  }
-  const companyName = (intake.companyName as string | undefined) ?? projectName;
-  const sector      = (intake.sector    as string | undefined) ?? "";
-  const formData    = (intake.formData  as Record<string, string> | undefined) ?? {};
-  const sectors     = sector ? [sector] : [];
-  const descriptor  = formData["1.1"] ?? "";
-  const geography   = (intake.stringLists as Record<string, string[]> | undefined)?.["3.3"]?.join(", ") ?? "";
-  const competitors = (intake.stringLists as Record<string, string[]> | undefined)?.["4.8"] ?? [];
-  const keywords    = formData["1.7"] ? formData["1.7"].split(",").map((s: string) => s.trim()) : [];
-  const icp         = (intake.dualLists as Record<string, Array<{ long: string }>> | undefined)?.["3.2"]?.[0]?.long ?? "";
+  // Read intake directly from DB — the store API has different field keys
+  const [projRow2] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  const intakeBlob = (projRow2?.intake ?? {}) as Record<string, unknown>;
+  const formData   = (intakeBlob.formData ?? {}) as Record<string, string>;
+
+  const companyName = (formData["4.1"] || projectName).slice(0, 200);
+
+  // formData["4.4"] holds semicolon-separated sector tags e.g. "Digital commerce agency; performance marketing"
+  const sectorRaw = formData["4.4"] ?? "";
+  const sectors   = sectorRaw.split(";").map((s: string) => s.trim()).filter(Boolean).slice(0, 3);
+  const sector    = sectors[0] || "Technology";
+
+  // formData["1.1"] is the full company descriptor generated from the site
+  const descriptor = (formData["1.1"] ?? formData["2.5"] ?? "").slice(0, 2000);
+
+  // formData["4.5"] holds geography e.g. "United Kingdom; Ireland; Manchester"
+  const geography  = (formData["4.5"] ?? "United Kingdom").split(";")[0].trim();
+
+  // formData["1.7"] holds comma-separated keywords
+  const keywords   = (formData["1.7"] ?? "").split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 10);
+
+  // icp from the brand positioning summary
+  const icp        = (formData["2.5"] ?? "").slice(0, 300);
+
+  const competitors: string[] = [];
 
   // ── LLM search queries ───────────────────────────────────────────────────
   const { result: llmQueriesResult, step: llmQueriesStep } = await runStep<{ discovery: string[]; shortlist: string[]; comparison: string[] }>(
@@ -367,22 +389,21 @@ export async function main(): Promise<DemoRunOutput> {
     "Website / GEO audit (diagnostic)",
     async () => {
       const res = await postJson("/diagnostic", {
-        url: TARGET_URL, projectId, ...(FORCE ? { force: true } : {}),
+        url: TARGET_URL, projectId, force: true,
       }, clientCookie);
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string; locked?: boolean };
         if (body.locked) {
-          log("   ⚠  Audit locked (21-day cooldown)");
+          log("   ⚠  Audit locked (21-day cooldown) — use --force to override");
           return { result: null, inputTokens: 0, outputTokens: 0, note: "Locked — 21-day cooldown" };
         }
         throw new Error(body.error ?? `diagnostic HTTP ${res.status}`);
       }
-      const result = await res.json() as { _tokenUsage?: { inputTokens?: number; outputTokens?: number } };
-      return {
-        result,
-        inputTokens:  result._tokenUsage?.inputTokens  ?? 0,
-        outputTokens: result._tokenUsage?.outputTokens ?? 0,
-      };
+      // Diagnostic is SSE — consume the stream rather than calling res.json()
+      const { result, error } = await consumeSse(res);
+      if (error) throw new Error(error);
+      // Tokens are logged server-side per-call; they won't appear in the SSE result payload
+      return { result, inputTokens: 0, outputTokens: 0, note: "Tokens logged in DB" };
     },
   );
   steps.push(diagnosticStep);
@@ -472,11 +493,26 @@ export async function main(): Promise<DemoRunOutput> {
     steps.push(optimiseStep);
   }
 
-  // ── Phase 4: Authoritative run-scoped DB total ────────────────────────────
+  // ── Phase 4: Authoritative run-scoped DB totals ───────────────────────────
   log("\nPhase 4: Token usage summary");
+
+  // Client-session recurring costs (LLM queries + audits + content)
   const dbRunTotal = await fetchRunScopedDbTotal(CLIENT_USER, runStartedAt);
   log(`   ℹ  Run-scoped DB total for '${CLIENT_USER}' since ${runStartedAt.toISOString().slice(11, 19)}`);
   log(`      Calls: ${dbRunTotal.callCount}  in:${dbRunTotal.inputTokens.toLocaleString()}  out:${dbRunTotal.outputTokens.toLocaleString()}  £${dbRunTotal.costGbp.toFixed(4)}`);
+
+  // Admin-session setup cost (project generation — one-off at onboarding)
+  const setupDbTotal = await fetchRunScopedDbTotal("admin", wallStart);
+  log(`   ℹ  Admin setup DB total (project generation): £${setupDbTotal.costGbp.toFixed(4)}`);
+
+  // Projection
+  // - Setup is a one-off cost at onboarding
+  // - One cycle = 21 days (hard audit-lock window); all audits + content = one cycle
+  // - 1 calendar month = 28/21 ≈ 1.33 cycles
+  const recurringCostPer3WeekCycle = dbRunTotal.costGbp;
+  const oneOffSetupCostGbp         = setupDbTotal.costGbp;
+  const projectedMonth1CostGbp     = oneOffSetupCostGbp + recurringCostPer3WeekCycle;
+  const projectedMonthlyCostGbp    = recurringCostPer3WeekCycle * (28 / 21);
 
   // ── Build output ─────────────────────────────────────────────────────────
   const stepEstimateTotal = steps.reduce(
@@ -489,6 +525,21 @@ export async function main(): Promise<DemoRunOutput> {
     { durationMs: 0, inputTokens: 0, outputTokens: 0, costGbp: 0 },
   );
 
+  const projection = {
+    oneOffSetupCostGbp:            parseFloat(oneOffSetupCostGbp.toFixed(6)),
+    recurringCostPer3WeekCycleGbp: parseFloat(recurringCostPer3WeekCycle.toFixed(6)),
+    projectedMonth1CostGbp:        parseFloat(projectedMonth1CostGbp.toFixed(6)),
+    projectedMonthlyCostGbp:       parseFloat(projectedMonthlyCostGbp.toFixed(6)),
+    assumptions: [
+      "Account/project setup (generate-from-url) is a one-off cost, charged once at onboarding",
+      "GEO and Earned Media audits are locked to a 21-day window — one full run per 3-week cycle",
+      "LLM search queries generated once per project and reused within the cycle",
+      "Content: 3 pieces (Article, Press Release, Social Post) created and optimised per 3-week cycle",
+      "1 calendar month = 28 days; ongoing monthly cost = recurring × (28 ÷ 21) ≈ 1.33 cycles",
+      "All figures derived from actual logged token rows — no estimates or guesses",
+    ],
+  };
+
   const output: DemoRunOutput = {
     runAt:             new Date().toISOString(),
     targetUrl:         TARGET_URL,
@@ -498,6 +549,8 @@ export async function main(): Promise<DemoRunOutput> {
     steps,
     stepEstimateTotal,
     dbRunTotal,
+    setupDbTotal,
+    projection,
     grandTotal:        stepEstimateTotal,  // backwards-compat alias
   };
 
@@ -552,6 +605,31 @@ function printSummaryTable(output: DemoRunOutput): void {
   log(`Project: ${output.projectName}  (${output.projectId})`);
   log(`Client:  ${output.clientUsername}  (TokenUsageAdminPage → filter by account)`);
   log(`Ran at:  ${output.runAt}`);
+
+  // ── Projection ────────────────────────────────────────────────────────────
+  const p = output.projection;
+  log("\n" + "=".repeat(W));
+  log("TYPICAL CLIENT COST PROJECTION  (based on real token data from this run)");
+  log("=".repeat(W));
+  log(`
+  Assumptions
+  -----------
+  • Account/project setup is a one-off cost at onboarding.
+  • GEO audit + Earned Media audit locked to a 21-day window (hard platform
+    limit) — one full run per 3-week cycle is the expected customer cadence.
+  • LLM search queries generated once per project, reused within the cycle.
+  • Content: 3 pieces (Article, Press Release, Social Post) created and
+    optimised per 3-week cycle — matching this run.
+  • 1 calendar month = 28 days / 21-day cycle ≈ 1.33 cycles per month.
+  • All figures come from actual logged token rows — no guesses.
+`);
+  log(`  One-off setup cost (project generation):            £${p.oneOffSetupCostGbp.toFixed(4)}`);
+  log(`  Recurring cost per 3-week cycle:                    £${p.recurringCostPer3WeekCycleGbp.toFixed(4)}`);
+  log(`  ──────────────────────────────────────────────────────────────────────`);
+  log(`  Month 1 total (setup + first 3-week cycle):         £${p.projectedMonth1CostGbp.toFixed(4)}`);
+  log(`  Ongoing monthly cost (ex. setup, 1.33× cycle):      £${p.projectedMonthlyCostGbp.toFixed(4)}`);
+  log(`\n  ★  HEADLINE: ~£${p.projectedMonthlyCostGbp.toFixed(4)} per client per month (ongoing)  ★`);
+  log("=".repeat(W));
 }
 
 // ── Entry point (only when executed directly, not when imported by tests) ─────

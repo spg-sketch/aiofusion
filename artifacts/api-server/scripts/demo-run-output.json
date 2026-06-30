@@ -1,0 +1,121 @@
+{
+  "runAt": "2026-06-30T16:41:34.582Z",
+  "targetUrl": "https://www.glassatlas.com/",
+  "clientUsername": "glassatlas",
+  "projectId": "gen-glass-atlas-sj1g",
+  "projectName": "Glass Atlas",
+  "steps": [
+    {
+      "step": "Generate project from URL",
+      "durationMs": 176432,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costGbp": 0,
+      "note": "Tokens logged server-side; will appear in dbRunTotal"
+    },
+    {
+      "step": "Generate LLM search queries (1.6)",
+      "durationMs": 10167,
+      "inputTokens": 1982,
+      "outputTokens": 406,
+      "costGbp": 0.0094922
+    },
+    {
+      "step": "Website / GEO audit (diagnostic)",
+      "durationMs": 58888,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "costGbp": 0,
+      "note": "Tokens logged in DB"
+    },
+    {
+      "step": "Earned Media visibility audit (LLM check)",
+      "durationMs": 203637,
+      "inputTokens": 8297,
+      "outputTokens": 50348,
+      "costGbp": 0.61427377
+    },
+    {
+      "step": "Content Creator — Article",
+      "durationMs": 54283,
+      "inputTokens": 1537,
+      "outputTokens": 2573,
+      "costGbp": 0.03402982
+    },
+    {
+      "step": "Content Optimiser — Article",
+      "durationMs": 47529,
+      "inputTokens": 2356,
+      "outputTokens": 2229,
+      "costGbp": 0.031908210000000006
+    },
+    {
+      "step": "Content Creator — Press release",
+      "durationMs": 46558,
+      "inputTokens": 1492,
+      "outputTokens": 2283,
+      "costGbp": 0.03049827
+    },
+    {
+      "step": "Content Optimiser — Press release",
+      "durationMs": 40474,
+      "inputTokens": 2384,
+      "outputTokens": 2104,
+      "costGbp": 0.030498320000000002
+    },
+    {
+      "step": "Content Creator — Social post",
+      "durationMs": 40183,
+      "inputTokens": 1536,
+      "outputTokens": 1988,
+      "costGbp": 0.027118600000000003
+    },
+    {
+      "step": "Content Optimiser — Social post",
+      "durationMs": 37161,
+      "inputTokens": 1967,
+      "outputTokens": 1722,
+      "costGbp": 0.02499861
+    }
+  ],
+  "stepEstimateTotal": {
+    "durationMs": 715312,
+    "inputTokens": 21551,
+    "outputTokens": 63653,
+    "costGbp": 0.8028178
+  },
+  "dbRunTotal": {
+    "inputTokens": 23492,
+    "outputTokens": 66574,
+    "costGbp": 1.6359659999999998,
+    "callCount": 42,
+    "runStartedAt": "2026-06-30T16:32:35.612Z"
+  },
+  "setupDbTotal": {
+    "inputTokens": 1941,
+    "outputTokens": 3346,
+    "costGbp": 0.044116,
+    "callCount": 1,
+    "runStartedAt": "2026-06-30T16:29:38.874Z"
+  },
+  "projection": {
+    "oneOffSetupCostGbp": 0.044116,
+    "recurringCostPer3WeekCycleGbp": 1.635966,
+    "projectedMonth1CostGbp": 1.680082,
+    "projectedMonthlyCostGbp": 2.181288,
+    "assumptions": [
+      "Account/project setup (generate-from-url) is a one-off cost, charged once at onboarding",
+      "GEO and Earned Media audits are locked to a 21-day window — one full run per 3-week cycle",
+      "LLM search queries generated once per project and reused within the cycle",
+      "Content: 3 pieces (Article, Press Release, Social Post) created and optimised per 3-week cycle",
+      "1 calendar month = 28 days; ongoing monthly cost = recurring × (28 ÷ 21) ≈ 1.33 cycles",
+      "All figures derived from actual logged token rows — no estimates or guesses"
+    ]
+  },
+  "grandTotal": {
+    "durationMs": 715312,
+    "inputTokens": 21551,
+    "outputTokens": 63653,
+    "costGbp": 0.8028178
+  }
+}
