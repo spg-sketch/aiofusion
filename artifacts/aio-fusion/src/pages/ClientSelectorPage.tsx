@@ -204,7 +204,7 @@ export default function ClientSelectorPage({
               return (
                 <div
                   key={client.id}
-                  className="group/card rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:ring-2 hover:ring-[#C8497A] cursor-pointer"
+                  className="group/card rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:ring-4 hover:ring-[#C8497A] cursor-pointer"
                   style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
                 >
                   <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
