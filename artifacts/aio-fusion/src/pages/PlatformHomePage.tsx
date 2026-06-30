@@ -372,7 +372,7 @@ function PlatformHomePage({
         {/* HOW AIO FUSION WORKS - four guidance articles */}
         <div className="flex items-end justify-between mb-6 sm:mb-8">
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.teal }}>Guidance</span>
+            <span className="text-[13px] font-bold uppercase tracking-[0.22em]" style={{ color: "#1A647B" }}>Guidance</span>
             <h2 className="text-2xl sm:text-3xl mt-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
           </div>
           <button
