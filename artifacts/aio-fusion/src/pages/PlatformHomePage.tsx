@@ -82,8 +82,8 @@ function PlatformHomePage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#2589a8", color: "white" }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#2589a8", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1F748F", color: "white" }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1F748F", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </button>
