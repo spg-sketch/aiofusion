@@ -206,7 +206,7 @@ function PlatformHomePage({
                 <button
                   onClick={onContinueToProjects}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
-                  style={{ background: vars.teal }}
+                  style={{ background: accent }}
                 >
                   Continue to Project Hub <ArrowRight size={15} />
                 </button>
