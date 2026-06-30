@@ -82,7 +82,7 @@ function PlatformHomePage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: "white" }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "white", color: ink }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
@@ -102,24 +102,24 @@ function PlatformHomePage({
             <Sparkles size={12} color="white" />
             <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "white" }}>Platform Home</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
             Welcome to <span style={{ color: accent }}>AIO Fusion</span>
           </h1>
-          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] whitespace-nowrap" style={{ color: "white" }}>
+          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] whitespace-nowrap" style={{ color: vars.g600 }}>
             Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
           </p>
         </div>
 
         {/* LOGIN / SESSION - full-width across the page */}
         {!session ? (
-          <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: vars.teal, boxShadow: "0 8px 24px -12px rgba(79,143,255,0.25)" }}>
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(26,100,123,0.1)", color: "#1A647B" }}>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
                 <LogIn size={20} />
               </div>
               <div>
-                <h2 className="text-[22px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
-                <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Enter your account details to continue.</p>
+                <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
+                <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Enter your account details to continue.</p>
               </div>
             </div>
             <form
@@ -140,7 +140,7 @@ function PlatformHomePage({
               className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
             >
               <div className="lg:col-span-5">
-                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Username</label>
+                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Username</label>
                 <div className="relative">
                   <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
                   <input
@@ -155,7 +155,7 @@ function PlatformHomePage({
                 </div>
               </div>
               <div className="lg:col-span-4">
-                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: ink }}>Password</label>
+                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
                   <input
@@ -186,15 +186,15 @@ function PlatformHomePage({
             </form>
           </div>
         ) : (
-          <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: "white", border: `2px solid ${vars.teal}30`, boxShadow: "0 12px 32px -12px rgba(79,143,255,0.15)" }}>
+          <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: vars.teal, boxShadow: "0 12px 32px -12px rgba(79,143,255,0.25)" }}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(79,143,255,0.1)", color: vars.teal }}>
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
                   <User size={24} />
                 </div>
                 <div>
-                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Signed in as</p>
-                  <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
+                  <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
                     <span className="ml-3 inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.1)", color: session.role === "admin" ? "white" : vars.teal }}>
                       {roleLabel(session.role)}
@@ -331,26 +331,26 @@ function PlatformHomePage({
         )}
 
         {/* AIO MARKETING LOOP - full-width below login so all 7 steps fit */}
-        <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: "white", border: `1px solid ${vars.teal}40`, boxShadow: "0 8px 24px -12px rgba(79,143,255,0.15)" }}>
+        <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: vars.teal, boxShadow: "0 8px 24px -12px rgba(79,143,255,0.25)" }}>
           <div className="flex items-center gap-4 mb-8 sm:mb-8">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(26,100,123,0.1)", border: `1px solid rgba(26,100,123,0.2)` }}>
-              <Repeat size={20} color="#1A647B" />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)" }}>
+              <Repeat size={20} color="white" />
             </div>
             <div>
-              <h2 className="text-[22px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h2>
-              <p className="text-[14px] font-light mt-1" style={{ color: vars.g600 }}>Each pass moves the needle on AI citations.</p>
+              <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h2>
+              <p className="text-[14px] font-light mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>Each pass moves the needle on AI citations.</p>
             </div>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3 sm:gap-2 items-stretch">
             {loopSteps.map((s, i) => {
               const Icon = s.icon;
               return (
-                <div key={s.label} className="relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all hover:bg-slate-50" style={{ border: `1px solid ${vars.g200}` }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: vars.g100, color: ink }}>
+                <div key={s.label} className="relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all hover:bg-white/10" style={{ border: `1px solid rgba(255,255,255,0.25)` }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
                     <Icon size={18} />
                   </div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ink }}>{s.label}</div>
-                  <div className="text-[11px] font-medium" style={{ color: vars.g500 }}>{s.sub}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "white" }}>{s.label}</div>
+                  <div className="text-[11px] font-medium" style={{ color: "rgba(255,255,255,0.7)" }}>{s.sub}</div>
                   {i < loopSteps.length - 1 && (
                     <ChevronRight size={16} className="hidden lg:block absolute top-1/2 -right-3 -translate-y-1/2" style={{ color: vars.g300 }} />
                   )}
@@ -362,7 +362,7 @@ function PlatformHomePage({
               <span className="text-[11px] font-bold uppercase tracking-[0.14em]">Repeat</span>
             </div>
           </div>
-          <p className="text-[14px] font-medium mt-8 leading-[1.7] max-w-3xl" style={{ color: vars.g600 }}>
+          <p className="text-[14px] font-medium mt-8 leading-[1.7] max-w-3xl" style={{ color: "rgba(255,255,255,0.8)" }}>
             The AIO Marketing Loop runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
           </p>
         </div>
@@ -371,7 +371,7 @@ function PlatformHomePage({
         <div className="flex items-end justify-between mb-6 sm:mb-8">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.teal }}>Guidance</span>
-            <h2 className="text-2xl sm:text-3xl mt-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
+            <h2 className="text-2xl sm:text-3xl mt-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>How AIO Fusion works</h2>
           </div>
           <button
             onClick={onGuidance}
