@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  ChevronRight, ChevronLeft, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X, ChevronsRight,
+  ChevronRight, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadSavedAudits } from "../LlmCheckPage";
@@ -305,16 +305,6 @@ function SidebarContent({
               <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Intelligence Tier</span>
             </div>
           </div>
-          {onToggleWide && (
-            <button
-              onClick={onToggleWide}
-              title={wide ? "Collapse sidebar" : "Expand sidebar"}
-              className="p-2 rounded-lg transition-colors hover:bg-white/10 flex-shrink-0"
-              style={{ color: "#64748b" }}
-            >
-              {wide ? <ChevronLeft size={16} /> : <ChevronsRight size={16} />}
-            </button>
-          )}
         </div>
       </div>
     </>
@@ -343,7 +333,46 @@ export function Sidebar({
   onOpenSavedTechGeo?: (id: string) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [wide, setWide] = useState(false);
+  const [width, setWidth] = useState<number>(() => {
+    const saved = localStorage.getItem("aio:sidebar-width");
+    return saved ? Math.max(220, Math.min(520, Number(saved))) : 280;
+  });
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragging.current) return;
+    const next = Math.max(220, Math.min(520, startWidth.current + (e.clientX - startX.current)));
+    setWidth(next);
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem("aio:sidebar-width", String(startWidth.current + 0));
+    setWidth((w) => { localStorage.setItem("aio:sidebar-width", String(w)); return w; });
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  }, [onMouseMove]);
+
+  const onDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = width;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [width, onMouseMove, onMouseUp]);
+
+  useEffect(() => () => {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  }, [onMouseMove, onMouseUp]);
 
   return (
     <>
@@ -364,10 +393,18 @@ export function Sidebar({
       )}
 
       <aside
-        className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 transition-all duration-300"
-        style={{ width: wide ? "360px" : "280px", borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
+        className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 relative"
+        style={{ width: `${width}px`, borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
       >
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} wide={wide} onToggleWide={() => setWide((w) => !w)} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
+        {/* Drag handle */}
+        <div
+          onMouseDown={onDragHandleMouseDown}
+          className="absolute top-0 right-0 w-1.5 h-full z-10 cursor-col-resize group"
+          title="Drag to resize"
+        >
+          <div className="absolute top-0 right-0 w-1 h-full opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-full" style={{ background: "rgba(79,143,255,0.5)" }} />
+        </div>
       </aside>
     </>
   );
