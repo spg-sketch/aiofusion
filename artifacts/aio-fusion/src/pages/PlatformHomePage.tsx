@@ -214,15 +214,15 @@ function PlatformHomePage({
                   <>
                     <button
                       onClick={onManageUsers}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-slate-50 hover:shadow-sm"
-                      style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                      style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
                       <Users size={15} /> Manage Accounts
                     </button>
                     <button
                       onClick={onTokenUsage}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-slate-50 hover:shadow-sm"
-                      style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                      style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
                       Token Usage
                     </button>
@@ -230,8 +230,8 @@ function PlatformHomePage({
                 ) : canCreateSubAccounts(session.role) ? (
                   <button
                     onClick={onManageSubAccounts}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-slate-50 hover:shadow-sm"
-                    style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
                     <Users size={15} /> Client accounts
                   </button>
@@ -247,7 +247,7 @@ function PlatformHomePage({
             </div>
 
             {/* MY SESSIONS — expandable panel inside the signed-in card */}
-            <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
+            <div className="mt-6 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
               <button
                 onClick={() => {
                   const next = !showSessions;
@@ -255,7 +255,7 @@ function PlatformHomePage({
                   if (next && mySessions === null) loadMySessions();
                 }}
                 className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
-                style={{ color: vars.g500 }}
+                style={{ color: "rgba(255,255,255,0.65)" }}
               >
                 <MonitorSmartphone size={15} />
                 {showSessions ? "Hide My Sessions" : "View My Sessions"}
