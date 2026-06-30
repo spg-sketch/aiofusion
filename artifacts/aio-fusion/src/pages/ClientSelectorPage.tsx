@@ -50,7 +50,7 @@ export default function ClientSelectorPage({
         style={{ background: teal, borderBottom: "1px solid rgba(255,255,255,0.15)" }}
       >
         <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-14 sm:h-20" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
         <div className="flex items-center gap-4">
           <button onClick={onBackToPlatformHome} className="text-[12px] font-medium flex items-center gap-1.5 hover:opacity-80 transition-opacity" style={{ color: "rgba(255,255,255,0.8)" }}>
