@@ -345,7 +345,7 @@ function PlatformHomePage({
             {loopSteps.map((s, i) => {
               const Icon = s.icon;
               return (
-                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 cursor-default bg-white group-hover:bg-[#C8497A]" style={{ border: `1px solid ${vars.g200}` }}>
+                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 hover:bg-[#C8497A] cursor-default bg-white" style={{ border: `1px solid ${vars.g200}` }}>
                   <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-white/20" style={{ background: "#1A647B1a", color: "#1A647B" }}>
                     <Icon size={18} className="transition-colors duration-300 group-hover:text-white" />
                   </div>
@@ -395,7 +395,7 @@ function PlatformHomePage({
               <button
                 key={a.title}
                 onClick={onGuidance}
-                className="text-left rounded-2xl p-5 sm:p-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl flex flex-col group bg-white group-hover:bg-[#C8497A]"
+                className="text-left rounded-2xl p-5 sm:p-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:bg-[#C8497A] flex flex-col group bg-white"
                 style={{ border: `2px solid #1A647B` }}
               >
                 <div className="flex items-center justify-between mb-5">
