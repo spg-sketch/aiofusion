@@ -97,24 +97,24 @@ export default function ClientSelectorPage({
             {(!isClient || displayClients.length < 3) && (
               <button
                 onClick={onCreateProject}
-                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
+                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60 bg-[#C8497A]"
               >
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-white/20 text-white">
                   <Plus size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">Start a new piece of work</p>
-                  <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
-                  <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Walk through Project Set-Up.</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">Start a new piece of work</p>
+                  <p className="text-[16px] font-semibold mt-0.5 text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
+                  <p className="text-[12px] font-light mt-0.5 text-white/75">Walk through Project Set-Up.</p>
                 </div>
-                <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
+                <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-white/70" />
               </button>
             )}
             <button
               onClick={onArchivedProjects}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] bg-white border border-[#e2e8f0]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:ring-2 group-hover:ring-[#C8497A]">
                 <Archive size={18} />
               </div>
               <div className="flex-1 min-w-0">
@@ -126,9 +126,9 @@ export default function ClientSelectorPage({
             </button>
             <button
               onClick={onGuidance}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] bg-white border border-[#e2e8f0]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:ring-2 group-hover:ring-[#C8497A]">
                 <BookOpen size={18} />
               </div>
               <div className="flex-1 min-w-0">
