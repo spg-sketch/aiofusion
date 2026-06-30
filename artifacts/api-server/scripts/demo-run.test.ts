@@ -21,7 +21,7 @@ vi.mock("node:fs", () => ({
   existsSync:    vi.fn(() => true),
 }));
 
-// Mock DB rows returned by the run-scoped select query
+// Mock DB rows returned by the run-scoped token-usage select query
 const MOCK_DB_ROWS = [
   { inputTokens: 600,  outputTokens: 200,  costGbpEstimate: "0.0038" },
   { inputTokens: 1200, outputTokens: 400,  costGbpEstimate: "0.0076" },
@@ -38,6 +38,20 @@ const MOCK_DB_ROWS = [
 const EXPECTED_DB_INPUT  = MOCK_DB_ROWS.reduce((a, r) => a + r.inputTokens, 0);
 const EXPECTED_DB_OUTPUT = MOCK_DB_ROWS.reduce((a, r) => a + r.outputTokens, 0);
 
+// Fake project row returned by the projectsTable select (intake read)
+const MOCK_PROJECT_ROW = {
+  intake: {
+    formData: {
+      "4.1": "Glass Atlas",
+      "4.4": "Architecture & Design",
+      "1.1": "Glass Atlas is a specialist glass architecture firm.",
+      "1.7": "glass facades, structural glazing, sustainability",
+      "4.5": "United Kingdom",
+      "2.5": "Mid-size architectural practices seeking specialist glazing partners.",
+    },
+  },
+};
+
 vi.mock("@workspace/db", () => ({
   db: {
     update: vi.fn(() => ({
@@ -45,9 +59,15 @@ vi.mock("@workspace/db", () => ({
         where: vi.fn(() => Promise.resolve()),
       })),
     })),
+    // Context-aware select: token-usage table has an `accountId` field marker;
+    // project table select returns the fake project row instead.
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => Promise.resolve(MOCK_DB_ROWS)),
+      from: vi.fn((table: unknown) => ({
+        where: vi.fn(() =>
+          (table as Record<string, unknown>)?.accountId
+            ? Promise.resolve(MOCK_DB_ROWS)
+            : Promise.resolve([MOCK_PROJECT_ROW])
+        ),
       })),
     })),
   },
@@ -90,7 +110,6 @@ function jsonResponse(body: unknown, status = 200, setCookie?: string): Response
 
 // ── Token figures returned by endpoint mocks ──────────────────────────────────
 
-const DIAGNOSTIC_TOKENS  = { inputTokens: 1200, outputTokens: 400 };
 const LLM_CHECK_TOKENS   = { inputTokens: 8000, outputTokens: 2000 };
 const LLM_QUERIES_TOKENS = { inputTokens: 600,  outputTokens: 200 };
 const GENERATE_TOKENS    = { inputTokens: 900,  outputTokens: 500 };
@@ -131,22 +150,6 @@ describe("demo-run script", () => {
           { event: "result", data: { projectId: PROJECT_ID, projectName: PROJECT_NAME, score: 52 } },
         ]));
       }
-      // Intake fetch
-      if (path.startsWith("/api/store/projects/") && path.endsWith("/intake")) {
-        return Promise.resolve(jsonResponse({
-          intake: {
-            companyName: PROJECT_NAME,
-            sector: "Architecture & Design",
-            formData: {
-              "1.1": "Glass Atlas is a specialist glass architecture firm.",
-              "1.7": "glass facades, structural glazing, sustainability",
-              "5.6": "What projects has Glass Atlas completed?\nWhere are they based?",
-            },
-            stringLists: { "3.3": ["UK"], "4.8": ["Pilkington", "Guardian Glass"] },
-            dualLists:   { "3.2": [{ short: "Architect", long: "Mid-size architectural practices" }] },
-          },
-        }));
-      }
       // LLM queries — non-SSE, includes token counts
       if (path === "/api/content/llm-queries" && method === "POST") {
         return Promise.resolve(jsonResponse({
@@ -156,12 +159,11 @@ describe("demo-run script", () => {
           ...LLM_QUERIES_TOKENS,
         }));
       }
-      // Diagnostic — non-SSE, includes _tokenUsage
+      // Diagnostic — SSE stream; tokens are logged server-side to DB, not returned in payload
       if (path === "/api/diagnostic" && method === "POST") {
-        return Promise.resolve(jsonResponse({
-          overallScore: 58, categories: [], provider: "claude",
-          _tokenUsage: DIAGNOSTIC_TOKENS,
-        }));
+        return Promise.resolve(sseResponse([
+          { event: "result", data: { overallScore: 58, categories: [], provider: "claude" } },
+        ]));
       }
       // LLM check — SSE, result includes _tokenUsage
       if (path === "/api/llm-check" && method === "POST") {
@@ -232,8 +234,9 @@ describe("demo-run script", () => {
     expect(llmQueriesStep.costGbp).toBeGreaterThan(0);
 
     const diagnosticStep = output.steps.find((s) => s.step.startsWith("Website / GEO audit"))!;
-    expect(diagnosticStep.inputTokens).toBe(DIAGNOSTIC_TOKENS.inputTokens);
-    expect(diagnosticStep.outputTokens).toBe(DIAGNOSTIC_TOKENS.outputTokens);
+    // Diagnostic tokens are logged server-side to DB only — step payload always shows 0
+    expect(diagnosticStep.inputTokens).toBe(0);
+    expect(diagnosticStep.outputTokens).toBe(0);
 
     const llmCheckStep = output.steps.find((s) => s.step.startsWith("Earned Media visibility audit"))!;
     expect(llmCheckStep.inputTokens).toBe(LLM_CHECK_TOKENS.inputTokens);
