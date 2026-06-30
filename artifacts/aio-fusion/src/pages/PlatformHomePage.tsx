@@ -90,7 +90,7 @@ function PlatformHomePage({
         <button
           onClick={onBackToLanding}
           className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
-          style={{ background: vars.teal, color: "white" }}
+          style={{ background: accent, color: "white" }}
         >
           <ArrowLeft size={16} /> Back to website
         </button>
@@ -98,9 +98,9 @@ function PlatformHomePage({
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
         <div className="mb-8 sm:mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: "rgba(79,143,255,0.15)", border: `1px solid rgba(79,143,255,0.3)` }}>
-            <Sparkles size={12} color="#7fb3ff" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "#7fb3ff" }}>Platform Home</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accent }}>
+            <Sparkles size={12} color="white" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "white" }}>Platform Home</span>
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
             Welcome to <span style={{ color: accent }}>AIO Fusion</span>
@@ -173,7 +173,7 @@ function PlatformHomePage({
                 <button
                   type="submit"
                   className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
-                  style={{ background: vars.teal }}
+                  style={{ background: accent }}
                 >
                   <LogIn size={16} /> Sign in
                 </button>
