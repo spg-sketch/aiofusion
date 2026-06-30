@@ -196,7 +196,7 @@ function PlatformHomePage({
                   <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
                   <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
-                    <span className="ml-3 inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.1)", color: session.role === "admin" ? "white" : vars.teal }}>
+                    <span className="ml-3 inline-flex items-center px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.1)", color: session.role === "admin" ? "white" : vars.teal }}>
                       {roleLabel(session.role)}
                     </span>
                   </h2>
@@ -236,30 +236,31 @@ function PlatformHomePage({
                     <Users size={15} /> Client accounts
                   </button>
                 ) : null}
-                <button
-                  onClick={onSignOut}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                  style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
-                >
-                  <LogOut size={15} /> Sign out
-                </button>
               </div>
             </div>
 
             {/* MY SESSIONS — expandable panel inside the signed-in card */}
             <div className="mt-6 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
-              <button
-                onClick={() => {
-                  const next = !showSessions;
-                  setShowSessions(next);
-                  if (next && mySessions === null) loadMySessions();
-                }}
-                className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
-                style={{ color: "rgba(255,255,255,0.65)" }}
-              >
-                <MonitorSmartphone size={15} />
-                {showSessions ? "Hide My Sessions" : "View My Sessions"}
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    const next = !showSessions;
+                    setShowSessions(next);
+                    if (next && mySessions === null) loadMySessions();
+                  }}
+                  className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity text-white"
+                >
+                  <MonitorSmartphone size={15} />
+                  {showSessions ? "Hide Account Login Sessions" : "Account Login Sessions"}
+                </button>
+                <button
+                  onClick={onSignOut}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                  style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                >
+                  <LogOut size={15} /> Sign out
+                </button>
+              </div>
 
               {showSessions && (
                 <div className="mt-5">
