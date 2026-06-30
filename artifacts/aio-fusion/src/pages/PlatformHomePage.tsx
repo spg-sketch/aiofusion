@@ -346,8 +346,8 @@ function PlatformHomePage({
               const Icon = s.icon;
               return (
                 <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 cursor-default bg-white" style={{ border: `1px solid ${vars.g200}` }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-[#C8497A]" style={{ background: "#1A647B1a", color: "#1A647B" }}>
-                    <Icon size={18} className="transition-colors duration-300 group-hover:text-white" />
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 bg-[#1A647B]/10 text-[#1A647B] group-hover:scale-110 group-hover:bg-[#C8497A] group-hover:text-white">
+                    <Icon size={18} />
                   </div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ink }}>{s.label}</div>
                   <div className="text-[11px] font-medium" style={{ color: vars.g500 }}>{s.sub}</div>
