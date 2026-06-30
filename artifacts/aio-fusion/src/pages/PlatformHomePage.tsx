@@ -83,14 +83,14 @@ function PlatformHomePage({
   const accentSoft = "#FBE3ED";
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: "white" }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderBottom: `1px solid ${vars.g200}` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
         <button
           onClick={onBackToLanding}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 border"
-          style={{ color: "white", borderColor: "rgba(255,255,255,0.3)" }}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+          style={{ background: ink, color: "white" }}
         >
           <ArrowLeft size={16} /> Back to website
         </button>
