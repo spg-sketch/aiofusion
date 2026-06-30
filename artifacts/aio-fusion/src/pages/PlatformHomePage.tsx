@@ -333,8 +333,8 @@ function PlatformHomePage({
         {/* AIO MARKETING LOOP - full-width below login so all 7 steps fit */}
         <div className="rounded-2xl p-6 sm:p-10 mb-8 sm:mb-10" style={{ background: ink, boxShadow: "0 8px 24px -12px rgba(10,22,40,0.25)" }}>
           <div className="flex items-center gap-4 mb-8 sm:mb-8">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)" }}>
-              <Repeat size={20} color="white" />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "white", color: "#1A647B" }}>
+              <Repeat size={20} />
             </div>
             <div>
               <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Loop</h2>
