@@ -419,15 +419,15 @@ function UsersAdminPage({
   };
 
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
         <button onClick={onBack} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </button>
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-          style={{ background: ink, color: paper }}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
+          style={{ background: accent, color: "white" }}
         >
           <ArrowLeft size={16} /> Back to platform
         </button>
@@ -435,15 +435,15 @@ function UsersAdminPage({
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">
         <div className="mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
-            <Users size={12} color={accent} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Admin · User Management</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)" }}>
+            <Users size={12} color="white" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white">Admin · User Management</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            Manage platform users
+          <h1 className="text-3xl sm:text-4xl leading-[1.1] text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+            Manage platform accounts
           </h1>
-          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only. Use the controls below to set a friendly name and to move any project to the account that should own it.
+          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: "rgba(255,255,255,0.75)" }}>
+            Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only.
           </p>
         </div>
 
@@ -611,7 +611,7 @@ function UsersAdminPage({
           <div className="px-6 sm:px-8 py-5 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[18px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>All accounts ({users.length})</h2>
           </div>
-          <div className="flex flex-col gap-4 p-6 sm:p-8">
+          <div className="flex flex-col gap-3 p-5 sm:p-6">
             {orderedUsers.map(({ user: u, depth }) => {
               const isMe = u.username.toLowerCase() === session.username.toLowerCase();
               const editingPw = pwUser === u.username;
@@ -623,38 +623,38 @@ function UsersAdminPage({
               return (
                 <div
                   key={u.username}
-                  className="rounded-2xl p-6 sm:p-7 transition-all"
+                  className="rounded-xl p-4 sm:p-5 transition-all"
                   style={
                     depth > 0
-                      ? { marginLeft: depth * 24, background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `4px solid ${accent}40` }
-                      : { background: vars.g100 + "60", border: `1.5px solid ${vars.g200}` }
+                      ? { marginLeft: depth * 20, background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `3px solid ${accent}50` }
+                      : { background: vars.g100 + "80", border: `1.5px solid ${vars.g200}` }
                   }
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? "white" : accent }}>
-                        <User size={22} />
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? "white" : accent }}>
+                        <User size={18} />
                       </div>
                       <div>
-                        <p className="text-[18px] font-bold leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                        <p className="text-[15px] font-bold leading-tight" style={{ color: ink }}>
                           {accountLabel(u)}
-                          {isMe && <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
+                          {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
                         </p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
                             {roleLabel(u.role)}
                           </span>
                           {hasDisplayName && (
-                            <span className="text-[12px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
+                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
                           )}
                           {u.parent && (
-                            <span className="text-[12px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
+                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
                           )}
                           {(() => {
                             const t = tokenTotals[u.username.toLowerCase()];
                             if (!t || t.calls === 0) return null;
                             return (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
                                 {t.calls.toLocaleString()} {t.calls === 1 ? "call" : "calls"} &middot; £{t.cost.toFixed(4)}
                               </span>
                             );
@@ -662,37 +662,37 @@ function UsersAdminPage({
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <button
                         onClick={() => { setNameUser(editingName ? null : u.username); setNameValue(u.displayName || ""); setNameError(null); }}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g300}` }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                       >
-                        <FileEdit size={13} /> {editingName ? "Cancel" : "Name"}
+                        <FileEdit size={12} /> {editingName ? "Cancel" : "Name"}
                       </button>
                       <button
                         onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g300}` }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                       >
-                        <KeyRound size={13} /> {editingPw ? "Cancel" : "Password"}
+                        <KeyRound size={12} /> {editingPw ? "Cancel" : "Password"}
                       </button>
                       {!isMe && (
                         <button
                           onClick={() => { setRoleUser(editingRole ? null : u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                          style={{ color: ink, border: `1.5px solid ${vars.g300}` }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
-                          <Shield size={13} /> {editingRole ? "Cancel" : "Role"}
+                          <Shield size={12} /> {editingRole ? "Cancel" : "Role"}
                         </button>
                       )}
                       {u.role !== "admin" && (
                         <button
                           onClick={() => { setSeatCapUser(editingSeatCap ? null : u.username); setSeatCapValue(""); setSeatCapError(null); }}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                          style={{ color: ink, border: `1.5px solid ${vars.g300}` }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                         >
-                          <Users size={13} /> {editingSeatCap ? "Cancel" : "Seat cap"}
+                          <Users size={12} /> {editingSeatCap ? "Cancel" : "Seat cap"}
                         </button>
                       )}
                       <button
@@ -703,19 +703,19 @@ function UsersAdminPage({
                           setAccountSessionsError(null);
                           if (opening) loadAccountSessions(u.username);
                         }}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g300}` }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
                       >
-                        <MonitorSmartphone size={13} /> {viewingSessions ? "Close" : "Sessions"}
+                        <MonitorSmartphone size={12} /> {viewingSessions ? "Close" : "Sessions"}
                       </button>
                       <button
                         onClick={() => handleDelete(u.username)}
                         disabled={isMe}
                         title={isMe ? "You cannot delete your own account" : "Delete account"}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
                         style={{ color: accent, border: `1.5px solid ${accent}40` }}
                       >
-                        <Trash2 size={13} /> Delete
+                        <Trash2 size={12} /> Delete
                       </button>
                     </div>
                   </div>
