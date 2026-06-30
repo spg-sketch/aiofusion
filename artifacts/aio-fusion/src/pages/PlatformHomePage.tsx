@@ -82,15 +82,15 @@ function PlatformHomePage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: ink, color: "white" }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: ink, borderBottom: `1px solid rgba(255,255,255,0.08)` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </button>
         <button
           onClick={onBackToLanding}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-          style={{ background: ink, color: "white" }}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 border"
+          style={{ color: "white", borderColor: "rgba(255,255,255,0.3)" }}
         >
           <ArrowLeft size={16} /> Back to website
         </button>
@@ -98,14 +98,14 @@ function PlatformHomePage({
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
         <div className="mb-8 sm:mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: "rgba(79,143,255,0.1)", border: `1px solid rgba(79,143,255,0.2)` }}>
-            <Sparkles size={12} color={vars.teal} />
-            <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.teal }}>Platform Home</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: "rgba(79,143,255,0.15)", border: `1px solid rgba(79,143,255,0.3)` }}>
+            <Sparkles size={12} color="#7fb3ff" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "#7fb3ff" }}>Platform Home</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            Welcome to <span style={{ color: vars.teal }}>AIO Fusion</span>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+            Welcome to <span style={{ color: "#7fb3ff" }}>AIO Fusion</span>
           </h1>
-          <p className="text-[16px] sm:text-[18px] font-light mt-4 max-w-4xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="text-[16px] sm:text-[18px] font-light mt-4 max-w-4xl leading-[1.7]" style={{ color: "rgba(255,255,255,0.65)" }}>
             Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
           </p>
         </div>
