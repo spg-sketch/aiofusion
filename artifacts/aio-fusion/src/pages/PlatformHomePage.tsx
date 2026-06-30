@@ -345,12 +345,12 @@ function PlatformHomePage({
             {loopSteps.map((s, i) => {
               const Icon = s.icon;
               return (
-                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 cursor-default" style={{ border: `1px solid rgba(255,255,255,0.25)` }}>
+                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 cursor-default" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
                   <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 bg-white group-hover:bg-[#C8497A] group-hover:scale-110">
                     <Icon size={18} className="transition-colors duration-300 text-[#1A647B] group-hover:text-white" />
                   </div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 text-white">{s.label}</div>
-                  <div className="text-[11px] font-medium transition-colors duration-300" style={{ color: "rgba(255,255,255,0.7)" }}>{s.sub}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] transition-colors duration-300" style={{ color: ink }}>{s.label}</div>
+                  <div className="text-[11px] font-medium transition-colors duration-300" style={{ color: vars.g500 }}>{s.sub}</div>
                   {i < loopSteps.length - 1 && (
                     <ChevronRight size={16} className="hidden lg:block absolute top-1/2 -right-3 -translate-y-1/2" style={{ color: vars.g300 }} />
                   )}
