@@ -6,9 +6,7 @@ import {
 import { vars } from "../marketing/vars";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
 import { loadCycle } from "../lib/cycles";
-import { getProjectSectorLabel } from "../lib/projects";
 import type { Client } from "../types";
-import { MiniDonut } from "../components/MiniDonut";
 
 const teal = "#1A647B";
 const ink = "#0a1628";
@@ -241,27 +239,18 @@ export default function ClientSelectorPage({
                         <h3 className="text-[16px] font-bold truncate" style={{ color: ink }}>
                           {client.name}
                         </h3>
-                        <span
-                          className="text-[11px] font-medium px-2 py-0.5 rounded mt-1 inline-block"
-                          style={{ background: `${client.color}12`, color: client.color }}
-                        >
-                          {getProjectSectorLabel(client.id)}
-                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-center gap-5 mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
-                      <MiniDonut score={liveScore} color={client.color} size={60} />
-                      <div className="text-center">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Authority Score</span>
-                        <p className="text-[36px] font-bold leading-tight mt-0.5" style={{ color: ink }}>{liveScore}</p>
-                        {liveTrend !== 0 && (
-                          <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
-                            <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
-                            {liveTrend > 0 ? "+" : ""}{liveTrend}
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Authority Score</span>
+                      <p className="text-[48px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
+                      {liveTrend !== 0 && (
+                        <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
+                          <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
+                          {liveTrend > 0 ? "+" : ""}{liveTrend}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 mt-auto pt-2">
