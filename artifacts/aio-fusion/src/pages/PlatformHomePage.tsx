@@ -103,7 +103,7 @@ function PlatformHomePage({
             <span className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "#7fb3ff" }}>Platform Home</span>
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
-            Welcome to <span style={{ color: vars.teal }}>AIO Fusion</span>
+            Welcome to <span style={{ color: accent }}>AIO Fusion</span>
           </h1>
           <p className="text-[16px] sm:text-[18px] font-light mt-4 max-w-4xl leading-[1.7]" style={{ color: "white" }}>
             Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
