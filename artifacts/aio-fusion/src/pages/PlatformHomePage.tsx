@@ -85,7 +85,7 @@ function PlatformHomePage({
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: "white" }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
         <button
           onClick={onBackToLanding}
