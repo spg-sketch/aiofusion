@@ -100,46 +100,46 @@ export default function ClientSelectorPage({
             {(!isClient || displayClients.length < 3) && (
               <button
                 onClick={onCreateProject}
-                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:bg-[#C8497A] hover:border-[#C8497A]"
+                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
               >
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:bg-white/20 group-hover:text-white">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
                   <Plus size={20} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">Start a new piece of work</p>
-                  <p className="text-[16px] font-semibold mt-0.5 transition-colors duration-300 text-[#0a1628] group-hover:text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
-                  <p className="text-[12px] font-light mt-0.5 transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">Walk through Project Set-Up.</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">Start a new piece of work</p>
+                  <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
+                  <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Walk through Project Set-Up.</p>
                 </div>
-                <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-white" />
+                <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
               </button>
             )}
             <button
               onClick={onArchivedProjects}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:bg-[#C8497A] hover:border-[#C8497A]"
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:bg-white/20 group-hover:text-white">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
                 <Archive size={18} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">Past work</p>
-                <p className="text-[16px] font-semibold mt-0.5 transition-colors duration-300 text-[#0a1628] group-hover:text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
-                <p className="text-[12px] font-light mt-0.5 transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">Searchable history of completed work.</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">Past work</p>
+                <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
+                <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Searchable history of completed work.</p>
               </div>
-              <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-white" />
+              <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
             </button>
             <button
               onClick={onGuidance}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:bg-[#C8497A] hover:border-[#C8497A]"
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl bg-[#f8fafc] border border-[#e2e8f0] hover:border-[#C8497A]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:bg-white/20 group-hover:text-white">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] ring-2 ring-transparent group-hover:ring-[#C8497A]">
                 <BookOpen size={18} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">How-to library</p>
-                <p className="text-[16px] font-semibold mt-0.5 transition-colors duration-300 text-[#0a1628] group-hover:text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
-                <p className="text-[12px] font-light mt-0.5 transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">Articles &amp; videos on using the platform.</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6b7280]">How-to library</p>
+                <p className="text-[16px] font-semibold mt-0.5 text-[#0a1628]" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
+                <p className="text-[12px] font-light mt-0.5 text-[#6b7280]">Articles &amp; videos on using the platform.</p>
               </div>
-              <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-white" />
+              <ArrowRight size={16} className="transition-all duration-300 group-hover:translate-x-1 text-[#9ca3af] group-hover:text-[#C8497A]" />
             </button>
           </div>
         </div>
