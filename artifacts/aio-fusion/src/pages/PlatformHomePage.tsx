@@ -149,8 +149,8 @@ function PlatformHomePage({
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="username"
                     autoComplete="username"
-                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all placeholder:text-white/50 text-white"
-                    style={{ background: "rgba(255,255,255,0.15)", borderColor: "rgba(255,255,255,0.3)", ["--tw-ring-color" as any]: "rgba(255,255,255,0.5)" }}
+                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                    style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
                   />
                 </div>
               </div>
@@ -164,8 +164,8 @@ function PlatformHomePage({
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter password"
                     autoComplete="current-password"
-                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all placeholder:text-white/50 text-white"
-                    style={{ background: "rgba(255,255,255,0.15)", borderColor: "rgba(255,255,255,0.3)", ["--tw-ring-color" as any]: "rgba(255,255,255,0.5)" }}
+                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                    style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
                   />
                 </div>
               </div>
