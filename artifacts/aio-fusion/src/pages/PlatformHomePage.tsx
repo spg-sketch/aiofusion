@@ -377,7 +377,7 @@ function PlatformHomePage({
           </div>
           <button
             onClick={onGuidance}
-            className="hidden sm:flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+            className="hidden sm:flex items-center gap-2 text-[14px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
             style={{ color: ink }}
           >
             View all <ArrowRight size={14} />
