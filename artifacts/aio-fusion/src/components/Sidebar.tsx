@@ -365,7 +365,7 @@ export function Sidebar({
 
       <aside
         className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 transition-all duration-300"
-        style={{ width: wide ? "340px" : "260px", borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
+        style={{ width: wide ? "360px" : "280px", borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
       >
         <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} wide={wide} onToggleWide={() => setWide((w) => !w)} />
       </aside>
