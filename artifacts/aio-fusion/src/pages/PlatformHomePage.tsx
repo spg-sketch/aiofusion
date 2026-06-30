@@ -187,6 +187,12 @@ function PlatformHomePage({
           </div>
         ) : (
           <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: "#1A647B", boxShadow: "0 12px 32px -12px rgba(26,100,123,0.35)" }}>
+            {/* Role badge — top left */}
+            <div className="mb-4">
+              <span className="inline-flex items-center px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.15)", color: session.role === "admin" ? "white" : vars.teal }}>
+                {roleLabel(session.role)}
+              </span>
+            </div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
@@ -196,20 +202,10 @@ function PlatformHomePage({
                   <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
                   <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
-                    <span className="ml-3 inline-flex items-center px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em] align-middle" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.1)", color: session.role === "admin" ? "white" : vars.teal }}>
-                      {roleLabel(session.role)}
-                    </span>
                   </h2>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={onContinueToProjects}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
-                  style={{ background: accent }}
-                >
-                  Continue to Project Hub <ArrowRight size={15} />
-                </button>
                 {session.role === "admin" ? (
                   <>
                     <button
@@ -233,9 +229,16 @@ function PlatformHomePage({
                     className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
-                    <Users size={15} /> Client accounts
+                    <Users size={15} /> Client Accounts
                   </button>
                 ) : null}
+                <button
+                  onClick={onContinueToProjects}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                  style={{ background: accent }}
+                >
+                  Project Hub <ArrowRight size={15} />
+                </button>
               </div>
             </div>
 
