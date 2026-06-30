@@ -66,9 +66,6 @@ export default function ClientSelectorPage({
             <span className="text-[13px] font-medium text-white">
               {isAdmin ? "Admin" : isClient ? "Client" : "Agency"}
             </span>
-            <span className="text-[11px] font-light" style={{ color: "rgba(255,255,255,0.65)" }}>
-              Intelligence Tier
-            </span>
           </div>
         </div>
       </header>
