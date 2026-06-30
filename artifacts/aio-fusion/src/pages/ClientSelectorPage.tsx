@@ -209,8 +209,8 @@ export default function ClientSelectorPage({
                 >
                   <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
                   <div className="p-6 flex-1 flex flex-col">
-                    <div className="flex items-center gap-4 mb-5">
-                      <div className="relative flex-shrink-0">
+                    <div className="flex flex-col items-center text-center mb-5">
+                      <div className="relative flex-shrink-0 mb-3">
                         {logoUrl ? (
                           <div className="w-14 h-14 rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
                             <img src={logoUrl} alt={`${client.name} logo`} className="w-full h-full object-contain p-1" />
@@ -232,11 +232,9 @@ export default function ClientSelectorPage({
                           <Upload size={9} className="text-white" />
                         </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-[16px] font-bold truncate" style={{ color: ink }}>
-                          {client.name}
-                        </h3>
-                      </div>
+                      <h3 className="text-[17px] font-bold" style={{ color: ink }}>
+                        {client.name}
+                      </h3>
                     </div>
 
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
