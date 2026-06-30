@@ -345,12 +345,12 @@ function PlatformHomePage({
             {loopSteps.map((s, i) => {
               const Icon = s.icon;
               return (
-                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 hover:bg-[#C8497A] cursor-default bg-white" style={{ border: `1px solid ${vars.g200}` }}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-white/20" style={{ background: "#1A647B1a", color: "#1A647B" }}>
+                <div key={s.label} className="group relative flex flex-col items-center text-center gap-2.5 px-2 py-4 rounded-xl transition-all duration-300 hover:-translate-y-1 cursor-default bg-white" style={{ border: `1px solid ${vars.g200}` }}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-[#C8497A]" style={{ background: "#1A647B1a", color: "#1A647B" }}>
                     <Icon size={18} className="transition-colors duration-300 group-hover:text-white" />
                   </div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 group-hover:text-white" style={{ color: ink }}>{s.label}</div>
-                  <div className="text-[11px] font-medium transition-colors duration-300 group-hover:text-white/80" style={{ color: vars.g500 }}>{s.sub}</div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: ink }}>{s.label}</div>
+                  <div className="text-[11px] font-medium" style={{ color: vars.g500 }}>{s.sub}</div>
                   {i < loopSteps.length - 1 && (
                     <ChevronRight size={16} className="hidden lg:block absolute top-1/2 -right-3 -translate-y-1/2" style={{ color: vars.g300 }} />
                   )}
@@ -402,10 +402,10 @@ function PlatformHomePage({
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-white/20" style={{ background: "#1A647B1a", color: "#1A647B" }}>
                     <Icon size={20} className="transition-colors duration-300 group-hover:text-white" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1.5 rounded-md transition-all duration-300 group-hover:bg-white/20 group-hover:text-white" style={{ background: "#1A647B0d", color: "#1A647B" }}>{a.type}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1.5 rounded-md transition-all duration-300 text-[#1A647B] group-hover:text-white group-hover:bg-white/20" style={{ background: "#1A647B0d" }}>{a.type}</span>
                 </div>
-                <h3 className="text-[17px] font-bold mb-2 leading-snug transition-colors duration-300 group-hover:text-white" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
-                <p className="text-[14px] font-medium leading-[1.65] transition-colors duration-300 group-hover:text-white/80" style={{ color: vars.g500 }}>{a.desc}</p>
+                <h3 className="text-[17px] font-bold mb-2 leading-snug transition-colors duration-300 text-[#0a1628] group-hover:text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                <p className="text-[14px] font-medium leading-[1.65] transition-colors duration-300 text-[#6b7280] group-hover:text-white/80">{a.desc}</p>
               </button>
             );
           })}
