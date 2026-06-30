@@ -204,7 +204,7 @@ export default function ClientSelectorPage({
               return (
                 <div
                   key={client.id}
-                  className="rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl cursor-pointer"
+                  className="group/card rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:ring-2 hover:ring-[#C8497A] cursor-pointer"
                   style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
                 >
                   <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
@@ -258,7 +258,7 @@ export default function ClientSelectorPage({
                             onArchivedProjects();
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
                         style={{ background: vars.g100, color: vars.g500 }}
                         title="Archive project"
                       >
@@ -271,7 +271,7 @@ export default function ClientSelectorPage({
                             onDeleteProject(client.id);
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
                         style={{ background: "rgba(201,74,62,0.08)", color: vars.red }}
                         title="Delete project"
                       >
@@ -279,7 +279,7 @@ export default function ClientSelectorPage({
                       </button>
                       <button
                         onClick={() => onSelectClient(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-md"
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
                         style={{ background: accent }}
                       >
                         <LogIn size={13} /> Enter
