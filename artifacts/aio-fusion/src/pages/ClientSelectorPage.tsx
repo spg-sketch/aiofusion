@@ -212,7 +212,7 @@ export default function ClientSelectorPage({
               return (
                 <div
                   key={client.id}
-                  className="rounded-2xl overflow-hidden flex flex-col"
+                  className="rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl cursor-pointer"
                   style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
                 >
                   <div className="h-1.5" style={{ background: `linear-gradient(90deg, ${client.color}, ${client.color}88)` }} />
@@ -253,28 +253,17 @@ export default function ClientSelectorPage({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5 mb-5 px-4 py-4 rounded-xl" style={{ background: vars.g50 }}>
-                      <MiniDonut score={liveScore} color={client.color} size={52} />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g400 }}>Authority Score</span>
-                          {liveTrend !== 0 && (
-                            <span className="flex items-center gap-0.5 text-[11px] font-semibold" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
-                              <TrendingUp size={10} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
-                              {liveTrend > 0 ? "+" : ""}{liveTrend}
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="text-center rounded-lg py-1.5" style={{ background: "white" }}>
-                            <p className="text-[14px] font-bold" style={{ color: ink }}>{liveContent}</p>
-                            <p className="text-[9px] uppercase tracking-[0.12em] font-medium" style={{ color: vars.g400 }}>Content</p>
-                          </div>
-                          <div className="text-center rounded-lg py-1.5" style={{ background: "white" }}>
-                            <p className="text-[14px] font-bold" style={{ color: ink }}>{livePlans}</p>
-                            <p className="text-[9px] uppercase tracking-[0.12em] font-medium" style={{ color: vars.g400 }}>Plans</p>
-                          </div>
-                        </div>
+                    <div className="flex items-center justify-center gap-5 mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
+                      <MiniDonut score={liveScore} color={client.color} size={60} />
+                      <div className="text-center">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Authority Score</span>
+                        <p className="text-[36px] font-bold leading-tight mt-0.5" style={{ color: ink }}>{liveScore}</p>
+                        {liveTrend !== 0 && (
+                          <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
+                            <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
+                            {liveTrend > 0 ? "+" : ""}{liveTrend}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -286,7 +275,7 @@ export default function ClientSelectorPage({
                             onArchivedProjects();
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all hover:brightness-95"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ background: vars.g100, color: vars.g500 }}
                         title="Archive project"
                       >
@@ -299,7 +288,7 @@ export default function ClientSelectorPage({
                             onDeleteProject(client.id);
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all hover:brightness-95"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ background: "rgba(201,74,62,0.08)", color: vars.red }}
                         title="Delete project"
                       >
@@ -307,7 +296,7 @@ export default function ClientSelectorPage({
                       </button>
                       <button
                         onClick={() => onSelectClient(client)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all hover:brightness-110 hover:-translate-y-0.5"
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-md"
                         style={{ background: accent }}
                       >
                         <LogIn size={13} /> Enter
