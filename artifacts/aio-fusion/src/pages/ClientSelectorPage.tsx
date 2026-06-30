@@ -76,7 +76,7 @@ export default function ClientSelectorPage({
       </header>
 
       <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-6xl mx-auto">
-        <div className="mb-8 sm:mb-10 rounded-2xl p-6 sm:p-10" style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
+        <div className="mb-10 sm:mb-12 rounded-2xl p-6 sm:p-10" style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
           <div className="flex items-center gap-2 mb-4">
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em]"
@@ -92,61 +92,61 @@ export default function ClientSelectorPage({
             {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
-          <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
+          <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, on-going PR and marketing output."}
           </p>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-10 sm:mb-12">
-          {(!isClient || displayClients.length < 3) && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            {(!isClient || displayClients.length < 3) && (
+              <button
+                onClick={onCreateProject}
+                className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                style={{ background: accent, color: "white" }}
+              >
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.2)" }}>
+                  <Plus size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Start a new piece of work</p>
+                  <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
+                  <p className="text-[12px] font-light mt-0.5 opacity-85">Walk through Project Set-Up.</p>
+                </div>
+                <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+              </button>
+            )}
             <button
-              onClick={onCreateProject}
-              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg"
-              style={{ background: accent, color: "white" }}
+              onClick={onArchivedProjects}
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+              style={{ background: vars.g50, border: `1px solid ${vars.g200}`, color: ink }}
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.2)" }}>
-                <Plus size={20} />
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
+                <Archive size={18} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Start a new piece of work</p>
-                <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Create Project</p>
-                <p className="text-[12px] font-light mt-0.5 opacity-85">Walk through Project Set-Up.</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g500 }}>Past work</p>
+                <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
+                <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Searchable history of completed work.</p>
               </div>
-              <ArrowRight size={16} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" style={{ color: vars.g400 }} />
             </button>
-          )}
-          <button
-            onClick={onArchivedProjects}
-            className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
-            style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "white" }}
-          >
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.15)" }}>
-              <Archive size={18} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.6)" }}>Past work</p>
-              <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Archived Projects</p>
-              <p className="text-[12px] font-light mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>Searchable history of completed work.</p>
-            </div>
-            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform text-white/60" />
-          </button>
-          <button
-            onClick={onGuidance}
-            className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
-            style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "white" }}
-          >
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.15)" }}>
-              <BookOpen size={18} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.6)" }}>How-to library</p>
-              <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
-              <p className="text-[12px] font-light mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>Articles &amp; videos on using the platform.</p>
-            </div>
-            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform text-white/60" />
-          </button>
+            <button
+              onClick={onGuidance}
+              className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+              style={{ background: vars.g50, border: `1px solid ${vars.g200}`, color: ink }}
+            >
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
+                <BookOpen size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g500 }}>How-to library</p>
+                <p className="text-[16px] font-semibold mt-0.5" style={{ fontFamily: "'Alice', Georgia, serif" }}>Guidance</p>
+                <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>Articles &amp; videos on using the platform.</p>
+              </div>
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" style={{ color: vars.g400 }} />
+            </button>
+          </div>
         </div>
 
         {displayClients.length === 0 ? (
