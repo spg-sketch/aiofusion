@@ -385,27 +385,27 @@ function PlatformHomePage({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {[
-            { title: "Getting started with AIO Fusion", desc: "A walk-through of the platform, from intake to measurement.", type: "Article", tint: vars.teal, icon: BookOpen },
-            { title: "Running an AIO Diagnostic", desc: "How to interpret the diagnostic score and pick the first fixes.", type: "Article", tint: vars.accent, icon: Search },
-            { title: "Building a comms plan that scores", desc: "Turning the Comms Planner into AI authority impact.", type: "Article", tint: vars.gold, icon: Calendar },
-            { title: "Optimising content for AI citation", desc: "Tracked-changes editing for press releases, articles and case studies.", type: "Video", tint: vars.green, icon: FileEdit },
+            { title: "Getting started with AIO Fusion", desc: "A walk-through of the platform, from intake to measurement.", type: "Article", icon: BookOpen },
+            { title: "Running an AIO Diagnostic", desc: "How to interpret the diagnostic score and pick the first fixes.", type: "Article", icon: Search },
+            { title: "Building a comms plan that scores", desc: "Turning the Comms Planner into AI authority impact.", type: "Article", icon: Calendar },
+            { title: "Optimising content for AI citation", desc: "Tracked-changes editing for press releases, articles and case studies.", type: "Video", icon: FileEdit },
           ].map((a) => {
             const Icon = a.icon;
             return (
               <button
                 key={a.title}
                 onClick={onGuidance}
-                className="text-left rounded-2xl p-5 sm:p-6 transition-all hover:-translate-y-1 hover:shadow-lg flex flex-col group"
-                style={{ background: "white", border: `1px solid ${vars.g200}` }}
+                className="text-left rounded-2xl p-5 sm:p-6 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl flex flex-col group bg-white group-hover:bg-[#C8497A]"
+                style={{ border: `2px solid #1A647B` }}
               >
                 <div className="flex items-center justify-between mb-5">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-colors group-hover:scale-110" style={{ background: `${a.tint}15`, color: a.tint }}>
-                    <Icon size={20} />
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-white/20" style={{ background: "#1A647B1a", color: "#1A647B" }}>
+                    <Icon size={20} className="transition-colors duration-300 group-hover:text-white" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1.5 rounded-md" style={{ background: `${a.tint}10`, color: a.tint }}>{a.type}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] px-2.5 py-1.5 rounded-md transition-all duration-300 group-hover:bg-white/20 group-hover:text-white" style={{ background: "#1A647B0d", color: "#1A647B" }}>{a.type}</span>
                 </div>
-                <h3 className="text-[17px] font-bold mb-2 leading-snug group-hover:text-[var(--hover-color)] transition-colors" style={{ color: ink, fontFamily: "'Alice', Georgia, serif", ["--hover-color" as any]: a.tint }}>{a.title}</h3>
-                <p className="text-[14px] font-medium leading-[1.65]" style={{ color: vars.g500 }}>{a.desc}</p>
+                <h3 className="text-[17px] font-bold mb-2 leading-snug transition-colors duration-300 group-hover:text-white" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                <p className="text-[14px] font-medium leading-[1.65] transition-colors duration-300 group-hover:text-white/80" style={{ color: vars.g500 }}>{a.desc}</p>
               </button>
             );
           })}
