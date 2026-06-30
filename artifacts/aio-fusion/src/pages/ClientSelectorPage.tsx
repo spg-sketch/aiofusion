@@ -204,7 +204,7 @@ export default function ClientSelectorPage({
               return (
                 <div
                   key={client.id}
-                  className="group/card rounded-2xl flex flex-col transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:ring-[5px] hover:ring-[#C8497A] cursor-pointer"
+                  className="group/card rounded-2xl flex flex-col transition-all duration-300 hover:-translate-y-2 cursor-pointer border-[4px] border-transparent hover:border-[#C8497A]"
                   style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
                 >
                   <div className="p-6 flex-1 flex flex-col">
