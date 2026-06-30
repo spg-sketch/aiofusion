@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycleHistory";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
@@ -540,7 +540,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   });
   const [llmQueriesGenerating, setLlmQueriesGenerating] = useState(false);
   const [llmQueriesError, setLlmQueriesError] = useState("");
-  const autoQueriesTriggeredRef = useRef<Set<string>>(new Set());
   const [competitorsText, setCompetitorsText] = useState(getCompetitors().join("\n"));
   useEffect(() => {
     // Pin the active project key FIRST so every subsequent localStorage read
@@ -562,24 +561,6 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setDescriptor(getCompanyDescriptor());
   }, [activeClient.id, activeClient.name]);
 
-  // Auto-generate queries on page load when none are stored for this project.
-  // Guarded by a ref so it fires at most once per project per page visit.
-  // Derives emptiness directly from llmQueries to avoid use-before-declaration.
-  useEffect(() => {
-    if (autoQueriesTriggeredRef.current.has(activeClient.id)) return;
-    if (llmQueriesGenerating) return;
-    const hasAnyQuery =
-      llmQueries.discovery.length > 0 ||
-      llmQueries.shortlist.length > 0 ||
-      llmQueries.comparison.length > 0;
-    if (hasAnyQuery) return;
-    const name = (activeClient.name || "").trim();
-    const sectors = [...getBusinessSectors(), ...getTargetSectors()].filter(Boolean);
-    if (!name || sectors.length === 0) return;
-    autoQueriesTriggeredRef.current.add(activeClient.id);
-    generateQueriesOnPage(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClient.id, llmQueries, llmQueriesGenerating]);
   const probeName = companyName.trim();
   const businessSectors = getBusinessSectors();
   const targetSectors = getTargetSectors();
@@ -635,7 +616,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setConfirmedEntityState(entity);
     setEditingIdentity(false);
   }
-  const setupIncomplete = auditSectors.length === 0 || probeName.length === 0;
+  const hasSection16Queries = (() => {
+    const q = getLlmSearchQueries();
+    return q.discovery.length > 0 || q.shortlist.length > 0 || q.comparison.length > 0;
+  })();
+  const setupIncomplete = auditSectors.length === 0 || probeName.length === 0 || !hasSection16Queries;
   useEffect(() => {
     if (setupIncomplete) setShowRefine(true);
   }, [setupIncomplete]);
@@ -1644,7 +1629,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <>
                   <button
                     onClick={() => { setPendingForce(auditLock.locked); setShowRunConfirm(true); }}
-                    disabled={loading || auditSectors.length === 0 || probeName.length === 0 || showRunConfirm}
+                    disabled={loading || auditSectors.length === 0 || probeName.length === 0 || !hasSection16Queries || showRunConfirm}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-60"
                     style={{ background: "#1f748f" }}
                   >
@@ -1671,6 +1656,31 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 </>
               )}
             </div>
+            {!loading && !hasSection16Queries && (
+              <div className="mt-3 p-3 rounded-lg flex items-start gap-2.5" style={{ background: "#FEF3C7", border: "1px solid #FCD34D" }}>
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#92400E" }} />
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold" style={{ color: "#78350F" }}>
+                    Section 1.6 queries required before running the audit
+                  </p>
+                  <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: "#92400E" }}>
+                    The audit fires your buyer-journey queries verbatim at AI engines. Without them it can only use your brand name, which inflates scores. Go to{" "}
+                    {onNavigate ? (
+                      <button
+                        onClick={() => onNavigate("intake")}
+                        className="underline font-medium hover:opacity-75 transition-opacity"
+                        style={{ color: "#78350F" }}
+                      >
+                        Project Set-Up → Section 1.6
+                      </button>
+                    ) : (
+                      <span className="font-medium">Project Set-Up → Section 1.6</span>
+                    )}{" "}
+                    and generate your LLM search queries first.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="mt-4">
               <CountdownBanner
                 active={loading}
