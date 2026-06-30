@@ -89,8 +89,8 @@ function PlatformHomePage({
         </button>
         <button
           onClick={onBackToLanding}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 border"
-          style={{ color: "white", borderColor: "rgba(255,255,255,0.3)" }}
+          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
+          style={{ background: vars.teal, color: "white" }}
         >
           <ArrowLeft size={16} /> Back to website
         </button>
