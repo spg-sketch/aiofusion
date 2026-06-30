@@ -150,14 +150,15 @@ function sse(res: Response, event: string, data: unknown): void {
 type TimeoutError = Error & { isTimeout?: boolean };
 
 // Streams a single-prompt completion, emitting `progress` events with the
-// running character count, and returns the full accumulated text. Aborts and
-// throws a timeout-flagged error if the model runs past STREAM_TIMEOUT_MS.
+// running character count, and returns the full accumulated text plus usage
+// figures from the Anthropic API. Aborts and throws a timeout-flagged error
+// if the model runs past STREAM_TIMEOUT_MS.
 async function streamModelText(
   res: Response,
   client: Anthropic,
   prompt: string,
   maxTokens = 8192,
-): Promise<string> {
+): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   let acc = "";
   let lastSent = 0;
   let timedOut = false;
@@ -178,8 +179,9 @@ async function streamModelText(
       sse(res, "progress", { chars: acc.length });
     }
   });
+  let finalMsg: Awaited<ReturnType<typeof stream.finalMessage>> | null = null;
   try {
-    await stream.finalMessage();
+    finalMsg = await stream.finalMessage();
   } catch (err) {
     if (timedOut) {
       const e: TimeoutError = new Error("model stream timed out");
@@ -190,7 +192,11 @@ async function streamModelText(
   } finally {
     clearTimeout(timer);
   }
-  return acc;
+  return {
+    text:         acc,
+    inputTokens:  finalMsg?.usage?.input_tokens  ?? 0,
+    outputTokens: finalMsg?.usage?.output_tokens ?? 0,
+  };
 }
 
 // Sends a friendly `error` event and ends the stream. Distinguishes timeouts so
@@ -272,7 +278,10 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt, 16384);
+      const { text: raw, inputTokens, outputTokens } = await streamModelText(res, client, prompt, 16384);
+      if (req.account) {
+        void logTokenUsage(req.account.username, "content-optimise", MODEL, inputTokens, outputTokens);
+      }
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -293,6 +302,8 @@ contentAiRouter.post(
         standfirst: outStandfirst,
         bodyCopy: outBody,
         changeLog,
+        inputTokens,
+        outputTokens,
       });
       res.end();
     } catch (err) {
@@ -381,7 +392,7 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt);
+      const { text: raw } = await streamModelText(res, client, prompt);
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -631,7 +642,10 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt, maxTokens);
+      const { text: raw, inputTokens, outputTokens } = await streamModelText(res, client, prompt, maxTokens);
+      if (req.account) {
+        void logTokenUsage(req.account.username, "content-generate", MODEL, inputTokens, outputTokens);
+      }
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -654,6 +668,8 @@ contentAiRouter.post(
         bodyCopy: outBody,
         changeLog,
         supportingData: normaliseSupportingData(parsed.supportingData),
+        inputTokens,
+        outputTokens,
       });
       res.end();
     } catch (err) {
@@ -865,7 +881,7 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const raw = await streamModelText(res, client, prompt, MEDIA_LIST_MAX_TOKENS);
+      const { text: raw } = await streamModelText(res, client, prompt, MEDIA_LIST_MAX_TOKENS);
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -1010,10 +1026,13 @@ contentAiRouter.post(
           .filter((x: unknown): x is string => typeof x === "string" && (x as string).trim().length > 0)
           .map((x: string) => x.trim())
           .slice(0, 10);
+      const usedMsg2 = message as { usage?: { input_tokens?: number; output_tokens?: number } };
       res.json({
         discovery: normaliseList(parsed.discovery),
         shortlist: normaliseList(parsed.shortlist),
         comparison: normaliseList(parsed.comparison),
+        inputTokens:  usedMsg2.usage?.input_tokens  ?? 0,
+        outputTokens: usedMsg2.usage?.output_tokens ?? 0,
       });
     } catch (err) {
       logger.error({ err }, "content-ai: llm-queries call failed");

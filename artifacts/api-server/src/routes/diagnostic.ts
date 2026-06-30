@@ -210,14 +210,17 @@ export async function analyseWithClaude(content: string, facts?: GeoAuditFacts |
     ],
   });
 
+  const inputTokens  = response.usage?.input_tokens  ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
   if (opts?.accountId) {
-    void logTokenUsage(opts.accountId, "diagnostic", "claude-sonnet-4-5", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, opts.projectId);
+    void logTokenUsage(opts.accountId, "diagnostic", "claude-sonnet-4-5", inputTokens, outputTokens, opts.projectId);
   }
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") throw new Error("No text response from Claude");
 
-  return normaliseResult(extractJSON(textBlock.text));
+  const analysisResult = normaliseResult(extractJSON(textBlock.text));
+  return { ...analysisResult, _tokenUsage: { inputTokens, outputTokens } };
 }
 
 async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, confirmedEntity?: ConfirmedEntity | null, opts?: { accountId?: string; projectId?: string }): Promise<any> {
@@ -242,14 +245,17 @@ async function analyseWithOpenAI(content: string, facts?: GeoAuditFacts | null, 
     ],
   });
 
+  const inputTokens  = response.usage?.prompt_tokens      ?? 0;
+  const outputTokens = response.usage?.completion_tokens  ?? 0;
   if (opts?.accountId && response.usage) {
-    void logTokenUsage(opts.accountId, "diagnostic-openai", "gpt-5", response.usage.prompt_tokens, response.usage.completion_tokens, opts.projectId);
+    void logTokenUsage(opts.accountId, "diagnostic-openai", "gpt-5", inputTokens, outputTokens, opts.projectId);
   }
 
   const text = response.choices[0]?.message?.content;
   if (!text) throw new Error("No response from OpenAI");
 
-  return normaliseResult(extractJSON(text));
+  const analysisResult = normaliseResult(extractJSON(text));
+  return { ...analysisResult, _tokenUsage: { inputTokens, outputTokens } };
 }
 
 diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGuard, async (req: Request, res: Response) => {

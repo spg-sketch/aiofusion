@@ -632,7 +632,7 @@ export function computeVisibilityMetrics(results: ProbeResult[]): VisibilityMetr
   };
 }
 
-async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal, accountId?: string, projectId?: string): Promise<ProbeResult | null> {
+async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal, accountId?: string, projectId?: string, tokenAccum?: { input: number; output: number }): Promise<ProbeResult | null> {
   const client = createOpenAIClient();
   if (!client) return null;
 
@@ -655,10 +655,13 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
     }, { signal });
 
     const text = response.choices[0]?.message?.content || "";
+    const _inputTokens  = response.usage?.prompt_tokens     ?? 0;
+    const _outputTokens = response.usage?.completion_tokens ?? 0;
     if (accountId) {
-      void logTokenUsage(accountId, "llm-check-probe", "gpt-5", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0, projectId);
+      void logTokenUsage(accountId, "llm-check-probe", "gpt-5", _inputTokens, _outputTokens, projectId);
     }
-    if (response.choices[0]?.finish_reason === "length") {
+    if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
+    if ((response.choices[0] as { finish_reason?: string })?.finish_reason === "length") {
       logger.warn(
         { question, model: "gpt-5", textLength: text.length },
         "OpenAI probe hit the output token limit; answer may be truncated",
@@ -681,7 +684,7 @@ async function probeOpenAI(question: string, identity: BrandIdentity, probeWasAn
   }
 }
 
-async function probeClaude(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal, accountId?: string, projectId?: string): Promise<ProbeResult | null> {
+async function probeClaude(question: string, identity: BrandIdentity, probeWasAnchored = false, signal?: AbortSignal, accountId?: string, projectId?: string, tokenAccum?: { input: number; output: number }): Promise<ProbeResult | null> {
   const client = createAnthropicClient();
   if (!client) return null;
 
@@ -697,9 +700,12 @@ async function probeClaude(question: string, identity: BrandIdentity, probeWasAn
 
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    const _inputTokens  = response.usage?.input_tokens  ?? 0;
+    const _outputTokens = response.usage?.output_tokens ?? 0;
     if (accountId) {
-      void logTokenUsage(accountId, "llm-check-probe", "claude-sonnet-4-5", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, projectId);
+      void logTokenUsage(accountId, "llm-check-probe", "claude-sonnet-4-5", _inputTokens, _outputTokens, projectId);
     }
+    if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
     if (response.stop_reason === "max_tokens") {
       logger.warn(
         { question, model: "claude-sonnet-4-5", textLength: text.length },
@@ -991,6 +997,7 @@ export async function scoreAuthority(
   narrativeContext?: { gptContexts: string[]; claudeContexts: string[]; failedQuestions: string[] },
   accountId?: string,
   projectId?: string,
+  tokenAccum?: { input: number; output: number },
 ): Promise<AuthorityAssessment | null> {
   const client = createAnthropicClient();
   if (!client) return null;
@@ -1114,9 +1121,12 @@ ${JSON.stringify(evidence, null, 1)}`;
     });
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    const _inputTokens  = response.usage?.input_tokens  ?? 0;
+    const _outputTokens = response.usage?.output_tokens ?? 0;
     if (accountId) {
-      void logTokenUsage(accountId, "llm-check-scoring", "claude-sonnet-4-5", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, projectId);
+      void logTokenUsage(accountId, "llm-check-scoring", "claude-sonnet-4-5", _inputTokens, _outputTokens, projectId);
     }
+    if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
     return parseAssessment(text);
   } catch (err: any) {
     logger.error({ err, companyName }, "Authority scoring (stage 2) failed");
@@ -1211,7 +1221,7 @@ export function deriveEntityClarity(
 // fixed deterministically by anchoring identity to the project website/legal
 // name and corroborating mentions, which needs no live browsing. If a dependable
 // web-search tool becomes available, revisit this as an optional enrichment.
-export async function assessEntityClarity(identity: BrandIdentity, accountId?: string, projectId?: string): Promise<EntityClarity | null> {
+export async function assessEntityClarity(identity: BrandIdentity, accountId?: string, projectId?: string, tokenAccum?: { input: number; output: number }): Promise<EntityClarity | null> {
   const client = createAnthropicClient();
   if (!client) return null;
 
@@ -1233,9 +1243,12 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
     });
     const textBlock = response.content.find((b) => b.type === "text");
     const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+    const _inputTokens  = response.usage?.input_tokens  ?? 0;
+    const _outputTokens = response.usage?.output_tokens ?? 0;
     if (accountId) {
-      void logTokenUsage(accountId, "llm-check-entity", "claude-sonnet-4-5", response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0, projectId);
+      void logTokenUsage(accountId, "llm-check-entity", "claude-sonnet-4-5", _inputTokens, _outputTokens, projectId);
     }
+    if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
     const entities = parseEntityList(text);
     // Pre-seed any namesakes the client explicitly named so they are always
     // treated as competing entities even if Claude didn't list them.
@@ -1407,9 +1420,15 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     // Switch to SSE so the client receives live progress events as probes complete.
     initSse(res);
 
+    // Token accumulator: shared mutable reference passed into all LLM functions
+    // so the total token spend for this run is known when building the summary.
+    // Must be declared before entityClarityPromise so the async entity call can
+    // accumulate into it immediately on completion.
+    const tokenAccum = { input: 0, output: 0 };
+
     // Resolve how clearly the brand name identifies the company. Runs concurrently
     // with the probes; independent of their results and fail-soft.
-    const entityClarityPromise = assessEntityClarity(identity, req.account?.username, projectId);
+    const entityClarityPromise = assessEntityClarity(identity, req.account?.username, projectId, tokenAccum);
 
     const generated = generateProbeQuestions(companyName, sectorList, kw, icpProfile, locationProfile, personaProfile, identity, businessType);
     // Seed the probe set with the buyer's verbatim questions so the measurement
@@ -1480,8 +1499,8 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     for (const q of questions) {
       const anchored = anchoredQuestions.has(q);
       for (let run = 0; run < RUNS_PER_QUESTION; run++) {
-        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored, probeAbort.signal, req.account?.username, projectId)));
-        probePromises.push(trackProbe(probeClaude(q, identity, anchored, probeAbort.signal, req.account?.username, projectId)));
+        probePromises.push(trackProbe(probeOpenAI(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)));
+        probePromises.push(trackProbe(probeClaude(q, identity, anchored, probeAbort.signal, req.account?.username, projectId, tokenAccum)));
       }
     }
 
@@ -1582,6 +1601,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       { gptContexts, claudeContexts, failedQuestions },
       req.account?.username,
       projectId,
+      tokenAccum,
     );
 
     const summary = {
@@ -1603,6 +1623,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       assessment,
       entityClarity,
       detectionVersion: 2,
+      _tokenUsage: { inputTokens: tokenAccum.input, outputTokens: tokenAccum.output },
     };
 
     // Record this run so the 21-day lock is enforced on the next attempt.
