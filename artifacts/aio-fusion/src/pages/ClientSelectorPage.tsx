@@ -76,23 +76,23 @@ export default function ClientSelectorPage({
       </header>
 
       <div className="px-4 sm:px-10 py-8 sm:py-12 max-w-6xl mx-auto">
-        <div className="mb-8 sm:mb-10">
+        <div className="mb-8 sm:mb-10 rounded-2xl p-6 sm:p-10" style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
           <div className="flex items-center gap-2 mb-4">
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.22em]"
-              style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", color: "white" }}
+              style={{ background: accentSoft, border: `1px solid ${accent}40`, color: accent }}
             >
               <Building2 size={12} /> Project Hub
             </div>
           </div>
           <h1
-            className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight text-white"
-            style={{ fontFamily: "'Alice', Georgia, serif" }}
+            className="text-3xl sm:text-4xl lg:text-5xl leading-[1.05] tracking-tight"
+            style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
           >
             {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
-          <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: "rgba(255,255,255,0.75)" }}>
+          <p className="text-[15px] sm:text-[16px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, on-going PR and marketing output."}
