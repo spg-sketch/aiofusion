@@ -47,7 +47,7 @@ export default function ClientSelectorPage({
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: teal }}>
       <header
         className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between"
-        style={{ background: "rgba(0,0,0,0.12)", borderBottom: "1px solid rgba(255,255,255,0.15)" }}
+        style={{ background: teal, borderBottom: "1px solid rgba(255,255,255,0.15)" }}
       >
         <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-14 sm:h-20" />
