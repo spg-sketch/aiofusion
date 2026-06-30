@@ -255,8 +255,8 @@ export default function ClientSelectorPage({
                             onArchivedProjects();
                           }
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
-                        style={{ background: vars.g100, color: vars.g500 }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:bg-[#C8497A] hover:text-white hover:ring-[3px] hover:ring-[#C8497A]"
+                        style={{ background: "#FBE3ED", color: "#C8497A" }}
                         title="Archive project"
                       >
                         <Archive size={13} /> Archive
