@@ -114,7 +114,7 @@ function PlatformHomePage({
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(79,143,255,0.1)", color: vars.teal }}>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "rgba(26,100,123,0.1)", color: "#1A647B" }}>
                 <LogIn size={20} />
               </div>
               <div>
