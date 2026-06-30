@@ -211,12 +211,12 @@ export default function ClientSelectorPage({
                     <div className="flex flex-col items-center text-center mb-5">
                       <div className="relative flex-shrink-0 mb-3">
                         {logoUrl ? (
-                          <div className="w-14 h-14 rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
+                          <div className="w-28 h-28 rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
                             <img src={logoUrl} alt={`${client.name} logo`} className="w-full h-full object-contain p-1" />
                           </div>
                         ) : (
                           <div
-                            className="w-14 h-14 rounded-xl flex items-center justify-center text-[14px] font-bold text-white"
+                            className="w-28 h-28 rounded-xl flex items-center justify-center text-[22px] font-bold text-white"
                             style={{ background: client.color }}
                           >
                             {client.initials}
@@ -238,7 +238,7 @@ export default function ClientSelectorPage({
 
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Authority Score</span>
-                      <p className="text-[48px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
+                      <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
                       {liveTrend !== 0 && (
                         <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
                           <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
