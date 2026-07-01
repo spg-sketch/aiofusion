@@ -111,19 +111,19 @@ function SidebarContent({
   };
   return (
     <>
-      <div className="flex flex-col gap-1 px-6 py-6 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-        <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 object-contain self-start" />
-        <span className="text-[13px] font-semibold tracking-wide mt-1" style={{ color: "#94a3b8" }}>The AI Authority Platform</span>
+      <div className="flex flex-col gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
+        <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-20 object-contain self-start" />
+        <span className="text-[13px] font-semibold tracking-wide mt-1" style={{ color: vars.g400 }}>The AI Authority Platform</span>
       </div>
-      <div className="flex items-stretch border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+      <div className="flex items-stretch border-b" style={{ borderColor: vars.g200 }}>
         <button
           onClick={onBackToClients}
-          className="flex items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-white/5 flex-1 min-w-0"
+          className="flex items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-black/5 flex-1 min-w-0"
         >
-          <ArrowLeft size={16} style={{ color: "#94a3b8" }} />
+          <ArrowLeft size={16} style={{ color: vars.g400 }} />
           <div className="relative group/sblogo flex-shrink-0">
             {activeClient.logo ? (
-              <div className="w-10 h-10 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: "rgba(255,255,255,0.1)", background: "white" }}>
+              <div className="w-10 h-10 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
                 <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
               </div>
             ) : (
@@ -133,15 +133,15 @@ function SidebarContent({
             )}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[15px] font-semibold truncate text-white">{activeClient.name}</span>
-            <span className="text-[12px] font-medium truncate" style={{ color: "#94a3b8" }}>Switch project</span>
+            <span className="text-[15px] font-semibold truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
+            <span className="text-[12px] font-medium truncate" style={{ color: vars.g400 }}>Switch project</span>
           </div>
         </button>
         {onLogoUpdate && (
           <button
             onClick={handleLogoUpload}
-            className="px-4 border-l flex items-center justify-center transition-colors hover:bg-white/5"
-            style={{ borderColor: "rgba(255,255,255,0.08)", color: vars.teal }}
+            className="px-4 border-l flex items-center justify-center transition-colors hover:bg-black/5"
+            style={{ borderColor: vars.g200, color: vars.teal }}
             title={activeClient.logo ? "Replace client logo" : "Upload client logo"}
           >
             <Upload size={16} />
@@ -151,10 +151,10 @@ function SidebarContent({
       <nav className="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
         <button
           onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
-          className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-[14px] font-bold transition-all hover:bg-white/5"
+          className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-[14px] font-bold transition-all hover:bg-black/5"
           style={{
-            background: currentPage === "dashboard" ? "rgba(79,143,255,0.15)" : "transparent",
-            color: currentPage === "dashboard" ? vars.teal : "white",
+            background: currentPage === "dashboard" ? "rgba(79,143,255,0.1)" : "transparent",
+            color: currentPage === "dashboard" ? vars.teal : vars.navy,
             border: `1px solid ${currentPage === "dashboard" ? "rgba(79,143,255,0.3)" : "transparent"}`,
           }}
         >
