@@ -791,7 +791,7 @@ function App() {
         onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
       />
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#f8fafc" }}>
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: currentPage === "dashboard" ? "#1A647B" : "#f8fafc" }}>
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}

@@ -204,10 +204,10 @@ function DashboardPage({
           <Sparkles size={12} color={accentPink} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Authority Dashboard</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
           {activeClient.name}
         </h1>
-        <p className="text-[15px] font-light mt-2" style={{ color: vars.g600 }}>
+        <p className="text-[15px] font-light mt-2" style={{ color: "rgba(255,255,255,0.85)" }}>
           Your AI authority performance at a glance.
         </p>
       </div>
