@@ -220,12 +220,12 @@ export default function ClientSelectorPage({
                     <div className="flex flex-col items-center text-center mb-5">
                       <div className="relative flex-shrink-0 mb-3">
                         {logoUrl ? (
-                          <div className="w-28 h-28 rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
+                          <div className="w-[140px] h-[140px] rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
                             <img src={logoUrl} alt={`${client.name} logo`} className="w-full h-full object-contain p-1" />
                           </div>
                         ) : (
                           <div
-                            className="w-28 h-28 rounded-xl flex items-center justify-center text-[22px] font-bold text-white"
+                            className="w-[140px] h-[140px] rounded-xl flex items-center justify-center text-[27px] font-bold text-white"
                             style={{ background: client.color }}
                           >
                             {client.initials}
@@ -233,11 +233,11 @@ export default function ClientSelectorPage({
                         )}
                         <button
                           onClick={handleLogoUpload}
-                          className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center"
+                          className="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center"
                           style={{ background: vars.accent }}
                           title={logoUrl ? "Change logo" : "Add logo"}
                         >
-                          <Upload size={9} className="text-white" />
+                          <Upload size={11} className="text-white" />
                         </button>
                       </div>
                       <h3 className="text-[17px] font-bold" style={{ color: ink }}>
