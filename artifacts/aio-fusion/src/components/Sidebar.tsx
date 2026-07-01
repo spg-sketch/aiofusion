@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  ChevronRight, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X,
+  ChevronRight, Lock, BarChart3, ArrowLeft, Clock, Menu, X,
   FileEdit, Search, Globe, CalendarDays, PenTool, Wand2, Archive as ArchiveIcon,
   Users, Database, TrendingUp, PieChart,
 } from "lucide-react";
@@ -111,25 +111,6 @@ function SidebarContent({
   const recentDiagnostics = loadSavedDiagnostics(activeClient.id).slice(0, 3);
   const recentContentGeo = loadSavedScored(contentGeoKey(activeClient.id)).slice(0, 3);
   const recentTechGeo = loadSavedScored(techGeoKey(activeClient.id)).slice(0, 3);
-  const handleLogoUpload = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onLogoUpdate) return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/png,image/jpeg,image/svg+xml,image/webp";
-    input.onchange = (ev) => {
-      const file = (ev.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          onLogoUpdate(activeClient.id, reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
-  };
   return (
     <>
       <div className="flex flex-col gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
@@ -158,16 +139,6 @@ function SidebarContent({
             <span className="text-[12px] font-medium truncate" style={{ color: vars.g400 }}>Switch project</span>
           </div>
         </button>
-        {onLogoUpdate && (
-          <button
-            onClick={handleLogoUpload}
-            className="px-4 border-l flex items-center justify-center transition-colors hover:bg-black/5"
-            style={{ borderColor: vars.g200, color: vars.teal }}
-            title={activeClient.logo ? "Replace client logo" : "Upload client logo"}
-          >
-            <Upload size={16} />
-          </button>
-        )}
       </div>
       <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
         <div
