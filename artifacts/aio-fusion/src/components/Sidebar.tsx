@@ -181,11 +181,11 @@ function SidebarContent({
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
-                    className="flex items-start gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all hover:bg-white/5"
+                    className="flex items-start gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all hover:bg-black/5"
                     style={{
-                      background: isActive ? "rgba(79,143,255,0.15)" : "transparent",
+                      background: isActive ? "rgba(79,143,255,0.1)" : "transparent",
                       borderLeft: `3px solid ${isActive ? vars.teal : "transparent"}`,
-                      color: isActive ? vars.teal : isLocked ? "#64748b" : "#e2e8f0",
+                      color: isActive ? vars.teal : isLocked ? vars.g300 : vars.g600,
                       cursor: isLocked ? "not-allowed" : "pointer",
                       opacity: isLocked ? 0.6 : 1,
                     }}
@@ -194,13 +194,13 @@ function SidebarContent({
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-semibold truncate">{item.label}</span>
                         {isLocked && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g400 }}>
                             <Lock size={10} /> V2
                           </span>
                         )}
                       </div>
                       {item.sub && (
-                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : "#94a3b8" }}>
+                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : vars.g400 }}>
                           {item.sub}
                         </div>
                       )}
@@ -208,16 +208,16 @@ function SidebarContent({
                     {isActive && <ChevronRight size={16} className="mt-1 flex-shrink-0" />}
                   </button>
                   {item.id === "llm-check" && recentAudits.length > 0 && (
-                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentAudits.map((a) => (
                         <button
                           key={a.id}
                           onClick={() => { onOpenSavedAudit?.(a.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
                           title={`Open saved audit (${a.result.visibilityScore}% visibility)`}
                         >
-                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
+                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
                             {new Date(a.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(a.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
@@ -228,16 +228,16 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "diagnostic" && recentDiagnostics.length > 0 && (
-                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentDiagnostics.map((d) => (
                         <button
                           key={d.id}
                           onClick={() => { onOpenSavedDiagnostic?.(d.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
                           title={`Open saved audit (${d.result.overallScore}% readiness)`}
                         >
-                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
+                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
                             {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
@@ -248,16 +248,16 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "geo-content" && recentContentGeo.length > 0 && (
-                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentContentGeo.map((s) => (
                         <button
                           key={s.id}
                           onClick={() => { onOpenSavedContentGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
                           title={`Open saved audit (${s.score}% readiness)`}
                         >
-                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
+                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
                             {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
@@ -268,16 +268,16 @@ function SidebarContent({
                     </div>
                   )}
                   {item.id === "seo-audit" && recentTechGeo.length > 0 && (
-                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
+                    <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentTechGeo.map((s) => (
                         <button
                           key={s.id}
                           onClick={() => { onOpenSavedTechGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/10"
+                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
                           title={`Open saved audit (${s.score}% readiness)`}
                         >
-                          <Clock size={12} style={{ color: "#94a3b8" }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#cbd5e1" }}>
+                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
                             {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
@@ -294,15 +294,15 @@ function SidebarContent({
           </div>
         ))}
       </nav>
-      <div className="px-4 py-5 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+      <div className="px-4 py-5 border-t" style={{ borderColor: vars.g200 }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 px-2">
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
               SP
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-white">Admin</span>
-              <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Intelligence Tier</span>
+              <span className="text-sm font-semibold" style={{ color: vars.navy }}>Admin</span>
+              <span className="text-[12px] font-medium" style={{ color: vars.g400 }}>Intelligence Tier</span>
             </div>
           </div>
         </div>
@@ -386,7 +386,7 @@ export function Sidebar({
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative w-[280px] h-full flex flex-col" style={{ background: vars.navy }} onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
             <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
           </div>
         </div>
@@ -394,7 +394,7 @@ export function Sidebar({
 
       <aside
         className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 relative"
-        style={{ width: `${width}px`, borderColor: "rgba(255,255,255,0.08)", background: vars.navy }}
+        style={{ width: `${width}px`, borderColor: vars.g200, background: "white" }}
       >
         <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
         {/* Drag handle */}
