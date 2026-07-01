@@ -13,6 +13,26 @@ const ink = "#0a1628";
 const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
 
+function ClientLogoBox({ logoUrl, alt }: { logoUrl: string; alt: string }) {
+  const [wide, setWide] = useState(false);
+  return (
+    <div
+      className="h-[140px] rounded-xl overflow-hidden border flex items-center justify-center"
+      style={{ borderColor: vars.g200, background: "white", width: wide ? 175 : 140 }}
+    >
+      <img
+        src={logoUrl}
+        alt={alt}
+        className="w-full h-full object-contain p-1"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          setWide(img.naturalWidth > img.naturalHeight * 1.15);
+        }}
+      />
+    </div>
+  );
+}
+
 export default function ClientSelectorPage({
   projects,
   onSelectClient,
@@ -222,9 +242,7 @@ export default function ClientSelectorPage({
                     <div className="flex flex-col items-center text-center mb-5">
                       <div className="relative flex-shrink-0 mb-3">
                         {logoUrl ? (
-                          <div className="w-[140px] h-[140px] rounded-xl overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
-                            <img src={logoUrl} alt={`${client.name} logo`} className="w-full h-full object-contain p-1" />
-                          </div>
+                          <ClientLogoBox logoUrl={logoUrl} alt={`${client.name} logo`} />
                         ) : (
                           <div
                             className="w-[140px] h-[140px] rounded-xl flex items-center justify-center text-[27px] font-bold text-white"
