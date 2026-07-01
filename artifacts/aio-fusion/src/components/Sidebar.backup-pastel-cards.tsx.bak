@@ -19,7 +19,7 @@ export const navSections: NavSection[] = [
   },
   {
     section: "Visibility Audits",
-    color: "#8B6FD9",
+    color: "#4f8fff",
     items: [
       { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
@@ -37,7 +37,7 @@ export const navSections: NavSection[] = [
   },
   {
     section: "Media Management",
-    color: "#3D9B8B",
+    color: "#4A72AF",
     items: [
       { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
       { label: "Media Database", id: "media-database", sub: "Publications, journalists and custom categories" },
@@ -58,11 +58,6 @@ export const navSections: NavSection[] = [
     ],
   },
 ];
-
-// A slightly stronger tint used for the card border and dividers, layered
-// over the very pale card background, so each section reads as its own
-// soft, grouped block rather than a plain list.
-const DASHBOARD_COLOR = "#2FAE8B";
 
 export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
 
@@ -169,69 +164,52 @@ function SidebarContent({
           </button>
         )}
       </div>
-      <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
-        <div
-          className="rounded-[20px] p-2"
+      <nav className="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
+        <button
+          onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
+          className="flex items-center gap-3 w-full rounded-xl px-4 py-3.5 text-[14px] font-bold transition-all hover:bg-black/5"
           style={{
-            background: `${DASHBOARD_COLOR}0F`,
-            border: `1px solid ${DASHBOARD_COLOR}30`,
+            background: currentPage === "dashboard" ? "rgba(79,143,255,0.1)" : "transparent",
+            color: currentPage === "dashboard" ? vars.teal : vars.navy,
+            border: `1px solid ${currentPage === "dashboard" ? "rgba(79,143,255,0.3)" : "transparent"}`,
           }}
         >
-          <button
-            onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
-            className="flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all"
+          <span
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{
-              background: currentPage === "dashboard" ? `${DASHBOARD_COLOR}22` : "transparent",
-              color: currentPage === "dashboard" ? DASHBOARD_COLOR : vars.navy,
-              border: `1px solid ${currentPage === "dashboard" ? `${DASHBOARD_COLOR}40` : "transparent"}`,
+              background: currentPage === "dashboard" ? `${vars.teal}26` : `${vars.teal}14`,
+              color: vars.teal,
             }}
           >
-            <span
-              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{
-                background: `${DASHBOARD_COLOR}24`,
-                color: DASHBOARD_COLOR,
-              }}
-            >
-              <BarChart3 size={18} />
-            </span>
-            <span className="flex-1 text-left">Dashboard</span>
-            {currentPage === "dashboard" && <ChevronRight size={16} />}
-          </button>
-        </div>
+            <BarChart3 size={16} />
+          </span>
+          <span className="flex-1 text-left">Dashboard</span>
+          {currentPage === "dashboard" && <ChevronRight size={16} />}
+        </button>
         {navSections.map((section) => (
-          <div
-            key={section.section}
-            className="rounded-[20px] p-3.5"
-            style={{
-              background: `${section.color}0F`,
-              border: `1px solid ${section.color}2E`,
-            }}
-          >
-            <div className="px-1.5 pb-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
+          <div key={section.section}>
+            <div className="px-3 pb-3 flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: section.color }} />
+              <span className="text-[12px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
                 {section.section}
               </span>
             </div>
-            <div>
-              {section.items.map((item, idx) => {
+            <div className="space-y-1">
+              {section.items.map((item) => {
                 const isActive = currentPage === item.id;
                 const isLocked = !!item.locked;
                 return (
                   <div key={item.id}>
-                  {idx > 0 && (
-                    <div className="mx-1.5 h-px" style={{ background: `${section.color}22` }} />
-                  )}
                   <button
                     onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
-                    className="flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all"
+                    className="flex items-start gap-3 w-full rounded-xl px-3 py-2.5 text-left transition-all hover:bg-black/5"
                     style={{
-                      background: isActive ? `${section.color}22` : "transparent",
-                      border: `1px solid ${isActive ? `${section.color}40` : "transparent"}`,
-                      color: isActive ? section.color : isLocked ? vars.g300 : vars.navy,
+                      background: isActive ? "rgba(79,143,255,0.1)" : "transparent",
+                      borderLeft: `3px solid ${isActive ? vars.teal : "transparent"}`,
+                      color: isActive ? vars.teal : isLocked ? vars.g300 : vars.g600,
                       cursor: isLocked ? "not-allowed" : "pointer",
                       opacity: isLocked ? 0.6 : 1,
                     }}
@@ -240,19 +218,19 @@ function SidebarContent({
                       const Icon = ITEM_ICONS[item.id];
                       return (
                         <span
-                          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                           style={{
-                            background: isActive ? `${section.color}30` : `${section.color}20`,
+                            background: isActive ? `${section.color}26` : `${section.color}14`,
                             color: isLocked ? vars.g300 : section.color,
                           }}
                         >
-                          <Icon size={18} />
+                          <Icon size={16} />
                         </span>
                       );
                     })()}
-                    <div className="flex-1 min-w-0 pt-1.5">
+                    <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold truncate" style={{ color: isActive ? section.color : vars.navy }}>{item.label}</span>
+                        <span className="text-[13px] font-semibold truncate">{item.label}</span>
                         {isLocked && (
                           <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g400 }}>
                             <Lock size={10} /> V2
@@ -260,12 +238,12 @@ function SidebarContent({
                         )}
                       </div>
                       {item.sub && (
-                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: vars.g500 }}>
+                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: isActive ? "rgba(79,143,255,0.8)" : vars.g400 }}>
                           {item.sub}
                         </div>
                       )}
                     </div>
-                    {isActive && <ChevronRight size={16} className="mt-1.5 flex-shrink-0" style={{ color: section.color }} />}
+                    {isActive && <ChevronRight size={16} className="mt-1 flex-shrink-0" />}
                   </button>
                   {item.id === "llm-check" && recentAudits.length > 0 && (
                     <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
