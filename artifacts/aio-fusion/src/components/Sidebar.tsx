@@ -142,23 +142,14 @@ function SidebarContent({
       <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
         <button
           onClick={() => { onBackToClients(); onItemClick?.(); }}
-          className="group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all border"
+          className="group flex items-center justify-center gap-2 w-full rounded-full px-4 py-3 text-[14px] font-bold uppercase tracking-wider transition-all hover:brightness-110"
           style={{
-            background: "white",
-            color: vars.navy,
-            borderColor: vars.g200,
+            background: "#C8497A",
+            color: "#ffffff",
           }}
         >
-          <span
-            className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110"
-            style={{
-              background: vars.g100,
-              color: vars.navy,
-            }}
-          >
-            <ArrowLeft size={18} />
-          </span>
-          <span className="flex-1 text-left">Project Home</span>
+          <ArrowLeft size={16} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
+          <span>Project Home</span>
         </button>
         <div
           className="rounded-[20px] p-2"
