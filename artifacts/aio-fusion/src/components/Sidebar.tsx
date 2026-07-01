@@ -149,7 +149,7 @@ function SidebarContent({
         >
           <button
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
-            className="flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all"
+            className="group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all"
             style={{
               background: currentPage === "dashboard" ? "rgba(255,255,255,0.16)" : "transparent",
               color: "#ffffff",
@@ -157,7 +157,7 @@ function SidebarContent({
             }}
           >
             <span
-              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110"
               style={{
                 background: "rgba(255,255,255,0.18)",
                 color: "#ffffff",
@@ -197,7 +197,7 @@ function SidebarContent({
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
-                    className="flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all"
+                    className="group flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all"
                     style={{
                       background: isActive ? "rgba(255,255,255,0.4)" : "transparent",
                       border: `1px solid ${isActive ? "rgba(255,255,255,0.65)" : "transparent"}`,
@@ -210,7 +210,7 @@ function SidebarContent({
                       const Icon = ITEM_ICONS[item.id];
                       return (
                         <span
-                          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                          className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${isLocked ? "" : "group-hover:scale-110 group-hover:-translate-y-0.5"}`}
                           style={{
                             background: isActive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.55)",
                             color: isLocked ? "rgba(0,0,0,0.35)" : "#000000",
