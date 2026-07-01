@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
-import { loadCycle } from "../lib/cycles";
+import { loadSavedAudits } from "../LlmCheckPage";
 import type { Client } from "../types";
 
 const teal = "#1A647B";
@@ -171,9 +171,13 @@ export default function ClientSelectorPage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {displayClients.map((client) => {
-              const cyc = loadCycle(client.id);
-              const liveScore = cyc.history.length ? cyc.history[cyc.history.length - 1].score : 0;
-              const liveTrend = cyc.history.length > 1 ? liveScore - cyc.history[cyc.history.length - 2].score : 0;
+              const clientAudits = loadSavedAudits(client.id);
+              const latestEarnedAudit = clientAudits[0] ?? null;
+              const prevEarnedAudit = clientAudits[1] ?? null;
+              const liveScore = latestEarnedAudit ? latestEarnedAudit.result.visibilityScore : 0;
+              const liveTrend = latestEarnedAudit && prevEarnedAudit
+                ? latestEarnedAudit.result.visibilityScore - prevEarnedAudit.result.visibilityScore
+                : 0;
               const livePlans = loadPlannerProjects(client.id).length;
               const liveContent = loadArchive(client.id).length;
               const logoUrl = clientLogos[client.id];
@@ -204,6 +208,15 @@ export default function ClientSelectorPage({
               return (
                 <div
                   key={client.id}
+                  onClick={() => onSelectClient(client)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectClient(client);
+                    }
+                  }}
                   className="group/card rounded-2xl flex flex-col transition-all duration-300 hover:-translate-y-2 cursor-pointer border-[4px] border-transparent hover:border-[#C8497A]"
                   style={{ background: "white", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }}
                 >
@@ -237,13 +250,19 @@ export default function ClientSelectorPage({
                     </div>
 
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Authority Score</span>
-                      <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
-                      {liveTrend !== 0 && (
-                        <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
-                          <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
-                          {liveTrend > 0 ? "+" : ""}{liveTrend}
-                        </span>
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Earned Media Audit Score</span>
+                      {latestEarnedAudit ? (
+                        <>
+                          <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}%</p>
+                          {liveTrend !== 0 && (
+                            <span className="flex items-center justify-center gap-0.5 text-[12px] font-semibold mt-0.5" style={{ color: liveTrend > 0 ? "#1f748f" : "#C94A3E" }}>
+                              <TrendingUp size={11} style={{ transform: liveTrend < 0 ? "rotate(180deg)" : "none" }} />
+                              {liveTrend > 0 ? "+" : ""}{liveTrend}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>No audit yet</p>
                       )}
                     </div>
 
