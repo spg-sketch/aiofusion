@@ -131,3 +131,9 @@ id = "bs-RCgb120pxP8R9NqDV8"
 uri = "file://docs/competitor-semrush-pr-toolkit.md"
 type = "text"
 title = "AIO Fusion vs Semrush AI PR Toolkit — Competitor Analysis"
+
+[[outputs]]
+id = "FB5Ea7PdAQCPA4EPi3e3W"
+uri = "file://AIO_Fusion_Style_Guide.md"
+type = "text"
+title = "AIO Fusion Style Guide & Brief"
