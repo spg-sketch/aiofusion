@@ -12,14 +12,14 @@ import type { Client, NavItem, NavSection } from "../types";
 export const navSections: NavSection[] = [
   {
     section: "Project Set-Up",
-    color: "#4f8fff",
+    color: "#DE7A38",
     items: [
       { label: "Project Set-Up", id: "intake", sub: "Capture business profile and messaging" },
     ],
   },
   {
     section: "Visibility Audits",
-    color: "#8B6FD9",
+    color: "#DCA1A1",
     items: [
       { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
@@ -37,7 +37,7 @@ export const navSections: NavSection[] = [
   },
   {
     section: "Media Management",
-    color: "#3D9B8B",
+    color: "#84AB7D",
     items: [
       { label: "Media Research", id: "media-research", sub: "Recommend journalists and publications" },
       { label: "Media Database", id: "media-database", sub: "Publications, journalists and custom categories" },
@@ -45,14 +45,14 @@ export const navSections: NavSection[] = [
   },
   {
     section: "Marketing Intelligence",
-    color: "#C9A04E",
+    color: "#736EAE",
     items: [
       { label: "Marketing Intelligence", id: "marketing-intel", sub: "Recommend events and awards" },
     ],
   },
   {
     section: "Reporting",
-    color: "#3D9B6B",
+    color: "#A0A095",
     items: [
       { label: "Measure & Report", id: "measure", sub: "Track AI authority and PR impact" },
     ],
@@ -62,7 +62,7 @@ export const navSections: NavSection[] = [
 // A slightly stronger tint used for the card border and dividers, layered
 // over the very pale card background, so each section reads as its own
 // soft, grouped block rather than a plain list.
-const DASHBOARD_COLOR = "#2FAE8B";
+const DASHBOARD_COLOR = vars.navy;
 
 export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
 
@@ -173,24 +173,23 @@ function SidebarContent({
         <div
           className="rounded-[20px] p-2"
           style={{
-            background: `${DASHBOARD_COLOR}0F`,
-            border: `1px solid ${DASHBOARD_COLOR}30`,
+            background: DASHBOARD_COLOR,
           }}
         >
           <button
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
             className="flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all"
             style={{
-              background: currentPage === "dashboard" ? `${DASHBOARD_COLOR}22` : "transparent",
-              color: currentPage === "dashboard" ? DASHBOARD_COLOR : vars.navy,
-              border: `1px solid ${currentPage === "dashboard" ? `${DASHBOARD_COLOR}40` : "transparent"}`,
+              background: currentPage === "dashboard" ? "rgba(255,255,255,0.16)" : "transparent",
+              color: "#ffffff",
+              border: `1px solid ${currentPage === "dashboard" ? "rgba(255,255,255,0.35)" : "transparent"}`,
             }}
           >
             <span
               className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
               style={{
-                background: `${DASHBOARD_COLOR}24`,
-                color: DASHBOARD_COLOR,
+                background: "rgba(255,255,255,0.18)",
+                color: "#ffffff",
               }}
             >
               <BarChart3 size={18} />
