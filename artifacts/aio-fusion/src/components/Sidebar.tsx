@@ -115,7 +115,6 @@ function SidebarContent({
     <>
       <div className="flex flex-col items-center gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-24 object-contain self-center" />
-        <span className="text-[13px] font-semibold tracking-wide mt-1" style={{ color: vars.g400 }}>The AI Authority Platform</span>
       </div>
       <div className="flex items-stretch border-b" style={{ borderColor: vars.g200 }}>
         <button
