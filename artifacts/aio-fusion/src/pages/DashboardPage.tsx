@@ -214,12 +214,12 @@ function DashboardPage({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
         <div className="group rounded-2xl border p-4 sm:p-6 flex flex-col items-center transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60" style={{ background: vars.accent, borderColor: vars.accent, color: "white" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.75)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] mb-4 flex items-center" style={{ color: "#ffffff" }}>
             Authority Score
             <InfoTip text="Total authority score combining earned and website authority and visibility. LLM brief: 'Score Project [name] [URL] for authority and visibility in its market [Project Data S1] including earned and owned media – provide a score out of 100.'" />
           </h3>
           <AuthorityDonut score={authorityScore} size={130} light />
-          <p className="text-sm font-light mt-2" style={{ color: "rgba(255,255,255,0.85)" }}>Earned + Website combined</p>
+          <p className="text-sm font-light mt-2" style={{ color: "#ffffff" }}>Earned + Website combined</p>
           <button onClick={() => onNavigate("measure")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline transition-all duration-300 group-hover:translate-x-0.5" style={{ color: "white" }}>
             Open Authority Report <ArrowRight size={12} />
           </button>
