@@ -184,15 +184,6 @@ function DashboardPage({
       date: fmtDate(a.createdAt),
     }));
 
-  const quickActions = [
-    { icon: ClipboardPaste, label: "Project Set-Up", sub: "Capture business profile and messaging", action: "intake" },
-    { icon: Eye, label: "Earned Media Visibility Audit", sub: "Score AI brand mentions", action: "llm-check" },
-    { icon: Search, label: "Website Visibility Audit", sub: "Score your site for AI citation", action: "diagnostic" },
-    { icon: Calendar, label: "Comms Planner", sub: "Plan and score the PR / marketing schedule", action: "planner" },
-    { icon: FileEdit, label: "Content Optimiser & Editor", sub: "Optimise and edit drafts", action: "optimiser" },
-    { icon: BarChart3, label: "Measure & Report", sub: "Track AI authority and PR impact", action: "measure" },
-  ];
-
   const ink = "#102B36";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
@@ -560,19 +551,6 @@ function DashboardPage({
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5">
-        {quickActions.map((link) => (
-          <div key={link.label} onClick={() => onNavigate(link.action)}
-            className="rounded-2xl border p-5 sm:p-6 cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1 group"
-            style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110" style={{ background: "rgba(79,143,255,0.1)" }}>
-              <link.icon size={24} color={vars.teal} />
-            </div>
-            <p className="text-[15px] font-bold leading-tight" style={{ color: vars.navy }}>{link.label}</p>
-            <p className="text-[12px] font-medium mt-1.5 leading-snug" style={{ color: vars.g500 }}>{link.sub}</p>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
