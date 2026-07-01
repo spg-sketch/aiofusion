@@ -193,6 +193,7 @@ function DashboardPage({
     { icon: BarChart3, label: "Measure & Report", sub: "Track AI authority and PR impact", action: "measure" },
   ];
 
+  const ink = "#102B36";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
 
@@ -203,10 +204,10 @@ function DashboardPage({
           <Sparkles size={12} color={accentPink} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Authority Dashboard</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+        <h1 className="text-3xl sm:text-4xl tracking-tight leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
           {activeClient.name}
         </h1>
-        <p className="text-[15px] font-light mt-2" style={{ color: "rgba(255,255,255,0.75)" }}>
+        <p className="text-[15px] font-light mt-2" style={{ color: vars.g600 }}>
           Your AI authority performance at a glance.
         </p>
       </div>
@@ -225,18 +226,18 @@ function DashboardPage({
         </div>
 
         <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Earned Media Visibility Audit
             <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
           </h3>
           {earnedScore === null ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">
-              <Eye size={28} color={"rgba(255,255,255,0.4)"} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>No audit run yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: "rgba(255,255,255,0.6)" }}>Run the Earned Media Visibility Audit to see your AI mention score.</p>
+              <Eye size={28} color={vars.g300} className="mb-2" />
+              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Earned Media Visibility Audit to see your AI mention score.</p>
               {earnedLockDate
-                ? <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.6)" }}>Last run: {earnedLockDate}</p>
-                : <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Never run</p>}
+                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {earnedLockDate}</p>
+                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
@@ -248,21 +249,21 @@ function DashboardPage({
                       stroke={earnedScore >= 60 ? vars.green : earnedScore >= 30 ? vars.amber : vars.red}
                       strokeWidth={5} strokeDasharray={`${(earnedScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: "#ffffff" }}>{earnedScore}%</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{earnedScore}%</span>
                 </div>
                 <div className="flex-1 space-y-1.5">
                   {llmModels.map((m) => (
                     <div key={m.name} className="flex items-center gap-2">
                       {m.mentioned ? <CheckCircle2 size={13} color={vars.green} /> : <XCircle size={13} color={vars.red} />}
-                      <span className="text-[12px]" style={{ color: "#ffffff" }}>{m.name}</span>
+                      <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
                     </div>
                   ))}
-                  {(earnedLockDate || auditDate) && <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.6)" }}>Last run {earnedLockDate ?? auditDate}</p>}
+                  {(earnedLockDate || auditDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {earnedLockDate ?? auditDate}</p>}
                 </div>
               </div>
               {topCompetitors.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: "rgba(255,255,255,0.6)" }}>Top competitors cited instead</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
                   <div className="flex flex-wrap gap-1.5">
                     {topCompetitors.map((c) => (
                       <span key={c} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
@@ -283,18 +284,18 @@ function DashboardPage({
         </div>
 
         <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Website Visibility Audit
             <InfoTip text="Score for how well your website is structured for AI citation - schema, crawlability, entity clarity, internal authority graph." />
           </h3>
           {websiteScore === null ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">
-              <Globe size={28} color={"rgba(255,255,255,0.4)"} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>No audit run yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: "rgba(255,255,255,0.6)" }}>Run the Website Visibility Audit to score your site for AI citation readiness.</p>
+              <Globe size={28} color={vars.g300} className="mb-2" />
+              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Website Visibility Audit to score your site for AI citation readiness.</p>
               {websiteLockDate
-                ? <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.6)" }}>Last run: {websiteLockDate}</p>
-                : <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.4)" }}>Never run</p>}
+                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {websiteLockDate}</p>
+                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
@@ -306,16 +307,16 @@ function DashboardPage({
                       stroke={websiteScore >= 70 ? vars.green : websiteScore >= 40 ? vars.amber : vars.red}
                       strokeWidth={5} strokeDasharray={`${(websiteScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: "#ffffff" }}>{websiteScore}</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{websiteScore}</span>
                 </div>
                 <div className="flex-1 space-y-1.5">
                   {topDiagCategories.map((cat) => (
                     <div key={cat.name} className="flex items-center gap-2">
                       {cat.pct >= 0.7 ? <CheckCircle2 size={13} color={vars.green} /> : cat.pct >= 0.4 ? <AlertTriangle size={13} color={vars.amber} /> : <XCircle size={13} color={vars.red} />}
-                      <span className="text-[12px] truncate" style={{ color: "#ffffff" }}>{cat.name}</span>
+                      <span className="text-[12px] truncate" style={{ color: vars.navy }}>{cat.name}</span>
                     </div>
                   ))}
-                  {(websiteLockDate || diagnosticDate) && <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.6)" }}>Last run {websiteLockDate ?? diagnosticDate}</p>}
+                  {(websiteLockDate || diagnosticDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {websiteLockDate ?? diagnosticDate}</p>}
                 </div>
               </div>
             </>
@@ -331,43 +332,43 @@ function DashboardPage({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
         <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Comms Planner
             <InfoTip text="Your forward plan of PR and marketing activity. Each item is scored for predicted AI authority impact and tracked through draft, review and approved." />
           </h3>
           {plannerBreakdown.total === 0 ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">
-              <Calendar size={28} color={"rgba(255,255,255,0.4)"} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>No items planned yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: "rgba(255,255,255,0.6)" }}>Add content to the Comms Planner to track your PR pipeline.</p>
+              <Calendar size={28} color={vars.g300} className="mb-2" />
+              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No items planned yet</p>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Add content to the Comms Planner to track your PR pipeline.</p>
             </div>
           ) : (
             <>
               <div className="flex items-baseline gap-1 mb-3">
-                <span className="text-3xl font-bold" style={{ color: "#ffffff" }}>{plannerBreakdown.total}</span>
-                <span className="text-sm font-light" style={{ color: "rgba(255,255,255,0.75)" }}>content items</span>
+                <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerBreakdown.total}</span>
+                <span className="text-sm font-light" style={{ color: vars.g500 }}>content items</span>
               </div>
               <div className="space-y-2.5 mb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.green }} />
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>Approved</span>
+                    <span className="text-xs" style={{ color: vars.g500 }}>Approved</span>
                   </div>
-                  <span className="text-xs font-semibold" style={{ color: "#ffffff" }}>{plannerBreakdown.optimised}</span>
+                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.optimised}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.amber }} />
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>In Draft / Review</span>
+                    <span className="text-xs" style={{ color: vars.g500 }}>In Draft / Review</span>
                   </div>
-                  <span className="text-xs font-semibold" style={{ color: "#ffffff" }}>{plannerBreakdown.drafts}</span>
+                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.drafts}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(255,255,255,0.4)" }} />
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.75)" }}>Planned</span>
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.g300 }} />
+                    <span className="text-xs" style={{ color: vars.g500 }}>Planned</span>
                   </div>
-                  <span className="text-xs font-semibold" style={{ color: "#ffffff" }}>{plannerBreakdown.planned}</span>
+                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.planned}</span>
                 </div>
               </div>
               <div className="w-full h-2 rounded-full flex overflow-hidden mb-3" style={{ background: vars.g200 }}>
@@ -382,7 +383,7 @@ function DashboardPage({
         </div>
 
         <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Predicted Earned Authority
             <InfoTip text="Scoring likely earned media authority generated by planned activity in the Comms Planner over the next six months." />
           </h3>
@@ -390,22 +391,22 @@ function DashboardPage({
             <span className="text-3xl font-bold" style={{ color: vars.accent }}>{predictedAuthority.next6m}</span>
             <span className="text-xs font-medium" style={{ color: vars.green }}>+{predictedAuthority.delta} forecast</span>
           </div>
-          <p className="text-[12px] font-light mb-3" style={{ color: "rgba(255,255,255,0.75)" }}>
+          <p className="text-[12px] font-light mb-3" style={{ color: vars.g500 }}>
             {predictedAuthority.pieces === 0 ? "Add items to the Comms Planner to generate a forecast." : `From ${predictedAuthority.pieces} planned piece${predictedAuthority.pieces === 1 ? "" : "s"} over the next 6 months.`}
           </p>
           {predictedAuthority.byType.length > 0 ? (
             <div className="space-y-1.5">
               {predictedAuthority.byType.map(([label, n]) => (
                 <div key={label} className="flex items-center justify-between">
-                  <span className="text-[12px]" style={{ color: "rgba(255,255,255,0.75)" }}>{label}</span>
-                  <span className="text-[12px] font-semibold" style={{ color: "#ffffff" }}>{n}</span>
+                  <span className="text-[12px]" style={{ color: vars.g500 }}>{label}</span>
+                  <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{n}</span>
                 </div>
               ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-3 text-center">
-              <TrendingUp size={24} color={"rgba(255,255,255,0.4)"} className="mb-1" />
-              <p className="text-[11px] font-light" style={{ color: "rgba(255,255,255,0.6)" }}>Forecast appears once content is planned.</p>
+              <TrendingUp size={24} color={vars.g300} className="mb-1" />
+              <p className="text-[11px] font-light" style={{ color: vars.g400 }}>Forecast appears once content is planned.</p>
             </div>
           )}
           <button onClick={() => onNavigate("measure")} className="mt-3 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
@@ -414,7 +415,7 @@ function DashboardPage({
         </div>
 
         <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Project Set-Up
             <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
           </h3>
@@ -425,18 +426,18 @@ function DashboardPage({
                 <circle cx={28} cy={28} r={22} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
                   strokeWidth={5} strokeDasharray={`${(intakePct / 100) * 138} 138`} strokeLinecap="round" transform="rotate(-90 28 28)" />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: "#ffffff" }}>{intakePct}%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
             </div>
             <div>
-              <p className="text-sm font-semibold" style={{ color: "#ffffff" }}>{intakeCompleted} of {intakeSections.length}</p>
-              <p className="text-xs font-light" style={{ color: "rgba(255,255,255,0.75)" }}>sections complete</p>
+              <p className="text-sm font-semibold" style={{ color: vars.navy }}>{intakeCompleted} of {intakeSections.length}</p>
+              <p className="text-xs font-light" style={{ color: vars.g500 }}>sections complete</p>
             </div>
           </div>
           <div className="space-y-1.5">
             {intakeSections.map(([label, done]) => (
               <div key={label} className="flex items-center gap-2">
-                {done ? <CheckCircle2 size={13} color={vars.green} /> : <Circle size={13} color={"rgba(255,255,255,0.4)"} />}
-                <span className="text-[12px]" style={{ color: done ? "#ffffff" : "rgba(255,255,255,0.6)" }}>{label}</span>
+                {done ? <CheckCircle2 size={13} color={vars.green} /> : <Circle size={13} color={vars.g300} />}
+                <span className="text-[12px]" style={{ color: done ? vars.navy : vars.g400 }}>{label}</span>
               </div>
             ))}
           </div>
@@ -475,16 +476,16 @@ function DashboardPage({
         ].map((stat) => (
           <div key={stat.label} className="rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-[rgba(201,74,62,0.08)] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[rgba(201,74,62,0.22)]" style={{ borderColor: "#e2e8f0" }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em] flex items-center" style={{ color: "rgba(255,255,255,0.75)" }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] flex items-center" style={{ color: vars.g500 }}>
                 {stat.label}
                 <InfoTip text={stat.tip} />
               </span>
-              <stat.icon size={16} color={stat.hasData ? (stat.positive ? vars.green : vars.amber) : "rgba(255,255,255,0.4)"} />
+              <stat.icon size={16} color={stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g300} />
             </div>
-            <span className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: stat.hasData ? (stat.positive ? vars.green : vars.amber) : "rgba(255,255,255,0.6)" }}>
+            <span className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g400 }}>
               {stat.value}
             </span>
-            {!stat.hasData && <p className="text-[11px] mt-1 font-medium" style={{ color: "rgba(255,255,255,0.75)" }}>Run 2+ audits to see trend</p>}
+            {!stat.hasData && <p className="text-[11px] mt-1 font-medium" style={{ color: vars.g500 }}>Run 2+ audits to see trend</p>}
           </div>
         ))}
       </div>
@@ -502,8 +503,8 @@ function DashboardPage({
               <s.icon size={20} color={s.color} />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold leading-none mb-1 tracking-tight" style={{ color: "#ffffff" }}>{s.value}</p>
-              <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: "rgba(255,255,255,0.75)" }}>
+              <p className="text-2xl font-bold leading-none mb-1 tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: vars.g500 }}>
                 {s.label}
                 <InfoTip text={s.tip} />
               </p>
