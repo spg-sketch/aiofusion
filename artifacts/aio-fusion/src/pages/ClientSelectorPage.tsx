@@ -114,7 +114,7 @@ export default function ClientSelectorPage({
               onClick={onArchivedProjects}
               className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] bg-white border border-[#e2e8f0]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:ring-2 group-hover:ring-[#C8497A]">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:ring-2 group-hover:ring-[#C8497A]" style={{ background: "rgba(201,74,62,0.08)", color: vars.red }}>
                 <Archive size={18} />
               </div>
               <div className="flex-1 min-w-0">
@@ -128,7 +128,7 @@ export default function ClientSelectorPage({
               onClick={onGuidance}
               className="group flex items-center gap-4 rounded-2xl p-5 text-left transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] bg-white border border-[#e2e8f0]"
             >
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 bg-[#FBE3ED] text-[#C8497A] group-hover:ring-2 group-hover:ring-[#C8497A]">
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:ring-2 group-hover:ring-[#C8497A]" style={{ background: "rgba(201,74,62,0.08)", color: vars.red }}>
                 <BookOpen size={18} />
               </div>
               <div className="flex-1 min-w-0">
