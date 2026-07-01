@@ -203,12 +203,12 @@ function SidebarContent({
             key={section.section}
             className="rounded-[20px] p-3.5"
             style={{
-              background: `${section.color}33`,
-              border: `1px solid ${section.color}66`,
+              background: section.color,
+              border: "1px solid rgba(0,0,0,0.12)",
             }}
           >
             <div className="px-1.5 pb-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: section.color }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#000000" }}>
                 {section.section}
               </span>
             </div>
@@ -219,7 +219,7 @@ function SidebarContent({
                 return (
                   <div key={item.id}>
                   {idx > 0 && (
-                    <div className="mx-1.5 h-px" style={{ background: `${section.color}22` }} />
+                    <div className="mx-1.5 h-px" style={{ background: "rgba(0,0,0,0.12)" }} />
                   )}
                   <button
                     onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
@@ -228,9 +228,9 @@ function SidebarContent({
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
                     className="flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all"
                     style={{
-                      background: isActive ? `${section.color}22` : "transparent",
-                      border: `1px solid ${isActive ? `${section.color}40` : "transparent"}`,
-                      color: isActive ? section.color : isLocked ? vars.g300 : vars.navy,
+                      background: isActive ? "rgba(255,255,255,0.4)" : "transparent",
+                      border: `1px solid ${isActive ? "rgba(255,255,255,0.65)" : "transparent"}`,
+                      color: isLocked ? "rgba(0,0,0,0.35)" : "#000000",
                       cursor: isLocked ? "not-allowed" : "pointer",
                       opacity: isLocked ? 0.6 : 1,
                     }}
@@ -241,8 +241,8 @@ function SidebarContent({
                         <span
                           className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
                           style={{
-                            background: isActive ? `${section.color}30` : `${section.color}20`,
-                            color: isLocked ? vars.g300 : section.color,
+                            background: isActive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.55)",
+                            color: isLocked ? "rgba(0,0,0,0.35)" : "#000000",
                           }}
                         >
                           <Icon size={18} />
@@ -251,20 +251,20 @@ function SidebarContent({
                     })()}
                     <div className="flex-1 min-w-0 pt-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold truncate" style={{ color: isActive ? section.color : vars.navy }}>{item.label}</span>
+                        <span className="text-[13px] font-semibold truncate" style={{ color: "#000000" }}>{item.label}</span>
                         {isLocked && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: vars.g100, color: vars.g400 }}>
+                          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.6)", color: "rgba(0,0,0,0.5)" }}>
                             <Lock size={10} /> V2
                           </span>
                         )}
                       </div>
                       {item.sub && (
-                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: vars.g500 }}>
+                        <div className="text-[12px] font-medium leading-snug mt-1" style={{ color: "rgba(0,0,0,0.6)" }}>
                           {item.sub}
                         </div>
                       )}
                     </div>
-                    {isActive && <ChevronRight size={16} className="mt-1.5 flex-shrink-0" style={{ color: section.color }} />}
+                    {isActive && <ChevronRight size={16} className="mt-1.5 flex-shrink-0" style={{ color: "#000000" }} />}
                   </button>
                   {item.id === "llm-check" && recentAudits.length > 0 && (
                     <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
