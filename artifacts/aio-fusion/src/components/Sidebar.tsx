@@ -203,8 +203,8 @@ function SidebarContent({
             key={section.section}
             className="rounded-[20px] p-3.5"
             style={{
-              background: `${section.color}0F`,
-              border: `1px solid ${section.color}2E`,
+              background: `${section.color}33`,
+              border: `1px solid ${section.color}66`,
             }}
           >
             <div className="px-1.5 pb-2.5">
