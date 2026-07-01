@@ -90,7 +90,7 @@ export default function ClientSelectorPage({
           <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-2xl leading-[1.7]" style={{ color: ink }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
-              : "Select a project to manage AI optimisation, on-going PR and marketing output."}
+              : "Select a project to manage AI optimisation, ongoing PR and marketing output."}
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
