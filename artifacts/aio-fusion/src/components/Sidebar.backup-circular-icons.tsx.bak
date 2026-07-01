@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronRight, Lock, BarChart3, ArrowLeft, Upload, Clock, Menu, X,
-  FileEdit, Search, Globe, CalendarDays, PenTool, Wand2, Archive as ArchiveIcon,
-  Users, Database, TrendingUp, PieChart,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadSavedAudits } from "../LlmCheckPage";
@@ -60,20 +58,6 @@ export const navSections: NavSection[] = [
 ];
 
 export const navItems: NavItem[] = navSections.flatMap((s) => s.items);
-
-const ITEM_ICONS: Record<string, typeof BarChart3> = {
-  intake: FileEdit,
-  "llm-check": Search,
-  diagnostic: Globe,
-  planner: CalendarDays,
-  creator: PenTool,
-  optimiser: Wand2,
-  archive: ArchiveIcon,
-  "media-research": Users,
-  "media-database": Database,
-  "marketing-intel": TrendingUp,
-  measure: PieChart,
-};
 
 function SidebarContent({
   currentPage,
@@ -174,15 +158,7 @@ function SidebarContent({
             border: `1px solid ${currentPage === "dashboard" ? "rgba(79,143,255,0.3)" : "transparent"}`,
           }}
         >
-          <span
-            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{
-              background: currentPage === "dashboard" ? `${vars.teal}26` : `${vars.teal}14`,
-              color: vars.teal,
-            }}
-          >
-            <BarChart3 size={16} />
-          </span>
+          <BarChart3 size={18} />
           <span className="flex-1 text-left">Dashboard</span>
           {currentPage === "dashboard" && <ChevronRight size={16} />}
         </button>
@@ -214,20 +190,6 @@ function SidebarContent({
                       opacity: isLocked ? 0.6 : 1,
                     }}
                   >
-                    {ITEM_ICONS[item.id] && (() => {
-                      const Icon = ITEM_ICONS[item.id];
-                      return (
-                        <span
-                          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{
-                            background: isActive ? `${section.color}26` : `${section.color}14`,
-                            color: isLocked ? vars.g300 : section.color,
-                          }}
-                        >
-                          <Icon size={16} />
-                        </span>
-                      );
-                    })()}
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-semibold truncate">{item.label}</span>
