@@ -71,11 +71,9 @@ function DashboardPage({
   // ── Live audit data ───────────────────────────────────────────────────────
   const savedAudits = loadSavedAudits(activeClient.id);
   const latestAudit = savedAudits.length > 0 ? savedAudits[savedAudits.length - 1] : null;
-  const prevAudit = savedAudits.length > 1 ? savedAudits[savedAudits.length - 2] : null;
 
   const savedDiagnostics = loadSavedDiagnostics(activeClient.id);
   const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[savedDiagnostics.length - 1] : null;
-  const prevDiagnostic = savedDiagnostics.length > 1 ? savedDiagnostics[savedDiagnostics.length - 2] : null;
 
   // ── Live archive + planner ─────────────────────────────────────────────
   const allArchiveItems = loadArchive(activeClient.id).filter((a) => !a.id.startsWith("seed-"));
@@ -83,9 +81,6 @@ function DashboardPage({
   const archiveFinal = allArchiveItems.filter((a) => a.status === "Final").length;
 
   const livePlannerProjects = loadPlannerProjects(activeClient.id);
-  const plannerApproved = livePlannerProjects.filter((p) => p.status === "Approved").length;
-  const plannerDrafting = livePlannerProjects.filter((p) => p.status === "Drafting" || p.status === "Review").length;
-  const plannerPlanned = livePlannerProjects.filter((p) => p.status === "Planned").length;
 
   // ── Intake completion ─────────────────────────────────────────────────
   const intakeData = loadIntakeData();
@@ -105,15 +100,6 @@ function DashboardPage({
   // ── Scores ────────────────────────────────────────────────────────────
   const earnedScore: number | null = latestAudit?.result.visibilityScore ?? null;
   const websiteScore: number | null = latestDiagnostic?.result.overallScore ?? null;
-  const authorityScore = activeClient.avgScore ||
-    (earnedScore !== null && websiteScore !== null ? Math.round((earnedScore + websiteScore) / 2) :
-     earnedScore ?? websiteScore ?? 0);
-
-  const earnedTrendRaw: number | null = latestAudit && prevAudit
-    ? latestAudit.result.visibilityScore - prevAudit.result.visibilityScore : null;
-  const websiteTrendRaw: number | null = latestDiagnostic && prevDiagnostic
-    ? latestDiagnostic.result.overallScore - prevDiagnostic.result.overallScore : null;
-  const totalTrend = activeClient.scoreTrend;
 
   // ── LLM model data from latest audit ─────────────────────────────────
   const llmModels = latestAudit
@@ -145,28 +131,6 @@ function DashboardPage({
         .slice(0, 3)
     : [];
 
-  // ── Comms planner summary ─────────────────────────────────────────────
-  const plannerBreakdown = {
-    total: livePlannerProjects.length,
-    optimised: plannerApproved,
-    drafts: plannerDrafting,
-    planned: plannerPlanned,
-  };
-
-  // ── Predicted authority ───────────────────────────────────────────────
-  const authorityDelta = Math.min(40, livePlannerProjects.length * 3);
-  const plannerByType = livePlannerProjects.reduce<Record<string, number>>((acc, p) => {
-    const key = p.contentType || "Other";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const predictedAuthority = {
-    next6m: Math.min(100, authorityScore + authorityDelta),
-    pieces: livePlannerProjects.length,
-    delta: authorityDelta,
-    byType: Object.entries(plannerByType).slice(0, 4),
-  };
-
   const ink = "#102B36";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
@@ -187,15 +151,35 @@ function DashboardPage({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
-        <div className="group rounded-2xl border p-4 sm:p-6 flex flex-col items-center transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-white/60" style={{ background: vars.accent, borderColor: vars.accent, color: "white" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] mb-4 flex items-center" style={{ color: "#ffffff" }}>
-            Authority Score
-            <InfoTip text="Total authority score combining earned and website authority and visibility. LLM brief: 'Score Project [name] [URL] for authority and visibility in its market [Project Data S1] including earned and owned media – provide a score out of 100.'" />
+        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+            Project Set-Up
+            <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
           </h3>
-          <AuthorityDonut score={authorityScore} size={130} light />
-          <p className="text-sm font-light mt-2" style={{ color: "#ffffff" }}>Earned + Website combined</p>
-          <button onClick={() => onNavigate("measure")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline transition-all duration-300 group-hover:translate-x-0.5" style={{ color: "white" }}>
-            Open Authority Report <ArrowRight size={12} />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative w-14 h-14 flex-shrink-0">
+              <svg width={56} height={56} viewBox="0 0 56 56">
+                <circle cx={28} cy={28} r={22} fill="none" stroke={vars.g200} strokeWidth={5} />
+                <circle cx={28} cy={28} r={22} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
+                  strokeWidth={5} strokeDasharray={`${(intakePct / 100) * 138} 138`} strokeLinecap="round" transform="rotate(-90 28 28)" />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: vars.navy }}>{intakeCompleted} of {intakeSections.length}</p>
+              <p className="text-xs font-light" style={{ color: vars.g500 }}>sections complete</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            {intakeSections.map(([label, done]) => (
+              <div key={label} className="flex items-center gap-2">
+                {done ? <CheckCircle2 size={13} color={vars.green} /> : <Circle size={13} color={vars.g300} />}
+                <span className="text-[12px]" style={{ color: done ? vars.navy : vars.g400 }}>{label}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onNavigate("intake")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
           </button>
         </div>
 
@@ -304,185 +288,26 @@ function DashboardPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Comms Planner
-            <InfoTip text="Your forward plan of PR and marketing activity. Each item is scored for predicted AI authority impact and tracked through draft, review and approved." />
-          </h3>
-          {plannerBreakdown.total === 0 ? (
-            <div className="flex flex-col items-center justify-center py-4 text-center">
-              <Calendar size={28} color={vars.g300} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No items planned yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Add content to the Comms Planner to track your PR pipeline.</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-baseline gap-1 mb-3">
-                <span className="text-3xl font-bold" style={{ color: vars.navy }}>{plannerBreakdown.total}</span>
-                <span className="text-sm font-light" style={{ color: vars.g500 }}>content items</span>
-              </div>
-              <div className="space-y-2.5 mb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.green }} />
-                    <span className="text-xs" style={{ color: vars.g500 }}>Approved</span>
-                  </div>
-                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.optimised}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.amber }} />
-                    <span className="text-xs" style={{ color: vars.g500 }}>In Draft / Review</span>
-                  </div>
-                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.drafts}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: vars.g300 }} />
-                    <span className="text-xs" style={{ color: vars.g500 }}>Planned</span>
-                  </div>
-                  <span className="text-xs font-semibold" style={{ color: vars.navy }}>{plannerBreakdown.planned}</span>
-                </div>
-              </div>
-              <div className="w-full h-2 rounded-full flex overflow-hidden mb-3" style={{ background: vars.g200 }}>
-                <div className="h-full" style={{ width: `${plannerBreakdown.total > 0 ? (plannerBreakdown.optimised / plannerBreakdown.total) * 100 : 0}%`, background: vars.green }} />
-                <div className="h-full" style={{ width: `${plannerBreakdown.total > 0 ? (plannerBreakdown.drafts / plannerBreakdown.total) * 100 : 0}%`, background: vars.amber }} />
-              </div>
-            </>
-          )}
-          <button onClick={() => onNavigate("planner")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            Open Comms Planner <ArrowRight size={12} />
-          </button>
-        </div>
-
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Predicted Earned Authority
-            <InfoTip text="Scoring likely earned media authority generated by planned activity in the Comms Planner over the next six months." />
-          </h3>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold" style={{ color: vars.accent }}>{predictedAuthority.next6m}</span>
-            <span className="text-xs font-medium" style={{ color: vars.green }}>+{predictedAuthority.delta} forecast</span>
-          </div>
-          <p className="text-[12px] font-light mb-3" style={{ color: vars.g500 }}>
-            {predictedAuthority.pieces === 0 ? "Add items to the Comms Planner to generate a forecast." : `From ${predictedAuthority.pieces} planned piece${predictedAuthority.pieces === 1 ? "" : "s"} over the next 6 months.`}
-          </p>
-          {predictedAuthority.byType.length > 0 ? (
-            <div className="space-y-1.5">
-              {predictedAuthority.byType.map(([label, n]) => (
-                <div key={label} className="flex items-center justify-between">
-                  <span className="text-[12px]" style={{ color: vars.g500 }}>{label}</span>
-                  <span className="text-[12px] font-semibold" style={{ color: vars.navy }}>{n}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-3 text-center">
-              <TrendingUp size={24} color={vars.g300} className="mb-1" />
-              <p className="text-[11px] font-light" style={{ color: vars.g400 }}>Forecast appears once content is planned.</p>
-            </div>
-          )}
-          <button onClick={() => onNavigate("measure")} className="mt-3 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            See projection in report <ArrowRight size={12} />
-          </button>
-        </div>
-
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
-            Project Set-Up
-            <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
-          </h3>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="relative w-14 h-14 flex-shrink-0">
-              <svg width={56} height={56} viewBox="0 0 56 56">
-                <circle cx={28} cy={28} r={22} fill="none" stroke={vars.g200} strokeWidth={5} />
-                <circle cx={28} cy={28} r={22} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
-                  strokeWidth={5} strokeDasharray={`${(intakePct / 100) * 138} 138`} strokeLinecap="round" transform="rotate(-90 28 28)" />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
-            </div>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: vars.navy }}>{intakeCompleted} of {intakeSections.length}</p>
-              <p className="text-xs font-light" style={{ color: vars.g500 }}>sections complete</p>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            {intakeSections.map(([label, done]) => (
-              <div key={label} className="flex items-center gap-2">
-                {done ? <CheckCircle2 size={13} color={vars.green} /> : <Circle size={13} color={vars.g300} />}
-                <span className="text-[12px]" style={{ color: done ? vars.navy : vars.g400 }}>{label}</span>
-              </div>
-            ))}
-          </div>
-          <button onClick={() => onNavigate("intake")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
-            {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      {/* Content Activity stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
         {[
-          {
-            label: "Score Trend",
-            value: totalTrend !== null && totalTrend !== undefined ? (totalTrend > 0 ? `+${totalTrend}` : String(totalTrend)) : "--",
-            icon: TrendingUp,
-            positive: (totalTrend ?? 0) > 0,
-            hasData: totalTrend !== null && totalTrend !== undefined,
-            tip: "Combined authority score change since the last scoring cycle.",
-          },
-          {
-            label: "Earned Trend",
-            value: earnedTrendRaw !== null ? (earnedTrendRaw > 0 ? `+${earnedTrendRaw}` : String(earnedTrendRaw)) : "--",
-            icon: Eye,
-            positive: (earnedTrendRaw ?? 0) > 0,
-            hasData: earnedTrendRaw !== null,
-            tip: "Change in earned media visibility score between the last two audits.",
-          },
-          {
-            label: "Website Trend",
-            value: websiteTrendRaw !== null ? (websiteTrendRaw > 0 ? `+${websiteTrendRaw}` : String(websiteTrendRaw)) : "--",
-            icon: Globe,
-            positive: (websiteTrendRaw ?? 0) > 0,
-            hasData: websiteTrendRaw !== null,
-            tip: "Change in website visibility score between the last two audits.",
-          },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em] flex items-center" style={{ color: vars.g500 }}>
-                {stat.label}
-                <InfoTip text={stat.tip} />
-              </span>
-              <stat.icon size={16} color={stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g300} />
-            </div>
-            <span className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: stat.hasData ? (stat.positive ? vars.green : vars.amber) : vars.g400 }}>
-              {stat.value}
-            </span>
-            {!stat.hasData && <p className="text-[11px] mt-1 font-medium" style={{ color: vars.g500 }}>Run 2+ audits to see trend</p>}
-          </div>
-        ))}
-      </div>
-
-      {/* Content Activity stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project." },
-          { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Archive items currently in draft — not yet finalised." },
-          { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Archive items marked Final — approved and ready to send." },
-          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses." },
+          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses.", nav: "planner", cta: "Open Comms Planner" },
+          { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project.", nav: "archive", cta: "Open Archive" },
+          { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Archive items currently in draft — not yet finalised.", nav: "archive", cta: "Open Archive" },
+          { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Archive items marked Final — approved and ready to send.", nav: "archive", cta: "Open Archive" },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border p-4 sm:p-5 flex items-center gap-3.5 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${s.color}15` }}>
-              <s.icon size={20} color={s.color} />
+          <div key={s.label} className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 mb-4" style={{ background: `${s.color}15` }}>
+              <s.icon size={22} color={s.color} />
             </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold leading-none mb-1 tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
-              <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1" style={{ color: vars.g500 }}>
-                {s.label}
-                <InfoTip text={s.tip} />
-              </p>
-            </div>
+            <p className="text-4xl font-bold leading-none mb-2 tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 mb-4" style={{ color: vars.g500 }}>
+              {s.label}
+              <InfoTip text={s.tip} />
+            </p>
+            <button onClick={() => onNavigate(s.nav)} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+              {s.cta} <ArrowRight size={12} />
+            </button>
           </div>
         ))}
       </div>

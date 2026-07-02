@@ -169,7 +169,8 @@ The signature "feel" the client likes:
 ### Dashboard (in-project)
 - Teal page background (approved exception).
 - White/pink-wash metric cards as described in Section 5.
-- White "Activity Pipeline" panel and bottom quick-link tiles.
+- Simplified to 7 cards total (down from the earlier 6-card + trend-stat layout): a top row of 3 equal-weight cards — **Project Set-Up** (now first, showing the "X of Y sections complete" ring + checklist), **Earned Media Visibility Audit**, **Website Visibility Audit** — followed by a second row of 4 larger metric cards styled like the top row (icon chip, big number, label, CTA link) for **In Planner** (Comms Planner item count), **Total Articles**, **In Draft** and **Final / Ready** (Archive counts).
+- Removed: the standalone **Authority Score** donut card, the detailed **Comms Planner** breakdown card, the **Predicted Earned Authority** forecast card, and the **Score Trend / Earned Trend / Website Trend** stat row — all dropped per client feedback to reduce dashboard clutter.
 - Sidebar remains white regardless.
 
 ---
