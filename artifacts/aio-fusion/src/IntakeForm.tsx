@@ -2479,82 +2479,6 @@ export default function IntakePage() {
               </div>
             </div>
 
-            <div className="px-4 sm:px-8 py-5 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3" style={{ borderColor: vars.g100 }}>
-              <button
-                onClick={() => activeSection > 0 && setActiveSection(activeSection - 1)}
-                disabled={activeSection === 0}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-30"
-                style={{ borderColor: vars.g200, color: vars.g500 }}
-              >
-                <ArrowLeft size={14} /> Previous
-              </button>
-              <div className="flex items-center gap-3 justify-end flex-wrap">
-                <button
-                  onClick={saveDraft}
-                  title="Save your progress so you can finish later"
-                  className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] px-4 py-2.5 rounded-full border-2 transition-colors"
-                  style={{
-                    borderColor: justSaved ? vars.green : "#102B36",
-                    color: justSaved ? vars.green : "#102B36",
-                    background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
-                  }}
-                >
-                  {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
-                </button>
-                <button
-                  onClick={() => {
-                    if (completed.has(activeSection)) {
-                      setCompleted((prev) => { const next = new Set(prev); next.delete(activeSection); return next; });
-                    } else {
-                      markComplete(activeSection, !(track === "pr" && activeSection === visibleSections.length - 1));
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-                  style={{
-                    background: completed.has(activeSection) ? "rgba(61,155,107,0.08)" : "rgba(31,116,143,0.06)",
-                    color: completed.has(activeSection) ? vars.green : vars.accent,
-                  }}
-                >
-                  {completed.has(activeSection) ? (<><CheckCircle2 size={14} /> Completed</>) : (<><Check size={14} /> Mark Complete</>)}
-                </button>
-                {activeSection < visibleSections.length - 1 ? (
-                  <button
-                    onClick={() => setActiveSection(activeSection + 1)}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
-                    style={{ background: vars.accent }}
-                  >
-                    Next <ArrowRight size={14} />
-                  </button>
-                ) : track === "pr" ? (
-                  completed.has(activeSection) ? (
-                    <button
-                      onClick={() => setTrack("web")}
-                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
-                      style={{ background: vars.accent }}
-                    >
-                      Continue to AIO Set-Up <ArrowRight size={14} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => { markComplete(activeSection, false); }}
-                      className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
-                      style={{ background: vars.green }}
-                    >
-                      <CheckCircle2 size={14} /> Mark section complete
-                    </button>
-                  )
-                ) : (
-                  <button
-                    onClick={() => { markComplete(activeSection); }}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
-                    style={{ background: vars.green }}
-                  >
-                    <CheckCircle2 size={14} /> Mark section complete
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* Project Data Actions - page footer */}
             <div className="px-4 sm:px-8 py-4 border-t no-print" style={{ borderColor: vars.g100, background: "#FBF9F6" }}>
               <div className="flex items-center gap-2 mb-3">
@@ -2610,6 +2534,41 @@ export default function IntakePage() {
                 >
                   <Plus size={13} /> New Project
                 </button>
+                {activeSection < visibleSections.length - 1 ? (
+                  <button
+                    onClick={() => setActiveSection(activeSection + 1)}
+                    className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                    style={{ background: vars.accent }}
+                  >
+                    Next <ArrowRight size={14} />
+                  </button>
+                ) : track === "pr" ? (
+                  completed.has(activeSection) ? (
+                    <button
+                      onClick={() => setTrack("web")}
+                      className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                      style={{ background: vars.accent }}
+                    >
+                      Continue to AIO Set-Up <ArrowRight size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { markComplete(activeSection, false); }}
+                      className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                      style={{ background: vars.green }}
+                    >
+                      <CheckCircle2 size={14} /> Mark section complete
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={() => { markComplete(activeSection); }}
+                    className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                    style={{ background: vars.green }}
+                  >
+                    <CheckCircle2 size={14} /> Mark section complete
+                  </button>
+                )}
               </div>
             </div>
           </div>
