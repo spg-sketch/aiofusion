@@ -2537,8 +2537,8 @@ export default function IntakePage() {
                 {activeSection > 0 && (
                   <button
                     onClick={() => setActiveSection(activeSection - 1)}
-                    className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border-2 hover:-translate-y-0.5 hover:shadow-md"
-                    style={{ borderColor: "#0a1628", color: "#0a1628", background: "transparent" }}
+                    className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                    style={{ background: vars.accent }}
                   >
                     <ArrowLeft size={14} /> Previous
                   </button>
