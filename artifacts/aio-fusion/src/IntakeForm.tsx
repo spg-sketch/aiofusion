@@ -1854,7 +1854,7 @@ export default function IntakePage() {
         {/* Section body */}
         <div className="flex-1 min-w-0">
           <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-            <div className="px-8 py-6" style={{ background: "#102B36" }}>
+            <div className="px-8 py-6" style={{ background: "#FBF1F0" }}>
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#FBE3ED" }}>
                   <section.icon size={20} color="#C8497A" />
@@ -1863,10 +1863,10 @@ export default function IntakePage() {
                   <div className="text-[13px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
                     Section {section.number}
                   </div>
-                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
                     {section.title}
                   </h2>
-                  <p className="text-xs font-light mt-0.5" style={{ color: "rgba(251,246,236,0.7)" }}>{section.subtitle}</p>
+                  <p className="text-xs font-light mt-0.5" style={{ color: "rgba(16,43,54,0.65)" }}>{section.subtitle}</p>
                 </div>
               </div>
             </div>
