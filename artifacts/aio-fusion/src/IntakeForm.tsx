@@ -2670,7 +2670,7 @@ export default function IntakePage() {
         <div className="mt-6 rounded-xl border p-4 flex items-start gap-3" style={{ background: "rgba(61,155,107,0.06)", borderColor: "rgba(61,155,107,0.25)" }}>
           <CheckCircle2 size={18} color={vars.green} className="mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-[13px] font-semibold" style={{ color: vars.navy }}>Project Data signed off on {new Date(acceptedAt).toLocaleDateString()}.</p>
+            <p className="text-[13px] font-semibold" style={{ color: "#ffffff" }}>Project Data signed off on {new Date(acceptedAt).toLocaleDateString()}.</p>
           </div>
         </div>
       )}
