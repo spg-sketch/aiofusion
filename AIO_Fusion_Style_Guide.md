@@ -69,6 +69,7 @@ Within the Visibility Audits section, saved audit report rows (date + score, sho
 | Login / Platform Home | `#f8fafc` (light) |
 | Project Hub | `#f8fafc` (light), with cards floating on it — **note**: current screenshot shows a teal backdrop around the white Project Hub card; confirm with client whether Project Hub should also sit on light `#f8fafc` or intentionally keep a teal frame like Dashboard. *(Flagged for decision — see Section 7.)* |
 | Dashboard (in-project) | `#1A647B` solid teal — **intentional, client-approved exception** |
+| Project Set-Up | `#1A647B` solid teal — matches Dashboard's teal backdrop; all internal cards (AI-assist panel, track switcher, sections nav, Project Data Actions, section body) remain white/pink-wash so they float on the teal, same pattern as Dashboard's metric cards. |
 | Sidebar | White (`#ffffff`), always, regardless of main content background |
 
 ---
