@@ -1814,11 +1814,11 @@ export default function IntakePage() {
                   <button
                     key={t.key}
                     onClick={() => setTrack(t.key)}
-                    className="px-5 py-3 rounded-xl text-left transition-all border-2"
+                    className={`px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 ${isActive ? "" : "hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-[#C8497A]"}`}
                     style={{
-                      background: isActive ? "#102B36" : "#FBF6EC",
-                      borderColor: isActive ? "#102B36" : "rgba(16,43,54,0.15)",
-                      color: isActive ? "#FBF6EC" : "#102B36",
+                      background: isActive ? "#102B36" : "#FBF1F0",
+                      borderColor: isActive ? "#102B36" : "rgba(16,43,54,0.12)",
+                      color: isActive ? "#ffffff" : "#102B36",
                     }}
                   >
                     <div className="text-[14px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>{t.primary}</div>
@@ -1863,10 +1863,10 @@ export default function IntakePage() {
                 <button
                   key={sec.id}
                   onClick={() => setActiveSection(idx)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all border"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all duration-300 border ${isActive ? "" : "hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/50"}`}
                   style={{
                     borderColor: isActive ? "#C8497A" : vars.g200,
-                    background: isActive ? "#FBE3ED" : "transparent",
+                    background: isActive ? "#FBE3ED" : "#FBF1F0",
                   }}
                 >
                   <div
@@ -1904,7 +1904,7 @@ export default function IntakePage() {
               <button
                 onClick={saveDraft}
                 title="Save your progress so you can finish later"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border-2"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border-2 hover:-translate-y-0.5 hover:shadow-md"
                 style={{
                   borderColor: justSaved ? vars.green : "#0a1628",
                   color: justSaved ? vars.green : "#0a1628",
@@ -1915,7 +1915,7 @@ export default function IntakePage() {
               </button>
               <button
                 onClick={acceptProjectData}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all whitespace-nowrap"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
                 style={{ background: vars.green }}
                 title="Sign off the Project Data and save it to the Project Data archive"
               >
@@ -1923,7 +1923,7 @@ export default function IntakePage() {
               </button>
               <button
                 onClick={downloadProjectData}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/40"
                 style={{ background: "white", color: "#0a1628", borderColor: "rgba(16,43,54,0.2)" }}
                 title="Open the print dialog so you can save the full Project Data as a PDF"
               >
@@ -1937,7 +1937,7 @@ export default function IntakePage() {
                     setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                   }
                 }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all whitespace-nowrap border"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:bg-[#FBF1F0]"
                 style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
                 title="Clear everything and start a new project"
               >
@@ -1959,7 +1959,7 @@ export default function IntakePage() {
                   <div className="text-[13px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
                     Section {section.number}
                   </div>
-                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>
+                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
                     {section.title}
                   </h2>
                   <p className="text-xs font-light mt-0.5" style={{ color: "rgba(251,246,236,0.7)" }}>{section.subtitle}</p>
@@ -1967,7 +1967,7 @@ export default function IntakePage() {
               </div>
             </div>
 
-            <div className="px-8 py-6" style={{ background: "#FBF6EC" }}>
+            <div className="px-8 py-6" style={{ background: "#ffffff" }}>
               <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
                 <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>{section.intro}</p>
               </div>
@@ -2518,7 +2518,7 @@ export default function IntakePage() {
                             const isOn = selected.includes(opt);
                             const onPick = () => (field.single ? selectSingle(field.id, opt) : toggleCheckbox(field.id, opt));
                             return (
-                              <label key={opt} className="flex items-start gap-3 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#FBF6EC]">
+                              <label key={opt} className="flex items-start gap-3 cursor-pointer group p-2 rounded-lg transition-colors hover:bg-[#FBF1F0]">
                                 <div
                                   className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${field.single ? "rounded-full" : "rounded"}`}
                                   style={{
