@@ -1676,9 +1676,29 @@ export default function IntakePage() {
       {/* Header */}
       <div className="mb-6 sm:mb-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
-            Project Set-Up
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+              Project Set-Up
+            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => downloadSectionQuestions(section)}
+                className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
+              >
+                <Download size={13} /> Download these questions
+              </button>
+              <button
+                type="button"
+                onClick={downloadHowToGuide}
+                className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
+              >
+                <FileText size={13} /> How-to guide
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-2.5">
             <span
               className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
@@ -1864,25 +1884,6 @@ export default function IntakePage() {
                   </p>
                 </div>
               )}
-
-              <div className="flex flex-wrap items-center gap-2 -mt-4 mb-8">
-                <button
-                  type="button"
-                  onClick={() => downloadSectionQuestions(section)}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-                  style={{ borderColor: "rgba(16,43,54,0.18)", color: "#C8497A", background: "white" }}
-                >
-                  <Download size={13} /> Download these questions
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadHowToGuide}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-                  style={{ borderColor: "rgba(16,43,54,0.18)", color: "#102B36", background: "white" }}
-                >
-                  <FileText size={13} /> How-to guide
-                </button>
-              </div>
 
               <div className="space-y-6">
                 {section.fields.map((field) => {
