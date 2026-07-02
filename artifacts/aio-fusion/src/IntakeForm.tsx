@@ -1709,14 +1709,8 @@ export default function IntakePage() {
           <div className="flex items-start gap-2.5">
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
             <div className="flex-1">
-              <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
-                Let AI draft from your website (Beta)
-              </p>
-              <p className="text-[12px] font-light mt-0.5 mb-2" style={{ color: "#102B36" }}>
-                Add your company website and use the "Ask AI to complete this" button under a question to draft an answer quicker. This is an early test, so it is switched on for the first two questions (1.1 and 1.2) only. Please always review and check what it writes.
-              </p>
-              <p className="text-[12px] font-light mt-0.5 mb-3" style={{ color: "#374151" }}>
-                <span className="font-semibold" style={{ color: "#102B36" }}>Why the website?</span> The AI reads your site and uses it as the source for the draft, so the answer reflects your real products, language and positioning rather than generic filler. The more your website says, the better the starting point. It is only used as a reference; nothing is published or changed.
+              <p className="text-[13px] font-bold mb-3" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                Add your company website
               </p>
               {(() => {
                 const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
