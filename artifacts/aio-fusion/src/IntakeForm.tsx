@@ -2717,7 +2717,7 @@ function FieldLabel({ id, label, hint, website = "", companyName = "", optimisab
     } catch { done(); }
   };
   return (
-    <div className="mb-2.5">
+    <div className="mb-2.5 rounded-xl px-4 py-3" style={{ background: "#FBF1F0" }}>
       <label className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
         {id.match(/^\d/) && (
           <span className="inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "#FBE3ED", color: "#C8497A", fontFamily: "Inter, sans-serif" }}>{id}</span>
