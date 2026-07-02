@@ -167,23 +167,6 @@ function DashboardPage({
     byType: Object.entries(plannerByType).slice(0, 4),
   };
 
-  // ── Activity pipeline: real archive items ─────────────────────────────
-  const fmtDate = (iso: string) => {
-    if (!iso) return "";
-    try { return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
-    catch { return iso; }
-  };
-  const pipelineItems = [...allArchiveItems]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5)
-    .map((a) => ({
-      id: a.id,
-      title: a.title,
-      type: a.contentType,
-      status: a.status === "Final" ? ("approved" as const) : ("draft" as const),
-      date: fmtDate(a.createdAt),
-    }));
-
   const ink = "#102B36";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
@@ -502,53 +485,6 @@ function DashboardPage({
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="rounded-2xl border p-5 sm:p-7 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg sm:text-xl font-bold flex items-center gap-1.5" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-            Activity Pipeline
-            <InfoTip text="Your most recent content items from the Archive, sorted by date created. Click any item to open it." />
-          </h3>
-          <button onClick={() => onNavigate("archive")} className="text-[13px] font-bold uppercase tracking-wider flex items-center gap-1 hover:underline" style={{ color: vars.teal }}>
-            View all <ArrowRight size={14} />
-          </button>
-        </div>
-        {pipelineItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center bg-slate-50 rounded-xl">
-            <FileText size={40} color={vars.g300} className="mb-4" />
-            <p className="text-base font-semibold mb-1" style={{ color: vars.navy }}>No content created yet</p>
-            <p className="text-[14px] font-medium mb-5" style={{ color: vars.g500 }}>Content you create in the Optimiser or Creator will appear here.</p>
-            <button onClick={() => onNavigate("optimiser")} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-wider text-white transition-all hover:shadow-md hover:-translate-y-0.5" style={{ background: vars.teal }}>
-              <FileEdit size={14} /> Create content
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {pipelineItems.map((item) => {
-              const statusStyles = {
-                "draft": { bg: "rgba(245,158,11,0.1)", color: vars.amber, label: "Draft" },
-                "approved": { bg: "rgba(34,197,94,0.1)", color: vars.green, label: "Final" },
-              };
-              const st = statusStyles[item.status];
-              return (
-                <button key={item.id} onClick={() => onNavigate("archive")} className="w-full flex items-center gap-4 p-4 rounded-xl border text-left hover:bg-slate-50 transition-all hover:shadow-sm" style={{ borderColor: vars.g200 }}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: st.bg }}>
-                    <FileText size={18} color={st.color} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold truncate" style={{ color: vars.navy }}>{item.title}</p>
-                    <p className="text-[13px] font-medium mt-0.5" style={{ color: vars.g500 }}>{item.type}{item.date ? ` · ${item.date}` : ""}</p>
-                  </div>
-                  <span className="px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider flex-shrink-0" style={{ background: st.bg, color: st.color }}>
-                    {st.label}
-                  </span>
-                  <ArrowRight size={16} className="ml-2" color={vars.g400} />
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
     </div>
