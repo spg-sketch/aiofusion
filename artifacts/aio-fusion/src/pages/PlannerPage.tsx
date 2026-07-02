@@ -109,8 +109,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <Calendar size={12} color={accentPink} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Comms Planner</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
-        <p className="text-[15px] font-light max-w-5xl" style={{ color: vars.g600 }}>Plan your whole PR and marketing schedule in one place and see a live score for the AI authority each activity will earn. A joined-up plan means every release, article and event builds your visibility in AI answers instead of working in isolation. Click any content item to open and edit it in the Content Optimiser.</p>
+        <div className="flex items-center gap-3">
+          <Calendar size={26} color="#ffffff" />
+          <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
+        </div>
+        <p className="text-[15px] font-light max-w-5xl" style={{ color: "rgba(255,255,255,0.85)" }}>Plan your whole PR and marketing schedule in one place and see a live score for the AI authority each activity will earn. A joined-up plan means every release, article and event builds your visibility in AI answers instead of working in isolation. Click any content item to open and edit it in the Content Optimiser.</p>
       </div>
 
       {!contentVersion && (

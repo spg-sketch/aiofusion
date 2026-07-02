@@ -37,8 +37,8 @@ function ReleaseGatewayPage() {
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Release Gateway</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Send approved content out through connected media tools or download it for manual distribution, all from one controlled step. A clean, consistent release process gets your content live properly so it starts earning AI citations sooner.</p>
+        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Release Gateway</h1>
+        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Send approved content out through connected media tools or download it for manual distribution, all from one controlled step. A clean, consistent release process gets your content live properly so it starts earning AI citations sooner.</p>
       </div>
 
       <section className="mb-10">

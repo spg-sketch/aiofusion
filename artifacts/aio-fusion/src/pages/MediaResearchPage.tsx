@@ -328,8 +328,11 @@ function MediaResearchPage() {
           <Target size={12} color={accentPink} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Media Research</span>
         </div>
-        <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
-        <p className="text-[15px] font-light max-w-3xl" style={{ color: vars.g600 }}>
+        <div className="flex items-center gap-3">
+          <Users size={26} color="#ffffff" />
+          <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
+        </div>
+        <p className="text-[15px] font-light max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
           Pick a piece from your Archive and let AI recommend the publications and journalists most likely to run it. Coverage on the right trusted outlets is one of the strongest signals AI models use when deciding who to cite, so targeted outreach grows your authority directly. Recommendations come from the media categories you chose in Project Set-Up.
         </p>
       </div>

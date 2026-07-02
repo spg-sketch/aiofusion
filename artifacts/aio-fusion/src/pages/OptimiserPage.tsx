@@ -433,13 +433,13 @@ OUTPUT INSTRUCTIONS:
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
-              <FileEdit size={24} color={vars.teal} />
-              <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              <FileEdit size={24} color="#ffffff" />
+              <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
                 Content Optimiser & Editor
                 <span className="ml-3"><InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} /></span>
               </h1>
             </div>
-            <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: vars.g600 }}>
+            <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.85)" }}>
               Paste your own human-written draft below - a press release, article, case study or any other copy - then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
             </p>
           </div>

@@ -476,10 +476,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 mb-3">
-            <PenLine size={24} color={vars.teal} />
-            <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
+            <PenLine size={24} color="#ffffff" />
+            <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Content Creator</h1>
           </div>
-          <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: vars.g600 }}>
+          <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.85)" }}>
             Turn raw notes and transcripts into polished pitches, articles and case studies that are written to be AI friendly from the start. Content built this way is ready to earn citations the moment it goes live, rather than needing fixing later. Your signed-off Project Data is used as the authority brief.
           </p>
         </div>

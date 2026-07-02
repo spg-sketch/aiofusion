@@ -120,10 +120,10 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
-          <Archive size={22} color={vars.accent} /> Archive - {projectName}
+        <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+          <Archive size={22} color="#ffffff" /> Archive - {projectName}
         </h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
           Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept archive lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time. Click any card to send it back to the Content Optimiser.
         </p>
       </div>

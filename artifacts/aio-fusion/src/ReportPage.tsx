@@ -22,6 +22,7 @@ import {
   Sparkles,
   Calendar,
   Globe,
+  PieChart,
 } from "lucide-react";
 
 const vars = {
@@ -389,13 +390,13 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <BarChart3 size={20} color={vars.accent} />
-            <h1 className="text-xl sm:text-2xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <PieChart size={20} color="#ffffff" />
+            <h1 className="text-xl sm:text-2xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Authority &amp; Activity Report
               <InfoTip text="Combines diagnostic scores, earned media authority, planned activity, the Earned Media Tracker and the website GEO audit. Designed to be exported and shared with the client." width={260} />
             </h1>
           </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
             {activeClient.name} &middot; Generated {reportDate}
           </p>
           <p className="text-[14px] font-light mt-3 max-w-3xl leading-relaxed" style={{ color: vars.g600 }}>

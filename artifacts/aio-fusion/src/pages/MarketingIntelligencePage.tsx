@@ -204,10 +204,10 @@ function MarketingIntelligencePage() {
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
-          <Award size={20} color={vars.coral} />
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
+          <TrendingUp size={20} color="#ffffff" />
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
           Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
         </p>
       </div>

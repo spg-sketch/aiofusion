@@ -1217,12 +1217,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <Eye size={20} color="#1f748f" />
-            <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <Search size={20} color="#ffffff" />
+            <h1 className="text-xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Earned Media Visibility Audit
             </h1>
           </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
             Score how often {probeName || activeClient.name} is mentioned when AI engines are asked about your sectors and target markets.
           </p>
         </div>

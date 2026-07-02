@@ -7,7 +7,7 @@ import {
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
-  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, Database,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/contentAi";
@@ -259,8 +259,11 @@ function MediaDatabasePage() {
       {/* Header */}
       <div className="mb-6">
         <p className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1" style={{ color: vars.accent }}>Content Management</p>
-        <h1 className="text-[28px] font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Publications, journalists and custom trade media categories for your account.</p>
+        <div className="flex items-center gap-2.5">
+          <Database size={24} color="#ffffff" />
+          <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
+        </div>
+        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Publications, journalists and custom trade media categories for your account.</p>
       </div>
 
       {/* Tabs */}

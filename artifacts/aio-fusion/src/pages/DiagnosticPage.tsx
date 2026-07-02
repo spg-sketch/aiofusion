@@ -241,19 +241,19 @@ Engine used:
       <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <Search size={20} color="#1f748f" />
-            <h1 className="text-xl tracking-tight flex items-center" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+            <Globe size={20} color="#ffffff" />
+            <h1 className="text-xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Website Visibility Audit
               <InfoTip text="Runs an AI-powered audit of your website (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>
           </div>
-          <p className="text-[14px] font-light" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
             Score your site for AI agent visibility and citation.
           </p>
-          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
             This assessment looks at your website the way AI search and answer engines now read it. We check the things that decide whether an engine will trust your site, understand what you do, and name you in its answers: how your content is structured, how clearly your brand and services are described, the behind-the-scenes markup that helps machines make sense of the page, and the signals that show you are a credible source.
           </p>
-          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: vars.g500 }}>
+          <p className="text-[14px] font-light leading-relaxed mt-3 max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
             You get a single readiness score and a short, prioritised list of fixes, so you can see exactly where you stand today and what to improve to be mentioned more often when people ask AI about your sector.
           </p>
         </div>

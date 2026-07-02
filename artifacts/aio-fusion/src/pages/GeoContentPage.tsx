@@ -83,8 +83,8 @@ function GeoContentPage({
   return (
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Website Content GEO</h1>
-        <p className="text-[14px] font-light" style={{ color: vars.g500 }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (PR sections 2.5–2.7).</p>
+        <h1 className="text-3xl sm:text-4xl mb-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Website Content GEO</h1>
+        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>Audit your site's core message pages, score AI-citation readiness, and generate an action report aligned to your Project Data (PR sections 2.5–2.7).</p>
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">

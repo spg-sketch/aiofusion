@@ -27,6 +27,7 @@ import {
   Undo2,
   Loader2,
   Wand2,
+  FileEdit,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated, assertActiveProjectConsistencyFromCache } from "./lib/projectSync";
@@ -1677,6 +1678,7 @@ export default function IntakePage() {
       <div className="mb-6 sm:mb-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
           <div className="flex items-center gap-3 flex-wrap">
+            <FileEdit size={26} color="#ffffff" />
             <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Project Set-Up
             </h1>
