@@ -1703,12 +1703,6 @@ export default function IntakePage() {
         <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>
           This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR set-up and Website set-up sections to build it.
         </p>
-        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>
-          Getting this right matters, so set aside around two hours to do it properly. It is one of the most valuable investments you can make in your GEO strategy.
-        </p>
-        <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: "rgba(255,255,255,0.85)" }}>
-          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>. It copies a ready-to-paste prompt, with your company website built in, that you can drop straight into your own AI assistant (such as ChatGPT) to draft the answer faster. Add your website at the top first so the draft reflects your real business. The <span className="font-bold" style={{ color: "#ffffff" }}>Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#FCA5A5" }}>red</span>, and <span className="font-bold" style={{ color: "#ffffff" }}>Reject</span> restores your original.
-        </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBE3ED", borderColor: "rgba(200,73,122,0.45)" }}>
