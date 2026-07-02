@@ -70,10 +70,10 @@ function DashboardPage({
 
   // ── Live audit data ───────────────────────────────────────────────────────
   const savedAudits = loadSavedAudits(activeClient.id);
-  const latestAudit = savedAudits.length > 0 ? savedAudits[savedAudits.length - 1] : null;
+  const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
 
   const savedDiagnostics = loadSavedDiagnostics(activeClient.id);
-  const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[savedDiagnostics.length - 1] : null;
+  const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[0] : null;
 
   // ── Live archive + planner ─────────────────────────────────────────────
   const allArchiveItems = loadArchive(activeClient.id).filter((a) => !a.id.startsWith("seed-"));
