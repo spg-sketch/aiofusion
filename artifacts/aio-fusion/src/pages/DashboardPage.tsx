@@ -151,7 +151,7 @@ function DashboardPage({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+        <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Project Set-Up
             <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
@@ -183,7 +183,7 @@ function DashboardPage({
           </button>
         </div>
 
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+        <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Earned Media Visibility Audit
             <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
@@ -233,7 +233,7 @@ function DashboardPage({
               )}
             </>
           )}
-          <button onClick={() => onNavigate("llm-check")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("llm-check")} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
             {earnedAuditLock.locked
               ? <><Lock size={11} />View Audit (locked)</>
               : earnedScore === null ? "Run Earned Media Visibility Audit" : "View / Re-run Audit"}
@@ -241,7 +241,7 @@ function DashboardPage({
           </button>
         </div>
 
-        <div className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+        <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
             Website Visibility Audit
             <InfoTip text="Score for how well your website is structured for AI citation - schema, crawlability, entity clarity, internal authority graph." />
@@ -279,7 +279,7 @@ function DashboardPage({
               </div>
             </>
           )}
-          <button onClick={() => onNavigate("diagnostic")} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("diagnostic")} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
             {websiteAuditLock.locked
               ? <><Lock size={11} />View Audit (locked)</>
               : websiteScore === null ? "Run Website Visibility Audit" : "View / Re-run Audit"}
@@ -291,21 +291,23 @@ function DashboardPage({
       {/* Content Activity stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
         {[
-          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses.", nav: "planner", cta: "Open Comms Planner" },
           { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project.", nav: "archive", cta: "Open Archive" },
+          { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses.", nav: "planner", cta: "Open Comms Planner" },
           { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Archive items currently in draft — not yet finalised.", nav: "archive", cta: "Open Archive" },
           { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Archive items marked Final — approved and ready to send.", nav: "archive", cta: "Open Archive" },
         ].map((s) => (
-          <div key={s.label} className="group rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 mb-4" style={{ background: `${s.color}15` }}>
-              <s.icon size={22} color={s.color} />
-            </div>
-            <p className="text-4xl font-bold leading-none mb-2 tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
-            <p className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 mb-4" style={{ color: vars.g500 }}>
+          <div key={s.label} className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
               {s.label}
               <InfoTip text={s.tip} />
-            </p>
-            <button onClick={() => onNavigate(s.nav)} className="text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+            </h3>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${s.color}15` }}>
+                <s.icon size={24} color={s.color} />
+              </div>
+              <p className="text-4xl font-bold leading-none tracking-tight" style={{ color: vars.navy }}>{s.value}</p>
+            </div>
+            <button onClick={() => onNavigate(s.nav)} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
               {s.cta} <ArrowRight size={12} />
             </button>
           </div>
