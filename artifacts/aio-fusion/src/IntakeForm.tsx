@@ -1804,16 +1804,23 @@ export default function IntakePage() {
               { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)", label: "PR Set-Up Progress", pct: trackProgress.pr },
               { key: "web" as Track, primary: "AIO Set-Up", subtitle: "Business Profile (Sections 4–7)", label: "AIO Set-Up Progress", pct: trackProgress.web },
             ]).map((t) => {
-              const isActive = track === t.key;
               return (
                 <div key={t.key} className="flex-1 flex flex-col gap-3">
                   <button
                     onClick={() => setTrack(t.key)}
-                    className={`px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 w-full ${isActive ? "" : "hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-[#C8497A]"}`}
+                    className="group px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 w-full hover:-translate-y-1 hover:shadow-lg"
                     style={{
-                      background: isActive ? "#FBE3ED" : "#FBF1F0",
-                      borderColor: isActive ? "#C8497A" : "rgba(16,43,54,0.12)",
+                      background: "#FBF1F0",
+                      borderColor: "rgba(16,43,54,0.12)",
                       color: "#102B36",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#FBE3ED";
+                      e.currentTarget.style.borderColor = "#C8497A";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#FBF1F0";
+                      e.currentTarget.style.borderColor = "rgba(16,43,54,0.12)";
                     }}
                   >
                     <div className="text-[14px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>{t.primary}</div>
