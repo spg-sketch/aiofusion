@@ -1875,8 +1875,9 @@ export default function IntakePage() {
               {section.id === "earned-media" ? (
                 <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
                   <p className="text-[13px] font-light leading-relaxed mb-3" style={{ color: "#102B36" }}>{section.intro}</p>
+                  <p className="text-[13px] font-bold leading-relaxed mb-1" style={{ color: "#102B36" }}>Use your agreed FAQs and approved company messaging.</p>
                   <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>
-                    <span className="font-semibold">Use your agreed FAQs and approved company messaging.</span> Where you already have signed-off boilerplate, key messages or a published FAQ, reuse that exact wording here rather than writing something new. Keeping your earned media, your website and these answers consistent is what builds authority with AI models, so pull from your existing approved sources wherever you can.
+                    Where you already have signed-off boilerplate, key messages or a published FAQ, reuse that exact wording here rather than writing something new. Keeping your earned media, your website and these answers consistent is what builds authority with AI models, so pull from your existing approved sources wherever you can.
                   </p>
                 </div>
               ) : (
