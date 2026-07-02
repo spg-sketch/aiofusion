@@ -1680,18 +1680,6 @@ export default function IntakePage() {
             Project Set-Up
           </h1>
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={saveDraft}
-              title="Save your progress so you can finish later"
-              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] px-3.5 py-1.5 rounded-full border-2 transition-colors"
-              style={{
-                borderColor: justSaved ? vars.green : "rgba(255,255,255,0.7)",
-                color: justSaved ? vars.green : "#ffffff",
-                background: justSaved ? "rgba(61,155,107,0.15)" : "transparent",
-              }}
-            >
-              {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
-            </button>
             <span
               className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
               style={{ background: statusBadge.bg, color: statusBadge.color }}
