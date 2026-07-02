@@ -5,7 +5,7 @@ import {
   Users, Database, TrendingUp, PieChart,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadSavedAudits } from "../LlmCheckPage";
+import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
 import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "../lib/diagnosticStore";
 import type { Client, NavItem, NavSection } from "../types";
 
@@ -244,14 +244,14 @@ function SidebarContent({
                           key={a.id}
                           onClick={() => { onOpenSavedAudit?.(a.id); onItemClick?.(); }}
                           className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
-                          title={`Open saved audit (${a.result.visibilityScore}% visibility)`}
+                          title={`Open saved audit (Authority Index ${authorityIndexFor(a.result)})`}
                         >
                           <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
                           <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#4B5563" }}>
                             {new Date(a.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(a.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                           <span className="text-[11px] font-bold flex-shrink-0" style={{ color: "#4B5563" }}>
-                            {a.result.visibilityScore}%
+                            {authorityIndexFor(a.result)}
                           </span>
                         </button>
                       ))}

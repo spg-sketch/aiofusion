@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
-import { loadSavedAudits } from "../LlmCheckPage";
+import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
 import type { Client } from "../types";
 
 const teal = "#1A647B";
@@ -195,7 +195,7 @@ export default function ClientSelectorPage({
             {displayClients.map((client) => {
               const clientAudits = loadSavedAudits(client.id);
               const latestEarnedAudit = clientAudits[0] ?? null;
-              const liveScore = latestEarnedAudit ? latestEarnedAudit.result.visibilityScore : 0;
+              const liveScore = latestEarnedAudit ? authorityIndexFor(latestEarnedAudit.result) : 0;
               const livePlans = loadPlannerProjects(client.id).length;
               const liveContent = loadArchive(client.id).length;
               const logoUrl = clientLogos[client.id];
@@ -268,7 +268,7 @@ export default function ClientSelectorPage({
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Earned Media Audit Score</span>
                       {latestEarnedAudit ? (
-                        <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}%</p>
+                        <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
                       ) : (
                         <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>No audit yet</p>
                       )}

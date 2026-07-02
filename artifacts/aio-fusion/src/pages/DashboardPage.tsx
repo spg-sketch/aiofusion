@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, FileCheck, FolderCheck,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadSavedAudits } from "../LlmCheckPage";
+import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
 import { loadSavedDiagnostics } from "../lib/diagnosticStore";
 import { loadArchive, loadPlannerProjects, useContentStore } from "../lib/contentStore";
 import { loadIntakeData } from "../IntakeForm";
@@ -98,7 +98,7 @@ function DashboardPage({
   const intakePct = Math.round((intakeCompleted / intakeSections.length) * 100);
 
   // ── Scores ────────────────────────────────────────────────────────────
-  const earnedScore: number | null = latestAudit?.result.visibilityScore ?? null;
+  const earnedScore: number | null = latestAudit ? authorityIndexFor(latestAudit.result) : null;
   const websiteScore: number | null = latestDiagnostic?.result.overallScore ?? null;
 
   // ── LLM model data from latest audit ─────────────────────────────────
@@ -207,7 +207,7 @@ function DashboardPage({
                       stroke={earnedScore >= 60 ? vars.green : earnedScore >= 30 ? vars.amber : vars.red}
                       strokeWidth={5} strokeDasharray={`${(earnedScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{earnedScore}%</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{earnedScore}</span>
                 </div>
                 <div className="flex-1 space-y-1.5">
                   {llmModels.map((m) => (

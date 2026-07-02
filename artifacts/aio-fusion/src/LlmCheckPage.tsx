@@ -238,7 +238,7 @@ interface ReportData {
   categoryFraming: { query: string; themes: string }[];
 }
 
-function authorityIndexFor(result: LlmCheckResult): number {
+export function authorityIndexFor(result: LlmCheckResult): number {
   return result.assessment ? result.assessment.index : result.visibilityScore;
 }
 
