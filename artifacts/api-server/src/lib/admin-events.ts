@@ -12,7 +12,9 @@ export type AdminAction =
   | "account_delete"
   | "account_role_change"
   | "project_owner_reassign"
-  | "platform_migrate";
+  | "platform_migrate"
+  | "impersonate_start"
+  | "impersonate_exit";
 
 export async function logAdminEvent(
   actor: AdminActor,

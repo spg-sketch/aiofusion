@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -91,35 +91,75 @@ function UsersAdminPage({
   const allProjects = useMemo(() => loadStoredProjects(), [tick]);
   const projectsByOwner = (username: string) =>
     allProjects.filter((p) => (p.owner || "").toLowerCase() === username.toLowerCase());
-  // Order the flat account list as a tree so each client sits directly beneath
-  // the agency it reports to (and agencies beneath the master), with a depth so
-  // the list can indent nested accounts. Falls back to flat for any account
-  // whose parent is missing, and a cycle guard makes sure every account shows.
-  const orderedUsers = useMemo(() => {
-    const childrenByParent = new Map<string, LocalUser[]>();
+  // Group accounts into a real parent-child tree (rather than a flat,
+  // margin-indented list) so the master/agency/client hierarchy reads clearly:
+  // each account's children render nested inside it, with a connecting rail.
+  // A cycle guard and "unknown parent" fallback make sure every account still
+  // shows even if its parent record is missing.
+  const knownUsernames = useMemo(() => new Set(users.map((u) => u.username.toLowerCase())), [users]);
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, LocalUser[]>();
     for (const u of users) {
       const p = (u.parent || "").toLowerCase();
-      const list = childrenByParent.get(p) || [];
+      const list = map.get(p) || [];
       list.push(u);
-      childrenByParent.set(p, list);
+      map.set(p, list);
     }
-    const known = new Set(users.map((u) => u.username.toLowerCase()));
-    const out: { user: LocalUser; depth: number }[] = [];
+    return map;
+  }, [users]);
+  const topLevelUsers = useMemo(() => {
     const seen = new Set<string>();
-    const visit = (u: LocalUser, depth: number) => {
-      const key = u.username.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push({ user: u, depth });
-      for (const c of childrenByParent.get(key) || []) visit(c, depth + 1);
-    };
+    const out: LocalUser[] = [];
     for (const u of users) {
       const p = (u.parent || "").toLowerCase();
-      if (!p || !known.has(p)) visit(u, 0);
+      if (!p || !knownUsernames.has(p)) {
+        const key = u.username.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(u);
+        }
+      }
     }
-    for (const u of users) if (!seen.has(u.username.toLowerCase())) visit(u, 0);
     return out;
-  }, [users]);
+  }, [users, knownUsernames]);
+
+  // Which accounts have their sub-account tree collapsed. Starts empty (every
+  // account expanded), since admins usually need to see the whole hierarchy.
+  const [collapsedAccounts, setCollapsedAccounts] = useState<Set<string>>(new Set());
+  const toggleCollapse = (username: string) => {
+    setCollapsedAccounts((prev) => {
+      const next = new Set(prev);
+      const key = username.toLowerCase();
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // ── View account (support impersonation) ─────────────────────────────
+  const [impersonatingUsername, setImpersonatingUsername] = useState<string | null>(null);
+  const [impersonateError, setImpersonateError] = useState<string | null>(null);
+  const handleViewAccount = (username: string) => {
+    setImpersonateError(null);
+    setImpersonatingUsername(username);
+    void serverImpersonate(username)
+      .then((result) => {
+        if (!result.ok) {
+          setImpersonateError(result.error);
+          setImpersonatingUsername(null);
+          return;
+        }
+        // Reload into the target account's own view. A full reload keeps this
+        // in step with the rest of the app's session-bootstrap flow (project
+        // lists, cached account list, etc.) rather than trying to patch every
+        // piece of local state in place.
+        window.location.reload();
+      })
+      .catch(() => {
+        setImpersonateError("Failed to view this account.");
+        setImpersonatingUsername(null);
+      });
+  };
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -418,6 +458,356 @@ function UsersAdminPage({
     refresh();
   };
 
+  // Renders one account card, plus (recursively) its sub-accounts nested
+  // inside a bordered "rail" container, so the master/agency/client
+  // hierarchy is expressed structurally instead of via margin indentation.
+  function renderAccountNode(u: LocalUser, depth: number): React.ReactElement {
+    const isMe = u.username.toLowerCase() === session.username.toLowerCase();
+    const editingPw = pwUser === u.username;
+    const editingName = nameUser === u.username;
+    const editingRole = roleUser === u.username;
+    const editingSeatCap = seatCapUser === u.username;
+    const viewingSessions = sessionsUser === u.username;
+    const hasDisplayName = !!(u.displayName && u.displayName.trim());
+    const children = childrenByParent.get(u.username.toLowerCase()) || [];
+    const hasChildren = children.length > 0;
+    const isCollapsed = collapsedAccounts.has(u.username.toLowerCase());
+    return (
+      <div key={u.username} className="flex flex-col gap-3">
+        <div
+          className="rounded-xl p-4 sm:p-5 transition-all"
+          style={
+            depth > 0
+              ? { background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `3px solid ${accent}50` }
+              : { background: vars.g100 + "80", border: `1.5px solid ${vars.g200}` }
+          }
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {hasChildren ? (
+                <button
+                  onClick={() => toggleCollapse(u.username)}
+                  title={isCollapsed ? "Expand sub-accounts" : "Collapse sub-accounts"}
+                  className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all hover:bg-black/5"
+                  style={{ border: `1.5px solid ${vars.g200}`, color: vars.g500 }}
+                >
+                  {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                </button>
+              ) : (
+                <span className="w-6 shrink-0" />
+              )}
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? "white" : accent }}>
+                <User size={18} />
+              </div>
+              <div>
+                <p className="text-[15px] font-bold leading-tight" style={{ color: ink }}>
+                  {accountLabel(u)}
+                  {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
+                  {hasChildren && (
+                    <span className="ml-2 text-[10px] font-semibold" style={{ color: vars.g400 }}>
+                      ({children.length} sub-account{children.length === 1 ? "" : "s"})
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
+                    {roleLabel(u.role)}
+                  </span>
+                  {hasDisplayName && (
+                    <span className="text-[11px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
+                  )}
+                  {u.parent && (
+                    <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
+                  )}
+                  {(() => {
+                    const t = tokenTotals[u.username.toLowerCase()];
+                    if (!t || t.calls === 0) return null;
+                    return (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
+                        {t.calls.toLocaleString()} {t.calls === 1 ? "call" : "calls"} &middot; £{t.cost.toFixed(4)}
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!isMe && (
+                <button
+                  onClick={() => handleViewAccount(u.username)}
+                  disabled={impersonatingUsername === u.username}
+                  title="View this account (support mode)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:bg-black/5"
+                  style={{ color: "white", background: accent, border: `1.5px solid ${accent}` }}
+                >
+                  {impersonatingUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} View account
+                </button>
+              )}
+              <button
+                onClick={() => { setNameUser(editingName ? null : u.username); setNameValue(u.displayName || ""); setNameError(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+              >
+                <FileEdit size={12} /> {editingName ? "Cancel" : "Name"}
+              </button>
+              <button
+                onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+              >
+                <KeyRound size={12} /> {editingPw ? "Cancel" : "Password"}
+              </button>
+              {!isMe && (
+                <button
+                  onClick={() => { setRoleUser(editingRole ? null : u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                  style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                >
+                  <Shield size={12} /> {editingRole ? "Cancel" : "Role"}
+                </button>
+              )}
+              {u.role !== "admin" && (
+                <button
+                  onClick={() => { setSeatCapUser(editingSeatCap ? null : u.username); setSeatCapValue(""); setSeatCapError(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                  style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                >
+                  <Users size={12} /> {editingSeatCap ? "Cancel" : "Seat cap"}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const opening = !viewingSessions;
+                  setSessionsUser(opening ? u.username : null);
+                  setAccountSessions(null);
+                  setAccountSessionsError(null);
+                  if (opening) loadAccountSessions(u.username);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+              >
+                <MonitorSmartphone size={12} /> {viewingSessions ? "Close" : "Sessions"}
+              </button>
+              <button
+                onClick={() => handleDelete(u.username)}
+                disabled={isMe}
+                title={isMe ? "You cannot delete your own account" : "Delete account"}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
+                style={{ color: accent, border: `1.5px solid ${accent}40` }}
+              >
+                <Trash2 size={12} /> Delete
+              </button>
+            </div>
+          </div>
+          {(() => {
+            const owned = projectsByOwner(u.username);
+            return (
+              <div className="mt-3 sm:pl-[52px]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>
+                  Projects ({owned.length})
+                </p>
+                {owned.length === 0 ? (
+                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {owned.map((p) => (
+                      <div key={p.id} className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
+                            {p.name}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
+                          <select
+                            value={(p.owner || "").toLowerCase()}
+                            onChange={(e) => handleAssign(p.id, e.target.value)}
+                            className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
+                            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                          >
+                            {users.map((o) => (
+                              <option key={o.username} value={o.username.toLowerCase()}>
+                                {accountLabel(o)} ({roleLabel(o.role)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {(auditLocks[p.id] ?? []).map((lk) => (
+                          <div key={lk.auditType} className="flex items-center gap-2 pl-1">
+                            <Lock size={10} style={{ color: vars.g400 }} />
+                            <span className="text-[10px]" style={{ color: vars.g500 }}>
+                              {AUDIT_TYPE_LABELS[lk.auditType] ?? lk.auditType} locked
+                              {" - "}{new Date(lk.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                            </span>
+                            <button
+                              onClick={() => clearAuditLock(p.id, lk.auditType)}
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded border hover:opacity-80"
+                              style={{ borderColor: vars.g300, color: vars.g500, background: vars.g100 }}
+                            >
+                              Clear lock
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {editingName && (
+            <form onSubmit={handleSaveName} className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                placeholder="Display name (leave blank to clear)"
+                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                style={{ background: accent }}
+              >
+                Save
+              </button>
+              {nameError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{nameError}</span>}
+            </form>
+          )}
+          {editingPw && (
+            <form onSubmit={handleSavePassword} className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={pwValue}
+                onChange={(e) => setPwValue(e.target.value)}
+                placeholder="New password (min 4 chars)"
+                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                style={{ background: accent }}
+              >
+                Save
+              </button>
+              {pwError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{pwError}</span>}
+            </form>
+          )}
+          {editingRole && (
+            <form onSubmit={handleSaveRole} className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={roleValue}
+                onChange={(e) => setRoleValue(e.target.value as LocalRole)}
+                className="px-3 py-2 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              >
+                <option value="admin">Master (Admin)</option>
+                <option value="agency">Agency</option>
+                <option value="client">Direct Client</option>
+              </select>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                style={{ background: accent }}
+              >
+                Save
+              </button>
+              {roleError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{roleError}</span>}
+            </form>
+          )}
+          {editingSeatCap && (
+            <form onSubmit={handleSaveSeatCap} className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={seatCapValue}
+                  onChange={(e) => setSeatCapValue(e.target.value)}
+                  placeholder="No limit (leave blank)"
+                  className="w-44 px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                />
+                <span className="text-[12px]" style={{ color: vars.g500 }}>max sub-accounts (blank = no limit)</span>
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                style={{ background: accent }}
+              >
+                Save
+              </button>
+              {seatCapError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{seatCapError}</span>}
+            </form>
+          )}
+          {viewingSessions && (
+            <div className="mt-3">
+              {accountSessionsLoading && (
+                <div className="flex items-center gap-2 text-[12px]" style={{ color: vars.g400 }}>
+                  <Loader2 size={12} className="animate-spin" /> Loading sessions…
+                </div>
+              )}
+              {accountSessionsError && (
+                <p className="text-[12px] font-medium" style={{ color: vars.red }}>{accountSessionsError}</p>
+              )}
+              {!accountSessionsLoading && accountSessions !== null && (
+                accountSessions.length === 0 ? (
+                  <p className="text-[12px] font-light" style={{ color: vars.g400 }}>No active sessions.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
+                    <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                          <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Started</th>
+                          <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Expires</th>
+                          <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>IP</th>
+                          <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accountSessions.map((s, i) => (
+                          <tr key={s.sid} style={{ background: i % 2 === 0 ? "white" : vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                            <td className="px-3 py-2 whitespace-nowrap font-mono" style={{ color: ink }}>
+                              {new Date(s.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                              {" "}
+                              {new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                              {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
+                              {s.ipHint ?? "-"}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <button
+                                onClick={() => handleRevokeAccountSession(s.sid)}
+                                disabled={revokingAccountSession === s.sid}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-40"
+                                style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                              >
+                                {revokingAccountSession === s.sid ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
+                                Revoke
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+        {hasChildren && !isCollapsed && (
+          <div className="ml-[22px] pl-4 border-l-2 flex flex-col gap-3" style={{ borderColor: accentSoft }}>
+            {children.map((c) => renderAccountNode(c, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: ink }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
@@ -612,315 +1002,7 @@ function UsersAdminPage({
             <h2 className="text-[18px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>All accounts ({users.length})</h2>
           </div>
           <div className="flex flex-col gap-3 p-5 sm:p-6">
-            {orderedUsers.map(({ user: u, depth }) => {
-              const isMe = u.username.toLowerCase() === session.username.toLowerCase();
-              const editingPw = pwUser === u.username;
-              const editingName = nameUser === u.username;
-              const editingRole = roleUser === u.username;
-              const editingSeatCap = seatCapUser === u.username;
-              const viewingSessions = sessionsUser === u.username;
-              const hasDisplayName = !!(u.displayName && u.displayName.trim());
-              return (
-                <div
-                  key={u.username}
-                  className="rounded-xl p-4 sm:p-5 transition-all"
-                  style={
-                    depth > 0
-                      ? { marginLeft: depth * 20, background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `3px solid ${accent}50` }
-                      : { background: vars.g100 + "80", border: `1.5px solid ${vars.g200}` }
-                  }
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? "white" : accent }}>
-                        <User size={18} />
-                      </div>
-                      <div>
-                        <p className="text-[15px] font-bold leading-tight" style={{ color: ink }}>
-                          {accountLabel(u)}
-                          {isMe && <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>(you)</span>}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
-                            {roleLabel(u.role)}
-                          </span>
-                          {hasDisplayName && (
-                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
-                          )}
-                          {u.parent && (
-                            <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
-                          )}
-                          {(() => {
-                            const t = tokenTotals[u.username.toLowerCase()];
-                            if (!t || t.calls === 0) return null;
-                            return (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
-                                {t.calls.toLocaleString()} {t.calls === 1 ? "call" : "calls"} &middot; £{t.cost.toFixed(4)}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <button
-                        onClick={() => { setNameUser(editingName ? null : u.username); setNameValue(u.displayName || ""); setNameError(null); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                      >
-                        <FileEdit size={12} /> {editingName ? "Cancel" : "Name"}
-                      </button>
-                      <button
-                        onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                      >
-                        <KeyRound size={12} /> {editingPw ? "Cancel" : "Password"}
-                      </button>
-                      {!isMe && (
-                        <button
-                          onClick={() => { setRoleUser(editingRole ? null : u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                        >
-                          <Shield size={12} /> {editingRole ? "Cancel" : "Role"}
-                        </button>
-                      )}
-                      {u.role !== "admin" && (
-                        <button
-                          onClick={() => { setSeatCapUser(editingSeatCap ? null : u.username); setSeatCapValue(""); setSeatCapError(null); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                        >
-                          <Users size={12} /> {editingSeatCap ? "Cancel" : "Seat cap"}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          const opening = !viewingSessions;
-                          setSessionsUser(opening ? u.username : null);
-                          setAccountSessions(null);
-                          setAccountSessionsError(null);
-                          if (opening) loadAccountSessions(u.username);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                        style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                      >
-                        <MonitorSmartphone size={12} /> {viewingSessions ? "Close" : "Sessions"}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(u.username)}
-                        disabled={isMe}
-                        title={isMe ? "You cannot delete your own account" : "Delete account"}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
-                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
-                      >
-                        <Trash2 size={12} /> Delete
-                      </button>
-                    </div>
-                  </div>
-                  {(() => {
-                    const owned = projectsByOwner(u.username);
-                    return (
-                      <div className="mt-3 sm:pl-[52px]">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>
-                          Projects ({owned.length})
-                        </p>
-                        {owned.length === 0 ? (
-                          <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            {owned.map((p) => (
-                              <div key={p.id} className="flex flex-col gap-1.5">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
-                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
-                                    {p.name}
-                                  </span>
-                                  <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
-                                  <select
-                                    value={(p.owner || "").toLowerCase()}
-                                    onChange={(e) => handleAssign(p.id, e.target.value)}
-                                    className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
-                                    style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                                  >
-                                    {users.map((o) => (
-                                      <option key={o.username} value={o.username.toLowerCase()}>
-                                        {accountLabel(o)} ({roleLabel(o.role)})
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                {(auditLocks[p.id] ?? []).map((lk) => (
-                                  <div key={lk.auditType} className="flex items-center gap-2 pl-1">
-                                    <Lock size={10} style={{ color: vars.g400 }} />
-                                    <span className="text-[10px]" style={{ color: vars.g500 }}>
-                                      {AUDIT_TYPE_LABELS[lk.auditType] ?? lk.auditType} locked
-                                      {" - "}{new Date(lk.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                    </span>
-                                    <button
-                                      onClick={() => clearAuditLock(p.id, lk.auditType)}
-                                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded border hover:opacity-80"
-                                      style={{ borderColor: vars.g300, color: vars.g500, background: vars.g100 }}
-                                    >
-                                      Clear lock
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {editingName && (
-                    <form onSubmit={handleSaveName} className="mt-3 flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={nameValue}
-                        onChange={(e) => setNameValue(e.target.value)}
-                        placeholder="Display name (leave blank to clear)"
-                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
-                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
-                        style={{ background: accent }}
-                      >
-                        Save
-                      </button>
-                      {nameError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{nameError}</span>}
-                    </form>
-                  )}
-                  {editingPw && (
-                    <form onSubmit={handleSavePassword} className="mt-3 flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={pwValue}
-                        onChange={(e) => setPwValue(e.target.value)}
-                        placeholder="New password (min 4 chars)"
-                        className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
-                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
-                        style={{ background: accent }}
-                      >
-                        Save
-                      </button>
-                      {pwError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{pwError}</span>}
-                    </form>
-                  )}
-                  {editingRole && (
-                    <form onSubmit={handleSaveRole} className="mt-3 flex flex-wrap items-center gap-2">
-                      <select
-                        value={roleValue}
-                        onChange={(e) => setRoleValue(e.target.value as LocalRole)}
-                        className="px-3 py-2 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
-                        style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                      >
-                        <option value="admin">Master (Admin)</option>
-                        <option value="agency">Agency</option>
-                        <option value="client">Direct Client</option>
-                      </select>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
-                        style={{ background: accent }}
-                      >
-                        Save
-                      </button>
-                      {roleError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{roleError}</span>}
-                    </form>
-                  )}
-                  {editingSeatCap && (
-                    <form onSubmit={handleSaveSeatCap} className="mt-3 flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          value={seatCapValue}
-                          onChange={(e) => setSeatCapValue(e.target.value)}
-                          placeholder="No limit (leave blank)"
-                          className="w-44 px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
-                          style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-                        />
-                        <span className="text-[12px]" style={{ color: vars.g500 }}>max sub-accounts (blank = no limit)</span>
-                      </div>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
-                        style={{ background: accent }}
-                      >
-                        Save
-                      </button>
-                      {seatCapError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{seatCapError}</span>}
-                    </form>
-                  )}
-                  {viewingSessions && (
-                    <div className="mt-3">
-                      {accountSessionsLoading && (
-                        <div className="flex items-center gap-2 text-[12px]" style={{ color: vars.g400 }}>
-                          <Loader2 size={12} className="animate-spin" /> Loading sessions…
-                        </div>
-                      )}
-                      {accountSessionsError && (
-                        <p className="text-[12px] font-medium" style={{ color: vars.red }}>{accountSessionsError}</p>
-                      )}
-                      {!accountSessionsLoading && accountSessions !== null && (
-                        accountSessions.length === 0 ? (
-                          <p className="text-[12px] font-light" style={{ color: vars.g400 }}>No active sessions.</p>
-                        ) : (
-                          <div className="overflow-x-auto rounded-xl border" style={{ borderColor: vars.g200 }}>
-                            <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
-                              <thead>
-                                <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
-                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Started</th>
-                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Expires</th>
-                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>IP</th>
-                                  <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {accountSessions.map((s, i) => (
-                                  <tr key={s.sid} style={{ background: i % 2 === 0 ? "white" : vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
-                                    <td className="px-3 py-2 whitespace-nowrap font-mono" style={{ color: ink }}>
-                                      {new Date(s.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                      {" "}
-                                      {new Date(s.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
-                                      {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
-                                      {s.ipHint ?? "-"}
-                                    </td>
-                                    <td className="px-3 py-2 whitespace-nowrap">
-                                      <button
-                                        onClick={() => handleRevokeAccountSession(s.sid)}
-                                        disabled={revokingAccountSession === s.sid}
-                                        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-40"
-                                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
-                                      >
-                                        {revokingAccountSession === s.sid ? <Loader2 size={10} className="animate-spin" /> : <X size={10} />}
-                                        Revoke
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {topLevelUsers.map((u) => renderAccountNode(u, 0))}
           </div>
         </div>
 

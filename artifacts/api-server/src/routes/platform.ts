@@ -26,6 +26,10 @@ import {
   getPlatformSessionId,
   setPlatformCookie,
   clearPlatformCookie,
+  getImpersonationStashId,
+  setImpersonationStashCookie,
+  clearImpersonationStashCookie,
+  getPlatformSessionAccount,
   makeIpHint,
   type Role,
 } from "../lib/platform-auth";
@@ -131,8 +135,14 @@ async function deleteProfile(username: string): Promise<void> {
 // --- Session lifecycle ------------------------------------------------------
 
 // Who is signed in (or null). Drives the client's view of the current session.
-router.get("/platform/me", (req: Request, res: Response) => {
-  res.json({ account: req.account ?? null });
+router.get("/platform/me", async (req: Request, res: Response) => {
+  let impersonating: { by: string } | null = null;
+  const stashSid = getImpersonationStashId(req);
+  if (req.account && stashSid) {
+    const adminAccount = await getPlatformSessionAccount(stashSid);
+    if (adminAccount) impersonating = { by: adminAccount.username };
+  }
+  res.json({ account: req.account ?? null, impersonating });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.
@@ -187,9 +197,108 @@ router.post("/platform/logout", async (req: Request, res: Response) => {
     const sid = getPlatformSessionId(req);
     if (sid) await deletePlatformSession(sid);
     clearPlatformCookie(res);
+    // Never leave a stashed admin session behind after a logout.
+    clearImpersonationStashCookie(res);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Logout failed" });
+  }
+});
+
+// --- Impersonation ("view account" for support) -----------------------------
+//
+// Lets an admin briefly step into another account's view without a password,
+// for support/debugging. The admin's own session id is stashed in a second
+// cookie so "exit" can restore it without a fresh login; the target account
+// gets a normal (single-use) session, which - like a real login - ends any
+// session that account already had open.
+
+// POST /api/platform/accounts/:username/impersonate — admin only.
+router.post(
+  "/platform/accounts/:username/impersonate",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      if (actor.role !== "admin") {
+        res.status(403).json({ error: "Admin access required." });
+        return;
+      }
+      // Already viewing as someone else: don't allow nesting, which would
+      // overwrite the stash and strand the original admin session.
+      if (getImpersonationStashId(req)) {
+        res.status(400).json({ error: "Exit the current view-as session first." });
+        return;
+      }
+      const target = normUsername(req.params.username);
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      if (target === normUsername(actor.username)) {
+        res.status(400).json({ error: "You are already signed in as this account." });
+        return;
+      }
+      const account = await getAccount(target);
+      if (!account) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      const adminSid = getPlatformSessionId(req);
+      if (!adminSid) {
+        res.status(401).json({ error: "Unauthorized: sign in required" });
+        return;
+      }
+      const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+        ?? req.socket.remoteAddress;
+      const sid = await createPlatformSession(account.username, makeIpHint(rawIp));
+      setImpersonationStashCookie(res, adminSid);
+      setPlatformCookie(res, sid);
+      void logAdminEvent(
+        { username: actor.username },
+        "impersonate_start",
+        account.username,
+        "account",
+        { role: account.role },
+      );
+      res.json({ account: { username: account.username, role: account.role } });
+    } catch {
+      res.status(500).json({ error: "Failed to start view-as session" });
+    }
+  },
+);
+
+// POST /api/platform/exit-impersonation — restores the stashed admin session.
+router.post("/platform/exit-impersonation", async (req: Request, res: Response) => {
+  try {
+    const stashSid = getImpersonationStashId(req);
+    if (!stashSid) {
+      res.status(400).json({ error: "Not currently viewing another account." });
+      return;
+    }
+    const adminAccount = await getPlatformSessionAccount(stashSid);
+    if (!adminAccount) {
+      // The stashed admin session expired or was revoked; there is nothing
+      // safe to restore, so just clear both cookies and require a fresh login.
+      clearImpersonationStashCookie(res);
+      clearPlatformCookie(res);
+      res.status(401).json({ error: "Your original session expired. Please sign in again." });
+      return;
+    }
+    const viewedSid = getPlatformSessionId(req);
+    if (viewedSid && viewedSid !== stashSid) await deletePlatformSession(viewedSid);
+    setPlatformCookie(res, stashSid);
+    clearImpersonationStashCookie(res);
+    void logAdminEvent(
+      { username: adminAccount.username },
+      "impersonate_exit",
+      null,
+      "account",
+      null,
+    );
+    res.json({ account: { username: adminAccount.username, role: adminAccount.role } });
+  } catch {
+    res.status(500).json({ error: "Failed to exit view-as session" });
   }
 });
 

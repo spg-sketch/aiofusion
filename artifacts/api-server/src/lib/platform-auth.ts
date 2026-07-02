@@ -10,7 +10,13 @@ import { and, eq, ne } from "drizzle-orm";
 // cache.
 
 export const PLATFORM_COOKIE = "aio_sid";
+// Stashes the admin's own session id while they are "viewing as" another
+// account for support purposes, so exiting impersonation can restore it
+// without a fresh login. Short-lived: an admin should not leave this
+// dangling indefinitely.
+export const PLATFORM_IMPERSONATION_STASH_COOKIE = "aio_admin_sid";
 export const PLATFORM_SESSION_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+export const PLATFORM_IMPERSONATION_STASH_TTL = 4 * 60 * 60 * 1000; // 4 hours
 
 export type Role = "admin" | "agency" | "client" | "user";
 
@@ -317,4 +323,24 @@ export function setPlatformCookie(res: Response, sid: string): void {
 
 export function clearPlatformCookie(res: Response): void {
   res.clearCookie(PLATFORM_COOKIE, { path: "/" });
+}
+
+// --- Impersonation ("view account" for support) -----------------------------
+
+export function getImpersonationStashId(req: Request): string | undefined {
+  return req.cookies?.[PLATFORM_IMPERSONATION_STASH_COOKIE];
+}
+
+export function setImpersonationStashCookie(res: Response, sid: string): void {
+  res.cookie(PLATFORM_IMPERSONATION_STASH_COOKIE, sid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: PLATFORM_IMPERSONATION_STASH_TTL,
+  });
+}
+
+export function clearImpersonationStashCookie(res: Response): void {
+  res.clearCookie(PLATFORM_IMPERSONATION_STASH_COOKIE, { path: "/" });
 }

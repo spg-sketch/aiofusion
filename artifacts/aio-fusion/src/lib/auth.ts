@@ -38,6 +38,9 @@ export type Session = {
   role: Role;
 };
 
+// Present when an admin is currently "viewing as" this account for support.
+export type Impersonation = { by: string };
+
 const USERS_KEY = "aio.auth.users.v3";
 const SESSION_KEY = "aio.auth.session.v3";
 
@@ -335,7 +338,7 @@ export async function bootstrapAuth(): Promise<Session | null> {
   try {
     const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
     if (meResp.ok) {
-      const me = (await meResp.json()) as { account?: ServerAccount | null };
+      const me = (await meResp.json()) as { account?: ServerAccount | null; impersonating?: Impersonation | null };
       if (me.account) {
         session = { username: me.account.username, role: me.account.role };
         setSession(session);
@@ -353,6 +356,44 @@ export async function bootstrapAuth(): Promise<Session | null> {
     await refreshAccountsCache();
   }
   return session;
+}
+
+// Fetch the current impersonation state (null when not viewing as another
+// account). Safe to call even when signed out.
+export async function getImpersonationState(): Promise<Impersonation | null> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { impersonating?: Impersonation | null };
+    return json.impersonating ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Admin-only: start viewing another account's session for support. Returns
+// the new (target) session on success.
+export async function serverImpersonate(
+  username: string,
+): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
+  const { ok, json } = await postJson(`/api/platform/accounts/${encodeURIComponent(username)}/impersonate`);
+  if (!ok || !json?.account) return { ok: false, error: json?.error || "Failed to view this account." };
+  const session: Session = { username: json.account.username, role: json.account.role };
+  setSession(session);
+  await refreshAccountsCache();
+  return { ok: true, session };
+}
+
+// Restore the admin's own session after a view-as session.
+export async function serverExitImpersonation(): Promise<
+  { ok: true; session: Session } | { ok: false; error: string }
+> {
+  const { ok, json } = await postJson("/api/platform/exit-impersonation");
+  if (!ok || !json?.account) return { ok: false, error: json?.error || "Failed to exit view-as session." };
+  const session: Session = { username: json.account.username, role: json.account.role };
+  setSession(session);
+  await refreshAccountsCache();
+  return { ok: true, session };
 }
 
 export async function serverAddUser(
