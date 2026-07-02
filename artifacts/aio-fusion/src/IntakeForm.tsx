@@ -1798,7 +1798,7 @@ export default function IntakePage() {
         </div>
 
         {/* Track switch + progress - Variant C panel */}
-        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
+        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBF1F0", borderColor: "#102B36" }}>
           <div className="flex flex-col sm:flex-row gap-4">
             {([
               { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)", label: "PR Set-Up Progress", pct: trackProgress.pr },
