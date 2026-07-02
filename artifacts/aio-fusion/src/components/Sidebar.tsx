@@ -19,7 +19,7 @@ export const navSections: NavSection[] = [
   },
   {
     section: "Visibility Audits",
-    color: "#DCA1A1",
+    color: "#A4CCD4",
     items: [
       { label: "Earned Media Visibility Audit", id: "llm-check", sub: "Score AI brand mentions" },
       { label: "Website Visibility Audit", id: "diagnostic", sub: "Score your site for AI citation" },
@@ -116,28 +116,18 @@ function SidebarContent({
       <div className="flex flex-col items-center gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-24 object-contain self-center" />
       </div>
-      <div className="flex items-stretch border-b" style={{ borderColor: vars.g200 }}>
-        <button
-          onClick={onBackToClients}
-          className="flex items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-black/5 flex-1 min-w-0"
-        >
-          <ArrowLeft size={16} style={{ color: vars.g400 }} />
-          <div className="relative group/sblogo flex-shrink-0">
-            {activeClient.logo ? (
-              <div className="w-10 h-10 rounded-lg overflow-hidden border flex items-center justify-center" style={{ borderColor: vars.g200, background: "white" }}>
-                <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-0.5" />
-              </div>
-            ) : (
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[12px] font-bold text-white shadow-sm" style={{ background: activeClient.color }}>
-                {activeClient.initials}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-[15px] font-semibold truncate" style={{ color: vars.navy }}>{activeClient.name}</span>
-            <span className="text-[12px] font-medium truncate" style={{ color: vars.g400 }}>Switch project</span>
-          </div>
-        </button>
+      <div className="flex items-stretch justify-center border-b py-5" style={{ borderColor: vars.g200 }}>
+        <div className="relative group/sblogo flex-shrink-0">
+          {activeClient.logo ? (
+            <div className="w-14 h-14 rounded-lg overflow-hidden border-2 flex items-center justify-center" style={{ borderColor: vars.navy, background: "white" }}>
+              <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-1" />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-lg flex items-center justify-center text-[14px] font-bold text-white shadow-sm border-2" style={{ background: activeClient.color, borderColor: vars.navy }}>
+              {activeClient.initials}
+            </div>
+          )}
+        </div>
       </div>
       <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
         <button
@@ -149,7 +139,7 @@ function SidebarContent({
           }}
         >
           <ArrowLeft size={16} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
-          <span>Project Home</span>
+          <span>Project Hub</span>
         </button>
         <div
           className="rounded-[20px] p-2"
@@ -189,7 +179,7 @@ function SidebarContent({
             }}
           >
             <div className="px-1.5 pb-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#000000" }}>
+              <span className="text-[13px] font-bold uppercase tracking-[0.14em]" style={{ color: "#000000" }}>
                 {section.section}
               </span>
             </div>
@@ -257,10 +247,10 @@ function SidebarContent({
                           title={`Open saved audit (${a.result.visibilityScore}% visibility)`}
                         >
                           <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#4B5563" }}>
                             {new Date(a.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(a.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: "#4B5563" }}>
                             {a.result.visibilityScore}%
                           </span>
                         </button>
@@ -277,10 +267,10 @@ function SidebarContent({
                           title={`Open saved audit (${d.result.overallScore}% readiness)`}
                         >
                           <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
+                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#4B5563" }}>
                             {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
+                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: "#4B5563" }}>
                             {d.result.overallScore}%
                           </span>
                         </button>
