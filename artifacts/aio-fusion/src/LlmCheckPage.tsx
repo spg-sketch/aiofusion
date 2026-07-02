@@ -238,9 +238,13 @@ interface ReportData {
   categoryFraming: { query: string; themes: string }[];
 }
 
+function authorityIndexFor(result: LlmCheckResult): number {
+  return result.assessment ? result.assessment.index : result.visibilityScore;
+}
+
 function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData {
   const assess = result.assessment || null;
-  const idx = assess ? assess.index : result.visibilityScore;
+  const idx = authorityIndexFor(result);
   const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
   const presencePct = result.totalProbes > 0 ? Math.round((result.totalMentions / result.totalProbes) * 100) : 0;
   const competitorMentionTotal = result.probes.reduce((s, p) => s + (p.competitors?.length || 0), 0);
@@ -853,7 +857,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
 
       setResult(finalData);
       setResultIsFromSaved(false);
-      const updated = recordCycle(activeClient.id, finalData.visibilityScore);
+      const updated = recordCycle(activeClient.id, authorityIndexFor(finalData));
       setCycleData(updated);
       saveAuditToHistory(finalData);
       recordAuditDuration("visibility", Date.now() - _auditStart, getAuditDurationSeconds("visibility") * 1000);
@@ -880,7 +884,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     }
     const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
     const assess = result.assessment || null;
-    const idx = assess ? assess.index : result.visibilityScore;
+    const idx = authorityIndexFor(result);
     const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
     const gradeRead =
       idx >= 60
@@ -1757,7 +1761,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                           className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
                           style={{ background: showWarning ? "#FEF3C7" : "rgba(31,116,143,0.08)", color: showWarning ? "#92400E" : vars.accent }}
                         >
-                          {a.result.visibilityScore}%
+                          {authorityIndexFor(a.result)}
                         </div>
                         <div className="min-w-0">
                           <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>
@@ -1847,9 +1851,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <div className="flex-1 min-w-0">
               <p className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>
                 {result.companyName} was mentioned in <strong style={{ color: vars.navy }}>{result.totalMentions}</strong> of <strong style={{ color: vars.navy }}>{result.totalProbes}</strong> AI probes across ChatGPT and Claude.{" "}
-                {result.visibilityScore >= 60
+                {rd.idx >= 60
                   ? "Strong AI visibility - this brand is being referenced reliably in your sector."
-                  : result.visibilityScore >= 30
+                  : rd.idx >= 30
                   ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
                   : "Low AI visibility - AI models are not reliably mentioning this brand when asked about the sector."}
               </p>
@@ -1921,7 +1925,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               </div>
               <span className="inline-block mt-2 text-sm font-bold px-2.5 py-1 rounded-lg" style={gradeStyle(rd.idx)}>Grade {rd.grade}</span>
               {previousScore !== null && (() => {
-                const delta = result.visibilityScore - previousScore;
+                const delta = rd.idx - previousScore;
                 const positive = delta > 0;
                 const same = delta === 0;
                 const Icon = positive ? TrendingUp : same ? ArrowRight : TrendingDown;
@@ -1930,7 +1934,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 return (
                   <span className="block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit" style={{ background: bg, color }}>
                     <Icon size={10} className="inline mr-1" />
-                    {positive ? "+" : ""}{delta} vs previous ({previousScore}%)
+                    {positive ? "+" : ""}{delta} vs previous ({previousScore})
                   </span>
                 );
               })()}
