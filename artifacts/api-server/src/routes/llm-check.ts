@@ -838,7 +838,7 @@ function clampScore(v: unknown): number {
 }
 
 function gradeFor(idx: number): string {
-  return idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+  return idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
 }
 
 // Pull the first balanced JSON object out of a model response, tolerating
@@ -976,7 +976,7 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
 
   return {
     index,
-    grade: typeof parsed.grade === "string" && /^[A-F]$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
+    grade: typeof parsed.grade === "string" && /^(A\*|[A-E])$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
     summary: typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 1200) : "",
     dimensions,
     topGaps,
@@ -1056,7 +1056,7 @@ CRITICAL RULES:
 Return STRICT JSON only - no prose before or after, no markdown fences. Exactly this shape:
 {
   "index": <overall AI Authority Index 0-100>,
-  "grade": "<A|B|C|D|F>",
+  "grade": "<A*|A|B|C|D|E>",
   "summary": "<2 to 3 sentence executive summary in plain British English>",
   "dimensions": [{ "name": "Presence", "score": <0-100>, "justification": "<one sentence>", "confidence": "high|medium|low" }, ... all 8 dimensions in the order listed],
   "topGaps": ["<the most important visibility gap>", ... up to 5],

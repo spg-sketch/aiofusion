@@ -270,9 +270,9 @@ describe("parseAssessment fallback behaviour", () => {
   });
 
   it("derives a grade from the index when grade is missing or invalid", () => {
-    expect(parseAssessment('{"index": 85}')!.grade).toBe("A");
-    expect(parseAssessment('{"index": 10}')!.grade).toBe("F");
-    expect(parseAssessment('{"index": 50, "grade": "Z"}')!.grade).toBe("C");
+    expect(parseAssessment('{"index": 85}')!.grade).toBe("A*");
+    expect(parseAssessment('{"index": 10}')!.grade).toBe("D");
+    expect(parseAssessment('{"index": 50, "grade": "Z"}')!.grade).toBe("B");
   });
 });
 

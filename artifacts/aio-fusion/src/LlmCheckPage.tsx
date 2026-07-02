@@ -245,7 +245,7 @@ export function authorityIndexFor(result: LlmCheckResult): number {
 function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData {
   const assess = result.assessment || null;
   const idx = authorityIndexFor(result);
-  const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+  const grade = assess && assess.grade ? assess.grade : idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
   const presencePct = result.totalProbes > 0 ? Math.round((result.totalMentions / result.totalProbes) * 100) : 0;
   const competitorMentionTotal = result.probes.reduce((s, p) => s + (p.competitors?.length || 0), 0);
   const sovDenom = result.totalMentions + competitorMentionTotal;
@@ -885,9 +885,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
     const assess = result.assessment || null;
     const idx = authorityIndexFor(result);
-    const grade = assess && assess.grade ? assess.grade : idx >= 80 ? "A" : idx >= 60 ? "B" : idx >= 40 ? "C" : idx >= 20 ? "D" : "F";
+    const grade = assess && assess.grade ? assess.grade : idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
     const gradeRead =
-      idx >= 60
+      idx >= 50
         ? "Strong - this brand is being referenced reliably at the discovery stage."
         : idx >= 30
           ? "Moderate - the brand appears in some answers but is not consistently surfaced."
@@ -1851,7 +1851,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <div className="flex-1 min-w-0">
               <p className="text-sm font-light leading-relaxed" style={{ color: vars.g500 }}>
                 {result.companyName} was mentioned in <strong style={{ color: vars.navy }}>{result.totalMentions}</strong> of <strong style={{ color: vars.navy }}>{result.totalProbes}</strong> AI probes across ChatGPT and Claude.{" "}
-                {rd.idx >= 60
+                {rd.idx >= 50
                   ? "Strong AI visibility - this brand is being referenced reliably in your sector."
                   : rd.idx >= 30
                   ? "Moderate AI visibility - the brand appears in some contexts but is not consistently cited."
