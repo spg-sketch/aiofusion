@@ -1680,24 +1680,6 @@ export default function IntakePage() {
             <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Project Set-Up
             </h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => downloadSectionQuestions(section)}
-                className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-                style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
-              >
-                <Download size={13} /> Download these questions
-              </button>
-              <button
-                type="button"
-                onClick={downloadHowToGuide}
-                className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
-                style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
-              >
-                <FileText size={13} /> How-to guide
-              </button>
-            </div>
           </div>
           <div className="flex items-center gap-2.5">
             <span
@@ -1855,18 +1837,38 @@ export default function IntakePage() {
         <div className="flex-1 min-w-0">
           <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
             <div className="px-8 py-6" style={{ background: "#FBF1F0" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#FBE3ED" }}>
-                  <section.icon size={20} color="#C8497A" />
-                </div>
-                <div>
-                  <div className="text-[13px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
-                    Section {section.number}
+              <div className="flex items-start justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: "#FBE3ED" }}>
+                    <section.icon size={20} color="#C8497A" />
                   </div>
-                  <h2 className="text-xl font-semibold leading-tight" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
-                    {section.title}
-                  </h2>
-                  <p className="text-xs font-light mt-0.5" style={{ color: "rgba(16,43,54,0.65)" }}>{section.subtitle}</p>
+                  <div>
+                    <div className="text-[13px] font-bold uppercase tracking-[0.18em] mb-0.5" style={{ color: "#C8497A" }}>
+                      Section {section.number}
+                    </div>
+                    <h2 className="text-xl font-semibold leading-tight" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                      {section.title}
+                    </h2>
+                    <p className="text-xs font-light mt-0.5" style={{ color: "rgba(16,43,54,0.65)" }}>{section.subtitle}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => downloadSectionQuestions(section)}
+                    className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                    style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
+                  >
+                    <Download size={13} /> Download these questions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadHowToGuide}
+                    className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors"
+                    style={{ borderColor: "rgba(200,73,122,0.6)", color: "#C8497A", background: "white" }}
+                  >
+                    <FileText size={13} /> How-to guide
+                  </button>
                 </div>
               </div>
             </div>

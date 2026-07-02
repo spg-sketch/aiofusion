@@ -151,18 +151,6 @@ function StatTile({ label, value, sub, color, icon: Icon }: { label: string; val
   );
 }
 
-function SubHeader({ children, sub }: { children: React.ReactNode; sub?: string }) {
-  return (
-    <div className="rounded-xl px-4 py-2.5 mb-4" style={{ background: "#FBF1F0" }}>
-      <div className="flex items-center gap-2.5">
-        <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: vars.accent }} />
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.navy }}>{children}</h3>
-      </div>
-      {sub && <p className="text-[12px] font-light mt-1.5 pl-3.5" style={{ color: vars.g500 }}>{sub}</p>}
-    </div>
-  );
-}
-
 function CalloutBrief({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -516,7 +504,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <StatTile label="PR Coverage" value={String(prCoverageCount)} sub="PR / Article / Case Study / Whitepaper" color={vars.accent} icon={FileText} />
             </div>
 
-            <SubHeader>Authority trend (last 6 months)</SubHeader>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend (last 6 months)</h3>
             <div className="rounded-xl border p-4 mb-6" style={{ borderColor: vars.g200 }}>
               <div className="flex items-end gap-2 h-40">
                 {monthlyTrend.map(p => (
@@ -537,7 +525,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
 
-            <SubHeader sub="Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.">Website Content and Technical GEO Summary</SubHeader>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
               {[...websiteGeoScores.tech, ...websiteGeoScores.content].map(c => (
                 <ScoreBar key={c.label} label={c.label} score={c.score} max={c.max} description={c.desc} />
@@ -546,7 +535,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <SubHeader>Score Breakdown by Category</SubHeader>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
               {categoryScores.map(cat => <ScoreBar key={cat.label} {...cat} />)}
             </div>
@@ -580,7 +569,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <SubHeader sub="Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker.">Coverage per key message</SubHeader>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Coverage per key message</h3>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker.</p>
             <div className="space-y-3">
               {messageCoverage.map(k => (
                 <div key={k.msg}>
@@ -598,7 +588,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <SubHeader sub="Articles only.">Thought Leadership per key message</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Thought Leadership per key message</h3>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Articles only.</p>
               <div className="space-y-2">
                 {messageCoverage.map(k => (
                   <div key={k.msg} className="flex justify-between text-[12px]">
@@ -609,7 +600,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <SubHeader sub="Press Release rows only.">Press Releases per Key message</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Releases per Key message</h3>
+              <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Press Release rows only.</p>
               <div className="space-y-2">
                 {messageCoverage.map(k => (
                   <div key={k.msg} className="flex justify-between text-[12px]">
@@ -622,7 +614,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <SubHeader>Press Release Performance</SubHeader>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Release Performance</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               <StatTile label="Press Releases in period" value={String(prRows.length)} color={vars.navy} icon={FileText} />
               <StatTile label="Average score / PR" value={String(prAvgScore)} sub="out of 10" color={vars.accent} icon={BarChart3} />
@@ -641,7 +633,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <SubHeader>Volume by content type</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by content type</h3>
               <div className="space-y-2">
                 {volByType.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volByType.map(([t, n]) => (
@@ -653,7 +645,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <SubHeader>Volume by media category</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by media category</h3>
               <div className="space-y-2">
                 {volByCategory.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volByCategory.map(([t, n]) => (
@@ -665,7 +657,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <SubHeader>Volume by spokesperson</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Volume by spokesperson</h3>
               <div className="space-y-2">
                 {volBySpokesperson.length === 0 && <p className="text-[12px] font-light" style={{ color: vars.g500 }}>No items in period.</p>}
                 {volBySpokesperson.map(([t, n]) => (
@@ -680,7 +672,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3">
-              <SubHeader>Social impact</SubHeader>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Social impact</h3>
               <select className="text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: vars.g200 }}>
                 <option>Company LinkedIn</option>
                 <option>Spencer Gallagher</option>

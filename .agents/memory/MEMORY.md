@@ -19,4 +19,4 @@
 - [AIO Fusion DB backups](aio-fusion-db-backups.md) — verified pg_dump → object-storage backups in scripts/; gate compares projects-in-dump vs live count, quarantines on mismatch; runs as Replit Scheduled Deployment.
 - [AIO Fusion LLM queries field 1.6](aio-fusion-llm-queries.md) — 1.6 is now structured LlmQueries {v,discovery,shortlist,comparison}; getLlmSearchQueries() is the canonical read; /api/content/llm-queries uses non-streaming Anthropic call (no SSE); 3.4 removed.
 - [AIO Fusion content gen token limits + intake field mapping](aio-fusion-content-gen-tokens.md) — GEN_MAX_TOKENS must include JSON-wrapper overhead or extractJson fails; intake sector/name live in formData["4.4"/"4.1"], not top-level.
-- [AIO Fusion subsection header pink-wash pattern](aio-fusion-subsection-headers.md) — mini pink-wash bar for group headers within cards; skip it for repeated per-item eyebrow labels inside loops.
+- [AIO Fusion subsection header pink-wash pattern](aio-fusion-subsection-headers.md) — mini pink-wash bar, scoped to Project Set-Up page ONLY (client rejected it app-wide); skip per-item eyebrow labels inside loops.

@@ -503,9 +503,8 @@ Engine used:
         ];
         return (
           <div className="rounded-2xl border p-4 sm:p-6 mb-6 hover:shadow-sm transition-shadow" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2.5" style={{ background: "#FBF1F0" }}>
-              <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: vars.accent }} />
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-[16px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.navy }}>Measured On Your Page</h3>
             </div>
             <p className="text-[14px] font-light mb-4" style={{ color: vars.g500 }}>
               These figures are counted directly from your live page, not estimated. They are the same every time the page is checked.
@@ -559,10 +558,7 @@ Engine used:
       </div>
 
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-        <div className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2.5" style={{ background: "#FBF1F0" }}>
-          <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: vars.accent }} />
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.navy }}>Category Detail</h3>
-        </div>
+        <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Category Detail</h3>
         <div className="space-y-4">
           {(result.categories || []).map((cat) => (
             <div key={cat.name} className="rounded-xl border p-5 hover:shadow-md transition-shadow cursor-pointer hover:bg-slate-50" style={{ borderColor: vars.g200, background: vars.g50 }}>
@@ -607,10 +603,7 @@ Engine used:
 
       {(result.priorityActions || []).length > 0 && (
         <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
-          <div className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2.5" style={{ background: "#FBF1F0" }}>
-            <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: vars.accent }} />
-            <h3 className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.navy }}>Priority Actions</h3>
-          </div>
+          <h3 className="text-[16px] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Priority Actions</h3>
           <div className="space-y-3">
             {(result.priorityActions || []).map((action, i) => {
               const prioColor = action.priority === "Critical" ? vars.red : action.priority === "High" ? vars.amber : vars.teal;
