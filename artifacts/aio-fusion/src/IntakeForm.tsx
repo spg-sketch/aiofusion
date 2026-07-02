@@ -1697,6 +1697,7 @@ export default function IntakePage() {
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
+        {activeSection === 0 && (
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-6 sm:mb-8" style={{ background: "#FBF1F0", borderColor: "rgba(200,73,122,0.45)" }}>
           <div className="flex items-start gap-2.5 mb-3">
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
@@ -1788,6 +1789,7 @@ export default function IntakePage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Track switch + progress - Variant C panel */}
         <div className="rounded-2xl border-2 p-4 sm:p-5" style={{ background: "#FBF1F0", borderColor: "#102B36" }}>
