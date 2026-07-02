@@ -2469,10 +2469,6 @@ export default function IntakePage() {
 
             {/* Project Data Actions - page footer */}
             <div className="px-4 sm:px-8 py-4 border-t no-print" style={{ borderColor: vars.g100, background: "#FBF9F6" }}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#102B36" }}>Project Data Actions</span>
-              </div>
               <div className="flex flex-wrap items-center gap-3">
                 {optimiseError && (
                   <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
