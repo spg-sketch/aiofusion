@@ -136,8 +136,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
-    // The executive summary section starts collapsed; click to expand it.
-    fireEvent.click(screen.getByText("Executive summary"));
+    // The executive summary section starts expanded by default.
     expect(screen.getByText(/non-branded category queries across ChatGPT and Claude/i)).toBeInTheDocument();
   });
 
@@ -147,8 +146,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
-    // The executive summary section starts collapsed; click to expand it.
-    fireEvent.click(screen.getByText("Executive summary"));
+    // The executive summary section starts expanded by default.
 
     // The AI-generated summary from assessment.summary must be visible.
     expect(
@@ -163,6 +161,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     );
 
     expect(screen.getByText("AI Authority scorecard")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("AI Authority scorecard"));
     // A dimension justification from the assessment is shown.
     expect(screen.getByText("Appeared in 4 of 10 probes.")).toBeInTheDocument();
   });
@@ -234,6 +233,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     );
 
     expect(screen.getByText(/Entity clarity:/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Entity clarity:/i));
     // It names the competing namesakes...
     expect(screen.getByText("Sinclair Media Group")).toBeInTheDocument();
     expect(screen.getByText("Scott Management Group")).toBeInTheDocument();
@@ -256,6 +256,9 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
+    // Expand the entity-clarity section to reveal the confirmation prompt.
+    fireEvent.click(screen.getByText(/Entity clarity:/i));
+
     // The confirmation prompt is shown for an ambiguous brand.
     expect(screen.getByText(/Which company is/i)).toBeInTheDocument();
 
@@ -275,6 +278,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
+    fireEvent.click(screen.getByText(/Entity clarity:/i));
     fireEvent.click(screen.getByRole("button", { name: /No, we are Sinclair Media Group/i }));
 
     const intake = JSON.parse(localStorage.getItem(`aio.intake.v2::${CLIENT.id}`) || "{}");
@@ -328,6 +332,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
       <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
     );
 
+    fireEvent.click(screen.getByText(/Entity clarity:/i));
     fireEvent.click(screen.getByRole("button", { name: /our company, not the others listed/i }));
 
     // The choice is mirrored to the shared store, not just to localStorage, so it
@@ -448,6 +453,8 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     // ...and now reflects the server-side confirmed identity even though it was
     // never in this browser's localStorage to begin with.
+    const entityHeading = await screen.findByText(/Entity clarity:/i);
+    fireEvent.click(entityHeading);
     const confirmedLine = await screen.findByText(/Confirmed:/i);
     expect(confirmedLine.textContent).toMatch(/is SMG/);
 

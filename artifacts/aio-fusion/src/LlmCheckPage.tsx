@@ -479,7 +479,7 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
       icon={<Repeat size={14} style={{ color: vars.accent }} />}
       title="Narrative signals"
       subtitle="How each AI engine describes this brand when it does surface - and whether they agree"
-      defaultOpen={true}
+      defaultOpen={false}
     >
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
         <div>
@@ -1967,7 +1967,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         icon={<Eye size={14} style={{ color: vars.accent }} />}
         title="Executive summary"
         subtitle="A plain-English read on overall AI visibility for this brand"
-        defaultOpen={false}
+        defaultOpen={true}
       >
         {rd.assess?.summary
           ? <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{rd.assess.summary}</p>
@@ -1992,6 +1992,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icon={<AlertTriangle size={14} style={{ color: vars.amber }} />}
           title={`Entity clarity: who else is called "${result.entityClarity.brandName}"`}
           subtitle="Other organisations sharing this name that may be causing scoring confusion"
+          defaultOpen={false}
         >
           <p className="text-[13px] leading-relaxed" style={{ color: vars.g600 }}>{result.entityClarity.note}</p>
           <p className="text-[12px] mt-3" style={{ color: vars.g500 }}>
@@ -2105,6 +2106,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icon={<CheckCircle2 size={14} style={{ color: vars.accent }} />}
           title="AI Authority scorecard"
           subtitle="How your brand performs across five scored dimensions - presence, source quality, messaging, accuracy, and people"
+          defaultOpen={false}
         >
           <div className="overflow-x-auto">
             <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
@@ -2149,6 +2151,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icon={<ArrowRight size={14} style={{ color: vars.accent }} />}
           title="Prioritised actions"
           subtitle="The highest-impact steps to improve AI visibility - ranked by priority"
+          defaultOpen={false}
         >
           <div className="flex flex-col gap-2">
             {rd.assess.priorityActions.map((a, i) => {
@@ -2188,6 +2191,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icon={<TrendingDown size={14} style={{ color: vars.accent }} />}
           title="Top visibility gaps"
           subtitle="Queries where AI isn't naming this brand - the highest-opportunity areas to address"
+          defaultOpen={false}
         >
           <ul className="list-disc pl-5 space-y-1.5">
             {gapItems.map((g, i) => (
@@ -2202,6 +2206,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         icon={<Users size={14} style={{ color: vars.accent }} />}
         title="Who owns the category instead"
         subtitle="The brands AI recommended when this company wasn't cited - ordered by frequency"
+        defaultOpen={false}
       >
         <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
           The brands the engines recommended when {result.companyName} was absent - ordered by how often they appeared.
@@ -2277,7 +2282,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           icon={<Info size={14} style={{ color: vars.accent }} />}
           title="What the AI says about this category"
           subtitle="How AI engines frame each topic when this brand isn't named - the vocabulary and concepts you need to own"
-          defaultOpen={true}
+          defaultOpen={false}
         >
           <div className="overflow-x-auto">
             <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
