@@ -1836,105 +1836,6 @@ export default function IntakePage() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* Sections nav — horizontal strip above the form */}
-        <div className="w-full">
-          <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#0a1628", borderColor: "#0a1628" }}>
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Sections</span>
-            </div>
-            <div className="flex flex-wrap gap-2 p-3">
-            {visibleSections.map((sec, idx) => {
-              const isActive = idx === activeSection;
-              const isDone = completed.has(idx);
-              const hasData = sectionHasData(idx);
-              return (
-                <button
-                  key={sec.id}
-                  onClick={() => setActiveSection(idx)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all duration-300 border ${isActive ? "" : "hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/50"}`}
-                  style={{
-                    borderColor: isActive ? "#C8497A" : vars.g200,
-                    background: isActive ? "#FBE3ED" : "#FBF1F0",
-                  }}
-                >
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                    style={{
-                      background: isDone ? vars.green : isActive ? "#C8497A" : vars.g200,
-                      color: isDone || isActive ? "white" : vars.g500,
-                    }}
-                  >
-                    {isDone ? <Check size={12} /> : sec.number}
-                  </div>
-                  <p className="text-[12px] font-semibold whitespace-nowrap" style={{ color: isActive ? "#102B36" : vars.g600 }}>{sec.title}</p>
-                  {!isDone && hasData && (
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: vars.amber }} title="In progress" />
-                  )}
-                </button>
-              );
-            })}
-            </div>
-          </div>
-
-          {/* Project Data Actions - horizontal strip */}
-          <div className="mt-4 rounded-2xl border-2 overflow-hidden no-print" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-            <div className="px-4 py-3 border-b-2 flex items-center gap-2" style={{ background: "#0a1628", borderColor: "#0a1628" }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
-              <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Project Data Actions</span>
-            </div>
-            <div className="px-4 py-3 flex flex-wrap items-center gap-3">
-            {optimiseError && (
-              <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
-                <Info size={12} className="flex-shrink-0 mt-0.5" />
-                <span>{optimiseError}</span>
-              </div>
-            )}
-              <button
-                onClick={saveDraft}
-                title="Save your progress so you can finish later"
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border-2 hover:-translate-y-0.5 hover:shadow-md"
-                style={{
-                  borderColor: justSaved ? vars.green : "#0a1628",
-                  color: justSaved ? vars.green : "#0a1628",
-                  background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
-                }}
-              >
-                {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
-              </button>
-              <button
-                onClick={acceptProjectData}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
-                style={{ background: vars.green }}
-                title="Sign off the Project Data and save it to the Project Data archive"
-              >
-                <FileCheck2 size={13} /> Accept &amp; Sign Off
-              </button>
-              <button
-                onClick={downloadProjectData}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/40"
-                style={{ background: "white", color: "#0a1628", borderColor: "rgba(16,43,54,0.2)" }}
-                title="Open the print dialog so you can save the full Project Data as a PDF"
-              >
-                <Download size={13} /> Download PDF
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
-                    setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setProductQueries([]); setBusinessCategories([]); setAudienceCategories([]);
-                    setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
-                    setCompleted(new Set()); setActiveSection(0); setTrack("pr");
-                  }
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:bg-[#FBF1F0]"
-                style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
-                title="Clear everything and start a new project"
-              >
-                <Plus size={13} /> New Project
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Section body */}
         <div className="flex-1 min-w-0">
           <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
@@ -2644,6 +2545,64 @@ export default function IntakePage() {
                     <CheckCircle2 size={14} /> Mark section complete
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Project Data Actions - page footer */}
+            <div className="px-4 sm:px-8 py-4 border-t no-print" style={{ borderColor: vars.g100, background: "#FBF9F6" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#C8497A" }} />
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: "#102B36" }}>Project Data Actions</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {optimiseError && (
+                  <div className="flex items-start gap-2 text-[11px] font-medium px-3 py-2 rounded-xl w-full" style={{ background: "rgba(201,74,62,0.1)", color: "#C94A3E" }}>
+                    <Info size={12} className="flex-shrink-0 mt-0.5" />
+                    <span>{optimiseError}</span>
+                  </div>
+                )}
+                <button
+                  onClick={saveDraft}
+                  title="Save your progress so you can finish later"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border-2 hover:-translate-y-0.5 hover:shadow-md"
+                  style={{
+                    borderColor: justSaved ? vars.green : "#0a1628",
+                    color: justSaved ? vars.green : "#0a1628",
+                    background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
+                  }}
+                >
+                  {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
+                </button>
+                <button
+                  onClick={acceptProjectData}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                  style={{ background: vars.green }}
+                  title="Sign off the Project Data and save it to the Project Data archive"
+                >
+                  <FileCheck2 size={13} /> Accept &amp; Sign Off
+                </button>
+                <button
+                  onClick={downloadProjectData}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/40"
+                  style={{ background: "white", color: "#0a1628", borderColor: "rgba(16,43,54,0.2)" }}
+                  title="Open the print dialog so you can save the full Project Data as a PDF"
+                >
+                  <Download size={13} /> Download PDF
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
+                      setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setProductQueries([]); setBusinessCategories([]); setAudienceCategories([]);
+                      setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
+                      setCompleted(new Set()); setActiveSection(0); setTrack("pr");
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:bg-[#FBF1F0]"
+                  style={{ background: "transparent", color: "#C8497A", borderColor: "rgba(200,73,122,0.6)" }}
+                  title="Clear everything and start a new project"
+                >
+                  <Plus size={13} /> New Project
+                </button>
               </div>
             </div>
           </div>
