@@ -149,9 +149,11 @@ function SidebarContent({
         >
           <button
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
-            className="group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all"
+            className={`group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all ${
+              currentPage === "dashboard" ? "" : "hover:bg-white/15"
+            }`}
             style={{
-              background: currentPage === "dashboard" ? "rgba(255,255,255,0.16)" : "transparent",
+              background: currentPage === "dashboard" ? "rgba(255,255,255,0.16)" : undefined,
               color: "#ffffff",
               border: `1px solid ${currentPage === "dashboard" ? "rgba(255,255,255,0.35)" : "transparent"}`,
             }}
@@ -197,9 +199,11 @@ function SidebarContent({
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
-                    className="group flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all"
+                    className={`group flex items-start gap-3 w-full rounded-2xl px-2.5 py-3 text-left transition-all ${
+                      isActive || isLocked ? "" : "hover:bg-white/25"
+                    }`}
                     style={{
-                      background: isActive ? "rgba(255,255,255,0.4)" : "transparent",
+                      background: isActive ? "rgba(255,255,255,0.4)" : undefined,
                       border: `1px solid ${isActive ? "rgba(255,255,255,0.65)" : "transparent"}`,
                       color: isLocked ? "rgba(0,0,0,0.35)" : "#000000",
                       cursor: isLocked ? "not-allowed" : "pointer",
