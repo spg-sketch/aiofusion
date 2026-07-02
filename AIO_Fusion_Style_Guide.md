@@ -108,6 +108,15 @@ Within the Visibility Audits section, saved audit report rows (date + score, sho
 - Small rounded-square or circle, soft tint background (e.g. `rgba(79,143,255,0.1)` blue-tint, or `g100`), icon in navy or accent colour.
 - Scale up on hover to reinforce interactivity.
 
+### Subsection headers (grouping content within a card/page — e.g. Intake Form's "CORE BOILERPLATE", Report's "Score Breakdown by Category", Diagnostic's "Priority Actions")
+- Mini version of the Section-header pink wash, applied consistently everywhere a block of content needs a group label:
+  - `rounded-xl` bar, background `#FBF1F0` (light pink wash), padding `px-4 py-2.5`.
+  - Small pink (`#C8497A`) accent pill/bar (`w-1 h-4 rounded-full`) to the left of the label.
+  - Label: `text-[11px] font-bold uppercase tracking-[0.2em]`, navy `#102B36`.
+  - Optional helper sub-text below the label at `text-[12px] font-light`, `g500`.
+- Applies across the Intake Form, Report/Diagnostic pages, Comms Planner, Marketing Intelligence, and Media Research — anywhere a plain navy `h3`/accent-bar-only divider was previously used to group fields or data blocks.
+- Per-repeated-item eyebrow labels inside a loop (e.g. "Spokesperson 1", "Product / service 2", per-category "Findings"/"Recommendations") are intentionally left as plain small pink/navy uppercase text — NOT wrapped in the pink-wash bar — to avoid visual noise when the same label repeats many times.
+
 ---
 
 ## 6. Buttons

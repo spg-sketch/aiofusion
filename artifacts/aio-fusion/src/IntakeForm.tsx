@@ -1906,12 +1906,11 @@ export default function IntakePage() {
                   if (field.type === "heading") {
                     return (
                       <div key={field.id} className="pt-6 pb-1 first:pt-0">
-                        <div className="flex items-center gap-3">
-                          <span className="w-1 h-6 rounded-full flex-shrink-0" style={{ background: "#C8497A" }} />
+                        <div className="rounded-xl px-4 py-2.5 flex items-center gap-2.5" style={{ background: "#FBF1F0" }}>
+                          <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: "#C8497A" }} />
                           <h3 className="text-[11px] font-bold uppercase tracking-[0.22em]" style={{ color: "#102B36" }}>
                             {field.label}
                           </h3>
-                          <span className="flex-1 h-px" style={{ background: "rgba(16,43,54,0.12)" }} />
                         </div>
                       </div>
                     );

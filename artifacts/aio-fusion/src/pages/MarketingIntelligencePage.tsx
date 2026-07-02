@@ -315,9 +315,12 @@ function MarketingIntelligencePage() {
           </div>
 
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
-            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: vars.g100 }}>
-              <h3 className="text-[14px] font-semibold" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
-              <span className="text-[11px]" style={{ color: vars.g400 }}>Ranked by LLM authority + category fit</span>
+            <div className="px-5 py-3 flex items-center justify-between gap-2.5" style={{ background: "#FBF1F0" }}>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: vars.accent }} />
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.navy }}>Recommended events ({results.length})</h3>
+              </div>
+              <span className="text-[11px]" style={{ color: vars.g500 }}>Ranked by LLM authority + category fit</span>
             </div>
             <div className="divide-y" style={{ borderColor: vars.g100 }}>
               {results.map((e) => {

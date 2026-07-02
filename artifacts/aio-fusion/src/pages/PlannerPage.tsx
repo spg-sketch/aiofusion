@@ -178,10 +178,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       </div>
 
       <div className="rounded-2xl border-2 overflow-hidden mb-6" style={{ background: "white", borderColor: "rgba(16,43,54,0.12)" }}>
-        <div className="px-5 py-4 flex items-center gap-3" style={{ background: ink }}>
+        <div className="px-5 py-4 flex items-center gap-3" style={{ background: "#FBF1F0" }}>
           <span className="w-1.5 h-6 rounded-full" style={{ background: accentPink }} />
-          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: paper }}>Score Breakdown by Content Type</p>
-          <span className="text-[12px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.6)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
+          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Score Breakdown by Content Type</p>
+          <span className="text-[12px] font-light ml-auto" style={{ color: "rgba(16,43,54,0.55)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
         </div>
         <div className="p-6 flex flex-wrap gap-3">
           {Object.keys(cfg.typeWeights).sort((a, b) => (totals.byType[b] || 0) - (totals.byType[a] || 0)).map((t) => {

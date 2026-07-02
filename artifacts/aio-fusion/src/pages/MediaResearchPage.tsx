@@ -336,7 +336,10 @@ function MediaResearchPage() {
 
       {/* Select Content */}
       <div className="bg-white rounded-2xl border p-5 sm:p-6 mb-6" style={{ borderColor: vars.g200 }}>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.gold }}>1. Select Content</p>
+        <div className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2.5" style={{ background: accentSoft }}>
+          <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: accentPink }} />
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>1. Select Content</p>
+        </div>
         {(() => {
           const ELIGIBLE_TYPES = ["Press release", "Article", "Case study", "Whitepaper", "Blog post"];
           const eligible = archive.filter((a) => ELIGIBLE_TYPES.includes(a.contentType));
@@ -358,7 +361,10 @@ function MediaResearchPage() {
         <>
           {/* Selected content summary */}
           <div className="bg-white rounded-2xl border p-5 sm:p-6 mb-6" style={{ borderColor: vars.g200 }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-3" style={{ color: vars.gold }}>2. Selected content</p>
+            <div className="rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2.5" style={{ background: accentSoft }}>
+              <span className="w-1 h-4 rounded-full flex-shrink-0" style={{ background: accentPink }} />
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>2. Selected content</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <SummaryRow label="Title" value={selected.title} />
               <SummaryRow label="Content type" value={selected.contentType} />
