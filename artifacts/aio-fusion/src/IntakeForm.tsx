@@ -2532,6 +2532,15 @@ export default function IntakePage() {
                 >
                   <Plus size={13} /> New Project
                 </button>
+                {activeSection > 0 && (
+                  <button
+                    onClick={() => setActiveSection(activeSection - 1)}
+                    className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border-2 hover:-translate-y-0.5 hover:shadow-md"
+                    style={{ borderColor: "#0a1628", color: "#0a1628", background: "transparent" }}
+                  >
+                    <ArrowLeft size={14} /> Previous
+                  </button>
+                )}
                 {activeSection < visibleSections.length - 1 ? (
                   <button
                     onClick={() => setActiveSection(activeSection + 1)}
