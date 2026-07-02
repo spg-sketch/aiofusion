@@ -1705,7 +1705,7 @@ export default function IntakePage() {
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
-        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBE3ED", borderColor: "rgba(200,73,122,0.45)" }}>
+        <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBF1F0", borderColor: "rgba(200,73,122,0.45)" }}>
           <div className="flex items-start gap-2.5">
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
             <div className="flex-1">
