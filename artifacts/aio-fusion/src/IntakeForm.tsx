@@ -1767,7 +1767,7 @@ export default function IntakePage() {
                           }}
                         >
                           <Sparkles size={14} className={autoFillLoading ? "animate-pulse" : ""} />
-                          {autoFillLoading ? "Filling all fields from your website…" : "Auto-fill all fields from my website"}
+                          {autoFillLoading ? "Filling all fields from your website…" : "Populate my project set-up now"}
                         </button>
                       </>
                     )}
