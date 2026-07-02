@@ -1799,18 +1799,17 @@ export default function IntakePage() {
 
         {/* Track switch + progress - Variant C panel */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "white", borderColor: "#102B36" }}>
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row gap-2">
-              {([
-                { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)" },
-                { key: "web" as Track, primary: "AIO Set-Up", subtitle: "Business Profile (Sections 4–7)" },
-              ]).map((t) => {
-                const isActive = track === t.key;
-                return (
+          <div className="flex flex-col sm:flex-row gap-4">
+            {([
+              { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)", label: "PR Set-Up Progress", pct: trackProgress.pr },
+              { key: "web" as Track, primary: "AIO Set-Up", subtitle: "Business Profile (Sections 4–7)", label: "AIO Set-Up Progress", pct: trackProgress.web },
+            ]).map((t) => {
+              const isActive = track === t.key;
+              return (
+                <div key={t.key} className="flex-1 flex flex-col gap-3">
                   <button
-                    key={t.key}
                     onClick={() => setTrack(t.key)}
-                    className={`px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 ${isActive ? "" : "hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-[#C8497A]"}`}
+                    className={`px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 w-full ${isActive ? "" : "hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-[#C8497A]"}`}
                     style={{
                       background: isActive ? "#102B36" : "#FBF1F0",
                       borderColor: isActive ? "#102B36" : "rgba(16,43,54,0.12)",
@@ -1820,25 +1819,18 @@ export default function IntakePage() {
                     <div className="text-[14px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>{t.primary}</div>
                     <div className="text-[10px] font-medium uppercase tracking-[0.14em] mt-0.5 opacity-80">{t.subtitle}</div>
                   </button>
-                );
-              })}
-            </div>
-            <div className="flex-1 lg:max-w-md lg:ml-6 flex flex-col gap-3">
-              {([
-                { key: "pr", label: "PR Set-Up Progress", pct: trackProgress.pr },
-                { key: "web", label: "AIO Set-Up Progress", pct: trackProgress.web },
-              ]).map((p) => (
-                <div key={p.key}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>{p.label}</span>
-                    <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{p.pct}%</span>
-                  </div>
-                  <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.pct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#102B36" }}>{t.label}</span>
+                      <span className="text-[14px] font-bold" style={{ color: "#C8497A", fontFamily: "'Alice', Georgia, serif" }}>{t.pct}%</span>
+                    </div>
+                    <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: "rgba(16,43,54,0.08)" }}>
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${t.pct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
