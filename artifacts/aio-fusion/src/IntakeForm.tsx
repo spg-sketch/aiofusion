@@ -1811,9 +1811,9 @@ export default function IntakePage() {
                     onClick={() => setTrack(t.key)}
                     className={`px-5 py-3 rounded-xl text-left transition-all duration-300 border-2 w-full ${isActive ? "" : "hover:-translate-y-1 hover:shadow-lg hover:ring-2 hover:ring-[#C8497A]"}`}
                     style={{
-                      background: isActive ? "#102B36" : "#FBF1F0",
-                      borderColor: isActive ? "#102B36" : "rgba(16,43,54,0.12)",
-                      color: isActive ? "#ffffff" : "#102B36",
+                      background: isActive ? "#FBE3ED" : "#FBF1F0",
+                      borderColor: isActive ? "#C8497A" : "rgba(16,43,54,0.12)",
+                      color: "#102B36",
                     }}
                   >
                     <div className="text-[14px] font-bold" style={{ fontFamily: "'Alice', Georgia, serif" }}>{t.primary}</div>
