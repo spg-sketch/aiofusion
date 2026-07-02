@@ -50,13 +50,15 @@ This document captures the visual design system currently implemented across the
 |---|---|
 | Dashboard (top item) | Navy `#0a1628` |
 | Project Set-Up | `#DE7A38` |
-| Visibility Audits | `#DCA1A1` |
+| Visibility Audits | `#A4CCD4` |
 | Content Management | `#D4922A` |
 | Media Management | `#84AB7D` |
 | Marketing Intelligence | `#736EAE` |
 | Reporting | `#A0A095` |
 
-All sidebar section text/icons render in solid black (`#000000`) for contrast against these mid-tone solid backgrounds; active items get a white-tinted overlay (`rgba(255,255,255,0.16)` bg + `rgba(255,255,255,0.35)` border).
+All sidebar section text/icons render in solid black (`#000000`) for contrast against these mid-tone solid backgrounds; active items get a white-tinted overlay (`rgba(255,255,255,0.16)` bg + `rgba(255,255,255,0.35)` border). Section heading labels (e.g. "PROJECT SET-UP", "VISIBILITY AUDITS") are uppercase, bold, letter-spacing ~0.14em, at 13px (increased from 11px for legibility).
+
+Within the Visibility Audits section, saved audit report rows (date + score, shown under "Earned Media Visibility Audit" and "Website Visibility Audit") use a darker grey (`#4B5563`) for both the date/time text and the score, rather than the lighter `g500`, so recent reports stand out more clearly.
 
 ---
 
@@ -129,10 +131,10 @@ All sidebar section text/icons render in solid black (`#000000`) for contrast ag
 - White background throughout.
 - Logo centered at top, sized ~20% larger than original (h-24).
 - No subtitle tagline below logo (removed per client request).
-- Client switcher below logo (white bg, navy text, "Switch project" sub-label).
-- **"Project Home"** pink pill button below the client switcher (returns to Project Hub).
+- Client logo box below the main logo: centered, enlarged (14×14), with a darker navy 2px border for prominence. No back-arrow or "Switch project" label here — that action is now covered entirely by the "Project Hub" button directly below.
+- **"Project Hub"** pink pill button below the client logo (returns to Project Hub; relabelled from "Project Home").
 - **Dashboard** nav item: solid navy background, white text, white icon chip.
-- Six colour-coded sections below (see palette table above), each a solid rounded block containing nav items; black text/icons for contrast; active item gets white overlay highlight.
+- Six colour-coded sections below (see palette table above), each a solid rounded block containing nav items; black text/icons for contrast; active item gets white overlay highlight; section heading labels at 13px uppercase (see palette table above for full detail).
 - Item icons/Dashboard icon have a subtle hover scale to signal interactivity (locked/V2 items excluded).
 - Admin/account footer at the bottom (dark chip, avatar, tier label).
 
