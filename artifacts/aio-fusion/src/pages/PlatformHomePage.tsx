@@ -239,7 +239,7 @@ function PlatformHomePage({
               </div>
             </div>
 
-            {/* MY SESSIONS — expandable panel inside the signed-in card */}
+            {/* MY SESSIONS - expandable panel inside the signed-in card */}
             <div className="mt-6 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
               <div className="flex items-center justify-between">
                 <button
@@ -303,7 +303,7 @@ function PlatformHomePage({
                                   {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap font-mono text-[12px]" style={{ color: vars.g500 }}>
-                                  {s.ipHint ?? "—"}
+                                  {s.ipHint ?? "-"}
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   {!s.isCurrent && (

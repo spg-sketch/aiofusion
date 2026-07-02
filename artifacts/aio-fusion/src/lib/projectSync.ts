@@ -38,7 +38,7 @@ export function setKnownProjectIds(ids: string[]): void {
 
 // Pure utility: reads aio.activeProjectId from localStorage and clears it with
 // a console warning when the stored ID is not in projectIds. A missing ID (no
-// value stored) is a no-op — nothing to validate. An empty projectIds list is
+// value stored) is a no-op - nothing to validate. An empty projectIds list is
 // treated as "not yet loaded" and is also a no-op.
 export function assertActiveProjectConsistency(projectIds: string[]): void {
   if (projectIds.length === 0) return;

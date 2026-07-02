@@ -96,7 +96,7 @@ export function SearchableOutletPicker({
 }
 
 // ---------------------------------------------------------------------------
-// Media Database page — outlets, contacts and custom categories
+// Media Database page - outlets, contacts and custom categories
 // ---------------------------------------------------------------------------
 type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
 type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string; outletName?: string; outletCategory?: string };

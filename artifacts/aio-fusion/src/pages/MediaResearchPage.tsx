@@ -586,7 +586,7 @@ function MediaResearchPage() {
                 <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Publication / outlet</label>
                 <SearchableOutletPicker outlets={dbOutlets} value={addToDbForm.outletId} onChange={(id) => setAddToDbForm((f) => ({ ...f, outletId: id }))} />
                 {!addToDbForm.outletId && (
-                  <p className="text-[11px] mt-1.5" style={{ color: vars.g400 }}>Outlet not yet in your database — add it in Media Database first, then it will appear here.</p>
+                  <p className="text-[11px] mt-1.5" style={{ color: vars.g400 }}>Outlet not yet in your database - add it in Media Database first, then it will appear here.</p>
                 )}
               </div>
               <div>

@@ -27,3 +27,13 @@ save) removes historical em dashes without a destructive migration.
 survive), and intentionally LEAVES en dashes (U+2013) so numeric ranges like
 "10–20" are not broken. Scope was limited to the content optimisation feature;
 diagnostic/llm-check/seo-audit analysis routes were deliberately left out.
+
+**Static UI copy sweep:** on top of the AI-content sanitiser above, all
+hardcoded em dashes in aio-fusion's static UI copy (labels, subtitles,
+tooltips, hints, placeholders) and in api-server's seo-audit.ts finding/rec
+text (rendered directly in the Website Visibility Audit report) were bulk
+replaced with plain hyphens site-wide, since the client's "no em dashes"
+preference applies to all visible copy, not just AI-generated text.
+Deliberately left untouched: `.test.ts` files (test description strings) and
+backend-internal comments/AI-prompt strings that are never rendered to users
+(content-ai.ts, llm-check.ts, diagnostic.ts prompt text, code comments).

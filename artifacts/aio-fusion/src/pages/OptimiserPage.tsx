@@ -175,7 +175,7 @@ function OptimiserPage({
     const catList = mediaCats.length
       ? `<p style="margin:0 0 14pt 0;">${mediaCats.map((c) => escapeHtml(c)).join(", ")}</p>`
       : `<p style="margin:0 0 14pt 0; color:#6b7280;">None selected.</p>`;
-    // Strip the "Optimisation pass:" summary paragraph — useful on screen
+    // Strip the "Optimisation pass:" summary paragraph - useful on screen
     // but not needed in the downloaded document.
     const bodyCopyForDownload = bodyCopy
       .replace(/\n*Optimisation pass:[\s\S]*/i, "")
@@ -440,7 +440,7 @@ OUTPUT INSTRUCTIONS:
               </h1>
             </div>
             <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: vars.g600 }}>
-              Paste your own human-written draft below — a press release, article, case study or any other copy — then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
+              Paste your own human-written draft below - a press release, article, case study or any other copy - then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
             </p>
           </div>
           <button onClick={() => setShowRetrieve(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all shadow-sm whitespace-nowrap" style={{ background: vars.teal }}>
@@ -938,7 +938,7 @@ OUTPUT INSTRUCTIONS:
                   <button onClick={() => downloadOptimisedNotes("word")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
                     <FileText size={22} color={vars.accent} />
                     Word document
-                    <span className="text-[10px] font-light" style={{ color: vars.g400 }}>.doc — opens in Word</span>
+                    <span className="text-[10px] font-light" style={{ color: vars.g400 }}>.doc - opens in Word</span>
                   </button>
                   <button onClick={() => downloadOptimisedNotes("pdf")} className="flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl border text-[13px] font-semibold transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.navy }}>
                     <Download size={22} color={vars.accent} />

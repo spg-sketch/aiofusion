@@ -524,7 +524,7 @@ function UsersAdminPage({
                     Project created: {genResult.companyName}
                   </p>
                   <p className="text-[12px] mt-0.5" style={{ color: vars.g600 }}>
-                    ID: {genResult.projectId} — go back to the platform and it will appear in your project list after a sync.
+                    ID: {genResult.projectId} - go back to the platform and it will appear in your project list after a sync.
                   </p>
                 </div>
                 <button
@@ -756,7 +756,7 @@ function UsersAdminPage({
                                     <Lock size={10} style={{ color: vars.g400 }} />
                                     <span className="text-[10px]" style={{ color: vars.g500 }}>
                                       {AUDIT_TYPE_LABELS[lk.auditType] ?? lk.auditType} locked
-                                      {" — "}{new Date(lk.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                      {" - "}{new Date(lk.lastRunAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                                     </span>
                                     <button
                                       onClick={() => clearAuditLock(p.id, lk.auditType)}
@@ -896,7 +896,7 @@ function UsersAdminPage({
                                       {new Date(s.expiresAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>
-                                      {s.ipHint ?? "—"}
+                                      {s.ipHint ?? "-"}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">
                                       <button
@@ -1058,7 +1058,7 @@ function UsersAdminPage({
                       const ts = new Date(ev.createdAt);
                       const timeStr = ts.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + " " + ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
                       const actionLabel = ACTION_LABELS[ev.action] ?? ev.action;
-                      const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "—";
+                      const target = ev.targetId ? `${ev.targetType ?? ""} ${ev.targetId}`.trim() : ev.targetType ?? "-";
                       const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" · ").slice(0, 120) : "";
                       return (
                         <tr key={ev.id} style={{ background: rowBg, borderBottom: `1px solid ${vars.g200}` }}>
@@ -1066,7 +1066,7 @@ function UsersAdminPage({
                           <td className="px-4 py-2.5 whitespace-nowrap font-semibold" style={{ color: ink }}>{ev.actorUsername}</td>
                           <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: vars.navy }}>{actionLabel}</td>
                           <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>{target}</td>
-                          <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "—"}</td>
+                          <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "-"}</td>
                         </tr>
                       );
                     })}

@@ -28,16 +28,16 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       projects: "1 brand / project",
       competitorNote: "CisionOne AI from £15,000–£40,000+/yr. AIO Fusion pays for itself in one client engagement.",
       includes: [
-        "Full Standard platform — all 10 modules",
+        "Full Standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
-        "Comms Planner — plan, score and manage schedules",
+        "Comms Planner - plan, score and manage schedules",
         "Content Optimiser and Editor",
-        "Content Creator — articles, pitches and ideation",
-        "Media Research — AI-recommended journalists",
-        "Marketing Intelligence — awards and conferences",
+        "Content Creator - articles, pitches and ideation",
+        "Media Research - AI-recommended journalists",
+        "Marketing Intelligence - awards and conferences",
         "Website Content GEO and Technical GEO",
-        "Measure and Report — PR impact and AI authority",
-        "Archive — long-term content curation",
+        "Measure and Report - PR impact and AI authority",
+        "Archive - long-term content curation",
         "Email support",
       ],
     },
@@ -56,7 +56,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       includes: [
         "Everything in Standard In-House, plus:",
         "Multi-client architecture and agency dashboard",
-        "3 projects included — each a full brand workspace",
+        "3 projects included - each a full brand workspace",
         "Additional projects at £500/yr each (10 projects = £9,500/yr)",
         "Client sub-accounts and reporting",
         "Priority email and chat support",
@@ -83,9 +83,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       "AI-assisted draft content and GEO fixes",
       "Human approval gates throughout",
       "Journalist and Media AI Authority Score",
-      "Full AI Media Database — multi-market",
+      "Full AI Media Database - multi-market",
       "Release Gateway and Wire API integrations",
-      "Tactical Media Relations — live opportunity response",
+      "Tactical Media Relations - live opportunity response",
       "Authority-building content engine",
     ],
   };
@@ -115,10 +115,10 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ];
 
   const FAQS = [
-    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform — all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Archive. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
+    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Archive. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
     { q: "What does With Agents add?", a: "With Agents introduces an autonomous agentic layer that runs your PR and marketing programme using trained specialist agents, all governed by human approval gates. It adds always-on monitoring, AI-assisted draft content, GEO fixes, a Journalist and Media AI Authority Score, the full AI Media Database, Release Gateway integrations and a tactical media relations capability. Launching Q2 2027." },
     { q: "How does the With Agents upgrade offer work?", a: "Standard clients who upgrade to With Agents when it launches in Q2 2027 receive 50% off their subscription for the first six months. We will contact all active Standard clients ahead of launch with the details." },
-    { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through multiple AI engines — Claude, ChatGPT, Perplexity, Gemini and CoPilot — simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
+    { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through multiple AI engines - Claude, ChatGPT, Perplexity, Gemini and CoPilot - simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
     { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 projects. You can add further projects at £500/yr each. For example, 10 projects would total £9,500/yr." },
     { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },
     { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details." },
@@ -127,7 +127,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
     const color = agentic ? agenticGold : teal;
     if (v === true) return <span className="flex justify-center"><span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: `${color}22` }}><Check size={12} color={color} strokeWidth={2.5} /></span></span>;
-    if (v === false) return <span className="flex justify-center text-[18px] font-light" style={{ color: vars.g300 }}>—</span>;
+    if (v === false) return <span className="flex justify-center text-[18px] font-light" style={{ color: vars.g300 }}>-</span>;
     return <span className="text-[12px] font-medium text-center block" style={{ color: ink }}>{v}</span>;
   }
 

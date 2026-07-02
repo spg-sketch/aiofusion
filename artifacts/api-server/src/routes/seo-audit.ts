@@ -261,7 +261,7 @@ function analyseMeta($: cheerio.CheerioAPI, url: string): { findings: SeoFinding
   score += ogCount >= 3 ? 15 : ogCount >= 1 ? 8 : 0;
 
   const viewport = $('meta[name="viewport"]').attr("content") || "";
-  findings.push({ label: "Viewport meta", value: viewport ? "Present" : "Missing", status: viewport ? "pass" : "fail", detail: viewport || "No viewport meta tag — may not be mobile-friendly" });
+  findings.push({ label: "Viewport meta", value: viewport ? "Present" : "Missing", status: viewport ? "pass" : "fail", detail: viewport || "No viewport meta tag - may not be mobile-friendly" });
   score += viewport ? 10 : 0;
 
   const robotsMeta = $('meta[name="robots"]').attr("content") || "";
@@ -287,7 +287,7 @@ function analyseHeadings($: cheerio.CheerioAPI): { findings: SeoFinding[]; score
 
   const h1s = $("h1").map((_, el) => $(el).text().trim()).get();
   if (h1s.length === 1) {
-    findings.push({ label: "H1 tag", value: h1s[0], status: "pass", detail: "Single H1 tag found — correct" });
+    findings.push({ label: "H1 tag", value: h1s[0], status: "pass", detail: "Single H1 tag found - correct" });
     score += 30;
   } else if (h1s.length === 0) {
     findings.push({ label: "H1 tag", value: "Missing", status: "fail", detail: "No H1 tag found" });
@@ -297,11 +297,11 @@ function analyseHeadings($: cheerio.CheerioAPI): { findings: SeoFinding[]; score
   }
 
   const h2s = $("h2").map((_, el) => $(el).text().trim()).get();
-  findings.push({ label: "H2 tags", value: `${h2s.length} found`, status: h2s.length >= 2 ? "pass" : h2s.length >= 1 ? "warn" : "fail", detail: h2s.length > 0 ? h2s.slice(0, 5).join(" | ") : "No H2 tags found — poor content structure" });
+  findings.push({ label: "H2 tags", value: `${h2s.length} found`, status: h2s.length >= 2 ? "pass" : h2s.length >= 1 ? "warn" : "fail", detail: h2s.length > 0 ? h2s.slice(0, 5).join(" | ") : "No H2 tags found - poor content structure" });
   score += h2s.length >= 2 ? 25 : h2s.length >= 1 ? 12 : 0;
 
   const h3s = $("h3").map((_, el) => $(el).text().trim()).get();
-  findings.push({ label: "H3 tags", value: `${h3s.length} found`, status: h3s.length >= 1 ? "pass" : "warn", detail: h3s.length > 0 ? h3s.slice(0, 5).join(" | ") : "No H3 tags — consider adding sub-sections" });
+  findings.push({ label: "H3 tags", value: `${h3s.length} found`, status: h3s.length >= 1 ? "pass" : "warn", detail: h3s.length > 0 ? h3s.slice(0, 5).join(" | ") : "No H3 tags - consider adding sub-sections" });
   score += h3s.length >= 1 ? 20 : 0;
 
   const headingOrder: number[] = [];
@@ -347,7 +347,7 @@ function analyseSchema($: cheerio.CheerioAPI): { findings: SeoFinding[]; score: 
   score += hasOrg ? 20 : 0;
 
   const hasFaq = schemaTypes.some((t) => t === "FAQPage");
-  findings.push({ label: "FAQ schema", value: hasFaq ? "Present" : "Not found", status: hasFaq ? "pass" : "warn", detail: hasFaq ? "FAQPage schema found — good for AI Overviews" : "Consider adding FAQ schema for answer engine visibility" });
+  findings.push({ label: "FAQ schema", value: hasFaq ? "Present" : "Not found", status: hasFaq ? "pass" : "warn", detail: hasFaq ? "FAQPage schema found - good for AI Overviews" : "Consider adding FAQ schema for answer engine visibility" });
   score += hasFaq ? 20 : 0;
 
   const hasArticle = schemaTypes.some((t) => ["Article", "NewsArticle", "BlogPosting"].includes(t));
@@ -393,17 +393,17 @@ function analyseLinks($: cheerio.CheerioAPI, baseUrl: string): { findings: SeoFi
   findings.push({ label: "Internal links", value: `${internal.length} found`, status: internal.length >= 5 ? "pass" : internal.length >= 2 ? "warn" : "fail", detail: `Links to ${new Set(internal.map((l) => l.href)).size} unique internal pages` });
   score += internal.length >= 5 ? 30 : internal.length >= 2 ? 15 : 0;
 
-  findings.push({ label: "External links", value: `${external.length} found`, status: external.length >= 1 ? "pass" : "warn", detail: external.length > 0 ? `Links to ${new Set(external.map((l) => new URL(l.href).hostname)).size} external domains` : "No outbound links — citing external sources improves trust signals" });
+  findings.push({ label: "External links", value: `${external.length} found`, status: external.length >= 1 ? "pass" : "warn", detail: external.length > 0 ? `Links to ${new Set(external.map((l) => new URL(l.href).hostname)).size} external domains` : "No outbound links - citing external sources improves trust signals" });
   score += external.length >= 1 ? 20 : 0;
 
   const nofollow = $("a[rel*='nofollow']").length;
   if (nofollow > 0) {
-    findings.push({ label: "Nofollow links", value: `${nofollow} found`, status: "warn", detail: "Some links have rel='nofollow' — check if this is intentional" });
+    findings.push({ label: "Nofollow links", value: `${nofollow} found`, status: "warn", detail: "Some links have rel='nofollow' - check if this is intentional" });
   }
 
   const brokenAnchors = $("a[href='#'], a[href='']").length;
   if (brokenAnchors > 0) {
-    findings.push({ label: "Empty/placeholder links", value: `${brokenAnchors} found`, status: "warn", detail: "Links with href='#' or empty href — fix or remove" });
+    findings.push({ label: "Empty/placeholder links", value: `${brokenAnchors} found`, status: "warn", detail: "Links with href='#' or empty href - fix or remove" });
     score -= 5;
   }
 
@@ -432,7 +432,7 @@ function analyseLinks($: cheerio.CheerioAPI, baseUrl: string): { findings: SeoFi
   inboundIndicators.push({ label: "External domains linked", value: `${uniqueExternalDomains.length}`, status: uniqueExternalDomains.length >= 3 ? "pass" : "warn", detail: uniqueExternalDomains.length > 0 ? uniqueExternalDomains.slice(0, 10).join(", ") : "Page links to no external domains" });
 
   const socialLinks = external.filter((l) => /twitter\.com|x\.com|linkedin\.com|facebook\.com|instagram\.com|youtube\.com/i.test(l.href));
-  inboundIndicators.push({ label: "Social profile links", value: `${socialLinks.length} found`, status: socialLinks.length >= 2 ? "pass" : socialLinks.length >= 1 ? "warn" : "fail", detail: socialLinks.length > 0 ? "Social profiles linked — supports entity verification" : "No social profile links found — add these to strengthen entity signals" });
+  inboundIndicators.push({ label: "Social profile links", value: `${socialLinks.length} found`, status: socialLinks.length >= 2 ? "pass" : socialLinks.length >= 1 ? "warn" : "fail", detail: socialLinks.length > 0 ? "Social profiles linked - supports entity verification" : "No social profile links found - add these to strengthen entity signals" });
   score += socialLinks.length >= 2 ? 15 : socialLinks.length >= 1 ? 8 : 0;
 
   score += 20;
@@ -467,7 +467,7 @@ function analyseImages($: cheerio.CheerioAPI): { findings: SeoFinding[]; score: 
 
   const lazyCnt = $("img[loading='lazy']").length;
   if (total > 0) {
-    findings.push({ label: "Lazy loading", value: `${lazyCnt}/${total} images`, status: lazyCnt > 0 ? "pass" : "warn", detail: lazyCnt > 0 ? "Some images use lazy loading" : "No images use loading='lazy' — consider adding for performance" });
+    findings.push({ label: "Lazy loading", value: `${lazyCnt}/${total} images`, status: lazyCnt > 0 ? "pass" : "warn", detail: lazyCnt > 0 ? "Some images use lazy loading" : "No images use loading='lazy' - consider adding for performance" });
     score += lazyCnt > 0 ? 25 : 0;
   }
 
@@ -486,11 +486,11 @@ function analyseAiReadiness($: cheerio.CheerioAPI, robotsTxt: string | null): { 
 
   const bodyText = $("body").text().replace(/\s+/g, " ").trim();
   const wordCount = bodyText.split(/\s+/).length;
-  findings.push({ label: "Content length", value: `${wordCount} words`, status: wordCount >= 300 ? "pass" : wordCount >= 100 ? "warn" : "fail", detail: wordCount >= 300 ? "Sufficient content for AI analysis" : "Thin content — AI models prefer substantive pages" });
+  findings.push({ label: "Content length", value: `${wordCount} words`, status: wordCount >= 300 ? "pass" : wordCount >= 100 ? "warn" : "fail", detail: wordCount >= 300 ? "Sufficient content for AI analysis" : "Thin content - AI models prefer substantive pages" });
   score += wordCount >= 300 ? 15 : wordCount >= 100 ? 8 : 0;
 
   const hasFaq = $("h2, h3").filter((_, el) => /faq|frequently|questions/i.test($(el).text())).length > 0;
-  findings.push({ label: "FAQ content", value: hasFaq ? "Found" : "Not found", status: hasFaq ? "pass" : "warn", detail: hasFaq ? "FAQ section detected — good for answer engine visibility" : "Consider adding a FAQ section for better AI Overviews coverage" });
+  findings.push({ label: "FAQ content", value: hasFaq ? "Found" : "Not found", status: hasFaq ? "pass" : "warn", detail: hasFaq ? "FAQ section detected - good for answer engine visibility" : "Consider adding a FAQ section for better AI Overviews coverage" });
   score += hasFaq ? 15 : 0;
 
   const quotableStatements = $("blockquote, [class*='quote'], [class*='callout'], strong, b").length;
@@ -529,11 +529,11 @@ function analyseAiReadiness($: cheerio.CheerioAPI, robotsTxt: string | null): { 
 
     const anyMentioned = crawlers.some((c) => c.pattern.test(robotsTxt));
     if (!anyMentioned) {
-      findings.push({ label: "AI crawler directives", value: "None specified", status: "warn", detail: "No AI-specific crawler rules in robots.txt — all AI crawlers can access by default" });
+      findings.push({ label: "AI crawler directives", value: "None specified", status: "warn", detail: "No AI-specific crawler rules in robots.txt - all AI crawlers can access by default" });
       score += 5;
     }
   } else {
-    findings.push({ label: "robots.txt", value: "Not found or inaccessible", status: "warn", detail: "Could not fetch robots.txt — AI crawlers will use default access" });
+    findings.push({ label: "robots.txt", value: "Not found or inaccessible", status: "warn", detail: "Could not fetch robots.txt - AI crawlers will use default access" });
     score += 10;
   }
 
@@ -547,24 +547,24 @@ function generateRecommendations(result: Omit<SeoAuditResult, "recommendations">
 
   for (const f of allFindings) {
     if (f.status === "fail") {
-      if (f.label === "Title tag") recs.push({ priority: "Critical", text: "Add or fix the page title tag — this is the most basic SEO signal and affects all search visibility.", category: "Meta" });
+      if (f.label === "Title tag") recs.push({ priority: "Critical", text: "Add or fix the page title tag - this is the most basic SEO signal and affects all search visibility.", category: "Meta" });
       if (f.label === "Meta description") recs.push({ priority: "High", text: "Add a meta description (120-160 characters) that clearly describes what this page offers.", category: "Meta" });
       if (f.label === "H1 tag") recs.push({ priority: "Critical", text: "Add a single, clear H1 tag that describes the page's primary topic.", category: "Structure" });
       if (f.label === "JSON-LD structured data") recs.push({ priority: "High", text: "Add JSON-LD structured data (at minimum, Organization schema) to help search engines and AI understand your content.", category: "Schema" });
       if (f.label === "Organization schema") recs.push({ priority: "High", text: "Add Organization schema with your business name, logo, contact details, and social profiles.", category: "Schema" });
-      if (f.label.includes("Images with alt")) recs.push({ priority: "Medium", text: "Add descriptive alt text to all images — this improves accessibility and gives AI more context.", category: "Content" });
+      if (f.label.includes("Images with alt")) recs.push({ priority: "Medium", text: "Add descriptive alt text to all images - this improves accessibility and gives AI more context.", category: "Content" });
       if (f.label === "Social profile links") recs.push({ priority: "Medium", text: "Add links to your social media profiles to strengthen entity verification signals.", category: "Links" });
     }
     if (f.status === "warn") {
       if (f.label === "FAQ schema") recs.push({ priority: "Medium", text: "Add FAQ schema markup to help your answers appear in AI Overviews and featured snippets.", category: "Schema" });
-      if (f.label === "FAQ content") recs.push({ priority: "Medium", text: "Add a FAQ section with common questions and direct answers — this significantly improves answer engine visibility.", category: "Content" });
+      if (f.label === "FAQ content") recs.push({ priority: "Medium", text: "Add a FAQ section with common questions and direct answers - this significantly improves answer engine visibility.", category: "Content" });
       if (f.label === "Authority source links") recs.push({ priority: "Medium", text: "Link to authority sources (Wikipedia, Crunchbase, LinkedIn) to strengthen entity recognition.", category: "Links" });
       if (f.label === "Language attribute") recs.push({ priority: "Low", text: "Add a lang attribute to the <html> tag (e.g. lang='en') for better content classification.", category: "Technical" });
     }
   }
 
   if (result.scores.links < 50) {
-    recs.push({ priority: "High", text: "Improve internal linking — link between related pages to help search engines understand your site structure.", category: "Links" });
+    recs.push({ priority: "High", text: "Improve internal linking - link between related pages to help search engines understand your site structure.", category: "Links" });
   }
 
   if (result.scores.aiReadiness < 50) {

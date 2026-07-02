@@ -474,7 +474,7 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
     <ReportSection
       icon={<Repeat size={14} style={{ color: vars.accent }} />}
       title="Narrative signals"
-      subtitle="How each AI engine describes this brand when it does surface — and whether they agree"
+      subtitle="How each AI engine describes this brand when it does surface - and whether they agree"
       defaultOpen={true}
     >
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
@@ -487,7 +487,7 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
               ))}
             </div>
           ) : (
-            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in ChatGPT probes — no framing to extract.</p>
+            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in ChatGPT probes - no framing to extract.</p>
           )}
         </div>
         <div>
@@ -499,7 +499,7 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
               ))}
             </div>
           ) : (
-            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in Claude probes — no framing to extract.</p>
+            <p className="text-[12px]" style={{ color: vars.g400 }}>Brand did not surface in Claude probes - no framing to extract.</p>
           )}
         </div>
       </div>
@@ -508,7 +508,7 @@ function NarrativeSignalsCard({ signals, companyName }: { signals: { gpt: string
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#D97706" }} />
           <div>
             <p className="text-[11px] font-bold mb-0.5" style={{ color: "#92400E" }}>Positioning divergence</p>
-            <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>{signals.divergence} This suggests inconsistent positioning in AI training data — a PR opportunity to reinforce a unified narrative.</p>
+            <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>{signals.divergence} This suggests inconsistent positioning in AI training data - a PR opportunity to reinforce a unified narrative.</p>
           </div>
         </div>
       )}
@@ -974,7 +974,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             const noEvidence = d.confidence === "low" && d.score === 0 && d.justification.trim() === "No evidence in this run.";
             const pillClass = noEvidence ? "nm" : d.score >= 60 ? "good" : d.score >= 30 ? "mid" : "low";
             const pillText = noEvidence ? "N/M" : `${Math.round(d.score / 20)} / 5`;
-            const readText = noEvidence ? "Not measurable — brand appeared too rarely in this run for a reliable score." : d.justification;
+            const readText = noEvidence ? "Not measurable - brand appeared too rarely in this run for a reliable score." : d.justification;
             return `<tr><td><strong>${escapeHtml(d.displayName)}</strong></td><td><span class="score-pill ${pillClass}">${pillText}</span></td><td>${escapeHtml(readText)}</td></tr>`;
           })
           .join("")}</tbody>
@@ -1003,7 +1003,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     const narrativeSignalsBlock = ns && (ns.gpt.length > 0 || ns.claude.length > 0)
       ? `<div class="card">
       <h2>Narrative signals</h2>
-      <p class="lead" style="margin-bottom:12px;">How each AI engine describes ${escapeHtml(result.companyName)} when it does surface — and whether they agree.</p>
+      <p class="lead" style="margin-bottom:12px;">How each AI engine describes ${escapeHtml(result.companyName)} when it does surface - and whether they agree.</p>
       <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:${ns.divergence ? "14px" : "0"}">
         <div style="flex:1;min-width:180px;">
           <p class="meta-line" style="margin-bottom:6px;"><strong>ChatGPT frames ${escapeHtml(result.companyName)} as&hellip;</strong></p>
@@ -1179,7 +1179,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     ${assess && assess.categoryFraming && assess.categoryFraming.length > 0
       ? `<div class="card">
       <h2>What the AI says about this category</h2>
-      <p class="meta-line" style="margin-bottom:10px;">How AI engines frame each topic when this brand is not named — the vocabulary and concepts you need to own. Derived from blind-probe evidence only.</p>
+      <p class="meta-line" style="margin-bottom:10px;">How AI engines frame each topic when this brand is not named - the vocabulary and concepts you need to own. Derived from blind-probe evidence only.</p>
       <table>
         <thead><tr><th style="width:38%">Query</th><th>How engines frame this topic</th></tr></thead>
         <tbody>${assess.categoryFraming.map((row) => `<tr><td><strong>${escapeHtml(row.query)}</strong></td><td class="muted">${escapeHtml(row.themes)}</td></tr>`).join("")}</tbody>
@@ -1364,7 +1364,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               </div>
               <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: vars.g400 }}>
                 <Info size={11} className="flex-shrink-0 mt-0.5" />
-                Shapes the vocabulary of the generated probes so AI engines surface the right category of competitor — agencies and providers for services, platforms and vendors for products, brands for consumer. Leave on Auto-detect if unsure.
+                Shapes the vocabulary of the generated probes so AI engines surface the right category of competitor - agencies and providers for services, platforms and vendors for products, brands for consumer. Leave on Auto-detect if unsure.
               </p>
             </div>
             <div className="mb-6">
@@ -1384,7 +1384,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               </div>
               <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: vars.g400 }}>
                 <Info size={11} />
-                These keywords generate one extra probe — "Which companies are known for [keyword]?" — alongside the LLM search queries in section 1.6. They are not fired as verbatim questions.
+                These keywords generate one extra probe - "Which companies are known for [keyword]?" - alongside the LLM search queries in section 1.6. They are not fired as verbatim questions.
               </p>
             </div>
             <div className="mb-6">
@@ -1427,7 +1427,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </div>
             <div className="mb-6">
               <label className="text-[12px] font-semibold block mb-1.5" style={{ color: vars.g500 }}>
-                LLM search queries — how they find you
+                LLM search queries - how they find you
               </label>
               <div className="mb-3 flex flex-col gap-2">
                 <button
@@ -1453,7 +1453,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 const groups: { key: "discovery" | "shortlist" | "comparison"; label: string; sublabel: string; note?: string }[] = [
                   { key: "discovery", label: "Discovery", sublabel: "They are researching the problem space" },
                   { key: "shortlist", label: "Shortlist", sublabel: "They are looking for a provider" },
-                  { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives", note: "Your website domain appears in brackets after your name so AI engines identify the right company — important when your name is shared with others." },
+                  { key: "comparison", label: "Comparison and trust", sublabel: "They are evaluating you against alternatives", note: "Your website domain appears in brackets after your name so AI engines identify the right company - important when your name is shared with others." },
                 ];
                 return (
                   <div className="space-y-3">
@@ -1563,13 +1563,13 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 <li className="flex items-start justify-between gap-3">
                   <span className="text-[12px]" style={{ color: vars.navy }}>Boilerplate <span style={{ color: vars.g400 }}>(section 4.3)</span></span>
                   <span className="text-[11px] text-right max-w-[55%]" style={{ color: boilerplate ? vars.g500 : "#8A6314" }}>
-                    {boilerplate ? boilerplate.slice(0, 60).trimEnd() + (boilerplate.length > 60 ? "…" : "") : "Not set — add in Project Set-Up"}
+                    {boilerplate ? boilerplate.slice(0, 60).trimEnd() + (boilerplate.length > 60 ? "…" : "") : "Not set - add in Project Set-Up"}
                   </span>
                 </li>
                 <li className="flex items-start justify-between gap-3">
                   <span className="text-[12px]" style={{ color: vars.navy }}>Company descriptor <span style={{ color: vars.g400 }}>(section 1.1)</span></span>
                   <span className="text-[11px] text-right max-w-[55%]" style={{ color: descriptor ? vars.g500 : "#8A6314" }}>
-                    {descriptor ? descriptor.slice(0, 60).trimEnd() + (descriptor.length > 60 ? "…" : "") : "Not set — add in Project Set-Up"}
+                    {descriptor ? descriptor.slice(0, 60).trimEnd() + (descriptor.length > 60 ? "…" : "") : "Not set - add in Project Set-Up"}
                   </span>
                 </li>
               </ul>
@@ -1784,7 +1784,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                       <div className="flex items-start gap-2 px-3 pb-3 pt-0">
                         <AlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: "#D97706" }} />
                         <p className="text-[11px] leading-snug" style={{ color: "#92400E" }}>
-                          Score may understate real visibility — this brand name is shared with other organisations and the older detection method may have discounted genuine mentions. Open and re-run to get an updated result.
+                          Score may understate real visibility - this brand name is shared with other organisations and the older detection method may have discounted genuine mentions. Open and re-run to get an updated result.
                         </p>
                       </div>
                     )}
@@ -1792,7 +1792,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                       <div className="flex items-start gap-2 px-3 pb-3 pt-0">
                         <CheckCircle2 size={13} className="shrink-0 mt-0.5" style={{ color: vars.g400 }} />
                         <p className="text-[11px] leading-snug" style={{ color: vars.g500 }}>
-                          Superseded by a newer run — the score concern no longer applies to this client.
+                          Superseded by a newer run - the score concern no longer applies to this client.
                         </p>
                       </div>
                     )}
@@ -1895,7 +1895,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               This score may understate real visibility
             </p>
             <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>
-              &ldquo;{result.companyName}&rdquo; is a name shared with other organisations. An earlier version of the detection method could discount genuine mentions for ambiguous names like this, producing near-zero scores. The detection has since been improved — re-run the audit to get an up-to-date result.
+              &ldquo;{result.companyName}&rdquo; is a name shared with other organisations. An earlier version of the detection method could discount genuine mentions for ambiguous names like this, producing near-zero scores. The detection has since been improved - re-run the audit to get an up-to-date result.
             </p>
           </div>
           <button
@@ -1954,7 +1954,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </p>
         <p className="text-[10px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
           <Info size={10} className="flex-shrink-0 mt-0.5" />
-          Methodology: the Authority Index applies intent-tier weighting — buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.
+          Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.
         </p>
       </div>
 
@@ -1995,8 +1995,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             {result.entityClarity.brandRecognised
               ? (result.entityClarity.brandIsDominant
                   ? "The brand is the most prominent holder of this name, but it is shared."
-                  : "The brand is recognised under this name but is not the most prominent holder — present but confused.")
-              : "The brand did not surface for the bare name unprompted — the engines associate the name with other organisations (not absent, but confused)."}
+                  : "The brand is recognised under this name but is not the most prominent holder - present but confused.")
+              : "The brand did not surface for the bare name unprompted - the engines associate the name with other organisations (not absent, but confused)."}
           </p>
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
@@ -2010,7 +2010,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 {result.entityClarity.competingEntities.map((e, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${vars.g100}` }}>
                     <td className="text-[12px] py-2 pr-3 font-semibold align-top" style={{ color: vars.g600 }}>{e.name}</td>
-                    <td className="text-[12px] py-2 pl-3" style={{ color: vars.g500 }}>{e.description || "—"}</td>
+                    <td className="text-[12px] py-2 pl-3" style={{ color: vars.g500 }}>{e.description || "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2058,7 +2058,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                     className="text-left text-[12px] px-3 py-2 rounded-lg border transition-all hover:brightness-95"
                     style={{ borderColor: vars.g200, color: vars.g600, background: vars.g50 }}
                   >
-                    <strong>Yes, that&rsquo;s us</strong> — {getLegalName() || result.companyName} is our company, not the others listed.
+                    <strong>Yes, that&rsquo;s us</strong> - {getLegalName() || result.companyName} is our company, not the others listed.
                   </button>
                   {result.entityClarity.competingEntities.map((e, i) => (
                     <button
@@ -2067,7 +2067,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                       className="text-left text-[12px] px-3 py-2 rounded-lg border transition-all hover:brightness-95"
                       style={{ borderColor: vars.g200, color: vars.g600, background: "white" }}
                     >
-                      <strong>No, we are {e.name}</strong>{e.description ? ` — ${e.description}` : ""}
+                      <strong>No, we are {e.name}</strong>{e.description ? ` - ${e.description}` : ""}
                     </button>
                   ))}
                 </div>
@@ -2100,7 +2100,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <ReportSection
           icon={<CheckCircle2 size={14} style={{ color: vars.accent }} />}
           title="AI Authority scorecard"
-          subtitle="How your brand performs across five scored dimensions — presence, source quality, messaging, accuracy, and people"
+          subtitle="How your brand performs across five scored dimensions - presence, source quality, messaging, accuracy, and people"
         >
           <div className="overflow-x-auto">
             <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
@@ -2125,7 +2125,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                         </span>
                       </td>
                       <td className="py-2.5 pl-3 align-top text-[12px]" style={{ color: noEvidence ? vars.g400 : vars.g500 }}>
-                        {noEvidence ? "Not measurable — brand appeared too rarely in this run for a reliable score." : d.justification}
+                        {noEvidence ? "Not measurable - brand appeared too rarely in this run for a reliable score." : d.justification}
                       </td>
                     </tr>
                   );
@@ -2144,7 +2144,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <ReportSection
           icon={<ArrowRight size={14} style={{ color: vars.accent }} />}
           title="Prioritised actions"
-          subtitle="The highest-impact steps to improve AI visibility — ranked by priority"
+          subtitle="The highest-impact steps to improve AI visibility - ranked by priority"
         >
           <div className="flex flex-col gap-2">
             {rd.assess.priorityActions.map((a, i) => {
@@ -2183,7 +2183,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <ReportSection
           icon={<TrendingDown size={14} style={{ color: vars.accent }} />}
           title="Top visibility gaps"
-          subtitle="Queries where AI isn't naming this brand — the highest-opportunity areas to address"
+          subtitle="Queries where AI isn't naming this brand - the highest-opportunity areas to address"
         >
           <ul className="list-disc pl-5 space-y-1.5">
             {gapItems.map((g, i) => (
@@ -2197,10 +2197,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       <ReportSection
         icon={<Users size={14} style={{ color: vars.accent }} />}
         title="Who owns the category instead"
-        subtitle="The brands AI recommended when this company wasn't cited — ordered by frequency"
+        subtitle="The brands AI recommended when this company wasn't cited - ordered by frequency"
       >
         <p className="text-[12px] mb-4" style={{ color: vars.g500 }}>
-          The brands the engines recommended when {result.companyName} was absent — ordered by how often they appeared.
+          The brands the engines recommended when {result.companyName} was absent - ordered by how often they appeared.
         </p>
         {rd.owns.length > 0 ? (() => {
           const insightMap = new Map<string, string>(
@@ -2242,7 +2242,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               {untracked.length > 0 && (
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: "#B91C1C" }}>
-                    Rivals not on your tracked list — new intelligence
+                    Rivals not on your tracked list - new intelligence
                   </p>
                   <CompTable rows={untracked} showInsight={true} />
                   <p className="text-[11px] mt-2" style={{ color: vars.g400 }}>
@@ -2253,7 +2253,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
               {tracked.length > 0 && (
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.06em] mb-2" style={{ color: vars.green }}>
-                    Known competitors — already tracked
+                    Known competitors - already tracked
                   </p>
                   <CompTable rows={tracked} showInsight={false} />
                 </div>
@@ -2272,7 +2272,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <ReportSection
           icon={<Info size={14} style={{ color: vars.accent }} />}
           title="What the AI says about this category"
-          subtitle="How AI engines frame each topic when this brand isn't named — the vocabulary and concepts you need to own"
+          subtitle="How AI engines frame each topic when this brand isn't named - the vocabulary and concepts you need to own"
           defaultOpen={true}
         >
           <div className="overflow-x-auto">
@@ -2294,7 +2294,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             </table>
           </div>
           <p className="mt-3 text-[11px]" style={{ color: vars.g400 }}>
-            Derived from blind-probe evidence only — reflects what AI engines say when the brand is not named in the prompt.
+            Derived from blind-probe evidence only - reflects what AI engines say when the brand is not named in the prompt.
           </p>
         </ReportSection>
       )}
@@ -2337,7 +2337,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       <ReportSection
         icon={<Zap size={14} style={{ color: vars.accent }} />}
         title="Detailed probe results"
-        subtitle="The full AI responses to each question — expand individual rows to read the answer verbatim"
+        subtitle="The full AI responses to each question - expand individual rows to read the answer verbatim"
         defaultOpen={false}
       >
         <div className="space-y-2">
@@ -2364,11 +2364,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             AI responses are not deterministic, so individual results vary. The trend across repeated cycles is the meaningful signal, not a single run.
           </li>
           <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
-            Some ICP-narrowed probes are phrased to surface specialist or independent providers rather than large household names — a global agency or enterprise vendor is not expected to appear in those specific questions.{result.businessType && result.businessType !== "" ? ` Probe vocabulary was set to: ${result.businessType === "product" ? "Product / software" : result.businessType === "consumer" ? "Consumer brand" : "Professional services / agency"}.` : ""}
+            Some ICP-narrowed probes are phrased to surface specialist or independent providers rather than large household names - a global agency or enterprise vendor is not expected to appear in those specific questions.{result.businessType && result.businessType !== "" ? ` Probe vocabulary was set to: ${result.businessType === "product" ? "Product / software" : result.businessType === "consumer" ? "Consumer brand" : "Professional services / agency"}.` : ""}
           </li>
           {rd.assess && rd.assess.dimensions.some((d) => d.confidence === "low" && d.score === 0 && d.justification.trim() === "No evidence in this run.") && (
             <li className="text-[12px] leading-relaxed" style={{ color: vars.g600 }}>
-              Scorecard dimensions marked N/M (not measurable) could not be scored reliably because the brand appeared in too few probes. They are not failures — they indicate where more visibility work is needed first.
+              Scorecard dimensions marked N/M (not measurable) could not be scored reliably because the brand appeared in too few probes. They are not failures - they indicate where more visibility work is needed first.
             </li>
           )}
         </ul>
@@ -2386,7 +2386,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             { t: "Scores are directional, not precise.", b: "AI model responses aren't deterministic - the same question can produce slightly different answers each time. Individual results will vary, but the trend across multiple checks over time is meaningful." },
             { t: "Competitors reveal what's working.", b: "The companies AI does mention are winning the visibility race in your sector - analyse what they're doing differently with content structure, schema markup and authority signals." },
             { t: "Use this as a baseline.", b: "Run it now, do your GEO work (diagnostic, content optimisation, schema, authority planning), then run it again. A score moving from 20% to 50% is a measurable result you can report to the client." },
-            { t: "Set the right business type.", b: "Use the Business type selector to match the probe vocabulary to the client — agencies and providers for services, platforms and vendors for products, brands for consumer. This ensures the competitor set AI surfaces is actually comparable to the client." },
+            { t: "Set the right business type.", b: "Use the Business type selector to match the probe vocabulary to the client - agencies and providers for services, platforms and vendors for products, brands for consumer. This ensures the competitor set AI surfaces is actually comparable to the client." },
           ].map((item, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: vars.lightBg }}>

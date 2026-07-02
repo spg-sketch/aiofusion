@@ -39,7 +39,7 @@ export function splitArchiveBody(arc: { body?: string; headline?: string; standf
 }
 
 // ---------------------------------------------------------------------------
-// Content store — archive, planner and scoring config
+// Content store - archive, planner and scoring config
 // ---------------------------------------------------------------------------
 // Items live in a module-level in-memory cache populated from the server on
 // login. All reads return synchronously from the cache so existing call sites
@@ -49,7 +49,7 @@ export function splitArchiveBody(arc: { body?: string; headline?: string; standf
 // ---------------------------------------------------------------------------
 
 const CONTENT_STORE_MIGRATED_KEY = "aio.store.migrated.v1";
-// Legacy localStorage keys — kept so the one-time migration can find them.
+// Legacy localStorage keys - kept so the one-time migration can find them.
 const ARCHIVE_KEY  = "aio.archive.v1";
 const PROJECTS_KEY = "aio.planner.projects.v1";
 
@@ -129,7 +129,7 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
     }
 
     // Only migrate if the server currently has no archive items for this
-    // account — if items already exist, the localStorage data almost certainly
+    // account - if items already exist, the localStorage data almost certainly
     // belongs to a different account and must not be uploaded here.
     const serverIsEmpty = (_archiveCache ?? []).length === 0 && (_plannerCache ?? []).length === 0;
 
@@ -168,7 +168,7 @@ export async function migrateLocalStorageContentToServer(): Promise<void> {
     }
 
     // Always purge legacy localStorage keys after this check, whether or not
-    // we migrated — keeping them risks a future account picking them up.
+    // we migrated - keeping them risks a future account picking them up.
     for (const key of keys.filter((k) =>
       k === ARCHIVE_KEY || k.startsWith(ARCHIVE_KEY + "::") ||
       k === PROJECTS_KEY || k.startsWith(PROJECTS_KEY + "::") ||

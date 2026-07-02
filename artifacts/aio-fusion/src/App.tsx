@@ -127,7 +127,7 @@ import { Sidebar } from "./components/Sidebar";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
 
 // ---------------------------------------------------------------------------
-// Route-level lazy chunks — each page is only downloaded when first visited.
+// Route-level lazy chunks - each page is only downloaded when first visited.
 // ---------------------------------------------------------------------------
 const IntakePage = lazy(() => import("./IntakeForm"));
 const ReportPage = lazy(() => import("./ReportPage"));
@@ -393,7 +393,7 @@ function App() {
       logo,
     );
     if (!pushResult.ok && pushResult.limitReached) {
-      // Roll back the locally created project — the server rejected it.
+      // Roll back the locally created project - the server rejected it.
       const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
       saveStoredProjects(rolled);
       setStoredProjects(rolled);

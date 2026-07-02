@@ -325,8 +325,8 @@ const sections: SectionDef[] = [
       { id: "h-sp", label: "Semantic Phrase Guide & Topics", type: "heading" },
       {
         id: "1.6",
-        label: "LLM search queries — how prospective clients find you",
-        hint: "Generate your top 12 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit. Comparison queries include your website domain in brackets (e.g. SMG (smg.com)) so AI engines evaluate the right company — essential when your name is an acronym or short phrase that other organisations share.",
+        label: "LLM search queries - how prospective clients find you",
+        hint: "Generate your top 12 queries or type your own. Three groups reflect the B2B buying journey: Discovery (researching the problem), Shortlist (looking for a provider), and Comparison and trust (evaluating you against others). These queries are fired verbatim at AI models in your Earned Media Visibility Audit. Comparison queries include your website domain in brackets (e.g. SMG (smg.com)) so AI engines evaluate the right company - essential when your name is an acronym or short phrase that other organisations share.",
         type: "llm-queries",
       },
       {
@@ -531,7 +531,7 @@ const sections: SectionDef[] = [
       {
         id: "4.9",
         label: "Other companies with a similar name that we are NOT",
-        hint: "Optional — only fill this in if AI engines are confusing you with another organisation that shares your name. Add one per line, e.g. \"BlueHalo LLC (US defence contractor)\". These will be used to anchor the identity probe so engines answer about the right company.",
+        hint: "Optional - only fill this in if AI engines are confusing you with another organisation that shares your name. Add one per line, e.g. \"BlueHalo LLC (US defence contractor)\". These will be used to anchor the identity probe so engines answer about the right company.",
         type: "string-list",
         optional: true,
       },
@@ -3145,7 +3145,7 @@ export function getBuyerQuestions(): string[] {
   return fieldLines(["5.6"]);
 }
 
-// Structured LLM search queries from 1.6 — the primary probes for the Earned
+// Structured LLM search queries from 1.6 - the primary probes for the Earned
 // Media Visibility Audit. Returns an empty set when no queries have been generated.
 export function getLlmSearchQueries(): LlmQueries {
   const data = loadIntakeData();

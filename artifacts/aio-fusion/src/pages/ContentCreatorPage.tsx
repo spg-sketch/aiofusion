@@ -510,7 +510,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white"
               style={{ borderColor: vars.g200 }}
             >
-              <option value="">— No target query (free-form draft) —</option>
+              <option value="">- No target query (free-form draft) -</option>
               {llmQueries.discovery.length > 0 && (
                 <optgroup label="Discovery">
                   {llmQueries.discovery.map((q) => <option key={q} value={q}>{q}</option>)}
@@ -529,7 +529,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             </select>
           ) : (
             <div className="rounded-lg border px-3 py-2.5 text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: vars.g500 }}>
-              No queries generated yet —{" "}
+              No queries generated yet -{" "}
               <button
                 type="button"
                 className="underline font-semibold"

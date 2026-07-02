@@ -81,6 +81,7 @@ Within the Visibility Audits section, saved audit report rows (date + score, sho
 - **Eyebrow labels / section labels** (e.g. "AUTHORITY DASHBOARD", "GUIDANCE"): uppercase, bold, letter-spacing ~0.18–0.22em, small size (10–11px), accent pink or navy depending on context.
 - **Card titles**: bold, 14–15px, navy.
 - **Card sub-text**: 11–13px, g400/g500, regular/light weight.
+- **No em dashes anywhere in copy** (client preference): all static UI copy across the platform (labels, subtitles, tooltips, hints, placeholders, report/finding text) uses a plain hyphen (`-`) instead of an em dash (`—`). Numeric ranges may still use an en dash (`–`). AI-generated content is additionally deterministic-stripped server + client side (see em-dash sanitiser).
 
 ---
 

@@ -78,7 +78,7 @@ export default function CountdownBanner({
         {finished ? (
           <>
             <p className="text-[13px] font-semibold" style={{ color: "#0a1628" }}>
-              Still working — almost there…
+              Still working - almost there…
             </p>
             <p className="text-[11px] mt-0.5 font-light" style={{ color: "#475569" }}>
               You can switch tabs but please keep this tab open.
@@ -87,7 +87,7 @@ export default function CountdownBanner({
         ) : (
           <>
             <p className="text-[13px] font-semibold" style={{ color: "#0a1628" }}>
-              {label} — ready in approximately{" "}
+              {label} - ready in approximately{" "}
               <span style={{ color: "#4f8fff", fontVariantNumeric: "tabular-nums" }}>
                 {formatMmSs(remaining)}
               </span>

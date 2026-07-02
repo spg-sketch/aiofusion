@@ -4,7 +4,7 @@ interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-// Catches render-time errors — most commonly a lazy-loaded page chunk that
+// Catches render-time errors - most commonly a lazy-loaded page chunk that
 // fails to load (flaky connection, or a stale chunk hash after a new deploy).
 // Without this, an uncaught error unmounts the whole app and the user is left
 // looking at a blank white page with no way back in except a manual refresh.
