@@ -1745,6 +1745,12 @@ export default function IntakePage() {
                         <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#15803D" }}>
                           <Check size={13} strokeWidth={3} /> Website saved. Use "Ask AI to complete this" under a question.
                         </p>
+                        <div className="flex items-start gap-2.5 mt-4">
+                          <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
+                          <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                            Optional: Auto-fill my project set-up
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() => { void handleAutoFill(); }}
