@@ -1676,7 +1676,7 @@ export default function IntakePage() {
       {/* Header */}
       <div className="mb-6 sm:mb-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">
-          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
             Project Set-Up
           </h1>
           <div className="flex items-center gap-2.5">
@@ -1685,9 +1685,9 @@ export default function IntakePage() {
               title="Save your progress so you can finish later"
               className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] px-3.5 py-1.5 rounded-full border-2 transition-colors"
               style={{
-                borderColor: justSaved ? vars.green : "#102B36",
-                color: justSaved ? vars.green : "#102B36",
-                background: justSaved ? "rgba(61,155,107,0.1)" : "transparent",
+                borderColor: justSaved ? vars.green : "rgba(255,255,255,0.7)",
+                color: justSaved ? vars.green : "#ffffff",
+                background: justSaved ? "rgba(61,155,107,0.15)" : "transparent",
               }}
             >
               {justSaved ? <><Check size={13} /> Saved</> : <><Save size={13} /> Save for later</>}
@@ -1700,14 +1700,14 @@ export default function IntakePage() {
             </span>
           </div>
         </div>
-        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: vars.g500 }}>
+        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>
           This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR set-up and Website set-up sections to build it.
         </p>
-        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: vars.g500 }}>
+        <p className="text-[13px] sm:text-[14px] font-light mb-3" style={{ color: "rgba(255,255,255,0.85)" }}>
           Getting this right matters, so set aside around two hours to do it properly. It is one of the most valuable investments you can make in your GEO strategy.
         </p>
-        <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: vars.g500 }}>
-          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>. It copies a ready-to-paste prompt, with your company website built in, that you can drop straight into your own AI assistant (such as ChatGPT) to draft the answer faster. Add your website at the top first so the draft reflects your real business. The <span className="font-bold">Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#DC2626" }}>red</span>, and <span className="font-bold">Reject</span> restores your original.
+        <p className="text-[13px] sm:text-[14px] font-light mb-5" style={{ color: "rgba(255,255,255,0.85)" }}>
+          Each question has a copy icon <span className="inline-flex items-center align-middle mx-0.5 px-1.5 py-0.5 rounded-md" style={{ background: "#FBE3ED", color: "#C8497A" }}><Copy size={12} /></span>. It copies a ready-to-paste prompt, with your company website built in, that you can drop straight into your own AI assistant (such as ChatGPT) to draft the answer faster. Add your website at the top first so the draft reflects your real business. The <span className="font-bold" style={{ color: "#ffffff" }}>Optimise</span> icon rewrites your answer to be stronger and easier for AI to reference while keeping your own facts. Optimised copy shows in <span className="font-bold" style={{ color: "#FCA5A5" }}>red</span>, and <span className="font-bold" style={{ color: "#ffffff" }}>Reject</span> restores your original.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
