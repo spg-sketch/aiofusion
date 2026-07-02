@@ -1706,12 +1706,14 @@ export default function IntakePage() {
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
         <div className="rounded-2xl border-2 p-4 sm:p-5 mb-2" style={{ background: "#FBF1F0", borderColor: "rgba(200,73,122,0.45)" }}>
-          <div className="flex items-start gap-2.5">
+          <div className="flex items-start gap-2.5 mb-3">
             <Sparkles size={18} style={{ color: "#C8497A", marginTop: 2, flexShrink: 0 }} />
+            <p className="text-[13px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+              Add your company website
+            </p>
+          </div>
+          <div className="flex items-start gap-2.5">
             <div className="flex-1">
-              <p className="text-[13px] font-bold mb-3" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
-                Add your company website
-              </p>
               {(() => {
                 const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
                 return (
