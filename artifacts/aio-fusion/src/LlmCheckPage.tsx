@@ -40,6 +40,7 @@ const vars = {
   green: "#22c55e",
   amber: "#f59e0b",
   red: "#ef4444",
+  gold: "#C9A04E",
   lightBg: "#e8f0fe",
   g50: "#FAFAFA",
   g100: "#F1F5F9",
@@ -1222,7 +1223,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Search size={20} color="#ffffff" />
-            <h1 className="text-xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Earned Media Visibility Audit
             </h1>
           </div>
@@ -1232,10 +1233,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
         <div className="rounded-xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="max-w-lg mx-auto">
-            <div className="mb-5 p-4 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+            <div className="mb-5 p-5 sm:p-6 rounded-lg border" style={{ borderColor: vars.g200, background: vars.g50 }}>
               <div className="flex items-center gap-2 mb-3">
-                <Search size={16} style={{ color: vars.accent }} />
-                <span className="text-sm font-medium" style={{ color: vars.navy }}>
+                <Search size={18} style={{ color: vars.accent }} />
+                <span className="text-[16px] font-semibold" style={{ color: vars.navy }}>
                   We'll probe <strong>{probeName || activeClient.name}</strong> using your Project Set-Up data
                 </span>
               </div>
@@ -1243,7 +1244,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 auditSectors.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
                     {auditSectors.map((s) => (
-                      <span key={s} className="text-[12px] px-2.5 py-1 rounded-full border" style={{ background: vars.lightBg, color: vars.accent, borderColor: vars.accent }}>{s}</span>
+                      <span key={s} className="text-[13px] font-medium px-2.5 py-1 rounded-full border" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25", borderColor: vars.gold }}>{s}</span>
                     ))}
                   </div>
                 ) : (
@@ -1260,10 +1261,10 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
             <button
               type="button"
               onClick={() => setShowRefine((v) => !v)}
-              className="flex items-center gap-1.5 text-[12px] font-medium mb-5 transition-colors hover:opacity-80"
-              style={{ color: vars.accent }}
+              className="flex items-center gap-1.5 text-[15px] font-semibold mb-5 transition-colors hover:opacity-80"
+              style={{ color: vars.navy }}
             >
-              <SlidersHorizontal size={13} />
+              <SlidersHorizontal size={15} />
               {showRefine ? "Hide refine options" : "Refine what we probe"}
               <ChevronDown size={13} style={{ transform: showRefine ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
             </button>
@@ -1752,14 +1753,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 return (
                   <div
                     key={a.id}
-                    className="flex flex-col rounded-lg border transition-colors hover:bg-[rgba(31,116,143,0.04)]"
+                    className="flex flex-col rounded-lg border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-[rgba(200,73,122,0.03)]"
                     style={{ borderColor: showWarning ? "#F59E0B" : vars.g200 }}
                   >
                     <div className="flex items-center gap-3 p-3">
                       <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
                         <div
-                          className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0"
-                          style={{ background: showWarning ? "#FEF3C7" : "rgba(31,116,143,0.08)", color: showWarning ? "#92400E" : vars.accent }}
+                          className="flex items-center justify-center w-11 h-11 rounded-lg text-[13px] font-bold shrink-0 border-2"
+                          style={{ background: showWarning ? "#FEF3C7" : "#ffffff", color: showWarning ? "#92400E" : vars.navy, borderColor: showWarning ? "#F59E0B" : vars.accent }}
                         >
                           {authorityIndexFor(a.result)}
                         </div>

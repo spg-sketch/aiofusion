@@ -219,7 +219,7 @@ function MarketingIntelligencePage() {
             {MARKETING_TYPES.map((mt) => {
               const on = marketingType.includes(mt);
               return (
-                <button key={mt} onClick={() => setMarketingType(on ? marketingType.filter((x) => x !== mt) : [...marketingType, mt])} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-colors" style={{ borderColor: on ? vars.coral : vars.g200, background: on ? "rgba(224,120,86,0.1)" : "white", color: on ? vars.coral : vars.g500 }}>
+                <button key={mt} onClick={() => setMarketingType(on ? marketingType.filter((x) => x !== mt) : [...marketingType, mt])} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: on ? vars.coral : vars.g200, background: on ? "rgba(224,120,86,0.1)" : "white", color: on ? vars.coral : vars.g500 }}>
                   {mt}
                 </button>
               );
@@ -279,7 +279,7 @@ function MarketingIntelligencePage() {
               <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
             </button>
           </div>
-          <p className="text-[11px] font-light leading-relaxed" style={{ color: vars.g500 }}>
+          <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
             Builds an exhaustive, web-verified list of UK PR events for the chosen marketing types and business categories, with one row per opportunity (entry, award, speaker, sponsorship). Events confirmed in the next 12 months are flagged <strong style={{ color: "#1F7244" }}>[C] Confirmed</strong>; events held in the previous 24 months but not yet confirmed forward are flagged <strong style={{ color: "#A04040" }}>[U] Unconfirmed</strong>. Each event carries an LLM authority score (0-100), a relevance summary and named-contact details verified at search time. No URLs, events, titles or emails are invented.
           </p>
           {showLLMBrief && (

@@ -118,7 +118,7 @@ function ScoreBar({ label, score, max, description }: { label: string; score: nu
       <div className="w-full h-2.5 rounded-full mb-1" style={{ background: vars.g200 }}>
         <div className="h-2.5 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <p className="text-[11px] font-light" style={{ color: vars.g400 }}>{description}</p>
+      <p className="text-[12.5px] font-light" style={{ color: vars.g600 }}>{description}</p>
     </div>
   );
 }
@@ -141,7 +141,7 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
 
 function StatTile({ label, value, sub, color, icon: Icon }: { label: string; value: string; sub?: string; color?: string; icon?: any }) {
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: vars.g200 }}>
+    <div className="rounded-xl border-2 p-4 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ borderColor: "#C8497A" }}>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>{label}</p>
         {Icon && <Icon size={14} color={color || vars.accent} />}
@@ -390,27 +390,27 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <PieChart size={20} color="#ffffff" />
-            <h1 className="text-xl sm:text-2xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
-              Authority &amp; Activity Report
+            <PieChart size={24} color="#ffffff" />
+            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+              Measure &amp; Report
               <InfoTip text="Combines diagnostic scores, earned media authority, planned activity, the Earned Media Tracker and the website GEO audit. Designed to be exported and shared with the client." width={260} />
             </h1>
           </div>
           <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
-            {activeClient.name} &middot; Generated {reportDate}
+            Authority &amp; Activity Report &middot; {activeClient.name} &middot; Generated {reportDate}
           </p>
-          <p className="text-[14px] font-light mt-3 max-w-3xl leading-relaxed" style={{ color: vars.g600 }}>
+          <p className="text-[14px] font-light mt-3 max-w-3xl leading-relaxed" style={{ color: "#ffffff" }}>
             This is your shareable scorecard for the whole project. It pulls your audit scores, earned media and planned activity into one place so you can see how your AI authority is growing over time. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.g600 }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
             <Printer size={16} /> Print
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors hover:bg-gray-50" style={{ borderColor: vars.g200, color: vars.g600 }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
             <Share2 size={16} /> Share
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: vars.accent }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.accent }}>
             <Download size={16} /> Export PDF
           </button>
         </div>
@@ -436,7 +436,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       {activeTab === "summary" && (
         <div className="space-y-6">
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="rounded-xl p-4 sm:p-6 mb-5" style={{ background: "linear-gradient(135deg, #165265, #1f748f)" }}>
+            <div className="rounded-xl p-4 sm:p-6 mb-5" style={{ background: "linear-gradient(135deg, #A8305A, #C8497A)" }}>
               <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
                 <div className="flex flex-col items-center">
                   <div className="relative" style={{ width: 140, height: 140 }}>
@@ -463,17 +463,17 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                     {activeClient.name} currently scores {authorityScore}/100. This combines earned media authority and your website&rsquo;s technical &amp; content readiness for AI citation.
                   </p>
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">Earned</span>
-                      <span className="text-lg font-bold text-white">{earnedScore}/100</span>
+                    <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
+                      <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>Earned</span>
+                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{earnedScore}/100</span>
                     </div>
-                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">Website</span>
-                      <span className="text-lg font-bold text-white">{websiteScore}/100</span>
+                    <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
+                      <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>Website</span>
+                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{websiteScore}/100</span>
                     </div>
-                    <div className="px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.1)" }}>
-                      <span className="text-[10px] text-white/60 block uppercase tracking-wider">30-day trend</span>
-                      <span className="text-lg font-bold text-white flex items-center gap-1">
+                    <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
+                      <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>30-day trend</span>
+                      <span className="text-lg font-bold flex items-center gap-1" style={{ color: "#102B36" }}>
                         {activeClient.scoreTrend >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                         {activeClient.scoreTrend >= 0 ? "+" : ""}{activeClient.scoreTrend}
                       </span>
@@ -483,16 +483,16 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-5 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-5 p-4 rounded-xl" style={{ background: vars.navy }}>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - From</label>
-                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - From</label>
+                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - To</label>
-                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - To</label>
+                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
-              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-white" style={{ borderColor: vars.g200, color: vars.g600 }}>
                 Reset to project start
               </button>
             </div>
@@ -527,7 +527,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </div>
 
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
-            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.</p>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g600 }}>Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
               {[...websiteGeoScores.tech, ...websiteGeoScores.content].map(c => (
                 <ScoreBar key={c.label} label={c.label} score={c.score} max={c.max} description={c.desc} />
@@ -550,14 +550,14 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <h2 className="text-lg font-semibold mb-1" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>PR &amp; Marketing performance</h2>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>Pulled from your Earned Media Tracker for the date range below.</p>
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-4 rounded-xl border" style={{ background: vars.g50, borderColor: vars.g200 }}>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-4 rounded-xl" style={{ background: vars.navy }}>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - From</label>
-                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - From</label>
+                <input type="date" value={rangeFrom} onChange={e => setRangeFrom(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Date Range - To</label>
-                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - To</label>
+                <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
             </div>
           </div>

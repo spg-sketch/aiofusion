@@ -22,3 +22,4 @@
 - [AIO Fusion subsection header pink-wash pattern](aio-fusion-subsection-headers.md) — mini pink-wash bar, scoped to Project Set-Up page ONLY (client rejected it app-wide); skip per-item eyebrow labels inside loops.
 - [AIO Fusion impersonation + hierarchy redesign](aio-fusion-impersonation-and-hierarchy.md) — "View account" swaps session cookie server-side with stash/restore; accounts tree uses bordered rail nesting not marginLeft; e2e-test with disposable seeded accounts, never the real admin secret.
 - [IntakeForm scroll-to-top mechanism](aio-fusion-intake-scrolltop.md) — scrollIntoView on a padded anchor ref leaves a residual offset; walk to the real scroll ancestor and call scrollTo({top:0}) directly.
+- [AIO Fusion design/UX pass conventions](aio-fusion-design-ux-pass.md) — some pages shadow the shared `vars` palette with a local subset (missing tokens like gold); ReportPage's shared StatTile covers 4 report sections at once.

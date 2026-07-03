@@ -242,7 +242,7 @@ Engine used:
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Globe size={20} color="#ffffff" />
-            <h1 className="text-xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
+            <h1 className="text-3xl sm:text-4xl tracking-tight flex items-center" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
               Website Visibility Audit
               <InfoTip text="Runs an AI-powered audit of your website (URL or pasted text) against GEO readiness criteria - content structure, entity clarity, schema markup, and authority signals. Returns scored findings with prioritised recommendations." width={260} />
             </h1>

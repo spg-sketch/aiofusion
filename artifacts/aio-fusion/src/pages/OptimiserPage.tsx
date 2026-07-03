@@ -439,7 +439,7 @@ OUTPUT INSTRUCTIONS:
                 <span className="ml-3"><InfoTip text="Rewrites your content to be more citation-worthy for AI models - clearer entity definitions, better structure, stronger authority signals. Shows side-by-side tracked changes you can approve before publishing." width={260} /></span>
               </h1>
             </div>
-            <p className="text-[15px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.85)" }}>
+            <p className="text-[16px] font-light leading-relaxed max-w-4xl" style={{ color: "rgba(255,255,255,0.95)" }}>
               Paste your own human-written draft below - a press release, article, case study or any other copy - then click Optimise. The tool rewrites it with sharper structure, stronger authority signals and your key messages woven in, so AI models are more likely to cite it. Project Data is used as a reference brief, not as the source.
             </p>
           </div>
@@ -460,16 +460,14 @@ OUTPUT INSTRUCTIONS:
         <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="space-y-5">
             {/* Row 1 - Title + type */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker">
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
-                      className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
-                    <InfoTip text="Becomes the visible heading on the Comms Planner row, on the Archive card and on the Earned Media Tracker entry. Keep it descriptive (≈8 words)." />
-                  </div>
-                </Labelled>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker">
+                <div className="flex items-center gap-2">
+                  <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
+                    className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
+                  <InfoTip text="Becomes the visible heading on the Comms Planner row, on the Archive card and on the Earned Media Tracker entry. Keep it descriptive (≈8 words)." />
+                </div>
+              </Labelled>
               <Labelled label="Content Type" hint="Drives the scoring weight">
                 <div className="flex items-center gap-2">
                   <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
@@ -687,34 +685,34 @@ OUTPUT INSTRUCTIONS:
               </div>
             )}
 
-            {/* Action bar */}
-            <div className="flex flex-wrap items-center gap-2 pt-4 mt-4 border-t" style={{ borderColor: vars.g100 }}>
-              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all disabled:opacity-60" style={{ background: vars.teal }}>
+            {/* Action bar - freestanding pill buttons mirroring the Project Set-Up nav buttons */}
+            <div className="flex flex-wrap items-center gap-3 pt-4 mt-4 border-t" style={{ borderColor: vars.g100 }}>
+              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none" style={{ background: "#C8497A" }}>
                 {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
               </button>
               {optimised && (
-                <button onClick={rejectOptimised} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all" style={{ background: "#B03D33" }}>
+                <button onClick={rejectOptimised} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: "#B03D33" }}>
                   <X size={14} /> Reject Optimised
                 </button>
               )}
-              <button onClick={downloadDraft} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-bold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.navy, color: vars.navy }}>
+              <button onClick={downloadDraft} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.navy, color: vars.navy }}>
                 <Download size={14} /> Download
               </button>
-              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none" style={{ borderColor: vars.navy, color: vars.navy }}>
                 <FileText size={14} /> Optimised Notes
               </button>
-              <button onClick={shareDraft} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.g200, color: vars.navy }}>
+              <button onClick={shareDraft} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.navy, color: vars.navy }}>
                 <Send size={14} /> Share draft
               </button>
-              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-white hover:brightness-110 transition-all" style={{ background: vars.gold }}>
+              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: "#C8497A", color: "#C8497A" }}>
                 <Archive size={14} /> Archive
               </button>
               {canResearch && (
-                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold border bg-white hover:bg-slate-50 transition-colors" style={{ borderColor: vars.navy, color: vars.navy }}>
+                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.green, color: vars.green }}>
                   <Target size={14} /> Media Research
                 </button>
               )}
-              <button onClick={pushToPlanner} className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-[14px] font-semibold ml-auto text-white hover:brightness-110 transition-all" style={{ background: vars.accent }}>
+              <button onClick={pushToPlanner} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.gold }}>
                 <Calendar size={14} /> Push to Comms Planner
               </button>
             </div>

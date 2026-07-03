@@ -269,7 +269,7 @@ function MediaDatabasePage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: vars.g100 }}>
         {(["outlets", "contacts"] as const).map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-semibold transition-all capitalize" style={{ background: activeTab === t ? "white" : "transparent", color: activeTab === t ? vars.navy : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>
+          <button key={t} onClick={() => setActiveTab(t)} className="px-5 py-2 rounded-lg text-[13px] font-bold transition-all capitalize" style={{ background: activeTab === t ? "rgba(201,160,78,0.18)" : "transparent", color: activeTab === t ? "#7A5E25" : vars.g500, boxShadow: activeTab === t ? "0 1px 3px rgba(0,0,0,0.1)" : "none", border: activeTab === t ? `1px solid ${vars.gold}` : "1px solid transparent" }}>
             {t === "outlets" ? `Outlets (${outlets.length})` : `Contacts (${contacts.length})`}
           </button>
         ))}
@@ -279,9 +279,9 @@ function MediaDatabasePage() {
       {activeTab === "outlets" && (
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-5">
-            <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px]" style={{ borderColor: vars.g200 }} />
+            <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white" style={{ borderColor: vars.g200 }} />
             <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: vars.navy }}>
-              <option value="">All categories</option>
+              <option value="" style={{ color: "#ffffff", background: vars.navy }}>All categories</option>
               {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>

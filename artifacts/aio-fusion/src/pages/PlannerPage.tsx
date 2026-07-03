@@ -127,7 +127,6 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       <div className="rounded-2xl p-4 sm:p-5 mb-6" style={{ background: ink, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] mr-1" style={{ color: "rgba(251,246,236,0.6)" }}>View</span>
             <div className="inline-flex rounded-full p-1" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }} role="group" aria-label="Planner view">
               <button onClick={() => setView("spreadsheet")} className="flex items-center justify-center gap-1.5 w-[120px] px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: view === "spreadsheet" ? accentPink : "transparent", color: view === "spreadsheet" ? "white" : "rgba(251,246,236,0.7)" }}>
                 <Calendar size={12} /> Calendar View
@@ -156,13 +155,13 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="rounded-2xl p-5" style={{ background: ink, color: paper, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.25)" }}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Projected total score</p>
+          <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: "rgba(251,246,236,0.7)" }}>Projected total score</p>
           <p className="text-4xl font-bold mt-2" style={{ color: paper, fontFamily: "'Alice', Georgia, serif" }}>{projectedTotal}<span className="text-[14px] font-light" style={{ color: "rgba(251,246,236,0.5)" }}> / 100</span></p>
           <p className="text-[12px] font-light mt-1" style={{ color: "rgba(251,246,236,0.7)" }}>{projects.length} project{projects.length === 1 ? "" : "s"} in plan</p>
         </div>
         <div className="rounded-2xl p-5 border-2" style={{ background: "white", borderColor: `${accentPink}30` }}>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Visibility</p>
+            <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Visibility</p>
             <p className="text-[16px] font-bold" style={{ color: accentPink, fontFamily: "'Alice', Georgia, serif" }}>{Math.round(totals.visibility)}<span className="text-[12px] font-light" style={{ color: vars.g400 }}>/50</span></p>
           </div>
           <div className="h-3 rounded-full overflow-hidden" style={{ background: accentSoft }}>
@@ -171,7 +170,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         </div>
         <div className="rounded-2xl p-5 border-2" style={{ background: "white", borderColor: `${vars.teal}30` }}>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Authority</p>
+            <p className="text-[13px] font-bold uppercase tracking-[0.2em]" style={{ color: ink }}>Authority</p>
             <p className="text-[16px] font-bold" style={{ color: vars.teal, fontFamily: "'Alice', Georgia, serif" }}>{Math.round(totals.authority)}<span className="text-[12px] font-light" style={{ color: vars.g400 }}>/50</span></p>
           </div>
           <div className="h-3 rounded-full overflow-hidden" style={{ background: "rgba(40,150,185,0.15)" }}>
@@ -191,9 +190,9 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             const s = totals.byType[t] || 0;
             const hasScore = s > 0;
             return (
-              <div key={t} className="flex items-center gap-2.5 px-4 py-2 rounded-full border" style={{ background: hasScore ? accentSoft : paper, borderColor: hasScore ? `${accentPink}40` : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
+              <div key={t} className="flex items-center gap-2.5 px-4 py-2 rounded-full border transition-all duration-200 hover:-translate-y-1 hover:shadow-md" style={{ background: hasScore ? "rgba(201,160,78,0.18)" : paper, borderColor: hasScore ? vars.gold : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
                 <span className="text-[14px] font-semibold" style={{ color: ink }}>{t}</span>
-                <span className="text-[14px] font-bold" style={{ color: hasScore ? accentPink : vars.g400 }}>{Math.round(s)}</span>
+                <span className="text-[14px] font-bold" style={{ color: hasScore ? "#7A5E25" : vars.g400 }}>{Math.round(s)}</span>
               </div>
             );
           })}
@@ -212,25 +211,25 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <div>
             {/* Status key - horizontal strip ABOVE the calendar so it never obscures entries */}
             <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g500 }}>Status key:</span>
+              <span className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "#ffffff", background: vars.navy, padding: "4px 10px", borderRadius: 9999 }}>Status key:</span>
               {(["Planned", "Drafting", "Review", "Approved"] as PlannerStatus[]).map((st) => {
                 const cs = STATUS_COLOURS[st];
                 return (
-                  <span key={st} className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: cs.bg, color: cs.fg }}>{st}</span>
+                  <span key={st} className="text-[13px] font-semibold px-3 py-1.5 rounded-full" style={{ background: cs.fg, color: "#ffffff" }}>{st}</span>
                 );
               })}
             </div>
             <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2" style={{ borderColor: vars.g200 }}>
-                <h3 className="text-[15px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
-                <span className="text-[11px] font-light" style={{ color: vars.g400 }}>Click any row to open in the Content Optimiser</span>
+                <h3 className="text-[19px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
+                <span className="text-[13px] font-light" style={{ color: vars.g500 }}>Click any row to open in the Content Optimiser</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[11px] border-collapse">
                   <thead>
                     <tr>
                       {COLS.map((h) => (
-                        <th key={h} className="px-2 py-2 text-left font-semibold border" style={{ color: vars.navy, borderColor: "#FFFFFF", background: HEADER_BG, whiteSpace: "nowrap" }}>{h}</th>
+                        <th key={h} className="px-2 py-2 text-left font-semibold border" style={{ color: vars.navy, borderColor: vars.navy, background: HEADER_BG, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -248,25 +247,25 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                         return (
                           <tr key={`${w}-${i}`}>
                             {i === 0 && (
-                              <td rowSpan={rowCount} className="text-center font-semibold align-middle border" style={{ background: TEAL, color: "white", borderColor: "white", borderRightColor: TEAL_DARK, minWidth: 70, fontSize: 12 }}>
+                              <td rowSpan={rowCount} className="text-center font-semibold align-middle border" style={{ background: TEAL, color: "white", borderColor: vars.navy, borderRightColor: TEAL_DARK, minWidth: 70, fontSize: 12 }}>
                                 {label}
                               </td>
                             )}
                             {p ? (
                               <>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
-                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white" }}>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.contentType || ""}</td>
+                                <td className="px-3 py-2 border hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy }}>
                                   <div className="flex items-center gap-1">
                                     <span onClick={() => sendToOptimiser(p.id)} className="cursor-pointer hover:underline flex-1 min-w-0 truncate text-[12px]" style={{ color: vars.navy, fontWeight: 600 }} title="Open in Content Optimiser">{p.title}</span>
                                     <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${p.title}" from the Comms Planner?`)) deleteProject(p.id); }} className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-[12px] font-bold opacity-40 hover:opacity-100 transition-opacity hover:bg-red-50" style={{ color: vars.red }} title="Delete from Comms Planner">✕</button>
                                   </div>
                                 </td>
-                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-3 py-2 border cursor-pointer text-center hover:brightness-95 transition-all" style={{ background: cs!.bg, borderColor: "white", color: cs!.fg, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600 }}>{p.spokesperson || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: "white", color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}>/50</span></td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: "white", color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
+                                <td onClick={(e) => { e.stopPropagation(); setEditing(p); }} className="px-3 py-2 border cursor-pointer text-center hover:brightness-95 transition-all" style={{ background: cs!.bg, borderColor: vars.navy, color: cs!.fg, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }} title="Click to change status">{p.status}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>{p.spokesperson || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}>/50</span></td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
                               </>
                             ) : (
                               Array.from({ length: 8 }).map((__, c) => (
@@ -274,7 +273,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   key={c}
                                   onClick={c === 0 ? () => { addProject(); setTimeout(() => { const last = loadPlannerProjects()[0]; if (last) setEditing({ ...last, week: w }); }, 0); } : undefined}
                                   className={`px-3 py-2 border ${c === 0 ? "cursor-pointer hover:bg-slate-100 transition-colors" : ""}`}
-                                  style={{ background: slotBg, borderColor: "white", color: vars.g300, minHeight: 28 }}
+                                  style={{ background: slotBg, borderColor: vars.navy, color: vars.g300, minHeight: 28 }}
                                   title={c === 0 ? `Add project to ${label}` : undefined}
                                 >
                                   {c === 0 && i === wkProjects.length ? <button className="text-[13px] font-bold px-3 py-1.5 rounded-lg" style={{ color: vars.teal, background: "rgba(79,143,255,0.12)", border: `1.5px solid rgba(79,143,255,0.35)` }}>+ Add project</button> : ""}
