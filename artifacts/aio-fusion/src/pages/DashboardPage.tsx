@@ -178,7 +178,7 @@ function DashboardPage({
               </div>
             ))}
           </div>
-          <button onClick={() => onNavigate("intake")} className="mt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
+          <button onClick={() => onNavigate("intake")} className="mt-auto pt-4 text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
             {intakePct < 100 ? "Continue Project Set-Up" : "View Project Set-Up"} <ArrowRight size={12} />
           </button>
         </div>
