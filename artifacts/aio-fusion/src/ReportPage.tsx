@@ -674,7 +674,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Social impact</h3>
-              <select className="text-xs border rounded-lg px-2 py-1.5" style={{ borderColor: vars.g200 }}>
+              <select className="text-xs border rounded-lg px-2 py-1.5 font-semibold" style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}>
                 <option>Company LinkedIn</option>
                 <option>Spencer Gallagher</option>
                 <option>Helen Croydon</option>

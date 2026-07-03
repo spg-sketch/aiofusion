@@ -129,7 +129,7 @@ function SidebarContent({
           )}
         </div>
       </div>
-      <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
+      <div className="px-4 pt-4 pb-2 sticky top-0 z-10" style={{ background: "white" }}>
         <button
           onClick={() => { onBackToClients(); onItemClick?.(); }}
           className="group flex items-center justify-center gap-2 w-full rounded-full px-4 py-3 text-[14px] font-bold uppercase tracking-wider transition-all hover:brightness-110"
@@ -141,6 +141,8 @@ function SidebarContent({
           <ArrowLeft size={16} className="transition-transform duration-200 group-hover:-translate-x-0.5" />
           <span>Project Hub</span>
         </button>
+      </div>
+      <nav className="flex-1 pb-6 pt-2 px-4 space-y-4 overflow-y-auto">
         <div
           className="rounded-[20px] p-2"
           style={{
