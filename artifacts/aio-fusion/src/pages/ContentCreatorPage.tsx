@@ -654,7 +654,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               else setActionNotes(next.trim().split(/\s+/).slice(0, 150).join(" "));
             }}
             rows={4}
-            placeholder="e.g. Pair with launch event the week of; spokesperson availability tight; coordinate with Spencer on quote sign-off."
+            placeholder="e.g. Pair with launch event the week of; spokesperson availability tight; coordinate on quote sign-off."
             className="w-full px-3 py-2.5 rounded-lg border"
             style={{ borderColor: isOpt("actionNotes") ? optimisedColor : vars.g200, fontSize: `${editorFontSize}px`, lineHeight: 1.55, color: actionNotesColor }}
           />

@@ -656,7 +656,7 @@ OUTPUT INSTRUCTIONS:
                   else setActionNotes(next.trim().split(/\s+/).slice(0, 150).join(" "));
                 }}
                 rows={4}
-                placeholder="e.g. Embargo until Tuesday 09:00; align with launch webinar; coordinate with Spencer on quote sign-off."
+                placeholder="e.g. Embargo until Tuesday 09:00; align with launch webinar; coordinate on quote sign-off."
                 className="w-full p-3 rounded-lg border outline-none resize-vertical"
                 style={{ borderColor: vars.g200, color: vars.navy, fontSize: editorFontSize, lineHeight: 1.55 }}
               />

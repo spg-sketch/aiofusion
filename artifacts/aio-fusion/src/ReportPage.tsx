@@ -309,7 +309,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
   const socialImpactBySpokesperson: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = {
     "Company LinkedIn": { shares: "1,820", engagement: "4.2%", dms: "37", profileViews: "612" },
-    "Spencer Gallagher": { shares: "940", engagement: "5.6%", dms: "22", profileViews: "384" },
     "Helen Croydon": { shares: "610", engagement: "3.8%", dms: "14", profileViews: "251" },
   };
   const [socialImpactPerson, setSocialImpactPerson] = useState<string>("Company LinkedIn");
@@ -702,7 +701,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}
               >
                 <option>Company LinkedIn</option>
-                <option>Spencer Gallagher</option>
                 <option>Helen Croydon</option>
               </select>
             </div>
@@ -821,7 +819,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="ai-spokesperson" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Spokesperson <span className="font-normal normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
-                <input id="ai-spokesperson" placeholder="e.g. Spencer Gallagher" value={aiSearch.spokesperson} onChange={e => setAiSearch({ ...aiSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
+                <input id="ai-spokesperson" placeholder="e.g. Jane Doe" value={aiSearch.spokesperson} onChange={e => setAiSearch({ ...aiSearch, spokesperson: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} />
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="ai-content-title" className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Content Title <span className="font-normal normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
