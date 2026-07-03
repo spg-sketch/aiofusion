@@ -7,7 +7,7 @@ import {
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
-  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
@@ -139,6 +139,23 @@ function UsersAdminPage({
   // ── View account (support impersonation) ─────────────────────────────
   const [impersonatingUsername, setImpersonatingUsername] = useState<string | null>(null);
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
+
+  // ── Per-row "Manage" overflow menu + projects expand/collapse ─────────
+  // Secondary actions (Name/Password/Role/Seat cap/Sessions/Delete) live
+  // behind a single compact menu per account instead of a wrapping row of
+  // pill buttons, so each row reads as one clean line at a glance.
+  const [manageMenuUser, setManageMenuUser] = useState<string | null>(null);
+  const PROJECTS_COLLAPSE_THRESHOLD = 3;
+  const [expandedProjectsFor, setExpandedProjectsFor] = useState<Set<string>>(new Set());
+  const toggleProjectsExpanded = (username: string) => {
+    setExpandedProjectsFor((prev) => {
+      const next = new Set(prev);
+      const key = username.toLowerCase();
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const handleViewAccount = (username: string) => {
     setImpersonateError(null);
     setImpersonatingUsername(username);
@@ -509,21 +526,21 @@ function UsersAdminPage({
                     </span>
                   )}
                 </p>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
                     {roleLabel(u.role)}
                   </span>
-                  {hasDisplayName && (
-                    <span className="text-[11px] font-light" style={{ color: vars.g500 }}>login: {u.username}</span>
-                  )}
-                  {u.parent && (
-                    <span className="text-[11px] font-light" style={{ color: vars.g500 }}>reports to: {u.parent}</span>
-                  )}
+                  <span className="text-[11px] font-light truncate" style={{ color: vars.g500 }}>
+                    {[
+                      hasDisplayName ? u.username : null,
+                      u.parent ? `reports to ${u.parent}` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </span>
                   {(() => {
                     const t = tokenTotals[u.username.toLowerCase()];
                     if (!t || t.calls === 0) return null;
                     return (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{ background: vars.g100, color: vars.g500, border: `1px solid ${vars.g200}` }}>
+                      <span className="text-[10px] font-medium ml-auto sm:ml-0" style={{ color: vars.g400 }}>
                         {t.calls.toLocaleString()} {t.calls === 1 ? "call" : "calls"} &middot; £{t.cost.toFixed(4)}
                       </span>
                     );
@@ -531,98 +548,162 @@ function UsersAdminPage({
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="relative flex items-center gap-1.5 shrink-0">
               {!isMe && (
                 <button
                   onClick={() => handleViewAccount(u.username)}
                   disabled={impersonatingUsername === u.username}
                   title="View this account (support mode)"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:bg-black/5"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:brightness-110"
                   style={{ color: "white", background: accent, border: `1.5px solid ${accent}` }}
                 >
                   {impersonatingUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} View account
                 </button>
               )}
               <button
-                onClick={() => { setNameUser(editingName ? null : u.username); setNameValue(u.displayName || ""); setNameError(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                onClick={() => setManageMenuUser(manageMenuUser === u.username ? null : u.username)}
+                title="More actions"
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all hover:bg-black/5"
+                style={{ border: `1.5px solid ${vars.g200}`, color: vars.g500 }}
               >
-                <FileEdit size={12} /> {editingName ? "Cancel" : "Name"}
+                <MoreVertical size={14} />
               </button>
-              <button
-                onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-              >
-                <KeyRound size={12} /> {editingPw ? "Cancel" : "Password"}
-              </button>
-              {!isMe && (
-                <button
-                  onClick={() => { setRoleUser(editingRole ? null : u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                  style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                >
-                  <Shield size={12} /> {editingRole ? "Cancel" : "Role"}
-                </button>
+              {manageMenuUser === u.username && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setManageMenuUser(null)} />
+                  <div
+                    className="absolute right-0 top-9 z-20 w-48 py-1.5 rounded-xl overflow-hidden"
+                    style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 12px 32px -8px rgba(16,43,54,0.22)" }}
+                  >
+                    <button
+                      onClick={() => { setManageMenuUser(null); setNameUser(u.username); setNameValue(u.displayName || ""); setNameError(null); }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      style={{ color: ink }}
+                    >
+                      <FileEdit size={13} /> Edit name
+                    </button>
+                    <button
+                      onClick={() => { setManageMenuUser(null); setPwUser(u.username); setPwValue(""); setPwError(null); }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      style={{ color: ink }}
+                    >
+                      <KeyRound size={13} /> Reset password
+                    </button>
+                    {!isMe && (
+                      <button
+                        onClick={() => { setManageMenuUser(null); setRoleUser(u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        style={{ color: ink }}
+                      >
+                        <Shield size={13} /> Change role
+                      </button>
+                    )}
+                    {u.role !== "admin" && (
+                      <button
+                        onClick={() => { setManageMenuUser(null); setSeatCapUser(u.username); setSeatCapValue(""); setSeatCapError(null); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        style={{ color: ink }}
+                      >
+                        <Users size={13} /> Seat cap
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setManageMenuUser(null);
+                        setSessionsUser(u.username);
+                        setAccountSessions(null);
+                        setAccountSessionsError(null);
+                        loadAccountSessions(u.username);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                      style={{ color: ink }}
+                    >
+                      <MonitorSmartphone size={13} /> Sessions
+                    </button>
+                    <div className="my-1 border-t" style={{ borderColor: vars.g200 }} />
+                    <button
+                      onClick={() => { setManageMenuUser(null); handleDelete(u.username); }}
+                      disabled={isMe}
+                      title={isMe ? "You cannot delete your own account" : "Delete account"}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ color: accent }}
+                    >
+                      <Trash2 size={13} /> Delete account
+                    </button>
+                  </div>
+                </>
               )}
-              {u.role !== "admin" && (
-                <button
-                  onClick={() => { setSeatCapUser(editingSeatCap ? null : u.username); setSeatCapValue(""); setSeatCapError(null); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                  style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-                >
-                  <Users size={12} /> {editingSeatCap ? "Cancel" : "Seat cap"}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  const opening = !viewingSessions;
-                  setSessionsUser(opening ? u.username : null);
-                  setAccountSessions(null);
-                  setAccountSessionsError(null);
-                  if (opening) loadAccountSessions(u.username);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
-              >
-                <MonitorSmartphone size={12} /> {viewingSessions ? "Close" : "Sessions"}
-              </button>
-              <button
-                onClick={() => handleDelete(u.username)}
-                disabled={isMe}
-                title={isMe ? "You cannot delete your own account" : "Delete account"}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5"
-                style={{ color: accent, border: `1.5px solid ${accent}40` }}
-              >
-                <Trash2 size={12} /> Delete
-              </button>
             </div>
           </div>
+          {(editingName || editingPw || editingRole || editingSeatCap || viewingSessions) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:pl-[52px]">
+              {editingName && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full" style={{ background: vars.g100, color: vars.g500 }}>
+                  <FileEdit size={10} /> Editing name
+                  <button onClick={() => setNameUser(null)} className="ml-1 hover:opacity-60"><X size={10} /></button>
+                </span>
+              )}
+              {editingPw && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full" style={{ background: vars.g100, color: vars.g500 }}>
+                  <KeyRound size={10} /> Resetting password
+                  <button onClick={() => setPwUser(null)} className="ml-1 hover:opacity-60"><X size={10} /></button>
+                </span>
+              )}
+              {editingRole && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full" style={{ background: vars.g100, color: vars.g500 }}>
+                  <Shield size={10} /> Changing role
+                  <button onClick={() => setRoleUser(null)} className="ml-1 hover:opacity-60"><X size={10} /></button>
+                </span>
+              )}
+              {editingSeatCap && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full" style={{ background: vars.g100, color: vars.g500 }}>
+                  <Users size={10} /> Editing seat cap
+                  <button onClick={() => setSeatCapUser(null)} className="ml-1 hover:opacity-60"><X size={10} /></button>
+                </span>
+              )}
+              {viewingSessions && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-1 rounded-full" style={{ background: vars.g100, color: vars.g500 }}>
+                  <MonitorSmartphone size={10} /> Viewing sessions
+                  <button onClick={() => setSessionsUser(null)} className="ml-1 hover:opacity-60"><X size={10} /></button>
+                </span>
+              )}
+            </div>
+          )}
           {(() => {
             const owned = projectsByOwner(u.username);
+            const isExpanded = expandedProjectsFor.has(u.username.toLowerCase());
+            const shouldOfferCollapse = owned.length > PROJECTS_COLLAPSE_THRESHOLD;
+            const visible = shouldOfferCollapse && !isExpanded ? owned.slice(0, PROJECTS_COLLAPSE_THRESHOLD) : owned;
             return (
               <div className="mt-3 sm:pl-[52px]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>
-                  Projects ({owned.length})
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                    Projects ({owned.length})
+                  </p>
+                  {shouldOfferCollapse && (
+                    <button
+                      onClick={() => toggleProjectsExpanded(u.username)}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] hover:opacity-70"
+                      style={{ color: accent }}
+                    >
+                      {isExpanded ? "Show fewer" : `Show all ${owned.length}`} {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                    </button>
+                  )}
+                </div>
                 {owned.length === 0 ? (
-                  <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No projects yet.</p>
+                  <p className="text-[12px] font-light italic mt-1.5" style={{ color: vars.g400 }}>No projects yet.</p>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {owned.map((p) => (
-                      <div key={p.id} className="flex flex-col gap-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
-                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
-                            {p.name}
-                          </span>
-                          <span className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g400 }}>Owner</span>
+                  <div className="flex flex-col mt-1.5 rounded-lg overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
+                    {visible.map((p, i) => (
+                      <div key={p.id} style={{ background: i % 2 === 0 ? "white" : vars.g100 + "60", borderTop: i > 0 ? `1px solid ${vars.g200}` : undefined }}>
+                        <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white shrink-0" style={{ background: p.color }}>{p.initials}</span>
+                          <span className="text-[12px] font-medium truncate" style={{ color: ink }}>{p.name}</span>
                           <select
                             value={(p.owner || "").toLowerCase()}
                             onChange={(e) => handleAssign(p.id, e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg border text-[12px] bg-white focus:outline-none focus:ring-2"
-                            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                            className="ml-auto px-2 py-1 rounded-md border text-[11px] bg-white focus:outline-none focus:ring-2"
+                            style={{ borderColor: vars.g200, color: vars.g500, ["--tw-ring-color" as any]: accent }}
                           >
                             {users.map((o) => (
                               <option key={o.username} value={o.username.toLowerCase()}>
@@ -632,7 +713,7 @@ function UsersAdminPage({
                           </select>
                         </div>
                         {(auditLocks[p.id] ?? []).map((lk) => (
-                          <div key={lk.auditType} className="flex items-center gap-2 pl-1">
+                          <div key={lk.auditType} className="flex items-center gap-2 px-2.5 pb-1.5 -mt-0.5">
                             <Lock size={10} style={{ color: vars.g400 }} />
                             <span className="text-[10px]" style={{ color: vars.g500 }}>
                               {AUDIT_TYPE_LABELS[lk.auditType] ?? lk.auditType} locked
@@ -641,7 +722,7 @@ function UsersAdminPage({
                             <button
                               onClick={() => clearAuditLock(p.id, lk.auditType)}
                               className="text-[9px] font-semibold px-1.5 py-0.5 rounded border hover:opacity-80"
-                              style={{ borderColor: vars.g300, color: vars.g500, background: vars.g100 }}
+                              style={{ borderColor: vars.g300, color: vars.g500, background: "white" }}
                             >
                               Clear lock
                             </button>
@@ -809,10 +890,10 @@ function UsersAdminPage({
   }
 
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "#1A647B", color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
+    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderBottom: `1px solid ${vars.g200}` }}>
         <button onClick={onBack} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
         <button
           onClick={onBack}
@@ -825,14 +906,14 @@ function UsersAdminPage({
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">
         <div className="mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)" }}>
-            <Users size={12} color="white" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-white">Admin · User Management</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft }}>
+            <Users size={12} color={accent} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Admin · User Management</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl leading-[1.1] text-white" style={{ fontFamily: "'Alice', Georgia, serif" }}>
+          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
             Manage platform accounts
           </h1>
-          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: "rgba(255,255,255,0.75)" }}>
+          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only.
           </p>
         </div>

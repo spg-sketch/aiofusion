@@ -24,9 +24,26 @@ a chevron expand/collapse and a sub-account count badge on any master with child
 for hierarchy clarity; the bordered/rail nesting pattern is now the expected idiom
 for this page.
 
-**E2e testing tip:** do NOT try to log in as the real "admin" account in tests —
-`PLATFORM_ADMIN_PASSWORD` is a secret you cannot read, and the dev fallback constant
-in `demo-run.ts` only applies when the secret is unset. Instead seed disposable
-test accounts directly via SQL (matching `platform_accounts` schema: `username`,
-`password_hash` as `scrypt$<salt>$<derivedHex>` using Node's `crypto.scryptSync`
-with keylen 64, `role`, `parent`), run the test, then delete them afterward.
+**E2e testing tip:** you can log in as the real "admin" via `curl -d
+"{\"password\":\"$PLATFORM_ADMIN_PASSWORD\"}"` — bash expands the env var without
+ever printing it to you, and the login response/cookie jar contain no secret
+either. Use that admin session to POST a disposable test account with a
+password *you* choose (`/api/platform/accounts`), run the browser/e2e test as
+that account, then delete it via `/api/platform/accounts/delete`. Simpler than
+seeding rows via SQL and avoids duplicating the scrypt hash format by hand.
+
+**Density/layout, not just hierarchy:** fixing the nesting structure alone did
+not satisfy "make this page better laid out" — the client's real complaint was
+row-level clutter (5-7 always-visible pill buttons wrapping onto multiple
+lines) and a page background that didn't match the rest of the app. Fixed by:
+background `#1A647B` teal → light `#f8fafc` (teal is a client-approved
+exception reserved for the in-project Dashboard only, per
+`AIO_Fusion_Style_Guide.md` — don't reuse it elsewhere without asking); and
+collapsing secondary per-account actions (Name/Password/Role/Seat
+cap/Sessions/Delete) into one kebab "more actions" dropdown, leaving only
+"View account" as a visible pill. Projects sub-list truncates to 3 with a
+"Show all N" toggle when an account owns more.
+
+**Why:** a purely structural fix (tree nesting) reads as cosmetic if the
+per-row information density and off-brand background are untouched — those
+are what actually register as "cluttered" to a non-technical reviewer.
