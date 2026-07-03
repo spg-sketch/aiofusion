@@ -21,3 +21,4 @@
 - [AIO Fusion content gen token limits + intake field mapping](aio-fusion-content-gen-tokens.md) — GEN_MAX_TOKENS must include JSON-wrapper overhead or extractJson fails; intake sector/name live in formData["4.4"/"4.1"], not top-level.
 - [AIO Fusion subsection header pink-wash pattern](aio-fusion-subsection-headers.md) — mini pink-wash bar, scoped to Project Set-Up page ONLY (client rejected it app-wide); skip per-item eyebrow labels inside loops.
 - [AIO Fusion impersonation + hierarchy redesign](aio-fusion-impersonation-and-hierarchy.md) — "View account" swaps session cookie server-side with stash/restore; accounts tree uses bordered rail nesting not marginLeft; e2e-test with disposable seeded accounts, never the real admin secret.
+- [IntakeForm scroll-to-top mechanism](aio-fusion-intake-scrolltop.md) — scrollIntoView on a padded anchor ref leaves a residual offset; walk to the real scroll ancestor and call scrollTo({top:0}) directly.

@@ -935,7 +935,21 @@ export default function IntakePage() {
   // section (Next/Previous, sidebar click or track switch). Without this the
   // page stays scrolled at the bottom where the last buttons were.
   const topRef = useRef<HTMLDivElement>(null);
-  const scrollToTop = () => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToTop = () => {
+    const el = topRef.current;
+    if (!el) return;
+    let scrollParent: HTMLElement | null = el.parentElement;
+    while (scrollParent && scrollParent !== document.body && scrollParent !== document.documentElement) {
+      const style = window.getComputedStyle(scrollParent);
+      if (/(auto|scroll)/.test(style.overflowY) && scrollParent.scrollHeight > scrollParent.clientHeight) break;
+      scrollParent = scrollParent.parentElement;
+    }
+    if (scrollParent && scrollParent !== document.body && scrollParent !== document.documentElement) {
+      scrollParent.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
   const didMountSection = useRef(false);
   useEffect(() => {
     if (!didMountSection.current) { didMountSection.current = true; return; }
