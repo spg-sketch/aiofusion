@@ -184,47 +184,47 @@ function DashboardPage({
         </div>
 
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+          <h3 className="text-[12px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
             Earned Media Visibility Audit
             <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
           </h3>
           {earnedScore === null ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">
               <Eye size={28} color={vars.g300} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Earned Media Visibility Audit to see your AI mention score.</p>
+              <p className="text-[13px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
+              <p className="text-[12px] font-light mb-3" style={{ color: vars.g400 }}>Run the Earned Media Visibility Audit to see your AI mention score.</p>
               {earnedLockDate
-                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {earnedLockDate}</p>
-                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
+                ? <p className="text-[11px]" style={{ color: vars.g400 }}>Last run: {earnedLockDate}</p>
+                : <p className="text-[11px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-4 mb-3">
-                <div className="relative w-16 h-16 flex-shrink-0">
-                  <svg width={64} height={64} viewBox="0 0 64 64">
-                    <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
-                    <circle cx={32} cy={32} r={26} fill="none"
+              <div className="flex flex-col items-center text-center mb-4">
+                <div className="relative w-24 h-24 flex-shrink-0 mb-3">
+                  <svg width={96} height={96} viewBox="0 0 96 96">
+                    <circle cx={48} cy={48} r={40} fill="none" stroke={vars.g200} strokeWidth={7} />
+                    <circle cx={48} cy={48} r={40} fill="none"
                       stroke={earnedScore >= 60 ? vars.green : earnedScore >= 30 ? vars.amber : vars.red}
-                      strokeWidth={5} strokeDasharray={`${(earnedScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+                      strokeWidth={7} strokeDasharray={`${(earnedScore / 100) * 251} 251`} strokeLinecap="round" transform="rotate(-90 48 48)" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{earnedScore}</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold" style={{ color: vars.navy }}>{earnedScore}</span>
                 </div>
-                <div className="flex-1 space-y-1.5">
+                <div className="w-full space-y-1.5">
                   {llmModels.map((m) => (
-                    <div key={m.name} className="flex items-center gap-2">
-                      {m.mentioned ? <CheckCircle2 size={13} color={vars.green} /> : <XCircle size={13} color={vars.red} />}
-                      <span className="text-[12px]" style={{ color: vars.navy }}>{m.name}</span>
+                    <div key={m.name} className="flex items-center justify-center gap-2">
+                      {m.mentioned ? <CheckCircle2 size={14} color={vars.green} /> : <XCircle size={14} color={vars.red} />}
+                      <span className="text-[13px]" style={{ color: vars.navy }}>{m.name}</span>
                     </div>
                   ))}
-                  {(earnedLockDate || auditDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {earnedLockDate ?? auditDate}</p>}
+                  {(earnedLockDate || auditDate) && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Last run {earnedLockDate ?? auditDate}</p>}
                 </div>
               </div>
               {topCompetitors.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
                   <div className="flex flex-wrap gap-1.5">
                     {topCompetitors.map((c) => (
-                      <span key={c} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
+                      <span key={c} className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
                         {c}
                       </span>
                     ))}
@@ -242,39 +242,39 @@ function DashboardPage({
         </div>
 
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
-          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.g400 }}>
+          <h3 className="text-[12px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
             Website Visibility Audit
             <InfoTip text="Score for how well your website is structured for AI citation - schema, crawlability, entity clarity, internal authority graph." />
           </h3>
           {websiteScore === null ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">
               <Globe size={28} color={vars.g300} className="mb-2" />
-              <p className="text-[12px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
-              <p className="text-[11px] font-light mb-3" style={{ color: vars.g400 }}>Run the Website Visibility Audit to score your site for AI citation readiness.</p>
+              <p className="text-[13px] font-medium mb-1" style={{ color: vars.g500 }}>No audit run yet</p>
+              <p className="text-[12px] font-light mb-3" style={{ color: vars.g400 }}>Run the Website Visibility Audit to score your site for AI citation readiness.</p>
               {websiteLockDate
-                ? <p className="text-[10px]" style={{ color: vars.g400 }}>Last run: {websiteLockDate}</p>
-                : <p className="text-[10px]" style={{ color: vars.g300 }}>Never run</p>}
+                ? <p className="text-[11px]" style={{ color: vars.g400 }}>Last run: {websiteLockDate}</p>
+                : <p className="text-[11px]" style={{ color: vars.g300 }}>Never run</p>}
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-4 mb-3">
-                <div className="relative w-16 h-16 flex-shrink-0">
-                  <svg width={64} height={64} viewBox="0 0 64 64">
-                    <circle cx={32} cy={32} r={26} fill="none" stroke={vars.g200} strokeWidth={5} />
-                    <circle cx={32} cy={32} r={26} fill="none"
+              <div className="flex flex-col items-center text-center mb-4">
+                <div className="relative w-24 h-24 flex-shrink-0 mb-3">
+                  <svg width={96} height={96} viewBox="0 0 96 96">
+                    <circle cx={48} cy={48} r={40} fill="none" stroke={vars.g200} strokeWidth={7} />
+                    <circle cx={48} cy={48} r={40} fill="none"
                       stroke={websiteScore >= 70 ? vars.green : websiteScore >= 40 ? vars.amber : vars.red}
-                      strokeWidth={5} strokeDasharray={`${(websiteScore / 100) * 163} 163`} strokeLinecap="round" transform="rotate(-90 32 32)" />
+                      strokeWidth={7} strokeDasharray={`${(websiteScore / 100) * 251} 251`} strokeLinecap="round" transform="rotate(-90 48 48)" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold" style={{ color: vars.navy }}>{websiteScore}</span>
+                  <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold" style={{ color: vars.navy }}>{websiteScore}</span>
                 </div>
-                <div className="flex-1 space-y-1.5">
+                <div className="w-full space-y-1.5">
                   {topDiagCategories.map((cat) => (
-                    <div key={cat.name} className="flex items-center gap-2">
-                      {cat.pct >= 0.7 ? <CheckCircle2 size={13} color={vars.green} /> : cat.pct >= 0.4 ? <AlertTriangle size={13} color={vars.amber} /> : <XCircle size={13} color={vars.red} />}
-                      <span className="text-[12px] truncate" style={{ color: vars.navy }}>{cat.name}</span>
+                    <div key={cat.name} className="flex items-center justify-center gap-2">
+                      {cat.pct >= 0.7 ? <CheckCircle2 size={14} color={vars.green} /> : cat.pct >= 0.4 ? <AlertTriangle size={14} color={vars.amber} /> : <XCircle size={14} color={vars.red} />}
+                      <span className="text-[13px] truncate" style={{ color: vars.navy }}>{cat.name}</span>
                     </div>
                   ))}
-                  {(websiteLockDate || diagnosticDate) && <p className="text-[10px]" style={{ color: vars.g400 }}>Last run {websiteLockDate ?? diagnosticDate}</p>}
+                  {(websiteLockDate || diagnosticDate) && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Last run {websiteLockDate ?? diagnosticDate}</p>}
                 </div>
               </div>
             </>
