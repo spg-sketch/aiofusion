@@ -108,7 +108,6 @@ function DashboardPage({
         { name: "Claude", mentioned: latestAudit.result.byModel.claude.mentions > 0 },
       ]
     : [];
-  const topCompetitors = latestAudit?.result.topCompetitors?.slice(0, 3).map((c) => c.name) ?? [];
   const auditDate = latestAudit
     ? new Date(latestAudit.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -157,13 +156,13 @@ function DashboardPage({
             <InfoTip text="The onboarding questionnaire that captures the business profile, messaging, spokespeople and target media. Once accepted it becomes the signed-off Project Data brief used to optimise every piece of content." />
           </h3>
           <div className="flex items-center gap-3 mb-3">
-            <div className="relative w-14 h-14 flex-shrink-0">
-              <svg width={56} height={56} viewBox="0 0 56 56">
-                <circle cx={28} cy={28} r={22} fill="none" stroke={vars.g200} strokeWidth={5} />
-                <circle cx={28} cy={28} r={22} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
-                  strokeWidth={5} strokeDasharray={`${(intakePct / 100) * 138} 138`} strokeLinecap="round" transform="rotate(-90 28 28)" />
+            <div className="relative w-24 h-24 flex-shrink-0">
+              <svg width={96} height={96} viewBox="0 0 96 96">
+                <circle cx={48} cy={48} r={40} fill="none" stroke={vars.g200} strokeWidth={7} />
+                <circle cx={48} cy={48} r={40} fill="none" stroke={intakePct >= 80 ? vars.green : intakePct >= 40 ? vars.amber : vars.red}
+                  strokeWidth={7} strokeDasharray={`${(intakePct / 100) * 251} 251`} strokeLinecap="round" transform="rotate(-90 48 48)" />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xs font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-xl font-bold" style={{ color: vars.navy }}>{intakePct}%</span>
             </div>
             <div>
               <p className="text-sm font-semibold" style={{ color: vars.navy }}>{intakeCompleted} of {intakeSections.length}</p>
@@ -200,12 +199,12 @@ function DashboardPage({
           ) : (
             <>
               <div className="flex flex-col items-center text-center mb-4">
-                <div className="relative w-24 h-24 flex-shrink-0 mb-3">
-                  <svg width={96} height={96} viewBox="0 0 96 96">
-                    <circle cx={48} cy={48} r={40} fill="none" stroke={vars.g200} strokeWidth={7} />
-                    <circle cx={48} cy={48} r={40} fill="none"
+                <div className="relative w-28 h-28 flex-shrink-0 mb-3">
+                  <svg width={112} height={112} viewBox="0 0 112 112">
+                    <circle cx={56} cy={56} r={47} fill="none" stroke={vars.g200} strokeWidth={8} />
+                    <circle cx={56} cy={56} r={47} fill="none"
                       stroke={earnedScore >= 60 ? vars.green : earnedScore >= 30 ? vars.amber : vars.red}
-                      strokeWidth={7} strokeDasharray={`${(earnedScore / 100) * 251} 251`} strokeLinecap="round" transform="rotate(-90 48 48)" />
+                      strokeWidth={8} strokeDasharray={`${(earnedScore / 100) * 295} 295`} strokeLinecap="round" transform="rotate(-90 56 56)" />
                   </svg>
                   <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold" style={{ color: vars.navy }}>{earnedScore}</span>
                 </div>
@@ -219,18 +218,6 @@ function DashboardPage({
                   {(earnedLockDate || auditDate) && <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>Last run {earnedLockDate ?? auditDate}</p>}
                 </div>
               </div>
-              {topCompetitors.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-1.5" style={{ color: vars.g400 }}>Top competitors cited instead</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {topCompetitors.map((c) => (
-                      <span key={c} className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: "rgba(176,61,51,0.06)", color: vars.red }}>
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </>
           )}
           <button onClick={() => onNavigate("llm-check")} className="mt-auto text-xs font-medium flex items-center gap-1 hover:underline" style={{ color: vars.accent }}>
@@ -258,12 +245,12 @@ function DashboardPage({
           ) : (
             <>
               <div className="flex flex-col items-center text-center mb-4">
-                <div className="relative w-24 h-24 flex-shrink-0 mb-3">
-                  <svg width={96} height={96} viewBox="0 0 96 96">
-                    <circle cx={48} cy={48} r={40} fill="none" stroke={vars.g200} strokeWidth={7} />
-                    <circle cx={48} cy={48} r={40} fill="none"
+                <div className="relative w-28 h-28 flex-shrink-0 mb-3">
+                  <svg width={112} height={112} viewBox="0 0 112 112">
+                    <circle cx={56} cy={56} r={47} fill="none" stroke={vars.g200} strokeWidth={8} />
+                    <circle cx={56} cy={56} r={47} fill="none"
                       stroke={websiteScore >= 70 ? vars.green : websiteScore >= 40 ? vars.amber : vars.red}
-                      strokeWidth={7} strokeDasharray={`${(websiteScore / 100) * 251} 251`} strokeLinecap="round" transform="rotate(-90 48 48)" />
+                      strokeWidth={8} strokeDasharray={`${(websiteScore / 100) * 295} 295`} strokeLinecap="round" transform="rotate(-90 56 56)" />
                   </svg>
                   <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold" style={{ color: vars.navy }}>{websiteScore}</span>
                 </div>
