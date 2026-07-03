@@ -1,9 +1,11 @@
-export type AuditOperationType = "visibility" | "website" | "draft";
+export type AuditOperationType = "visibility" | "website" | "draft" | "content-draft" | "content-optimise";
 
 const DEFAULTS: Record<AuditOperationType, number> = {
   visibility: 300,
   website: 120,
   draft: 60,
+  "content-draft": 75,
+  "content-optimise": 40,
 };
 
 const HISTORY_SIZE = 5;

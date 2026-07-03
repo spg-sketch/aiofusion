@@ -18,6 +18,7 @@ import { CategoryPickerModal, CONTENT_TYPES, countWords, Labelled } from "./shar
 import InfoTip from "../InfoTip";
 import { loadSavedAudits } from "../LlmCheckPage";
 import CountdownBanner from "../components/CountdownBanner";
+import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "../lib/auditTiming";
 type CreatorFieldKey = "headline" | "standfirst" | "pitch" | "transcript" | "actionNotes";
 
 const CREATOR_FIELD_LABELS: Record<CreatorFieldKey, string> = {
@@ -58,6 +59,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const [creatorError, setCreatorError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateChars, setGenerateChars] = useState(0);
+  const generateStartRef = useRef<number | null>(null);
+  const optimiseStartRef = useRef<number | null>(null);
   const [generated, setGenerated] = useState(false);
   const [draftSnapshot, setDraftSnapshot] = useState<{ articleHeadline: string; standfirst: string; transcript: string } | null>(null);
   const [supportingData, setSupportingData] = useState<{ text: string; url: string }[]>([]);
@@ -183,6 +186,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     setCreatorError("");
     setCreatorChars(0);
     setOptimisingField(key);
+    optimiseStartRef.current = Date.now();
     try {
       const data = await streamContent(
         "/api/content/creator-field",
@@ -217,10 +221,14 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       setFieldValue(key, nextValue);
       setChangeLog((prev) => [...prev, ...log]);
       setOptimisedFields((prev) => new Set(prev).add(key));
+      if (optimiseStartRef.current) {
+        recordAuditDuration("content-optimise", Date.now() - optimiseStartRef.current, getAuditDurationSeconds("content-optimise") * 1000);
+      }
     } catch (err) {
       setCreatorError(err instanceof Error ? err.message : "The optimisation could not be generated right now. Please try again.");
     } finally {
       setOptimisingField(null);
+      optimiseStartRef.current = null;
     }
   };
 
@@ -249,6 +257,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
     setCreatorError("");
     setGenerateChars(0);
     setGenerating(true);
+    generateStartRef.current = Date.now();
     const snapshot = { articleHeadline, standfirst, transcript };
     let queryAuditData: { mentionCount: number; totalProbes: number; competitors: string[] } | undefined;
     if (targetQuery) {
@@ -309,10 +318,14 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       setOptimisedFields(new Set());
       setFieldSnapshots({});
       setGenerated(true);
+      if (generateStartRef.current) {
+        recordAuditDuration("content-draft", Date.now() - generateStartRef.current, getAuditDurationSeconds("content-draft") * 1000);
+      }
     } catch (err) {
       setCreatorError(err instanceof Error ? err.message : "The draft could not be generated right now. Please try again.");
     } finally {
       setGenerating(false);
+      generateStartRef.current = null;
     }
   };
 
@@ -709,7 +722,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       </div>
 
       {generating && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          <CountdownBanner
+            active={generating}
+            durationSeconds={getAuditDurationSeconds("content-draft")}
+            label="Your draft is being written"
+            sampleCount={getAuditSampleCount("content-draft")}
+          />
           <GenerationProgress
             stages={[
               "Reading your Project Data and brief",
@@ -725,7 +744,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       )}
 
       {optimisingField && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          <CountdownBanner
+            active={optimisingField !== null}
+            durationSeconds={getAuditDurationSeconds("content-optimise")}
+            label="Your copy is being optimised"
+            sampleCount={getAuditSampleCount("content-optimise")}
+          />
           <GenerationProgress
             stages={[
               `Reading your ${CREATOR_FIELD_LABELS[optimisingField] || "copy"}`,
@@ -757,6 +782,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           >
             {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
           </button>
+          {!generating && !optimisingField && (() => { const hint = getTypicalDurationHint("content-draft"); return hint ? (
+            <span className="flex items-center gap-1 text-[11px]" style={{ color: vars.g400 }}>
+              <Clock size={12} />
+              {hint}
+            </span>
+          ) : null; })()}
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
