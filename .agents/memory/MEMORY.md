@@ -23,3 +23,4 @@
 - [AIO Fusion impersonation + hierarchy redesign](aio-fusion-impersonation-and-hierarchy.md) — "View account" swaps session cookie server-side with stash/restore; accounts tree uses bordered rail nesting not marginLeft; e2e-test with disposable seeded accounts, never the real admin secret.
 - [IntakeForm scroll-to-top mechanism](aio-fusion-intake-scrolltop.md) — scrollIntoView on a padded anchor ref leaves a residual offset; walk to the real scroll ancestor and call scrollTo({top:0}) directly.
 - [AIO Fusion design/UX pass conventions](aio-fusion-design-ux-pass.md) — some pages shadow the shared `vars` palette with a local subset (missing tokens like gold); ReportPage's shared StatTile covers 4 report sections at once.
+- [AIO Fusion Earned Media Tracker scoping](aio-fusion-earned-tracker-scoping.md) — tracker had zero per-client isolation (one global key); check any bare-key localStorage feature for this same cross-client leak pattern.
