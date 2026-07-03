@@ -201,11 +201,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
       {view === "spreadsheet" && (() => {
         const SLOTS_PER_WEEK = 6;
-        const TEAL = "#5BA8B5";
-        const TEAL_DARK = "#3A8693";
+        const TEAL = vars.navy;
+        const TEAL_DARK = vars.navy;
         const SLOT_BG_A = "#F2F8F9";
         const SLOT_BG_B = "#E6F0F2";
-        const HEADER_BG = "#9FD0D7";
+        const HEADER_BG = vars.navy;
         const COLS = ["Week of", "Content Type", "Content Title", "Status", "Key Message", "Spokesperson", "Release Date", "Authority Score", "Action Notes"];
         return (
           <div>
@@ -229,7 +229,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   <thead>
                     <tr>
                       {COLS.map((h) => (
-                        <th key={h} className="px-2 py-2 text-left font-semibold border" style={{ color: vars.navy, borderColor: vars.navy, background: HEADER_BG, whiteSpace: "nowrap" }}>{h}</th>
+                        <th key={h} className="px-2 py-2 text-left font-semibold border" style={{ color: "white", borderColor: vars.navy, background: HEADER_BG, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
