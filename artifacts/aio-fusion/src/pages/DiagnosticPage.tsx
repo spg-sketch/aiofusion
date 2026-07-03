@@ -73,18 +73,37 @@ function DiagnosticPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDiagnosticId, savedDiagnostics]);
 
-  function saveDiagnostic() {
-    if (!result || justSaved) return;
+  function saveDiagnostic(target: DiagnosticResult | null = result) {
+    if (!target || justSaved) return;
     const entry: SavedDiagnostic = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       savedAt: new Date().toISOString(),
-      result,
+      result: target,
     };
     const next = [entry, ...savedDiagnostics];
     if (!persistSavedDiagnostics(activeClient.id, next)) {
       alert("Could not save this audit - your browser storage may be full. Try removing a few older saved audits.");
       return;
     }
+    setSavedDiagnostics(next);
+    setJustSaved(true);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  // Automatically saves a freshly-run audit so it appears in the sidebar
+  // straight away, without relying on the user to spot the "Save audit"
+  // button in the footer. Uses the freshly-fetched savedDiagnostics list
+  // (rather than the possibly-stale `savedDiagnostics` state) so it can't
+  // race with the click-to-save path and create a duplicate.
+  function autoSaveDiagnostic(target: DiagnosticResult) {
+    const current = loadSavedDiagnostics(activeClient.id);
+    const entry: SavedDiagnostic = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      savedAt: new Date().toISOString(),
+      result: target,
+    };
+    const next = [entry, ...current];
+    if (!persistSavedDiagnostics(activeClient.id, next)) return;
     setSavedDiagnostics(next);
     setJustSaved(true);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
@@ -226,6 +245,11 @@ Engine used:
       const data = await resp.json();
       setResult(data);
       setJustSaved(false);
+      // Auto-save every completed audit so it shows up in the sidebar
+      // immediately, without waiting for the user to notice/click "Save audit".
+      // saveDiagnostic() itself is duplicate-safe, so a later manual click
+      // (or the effect below) is a no-op if this already saved it.
+      autoSaveDiagnostic(data);
       // Refresh audit lock so the next visit shows the correct last-run date.
       const lockResp = await fetch(`${apiBase}/api/audit-lock?projectId=${encodeURIComponent(activeClient.id)}&auditType=website`, { credentials: "include" }).catch(() => null);
       if (lockResp?.ok) lockResp.json().then(setDiagAuditLock).catch(() => {});
@@ -420,7 +444,7 @@ Engine used:
               )}
             </div>
             <div className="flex items-center gap-2 self-start flex-shrink-0">
-              <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+              <button onClick={() => saveDiagnostic()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
                 {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
               </button>
               <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
@@ -449,7 +473,7 @@ Engine used:
       <div className="rounded-2xl border p-4 sm:p-6 mb-6" style={{ background: "white", borderColor: vars.g200 }}>
         <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
           <div className="flex flex-col items-center flex-shrink-0">
-            <div className="relative" style={{ width: 130, height: 130 }}>
+            <div className="relative" style={{ width: 160, height: 160 }}>
               <svg width={160} height={160}>
                 <circle cx={80} cy={80} r={70} fill="none" stroke={vars.g200} strokeWidth={12} />
                 <circle cx={80} cy={80} r={70} fill="none"
@@ -626,7 +650,7 @@ Engine used:
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
           {copiedKey === "vibe" ? <CheckCircle2 size={14} /> : <Code2 size={14} />} {copiedKey === "vibe" ? "Copied" : "Vibe Code Prompt"}
         </button>
         <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.navy }}>
@@ -636,10 +660,10 @@ Engine used:
           Run New Diagnostic
         </button>
         <div className="flex items-center gap-2 sm:ml-auto">
-          <button onClick={saveDiagnostic} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+          <button onClick={() => saveDiagnostic()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
             {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
           </button>
-          <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#1f748f" }}>
+          <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.accent }}>
             <Download size={14} /> Print / PDF
           </button>
         </div>
