@@ -560,7 +560,7 @@ OUTPUT INSTRUCTIONS:
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {mediaCats.map((c) => (
-                      <span key={c} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(201,160,78,0.12)", color: "#7A5E25" }}>
+                      <span key={c} className="text-[11px] font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1.5" style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}>
                         {c}
                         <button onClick={() => setMediaCats(mediaCats.filter((x) => x !== c))}><XCircle size={11} /></button>
                       </span>
