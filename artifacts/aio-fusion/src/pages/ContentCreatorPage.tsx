@@ -502,11 +502,11 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
           <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
             Project name
-            <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker.</span>
+            <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker.</span>
           </label>
           <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
             Content type
-            <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· Press release, article, case study, blog, social post.</span>
+            <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· Press release, article, case study, blog, social post.</span>
           </label>
           <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="e.g. Q2 thought leadership programme" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
           <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
@@ -573,7 +573,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
             <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
           </p>
-          <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+          <p className="text-[13px] font-normal mt-1" style={{ color: vars.g600 }}>
             Fill in the fields below, then click <strong>Create Draft</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
           </p>
           {generated && draftSnapshot && (
@@ -594,7 +594,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
-            <span className="text-[11px] font-light" style={{ color: vars.g400 }}>Use Optimise this copy on any field to weave in your key messages.</span>
+            <span className="text-[12px] font-normal" style={{ color: vars.g600 }}>Use Optimise this copy on any field to weave in your key messages.</span>
           </div>
           <div className="flex items-center gap-2">
             <label htmlFor="editor-font-size" className="text-[11px] font-medium" style={{ color: vars.g500 }}>Font size</label>

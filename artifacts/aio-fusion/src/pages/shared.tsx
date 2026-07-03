@@ -58,7 +58,7 @@ function Labelled({ label, hint, children, action }: { label: string; hint?: str
       <div className="flex items-start justify-between gap-2 mb-1">
         <label className="block text-[12px] font-semibold" style={{ color: vars.navy }}>
           {label}
-          {hint && <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· {hint}</span>}
+          {hint && <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· {hint}</span>}
         </label>
         {action && <div className="flex-shrink-0">{action}</div>}
       </div>

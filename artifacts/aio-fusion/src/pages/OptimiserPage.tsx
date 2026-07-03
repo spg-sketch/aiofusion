@@ -463,11 +463,11 @@ OUTPUT INSTRUCTIONS:
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
               <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
                 Project name
-                <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker</span>
+                <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker</span>
               </label>
               <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
                 Content Type
-                <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· Drives the scoring weight</span>
+                <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· Drives the scoring weight</span>
               </label>
               <div className="flex items-center gap-2">
                 <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
