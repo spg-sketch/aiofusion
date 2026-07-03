@@ -2,6 +2,7 @@ import { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategor
 import CountdownBanner from "./components/CountdownBanner";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
+import { apiBase } from "./lib/contentAi";
 import { loadSavedAudits } from "./LlmCheckPage";
 import InfoTip from "./InfoTip";
 import {
@@ -281,7 +282,7 @@ function App() {
   const loadTokenUsage = () => {
     setTokenUsageLoading(true);
     setTokenUsageError(null);
-    void fetch(`${appBase()}/api/admin/token-usage`, { credentials: "include" })
+    void fetch(`${apiBase()}/api/admin/token-usage`, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error("Failed to load token usage");
         const data = await r.json() as { rows: TokenUsageRow[] };
