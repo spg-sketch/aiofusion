@@ -499,15 +499,19 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       </div>
 
       <div className="bg-white rounded-2xl border p-6 sm:p-8 space-y-5" style={{ borderColor: vars.g200 }}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker.">
-            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="e.g. Q2 thought leadership programme" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
-          </Labelled>
-          <Labelled label="Content type" hint="Press release, article, case study, blog, social post.">
-            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-              {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </Labelled>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+          <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
+            Project name
+            <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker.</span>
+          </label>
+          <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
+            Content type
+            <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· Press release, article, case study, blog, social post.</span>
+          </label>
+          <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="e.g. Q2 thought leadership programme" className="w-full px-3 py-2.5 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }} />
+          <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
+            {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
 
         <Labelled label="Target LLM Query" hint="Pick a query from section 1.6 to write a GEO-targeted article. The AI will structure the piece to earn a citation when someone asks this exact question. You can leave this blank for a free-form draft.">

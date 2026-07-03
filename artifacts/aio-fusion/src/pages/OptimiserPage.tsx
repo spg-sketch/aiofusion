@@ -460,22 +460,26 @@ OUTPUT INSTRUCTIONS:
         <div className="rounded-2xl border p-6 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
           <div className="space-y-5">
             {/* Row 1 - Title + type */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Labelled label="Project name" hint="A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker">
-                <div className="flex items-center gap-2">
-                  <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
-                    className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
-                  <InfoTip text="Becomes the visible heading on the Comms Planner row, on the Archive card and on the Earned Media Tracker entry. Keep it descriptive (≈8 words)." />
-                </div>
-              </Labelled>
-              <Labelled label="Content Type" hint="Drives the scoring weight">
-                <div className="flex items-center gap-2">
-                  <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                    {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <InfoTip text="Each type carries a default Authority and Visibility score (see Score settings inside the Comms Planner)." />
-                </div>
-              </Labelled>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+              <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
+                Project name
+                <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker</span>
+              </label>
+              <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
+                Content Type
+                <span className="text-[11px] font-light ml-2" style={{ color: vars.g400 }}>· Drives the scoring weight</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input type="text" value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="e.g. Q2 product launch announcement"
+                  className="flex-1 px-3 py-2.5 rounded-lg border text-sm" style={{ borderColor: vars.g200, color: vars.navy }} />
+                <InfoTip text="Becomes the visible heading on the Comms Planner row, on the Archive card and on the Earned Media Tracker entry. Keep it descriptive (≈8 words)." />
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
+                  {CONTENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <InfoTip text="Each type carries a default Authority and Visibility score (see Score settings inside the Comms Planner)." />
+              </div>
             </div>
 
             {/* Row 2 - Spokesperson + LLM target */}
