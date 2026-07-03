@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
+import { effectiveProjectId } from "./lib/contentStore";
 import {
   Download,
   Printer,
@@ -89,11 +90,22 @@ type TrackerRow = {
 const TRACKER_KEY = "aio.earnedTracker.v2";
 const seedTracker: TrackerRow[] = [];
 
-function loadTracker(): TrackerRow[] {
+// Each client/project gets its own tracker bucket so earned-media rows never
+// bleed between accounts. The "default" project keeps the original bare key
+// (so any pre-existing data isn't silently orphaned); every other project
+// gets a dedicated `TRACKER_KEY::projectId` key, starting empty rather than
+// inheriting the shared bare-key data (see contentStore.ts scoping pattern).
+function trackerKey(clientId?: string): string {
+  const pid = effectiveProjectId(clientId);
+  return pid === "default" ? TRACKER_KEY : `${TRACKER_KEY}::${pid}`;
+}
+
+function loadTracker(clientId?: string): TrackerRow[] {
+  const key = trackerKey(clientId);
   try {
-    const raw = localStorage.getItem(TRACKER_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) {
-      localStorage.setItem(TRACKER_KEY, JSON.stringify(seedTracker));
+      localStorage.setItem(key, JSON.stringify(seedTracker));
       return seedTracker;
     }
     return JSON.parse(raw) as TrackerRow[];
@@ -102,8 +114,8 @@ function loadTracker(): TrackerRow[] {
   }
 }
 
-function saveTracker(rows: TrackerRow[]) {
-  try { localStorage.setItem(TRACKER_KEY, JSON.stringify(rows)); } catch { /* ignore */ }
+function saveTracker(rows: TrackerRow[], clientId?: string) {
+  try { localStorage.setItem(trackerKey(clientId), JSON.stringify(rows)); } catch { /* ignore */ }
 }
 
 function ScoreBar({ label, score, max, description }: { label: string; score: number; max: number; description: string }) {
@@ -190,8 +202,9 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   })();
 
-  const [tracker, setTracker] = useState<TrackerRow[]>(() => loadTracker());
-  useEffect(() => saveTracker(tracker), [tracker]);
+  const [tracker, setTracker] = useState<TrackerRow[]>(() => loadTracker(activeClient.id));
+  useEffect(() => { setTracker(loadTracker(activeClient.id)); }, [activeClient.id]);
+  useEffect(() => saveTracker(tracker, activeClient.id), [tracker, activeClient.id]);
 
   const inRange = useMemo(() => tracker.filter(r => r.date >= rangeFrom && r.date <= rangeTo), [tracker, rangeFrom, rangeTo]);
   const earnedRowsForCoverage = useMemo(() =>
@@ -293,6 +306,14 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     inRange.forEach(r => tally.set(r.spokesperson || "-", (tally.get(r.spokesperson || "-") || 0) + 1));
     return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
   }, [inRange]);
+
+  const socialImpactBySpokesperson: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = {
+    "Company LinkedIn": { shares: "1,820", engagement: "4.2%", dms: "37", profileViews: "612" },
+    "Spencer Gallagher": { shares: "940", engagement: "5.6%", dms: "22", profileViews: "384" },
+    "Helen Croydon": { shares: "610", engagement: "3.8%", dms: "14", profileViews: "251" },
+  };
+  const [socialImpactPerson, setSocialImpactPerson] = useState<string>("Company LinkedIn");
+  const socialImpactStats = socialImpactBySpokesperson[socialImpactPerson] || socialImpactBySpokesperson["Company LinkedIn"];
 
   const prRows = useMemo(() => inRange.filter(r => r.type === "Press Release"), [inRange]);
   const prAvgScore = prRows.length ? Math.round((prRows.reduce((s, r) => s + r.score, 0) / prRows.length) * 10) / 10 : 0;
@@ -674,17 +695,22 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Social impact</h3>
-              <select className="text-xs border rounded-lg px-2 py-1.5 font-semibold" style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}>
+              <select
+                value={socialImpactPerson}
+                onChange={(e) => setSocialImpactPerson(e.target.value)}
+                className="text-xs border rounded-lg px-2 py-1.5 font-semibold"
+                style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}
+              >
                 <option>Company LinkedIn</option>
                 <option>Spencer Gallagher</option>
                 <option>Helen Croydon</option>
               </select>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatTile label="LinkedIn shares" value="1,820" color={vars.navy} icon={Share2} />
-              <StatTile label="LinkedIn engagement" value="4.2%" color={vars.navy} icon={TrendingUp} />
-              <StatTile label="Inbound DMs" value="37" color={vars.navy} icon={FileText} />
-              <StatTile label="Profile views (week)" value="612" color={vars.navy} icon={Eye} />
+              <StatTile label="LinkedIn shares" value={socialImpactStats.shares} color={vars.navy} icon={Share2} />
+              <StatTile label="LinkedIn engagement" value={socialImpactStats.engagement} color={vars.navy} icon={TrendingUp} />
+              <StatTile label="Inbound DMs" value={socialImpactStats.dms} color={vars.navy} icon={FileText} />
+              <StatTile label="Profile views (week)" value={socialImpactStats.profileViews} color={vars.navy} icon={Eye} />
             </div>
           </div>
 
