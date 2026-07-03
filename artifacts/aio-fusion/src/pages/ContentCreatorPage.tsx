@@ -795,8 +795,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            style={{ borderColor: vars.navy, color: vars.navy }}
+            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title="Download the current draft as a Word document"
           >
             <Download size={14} /> Download
@@ -804,8 +804,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={() => setShowDownloadNotesModal(true)}
             disabled={changeLog.length === 0}
-            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            style={{ borderColor: vars.navy, color: vars.navy }}
+            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece with a change log explaining where each key message was embedded - as Word or PDF"}
           >
             <FileText size={14} /> Download Notes
@@ -813,8 +813,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={shareDraftFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
-            style={{ borderColor: vars.navy, color: vars.navy }}
+            className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title="Open your email client with the current draft ready to send for review"
           >
             <Send size={14} /> Share draft
