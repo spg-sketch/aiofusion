@@ -424,13 +424,13 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.navy }}>
             <Printer size={16} /> Print
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.navy }}>
             <Share2 size={16} /> Share
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.accent }}>
+          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.accent }}>
             <Download size={16} /> Export PDF
           </button>
         </div>
