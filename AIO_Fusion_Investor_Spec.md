@@ -8,7 +8,7 @@
 
 ## 1. Executive summary
 
-AIO Fusion is a Generative Engine Optimisation (GEO) platform. It helps brands measure, manage and grow how they are seen, referenced and recommended by AI answer engines such as ChatGPT, Gemini, Claude, Perplexity and Copilot.
+AIO Fusion is a Generative Engine Optimisation (GEO) platform. It helps brands measure, manage and grow how they are seen, referenced and recommended by AI answer engines such as ChatGPT and Claude.
 
 Search is moving from a list of blue links to a single AI-generated answer. When a buyer, journalist or partner asks an AI a question, the brands that get named in the answer win, and the rest become invisible. Traditional SEO does not optimise for this new surface. AIO Fusion does.
 
@@ -72,7 +72,7 @@ The platform is organised into modules. Below, each is described with its purpos
 
 **Earned Media Visibility Audit (live engine).** Probes large language models in real time to see whether and how a brand is mentioned for industry-relevant questions. Inputs are company name, sector and optional keywords. Outputs include an **AI Visibility Score (0-100%)**, model-by-model mention rates (for example ChatGPT vs Claude), competitor mentions surfaced alongside the brand, and detailed probe results showing the exact context of each mention.
 
-**Website Visibility Audit / Technical GEO (live engine).** Crawls a target URL and scores its readiness to be referenced by AI. Produces an **overall score (0-100)** across categories including metadata, heading structure, schema (JSON-LD), links, images, AI-readiness, performance and sources. It explicitly checks whether AI crawlers (such as GPTBot, ClaudeBot and PerplexityBot) are permitted, and returns prioritised recommendations graded Critical / High / Medium / Low.
+**Website Visibility Audit / Technical GEO (live engine).** Crawls a target URL and scores its readiness to be referenced by AI. Produces an **overall score (0-100)** across categories including metadata, heading structure, schema (JSON-LD), links, images, AI-readiness, performance and sources. It explicitly checks whether AI crawlers (such as GPTBot and ClaudeBot) are permitted, and returns prioritised recommendations graded Critical / High / Medium / Low.
 
 ### Strategy, planning and creation
 

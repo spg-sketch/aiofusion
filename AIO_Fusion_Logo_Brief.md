@@ -2,7 +2,7 @@
 
 ## 1. About the product
 
-**AIO Fusion** is a Generative Engine Optimisation (GEO) platform built by **Simpatico PR**, a B2B PR and communications agency. The platform helps agencies and B2B businesses become the source that AI engines — ChatGPT, Perplexity, Claude, Gemini — cite and recommend.
+**AIO Fusion** is a Generative Engine Optimisation (GEO) platform built by **Simpatico PR**, a B2B PR and communications agency. The platform helps agencies and B2B businesses become the source that AI engines — ChatGPT and Claude — cite and recommend.
 
 It is a managed-service tool: Simpatico PR staff operate the platform on behalf of clients, delivering GEO as part of a retained PR engagement. The platform diagnoses how AI sees a brand, optimises content for AI retrieval, and plans authority-building activity.
 
