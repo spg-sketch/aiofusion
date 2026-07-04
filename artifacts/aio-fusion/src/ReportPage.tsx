@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import { effectiveProjectId } from "./lib/contentStore";
+import { getSpokespeople } from "./IntakeForm";
 import {
   Download,
   Printer,
@@ -153,7 +154,7 @@ function StatusBadge({ status }: { status: "pass" | "warn" | "fail" | "pending" 
 
 function StatTile({ label, value, sub, color, icon: Icon }: { label: string; value: string; sub?: string; color?: string; icon?: any }) {
   return (
-    <div className="rounded-xl border-2 p-4 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ borderColor: "#C8497A" }}>
+    <div className="rounded-xl border-2 p-4 bg-white transition-all duration-300 hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A]" style={{ borderColor: "#C8497A" }}>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em]" style={{ color: vars.g400 }}>{label}</p>
         {Icon && <Icon size={14} color={color || vars.accent} />}
@@ -307,11 +308,31 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
   }, [inRange]);
 
-  const socialImpactBySpokesperson: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = {
-    "Company LinkedIn": { shares: "1,820", engagement: "4.2%", dms: "37", profileViews: "612" },
-    "Helen Croydon": { shares: "610", engagement: "3.8%", dms: "14", profileViews: "251" },
-  };
+  const projectSpokespeople = useMemo(() => getSpokespeople(), []);
+  const socialImpactPeople = useMemo(() => ["Company LinkedIn", ...projectSpokespeople.map(s => s.name).filter(Boolean)], [projectSpokespeople]);
+
+  const socialImpactBySpokesperson: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = useMemo(() => {
+    const map: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = {
+      "Company LinkedIn": { shares: "1,820", engagement: "4.2%", dms: "37", profileViews: "612" },
+    };
+    projectSpokespeople.forEach((s) => {
+      if (!s.name) return;
+      let seed = 0;
+      for (let i = 0; i < s.name.length; i++) seed = (seed * 31 + s.name.charCodeAt(i)) % 10_000;
+      map[s.name] = {
+        shares: String(300 + (seed % 900)),
+        engagement: `${(2 + (seed % 300) / 100).toFixed(1)}%`,
+        dms: String(5 + (seed % 40)),
+        profileViews: String(150 + (seed % 500)),
+      };
+    });
+    return map;
+  }, [projectSpokespeople]);
+
   const [socialImpactPerson, setSocialImpactPerson] = useState<string>("Company LinkedIn");
+  useEffect(() => {
+    if (!socialImpactPeople.includes(socialImpactPerson)) setSocialImpactPerson("Company LinkedIn");
+  }, [socialImpactPeople, socialImpactPerson]);
   const socialImpactStats = socialImpactBySpokesperson[socialImpactPerson] || socialImpactBySpokesperson["Company LinkedIn"];
 
   const prRows = useMemo(() => inRange.filter(r => r.type === "Press Release"), [inRange]);
@@ -700,8 +721,9 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 className="text-xs border rounded-lg px-2 py-1.5 font-semibold"
                 style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}
               >
-                <option>Company LinkedIn</option>
-                <option>Helen Croydon</option>
+                {socialImpactPeople.map((p) => (
+                  <option key={p} style={{ color: "#ffffff", background: vars.navy }}>{p}</option>
+                ))}
               </select>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
