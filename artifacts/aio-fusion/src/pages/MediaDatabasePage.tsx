@@ -280,9 +280,9 @@ function MediaDatabasePage() {
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-5">
             <input value={outletSearch} onChange={(e) => setOutletSearch(e.target.value)} placeholder="Search outlets..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white" style={{ borderColor: vars.g200 }} />
-            <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <select value={outletCatFilter} onChange={(e) => setOutletCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: outletCatFilter ? vars.navy : "#ffffff" }}>
               <option value="" style={{ color: "#ffffff", background: vars.navy }}>All categories</option>
-              {catOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              {catOptions.map((c) => <option key={c} value={c} style={{ color: vars.navy, background: "#ffffff" }}>{c}</option>)}
             </select>
             <button onClick={openAddOutlet} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <Plus size={14} /> Add outlet
