@@ -494,9 +494,9 @@ function UsersAdminPage({
         <div
           className="rounded-xl p-4 sm:p-5 transition-all"
           style={
-            depth > 0
-              ? { background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `3px solid ${accent}50` }
-              : { background: vars.g100 + "80", border: `1.5px solid ${vars.g200}` }
+            depth === 0 || hasChildren
+              ? { background: vars.g100 + "80", border: `1.5px solid ${vars.g200}` }
+              : { background: "rgba(200,73,122,0.03)", border: `1.5px solid ${accentSoft}`, borderLeft: `3px solid ${accent}50` }
           }
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -513,7 +513,7 @@ function UsersAdminPage({
               ) : (
                 <span className="w-6 shrink-0" />
               )}
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? "white" : accent }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: u.role === "admin" ? ink : (hasChildren ? accent : accentSoft), color: u.role === "admin" || hasChildren ? "white" : accent }}>
                 <User size={18} />
               </div>
               <div>
@@ -527,7 +527,7 @@ function UsersAdminPage({
                   )}
                 </p>
                 <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : (hasChildren ? accent : accentSoft), color: u.role === "admin" || hasChildren ? paper : accent }}>
                     {roleLabel(u.role)}
                   </span>
                   <span className="text-[11px] font-light truncate" style={{ color: vars.g500 }}>
