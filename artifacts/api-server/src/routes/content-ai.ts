@@ -251,7 +251,7 @@ contentAiRouter.post(
     // Draft comes first so Claude anchors its rewrite to the submitted text
     // rather than regenerating from the project data brief.
     const prompt =
-      `You are an expert PR and GEO (generative engine optimisation) editor. You rewrite a client's draft so AI search and answer engines (ChatGPT, Perplexity, Claude, Gemini) can clearly understand, trust and cite it, while preserving every fact the client supplied.\n\n` +
+      `You are an expert PR and GEO (generative engine optimisation) editor. You rewrite a client's draft so AI search and answer engines (ChatGPT, Claude) can clearly understand, trust and cite it, while preserving every fact the client supplied.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `Content type: ${contentType}\n` +
       (projectTitle ? `Project: ${projectTitle}\n` : "") +
@@ -593,7 +593,7 @@ contentAiRouter.post(
         : "";
       geoTargetBlock =
         `\nGEO TARGET QUERY — primary directive for this article:\n` +
-        `The user wants this article to earn a citation from AI engines (ChatGPT, Perplexity, Claude) when someone asks:\n` +
+        `The user wants this article to earn a citation from AI engines (ChatGPT, Claude) when someone asks:\n` +
         `"${targetQueryText}"\n` +
         `Buying stage: ${stageLabel}\n` +
         (visibilityLine ? `${visibilityLine}\n` : "") +
@@ -608,7 +608,7 @@ contentAiRouter.post(
     }
 
     const prompt =
-      `You are an expert PR and GEO (generative engine optimisation) writer. You WRITE a brand-new, publication-ready draft from scratch for a client, so that AI search and answer engines (ChatGPT, Perplexity, Claude, Gemini) can clearly understand, trust and cite it. This is generation, not light editing: compose a complete, well-structured draft of the target length. Never simply echo the brief, the notes or the key messages back as the body.\n\n` +
+      `You are an expert PR and GEO (generative engine optimisation) writer. You WRITE a brand-new, publication-ready draft from scratch for a client, so that AI search and answer engines (ChatGPT, Claude) can clearly understand, trust and cite it. This is generation, not light editing: compose a complete, well-structured draft of the target length. Never simply echo the brief, the notes or the key messages back as the body.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `Content type: ${contentType}\n` +
       (projectName ? `Project: ${projectName}\n` : "") +
@@ -972,7 +972,7 @@ contentAiRouter.post(
       : "";
 
     const prompt =
-      `You are a GEO (generative engine optimisation) expert. Generate the top 12 LLM search queries that a prospective B2B client would type into an AI like ChatGPT, Claude or Perplexity when looking for a company like the one described below.\n\n` +
+      `You are a GEO (generative engine optimisation) expert. Generate the top 12 LLM search queries that a prospective B2B client would type into an AI like ChatGPT or Claude when looking for a company like the one described below.\n\n` +
       `${BRITISH_RULE}\n\n` +
       `IMPORTANT: The structured fields below (company name, descriptor, primary message, services, target clients, geography, sectors) capture the client's intended strategic positioning. They take precedence over website content when they conflict. Use the website content to fill factual gaps and add grounding where the structured fields are sparse or absent.\n\n` +
       `Structured company context:\n${contextParts.join("\n")}\n` +

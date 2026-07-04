@@ -185,7 +185,7 @@ function DashboardPage({
         <div className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
           <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>
             Earned Media Visibility Audit
-            <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT, Claude, Perplexity, Gemini and CoPilot." />
+            <InfoTip text="Shows whether AI models mention your brand when asked about your sector. We sample real questions across ChatGPT and Claude." />
           </h3>
           {earnedScore === null ? (
             <div className="flex flex-col items-center justify-center py-4 text-center">

@@ -346,7 +346,7 @@ function OptimiserPage({
   const promptBriefShort = promptVariant === "pitch"
     ? `Using the accepted information and instructions in Project Data Sections 1-3 for this project, develop a draft Media pitch synopsis for a thought leadership article.
 
-Use the Headline / subject entry as the guiding theme and argument. Optimise the article media pitch to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
+Use the Headline / subject entry as the guiding theme and argument. Optimise the article media pitch to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT and Claude - while preserving and strengthening the author's original argument and voice.
 
 ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
@@ -375,7 +375,7 @@ OUTPUT INSTRUCTIONS:
 
 ${contentType} = ${PROMPT_1_LENGTHS[contentType] || "Apply best practices for this content type referencing Project Data."}
 
-Further general guidance: Use the Headline / subject entry as the guiding theme and argument. Optimise the content to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
+Further general guidance: Use the Headline / subject entry as the guiding theme and argument. Optimise the content to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT and Claude - while preserving and strengthening the author's original argument and voice.
 
 ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all factual content, statistics, data points, and claims exactly as written. Do not add, remove, or alter any facts.
@@ -401,7 +401,7 @@ OUTPUT INSTRUCTIONS:
 
 ${contentType} = ${PROMPT_2_LENGTHS[contentType] || "apply best practices for this content type"}
 
-Use the Headline / subject entry as the guiding theme and argument. Optimise the ${contentType.toLowerCase()} to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT, Perplexity, Claude, and Gemini - while preserving and strengthening the author's original argument and voice.
+Use the Headline / subject entry as the guiding theme and argument. Optimise the ${contentType.toLowerCase()} to maximise its authority, discoverability, and accurate representation by large language models such as ChatGPT and Claude - while preserving and strengthening the author's original argument and voice.
 
 ABSOLUTE CONSTRAINTS - DO NOT VIOLATE:
 - Retain all original factual content, statistics, data points, and claims exactly as written. Do not alter, reattribute, or contradict any existing facts.
@@ -499,7 +499,7 @@ OUTPUT INSTRUCTIONS:
               <Labelled label="LLM Target">
                 <div className="flex items-center gap-2">
                   <select value={llmTarget} onChange={(e) => setLlmTarget(e.target.value)} className="flex-1 px-3 py-2.5 rounded-lg border text-sm bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
-                    {["General (All LLMs)", "ChatGPT", "Claude", "Perplexity", "Gemini", "Copilot"].map((t) => <option key={t} value={t}>{t}</option>)}
+                    {["General (All LLMs)", "ChatGPT", "Claude"].map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <InfoTip text="Tunes the optimisation prompt to the citation patterns of a single answer engine. Leave on General unless you have a specific target." />
                 </div>

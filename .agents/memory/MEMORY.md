@@ -24,3 +24,5 @@
 - [IntakeForm scroll-to-top mechanism](aio-fusion-intake-scrolltop.md) — scrollIntoView on a padded anchor ref leaves a residual offset; walk to the real scroll ancestor and call scrollTo({top:0}) directly.
 - [AIO Fusion design/UX pass conventions](aio-fusion-design-ux-pass.md) — some pages shadow the shared `vars` palette with a local subset (missing tokens like gold); ReportPage's shared StatTile covers 4 report sections at once.
 - [AIO Fusion Earned Media Tracker scoping](aio-fusion-earned-tracker-scoping.md) — tracker had zero per-client isolation (one global key); check any bare-key localStorage feature for this same cross-client leak pattern.
+- [AIO Fusion LLM roster = ChatGPT+Claude only](aio-fusion-llm-roster-scope.md) — product scope excludes Perplexity/Gemini/other LLMs everywhere (UI, prompts, public/llms.txt, agents.md, robots.txt); grep sweep needed across all surfaces, not just app pages.
+- [AIO Fusion ReportPage real-data rewiring](aio-fusion-reportpage-real-data.md) — Executive Summary/GEO tabs were hardcoded demo numbers; now derived from loadSavedAudits/loadSavedDiagnostics; empty-state text required wherever no audit exists yet.

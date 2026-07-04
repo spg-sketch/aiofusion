@@ -1,12 +1,12 @@
 # AIO Fusion
 
-> AIO Fusion is a GEO (Generative Engine Optimisation) platform that tracks, scores and grows a brand's authority and visibility across AI search and answer engines such as ChatGPT, Gemini, Claude and Perplexity. It is built for PR agencies and B2B communications teams, both in-house and agency side, to become the source that AI models cite and recommend.
+> AIO Fusion is a GEO (Generative Engine Optimisation) platform that tracks, scores and grows a brand's authority and visibility across AI search and answer engines such as ChatGPT and Claude. It is built for PR agencies and B2B communications teams, both in-house and agency side, to become the source that AI models cite and recommend.
 
 AIO Fusion helps brands understand how they are seen by AI answer engines and gives them the tools to improve that visibility. It measures how often and how favourably a brand is cited by large language models, audits a website's readiness for AI citation, and guides the planning, creation and optimisation of PR and marketing content so it is more likely to be surfaced and quoted by AI.
 
 ## The full toolset
 
-- Earned Media Visibility Audit: scores how often AI models cite and recommend a brand, broken down by model across ChatGPT, Claude, Perplexity and Gemini.
+- Earned Media Visibility Audit: scores how often AI models cite and recommend a brand, broken down by model across ChatGPT and Claude.
 - Website Visibility Audit: scores a site for AI citation and crawlability across signal categories, showing where it is strong and what to fix.
 - Comms Planner: plans and scores the forward PR and marketing schedule for predicted AI authority impact.
 - Content Optimiser and Editor: optimises and edits drafts with tracked changes, every edit annotated with its reasoning.
@@ -19,7 +19,7 @@ AIO Fusion helps brands understand how they are seen by AI answer engines and gi
 - Website Content GEO: optimises on-site content to lift visibility with AI models.
 - Website Technical GEO: back-end and schema guidance to maximise a site's AI effectiveness.
 
-Every tool works across ChatGPT, Perplexity, Claude and Gemini, so visibility and authority are measured and improved against the models a client's audience actually uses.
+Every tool works across ChatGPT and Claude, so visibility and authority are measured and improved against the models a client's audience actually uses.
 
 ## Who it is for
 
@@ -29,7 +29,7 @@ Every tool works across ChatGPT, Perplexity, Claude and Gemini, so visibility an
 ## Key concepts
 
 - GEO (Generative Engine Optimisation): optimising content and brand presence so it is discovered, trusted and cited by AI answer engines, the natural successor to traditional SEO for an AI-first search landscape.
-- Answer engines: AI systems such as ChatGPT, Gemini, Claude and Perplexity that answer user questions directly rather than returning a list of links.
+- Answer engines: AI systems such as ChatGPT and Claude that answer user questions directly rather than returning a list of links.
 - AI authority: a measure of how often and how favourably a brand is referenced by AI answer engines.
 
 ## Links

@@ -679,7 +679,7 @@ function App() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-4" style={{ color: vars.g400 }}>The full toolset available in the platform</p>
         <div className="grid sm:grid-cols-2 gap-4 mb-10">
           {[
-            { title: "Earned Media Visibility Audit", desc: "Scores how often AI models cite and recommend a brand, broken down by model across ChatGPT, Claude, Perplexity and Gemini." },
+            { title: "Earned Media Visibility Audit", desc: "Scores how often AI models cite and recommend a brand, broken down by model across ChatGPT and Claude." },
             { title: "Website Visibility Audit", desc: "Scores a site for AI citation and crawlability across signal categories, showing exactly where it is strong and what to fix." },
             { title: "Comms Planner", desc: "Plans and scores the forward PR and marketing schedule for predicted AI authority impact." },
             { title: "Content Optimiser & Editor", desc: "Optimises and edits drafts with tracked changes, every edit annotated with reasoning so the change is clear." },
@@ -705,7 +705,7 @@ function App() {
         </div>
 
         <p className="text-[15px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
-          Every tool above works across ChatGPT, Perplexity, Claude and Gemini, so visibility and authority are measured and improved against the models your client's audience actually uses.
+          Every tool above works across ChatGPT and Claude, so visibility and authority are measured and improved against the models your client's audience actually uses.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4">

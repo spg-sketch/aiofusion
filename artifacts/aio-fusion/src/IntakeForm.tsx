@@ -547,7 +547,7 @@ const sections: SectionDef[] = [
     subtitle: "Determine which optimisation approach should lead",
     icon: Target,
     intro:
-      "GEO (Generative Engine Optimisation) focuses on being cited by AI systems like ChatGPT, Claude and Gemini. AEO (Answer Engine Optimisation) focuses on appearing in direct-answer features.",
+      "GEO (Generative Engine Optimisation) focuses on being cited by AI systems like ChatGPT and Claude. AEO (Answer Engine Optimisation) focuses on appearing in direct-answer features.",
     fields: [
       { id: "h-biz", label: "Business Model Signals", type: "heading" },
       {
@@ -651,7 +651,7 @@ const sections: SectionDef[] = [
       {
         id: "6.5",
         label: "AI crawler access via robots.txt",
-        hint: "Key AI crawlers: GPTBot, ClaudeBot, Google-Extended, PerplexityBot, CCBot. Please ask your website developer for more guidance.",
+        hint: "Key AI crawlers: GPTBot, ClaudeBot. Please ask your website developer for more guidance.",
         type: "checkbox",
         options: [
           "Yes, all are allowed",
@@ -1586,7 +1586,7 @@ export default function IntakePage() {
     const body = `<div class="guide">
       <div class="sec">
         <h2>What this Set-Up is for</h2>
-        <p>The Set-Up captures everything AIO Fusion needs to represent your business accurately to AI answer engines such as ChatGPT, Claude, Gemini and Google's AI Overviews. These engines build their picture of your business from your website, your press coverage and other public sources. This form is how you tell us what that picture should be.</p>
+        <p>The Set-Up captures everything AIO Fusion needs to represent your business accurately to AI answer engines such as ChatGPT and Claude. These engines build their picture of your business from your website, your press coverage and other public sources. This form is how you tell us what that picture should be.</p>
         <p>The more complete and precise your answers, the better every tool performs, because they all draw on what you enter here. Treat it like briefing a new team member who will speak on your behalf: the clearer the brief, the better they represent you.</p>
         <p>You do not need to complete everything in one sitting, and you do not need to answer every question. Start with what you know, save as you go, and come back to fill the gaps. Even a partly completed Set-Up improves your results.</p>
       </div>
@@ -1655,7 +1655,7 @@ export default function IntakePage() {
       <div class="sec">
         <h2>A few key terms</h2>
         <ul>
-          <li><strong>GEO (Generative Engine Optimisation)</strong> - being cited and recommended by AI systems such as ChatGPT, Claude and Gemini.</li>
+          <li><strong>GEO (Generative Engine Optimisation)</strong> - being cited and recommended by AI systems such as ChatGPT and Claude.</li>
           <li><strong>AEO (Answer Engine Optimisation)</strong> - appearing in direct-answer features such as Google's AI Overviews and voice assistants.</li>
           <li><strong>Earned media</strong> - independent coverage you earn rather than pay for, such as articles and mentions in credible outlets. It is one of the highest-authority signals for AI.</li>
           <li><strong>Boilerplate</strong> - your standard, approved "about the company" paragraph used in press and across the web.</li>

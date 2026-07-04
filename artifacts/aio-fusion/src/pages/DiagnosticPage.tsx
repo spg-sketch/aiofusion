@@ -165,7 +165,7 @@ function DiagnosticPage({
     const target = r.fetchedUrl || activeClient.name;
     const lines: string[] = [];
     lines.push("You are an expert technical SEO and GEO (generative engine optimisation) engineer.");
-    lines.push("Improve my website so it ranks in traditional search AND gets cited by AI answer engines (ChatGPT, Gemini, Perplexity, Google AI Overviews).");
+    lines.push("Improve my website so it ranks in traditional search AND gets cited by AI answer engines (ChatGPT, Claude).");
     lines.push("");
     lines.push(`Website: ${target}`);
     lines.push(`Current AIO score: ${r.overallScore}/100`);
@@ -192,7 +192,7 @@ function DiagnosticPage({
     return lines.join("\n").trim();
   };
 
-  const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
+  const DIAGNOSTIC_LLM_BRIEF = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse a brand's web presence for readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Claude).
 
 Score each of the following 6 categories from 0 to the maximum shown. Be rigorous - most pages score poorly. Provide specific, actionable recommendations for each category.
 

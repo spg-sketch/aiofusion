@@ -511,8 +511,6 @@ function analyseAiReadiness($: cheerio.CheerioAPI, robotsTxt: string | null): { 
     const crawlers = [
       { name: "GPTBot (OpenAI)", pattern: /user-agent:\s*gptbot/i },
       { name: "ClaudeBot (Anthropic)", pattern: /user-agent:\s*claudebot/i },
-      { name: "Google-Extended", pattern: /user-agent:\s*google-extended/i },
-      { name: "PerplexityBot", pattern: /user-agent:\s*perplexitybot/i },
       { name: "CCBot", pattern: /user-agent:\s*ccbot/i },
     ];
 

@@ -35,7 +35,7 @@ const CATEGORY_MAXES: Record<string, number> = {
   "Technical Accessibility": 15,
 };
 
-export const GEO_SYSTEM_PROMPT = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Perplexity, Claude, Gemini, Google AI Overviews).
+export const GEO_SYSTEM_PROMPT = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Claude).
 
 Score each of the following 6 categories from 0 to the maximum shown. Be rigorous — most pages score poorly. Provide specific, actionable recommendations for each category.
 

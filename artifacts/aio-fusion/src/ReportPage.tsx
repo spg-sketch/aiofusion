@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
-import { effectiveProjectId } from "./lib/contentStore";
+import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
 import { getSpokespeople } from "./IntakeForm";
+import { loadSavedAudits, authorityIndexFor } from "./LlmCheckPage";
+import { loadSavedDiagnostics } from "./lib/diagnosticStore";
 import {
   Download,
   Printer,
@@ -190,9 +192,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo">("summary");
   const projectStartDate = "2026-01-08";
   const todayIso = new Date().toISOString().slice(0, 10);
-  const authorityScore = activeClient.avgScore || 24;
-  const earnedScore = 20;
-  const websiteScore = 38;
+
+  // ── Live audit data (same sources as the Dashboard) ─────────────────────
+  const savedAudits = useMemo(() => loadSavedAudits(activeClient.id), [activeClient.id]);
+  const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
+  const previousAudit = savedAudits.length > 1 ? savedAudits[1] : null;
+
+  const savedDiagnostics = useMemo(() => loadSavedDiagnostics(activeClient.id), [activeClient.id]);
+  const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[0] : null;
+  const previousDiagnostic = savedDiagnostics.length > 1 ? savedDiagnostics[1] : null;
+
+  const earnedScore: number | null = latestAudit ? authorityIndexFor(latestAudit.result) : null;
+  const websiteScore: number | null = latestDiagnostic?.result.overallScore ?? null;
+  const authorityScore = earnedScore !== null && websiteScore !== null
+    ? Math.round((earnedScore + websiteScore) / 2)
+    : earnedScore ?? websiteScore ?? 0;
 
   const [rangeFrom, setRangeFrom] = useState(projectStartDate);
   const [rangeTo, setRangeTo] = useState(todayIso);
@@ -217,65 +231,82 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const earnedAuthorityScore = Math.min(100, Math.round(inRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)));
   const prCoverageCount = earnedRowsForCoverage.length;
 
-  const categoryScores = [
-    { label: "Schema & Structured Data", score: 3, max: 15, description: "Organization, FAQ, Article schema coverage" },
-    { label: "Content Architecture", score: 5, max: 15, description: "Answer-first formatting, semantic phrase density" },
-    { label: "Source Authority", score: 4, max: 15, description: "NAP consistency, third-party profiles, citations" },
-    { label: "Earned Media Signals", score: 7, max: 20, description: "Press mentions, backlink quality, spokesperson visibility" },
-    { label: "Earned Visibility", score: 3, max: 20, description: "Mentions across ChatGPT, Perplexity, Claude, Gemini" },
-    { label: "Technical Accessibility", score: 2, max: 15, description: "AI crawler access, robots.txt, sitemap, page speed" },
-  ];
+  // ── Category breakdown, straight from the latest Website Visibility audit ──
+  const diagnosticCategories = latestDiagnostic?.result.categories ?? [];
+  const categoryScores = diagnosticCategories.map((c) => ({
+    label: c.name,
+    score: c.score,
+    max: c.max,
+    description: c.findings[0] || c.recommendations[0] || "No findings recorded for this category yet.",
+  }));
+
+  const geoTechCategories = diagnosticCategories.filter((c) => c.name === "Schema & Structured Data" || c.name === "Technical Accessibility");
+  const geoContentCategories = diagnosticCategories.filter((c) => c.name === "Content Architecture" || c.name === "Source Authority");
 
   const websiteGeoScores = {
-    tech: [
-      { label: "Schema coverage", score: 6, max: 10, desc: "Organisation, FAQ and Article schema across key templates." },
-      { label: "Crawlability", score: 8, max: 10, desc: "AI agents (GPTBot, ClaudeBot, PerplexityBot) reach all priority pages." },
-      { label: "Page speed", score: 5, max: 10, desc: "LCP 3.2s on the homepage; target under 2.5s." },
-    ],
-    content: [
-      { label: "Entity clarity", score: 5, max: 10, desc: "Brand, founders and services need explicit, consistent definitions." },
-      { label: "Q&A snippet density", score: 4, max: 10, desc: "Add answer-first key takeaways to top 10 templates." },
-      { label: "Internal authority graph", score: 6, max: 10, desc: "Spokesperson and topic hubs partially in place." },
-    ],
+    tech: geoTechCategories.map((c) => ({ label: c.name, score: c.score, max: c.max, desc: c.findings[0] || c.recommendations[0] || "No findings recorded yet." })),
+    content: geoContentCategories.map((c) => ({ label: c.name, score: c.score, max: c.max, desc: c.findings[0] || c.recommendations[0] || "No findings recorded yet." })),
   };
 
-  const llmScorecard = [
-    { platform: "ChatGPT", mentions: 24, cited: true, rank: 3, sentiment: "Positive", trend: 8 },
-    { platform: "Perplexity", mentions: 31, cited: true, rank: 2, sentiment: "Positive", trend: 12 },
-    { platform: "Google AI", mentions: 14, cited: false, rank: 5, sentiment: "Neutral", trend: 3 },
-    { platform: "Claude", mentions: 8, cited: false, rank: 7, sentiment: "Neutral", trend: 1 },
-    { platform: "Gemini", mentions: 11, cited: false, rank: 6, sentiment: "Neutral", trend: 2 },
-  ];
+  // ── LLM Scorecard: ChatGPT + Claude only, from the latest Earned Media audit ──
+  const llmScorecard = latestAudit
+    ? (["chatgpt", "claude"] as const).map((key) => {
+        const m = latestAudit.result.byModel[key];
+        const prevM = previousAudit?.result.byModel[key];
+        return {
+          platform: key === "chatgpt" ? "ChatGPT" : "Claude",
+          mentions: m.mentions,
+          cited: m.mentions > 0,
+          rate: m.rate,
+          trend: prevM ? Math.round(m.rate - prevM.rate) : 0,
+        };
+      })
+    : [];
 
-  const technicalAudit = [
-    { item: "Organization Schema", status: "fail" as const, detail: "No Organization schema detected on homepage" },
-    { item: "FAQ Schema", status: "fail" as const, detail: "FAQ page exists but no structured markup applied" },
-    { item: "Article Schema", status: "warn" as const, detail: "Partial implementation - missing author and datePublished" },
-    { item: "AI Crawler Access", status: "pass" as const, detail: "robots.txt allows GPTBot, PerplexityBot, ClaudeBot" },
-    { item: "Sitemap", status: "pass" as const, detail: "XML sitemap present and submitted to GSC" },
-    { item: "Page Speed (Core Web Vitals)", status: "warn" as const, detail: "LCP 3.2s (target < 2.5s), CLS 0.08 (pass)" },
-    { item: "NAP Consistency", status: "warn" as const, detail: "3 of 7 third-party profiles have outdated address" },
-    { item: "HTTPS / Security Headers", status: "pass" as const, detail: "TLS 1.3, HSTS enabled, CSP present" },
-  ];
+  // ── Technical / Content checklists, built from the audit's own findings ──
+  function auditRows(cats: typeof diagnosticCategories) {
+    return cats.flatMap((c) =>
+      c.findings.length > 0
+        ? c.findings.map((f, i) => ({ id: `${c.name}-${i}`, item: c.name, status: c.status as "pass" | "warn" | "fail", detail: f }))
+        : [{ id: c.name, item: c.name, status: c.status as "pass" | "warn" | "fail", detail: c.recommendations[0] || "No findings recorded yet." }],
+    );
+  }
+  const technicalAudit = auditRows(geoTechCategories);
+  const contentAudit = auditRows(geoContentCategories);
 
-  const contentAudit = [
-    { item: "Homepage Descriptor", status: "warn" as const, detail: "Generic tagline - needs entity-rich, answer-first copy" },
-    { item: "Product/Service Pages", status: "fail" as const, detail: "4 of 6 pages use promotional language instead of factual statements" },
-    { item: "FAQ Page", status: "warn" as const, detail: "12 questions present, but missing category authority and misconception FAQs" },
-    { item: "Blog / Thought Leadership", status: "pass" as const, detail: "Regular publishing cadence, 3 expert-authored pieces this quarter" },
-    { item: "Spokesperson Profiles", status: "fail" as const, detail: "No dedicated author/expert profile pages with credentials" },
-    { item: "Key Takeaway Boxes", status: "fail" as const, detail: "No answer-first summary blocks on content pages" },
-  ];
+  // ── Authority trend, built only from dates we actually have audit/diagnostic runs for ──
+  function valueAsOf<T extends { savedAt: string }>(list: T[], dateStr: string, pick: (item: T) => number): number | null {
+    let result: number | null = null;
+    for (const item of list) {
+      if (item.savedAt.slice(0, 10) <= dateStr) result = pick(item);
+      else break;
+    }
+    return result;
+  }
+  const auditsByDate = [...savedAudits].sort((a, b) => a.savedAt.localeCompare(b.savedAt));
+  const diagsByDate = [...savedDiagnostics].sort((a, b) => a.savedAt.localeCompare(b.savedAt));
+  const trendDates = Array.from(new Set([
+    ...auditsByDate.map((a) => a.savedAt.slice(0, 10)),
+    ...diagsByDate.map((d) => d.savedAt.slice(0, 10)),
+  ])).sort().slice(-6);
 
-  const monthlyTrend = [
-    { m: "Nov", total: 18, earned: 12, web: 32 },
-    { m: "Dec", total: 22, earned: 14, web: 33 },
-    { m: "Jan", total: 24, earned: 16, web: 34 },
-    { m: "Feb", total: 27, earned: 17, web: 35 },
-    { m: "Mar", total: 30, earned: 18, web: 36 },
-    { m: "Apr", total: authorityScore, earned: earnedScore, web: websiteScore },
-  ];
-  const trendMax = Math.max(...monthlyTrend.flatMap(p => [p.total, p.earned, p.web])) + 4;
+  const monthlyTrend = trendDates.map((dateStr) => {
+    const earned = valueAsOf(auditsByDate, dateStr, (a) => authorityIndexFor(a.result));
+    const web = valueAsOf(diagsByDate, dateStr, (d) => d.result.overallScore);
+    const total = earned !== null && web !== null ? Math.round((earned + web) / 2) : earned ?? web ?? 0;
+    const label = new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return { m: label, total, earned: earned ?? 0, web: web ?? 0 };
+  });
+  const trendMax = monthlyTrend.length ? Math.max(...monthlyTrend.flatMap(p => [p.total, p.earned, p.web])) + 4 : 100;
+
+  // ── Real trend stats for the summary tiles, instead of fixed demo numbers ──
+  const authorityTrendDelta = monthlyTrend.length > 1 ? monthlyTrend[monthlyTrend.length - 1].total - monthlyTrend[0].total : null;
+  const earnedTrendDelta = latestAudit && previousAudit ? Math.round(authorityIndexFor(latestAudit.result) - authorityIndexFor(previousAudit.result)) : null;
+  const websiteTrendDelta = latestDiagnostic && previousDiagnostic ? latestDiagnostic.result.overallScore - previousDiagnostic.result.overallScore : null;
+  const livePlannerProjects = useMemo(() => loadPlannerProjects(activeClient.id), [activeClient.id]);
+  const predictedEarnedAuthority = livePlannerProjects.length
+    ? Math.round(livePlannerProjects.reduce((s, p) => s + scoreProject(p).authority, 0) / livePlannerProjects.length)
+    : null;
 
   const messageCoverage = useMemo(() => {
     const buckets = [
@@ -506,17 +537,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   <div className="grid grid-cols-3 gap-2">
                     <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
                       <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>Earned</span>
-                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{earnedScore}/100</span>
+                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{earnedScore ?? "-"}/100</span>
                     </div>
                     <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
                       <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>Website</span>
-                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{websiteScore}/100</span>
+                      <span className="text-lg font-bold" style={{ color: "#102B36" }}>{websiteScore ?? "-"}/100</span>
                     </div>
                     <div className="px-3 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg" style={{ background: "#FBE3ED" }}>
-                      <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>30-day trend</span>
+                      <span className="text-[10px] block uppercase tracking-wider" style={{ color: "#8A3355" }}>Authority trend</span>
                       <span className="text-lg font-bold flex items-center gap-1" style={{ color: "#102B36" }}>
-                        {activeClient.scoreTrend >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                        {activeClient.scoreTrend >= 0 ? "+" : ""}{activeClient.scoreTrend}
+                        {authorityTrendDelta === null ? "New" : (
+                          <>
+                            {authorityTrendDelta >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                            {authorityTrendDelta >= 0 ? "+" : ""}{authorityTrendDelta}
+                          </>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -539,48 +574,88 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-              <StatTile label="Total Authority Trend" value={`+${activeClient.scoreTrend || 12}`} sub="vs last period" color={vars.green} icon={TrendingUp} />
-              <StatTile label="Earned Media Trend" value="+6" sub="from LLM checks" color={vars.green} icon={Eye} />
-              <StatTile label="Website Trend" value="+4" sub="from latest crawl" color={vars.green} icon={Globe} />
-              <StatTile label="Predicted Earned Authority" value={`+${28}`} sub="next 6 months from Comms Planner" color={vars.accent} icon={Sparkles} />
+              <StatTile
+                label="Total Authority Trend"
+                value={authorityTrendDelta === null ? "New" : `${authorityTrendDelta >= 0 ? "+" : ""}${authorityTrendDelta}`}
+                sub="vs earliest tracked run"
+                color={authorityTrendDelta !== null && authorityTrendDelta < 0 ? vars.red : vars.green}
+                icon={TrendingUp}
+              />
+              <StatTile
+                label="Earned Media Trend"
+                value={earnedTrendDelta === null ? "New" : `${earnedTrendDelta >= 0 ? "+" : ""}${earnedTrendDelta}`}
+                sub="from Earned Media audits"
+                color={earnedTrendDelta !== null && earnedTrendDelta < 0 ? vars.red : vars.green}
+                icon={Eye}
+              />
+              <StatTile
+                label="Website Trend"
+                value={websiteTrendDelta === null ? "New" : `${websiteTrendDelta >= 0 ? "+" : ""}${websiteTrendDelta}`}
+                sub="from Website Visibility audits"
+                color={websiteTrendDelta !== null && websiteTrendDelta < 0 ? vars.red : vars.green}
+                icon={Globe}
+              />
+              <StatTile
+                label="Predicted Earned Authority"
+                value={predictedEarnedAuthority === null ? "N/A" : String(predictedEarnedAuthority)}
+                sub={predictedEarnedAuthority === null ? "add items to Comms Planner" : "avg. from active Comms Planner items"}
+                color={vars.accent}
+                icon={Sparkles}
+              />
               <StatTile label="PR Coverage" value={String(prCoverageCount)} sub="PR / Article / Case Study / Whitepaper" color={vars.accent} icon={FileText} />
             </div>
 
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend (last 6 months)</h3>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend</h3>
             <div className="rounded-xl border p-4 mb-6" style={{ borderColor: vars.g200 }}>
-              <div className="flex items-end gap-2 h-40">
-                {monthlyTrend.map(p => (
-                  <div key={p.m} className="flex-1 flex flex-col items-center gap-0.5">
-                    <div className="w-full flex items-end gap-0.5 h-full">
-                      <div className="flex-1 rounded-t" style={{ height: `${(p.total / trendMax) * 100}%`, background: vars.navy }} title={`Total ${p.total}`} />
-                      <div className="flex-1 rounded-t" style={{ height: `${(p.earned / trendMax) * 100}%`, background: vars.coral }} title={`Earned ${p.earned}`} />
-                      <div className="flex-1 rounded-t" style={{ height: `${(p.web / trendMax) * 100}%`, background: vars.teal }} title={`Website ${p.web}`} />
-                    </div>
-                    <span className="text-[10px]" style={{ color: vars.g500 }}>{p.m}</span>
+              {monthlyTrend.length === 0 ? (
+                <p className="text-[13px] font-light py-6 text-center" style={{ color: vars.g500 }}>
+                  Run an Earned Media or Website Visibility audit to start tracking your authority trend.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-end gap-2 h-40">
+                    {monthlyTrend.map((p, i) => (
+                      <div key={`${p.m}-${i}`} className="flex-1 flex flex-col items-center gap-0.5">
+                        <div className="w-full flex items-end gap-0.5 h-full">
+                          <div className="flex-1 rounded-t" style={{ height: `${(p.total / trendMax) * 100}%`, background: vars.navy }} title={`Total ${p.total}`} />
+                          <div className="flex-1 rounded-t" style={{ height: `${(p.earned / trendMax) * 100}%`, background: vars.coral }} title={`Earned ${p.earned}`} />
+                          <div className="flex-1 rounded-t" style={{ height: `${(p.web / trendMax) * 100}%`, background: vars.teal }} title={`Website ${p.web}`} />
+                        </div>
+                        <span className="text-[10px]" style={{ color: vars.g500 }}>{p.m}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-3 mt-3 text-[11px]" style={{ color: vars.g500 }}>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.navy }} /> Total</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.coral }} /> Earned</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.teal }} /> Website</span>
-              </div>
+                  <div className="flex flex-wrap gap-3 mt-3 text-[11px]" style={{ color: vars.g500 }}>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.navy }} /> Total</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.coral }} /> Earned</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: vars.teal }} /> Website</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Website Content and Technical GEO Summary</h3>
-            <p className="text-[13px] font-light mb-4" style={{ color: vars.g600 }}>Three technical and three content scores feed into the Website Visibility track of your Total Authority Score.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-              {[...websiteGeoScores.tech, ...websiteGeoScores.content].map(c => (
-                <ScoreBar key={c.label} label={c.label} score={c.score} max={c.max} description={c.desc} />
-              ))}
-            </div>
+            <p className="text-[13px] font-light mb-4" style={{ color: vars.g600 }}>Technical and content scores from your latest Website Visibility audit feed into the Website track of your Total Authority Score.</p>
+            {websiteGeoScores.tech.length === 0 && websiteGeoScores.content.length === 0 ? (
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see these scores.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+                {[...websiteGeoScores.tech, ...websiteGeoScores.content].map(c => (
+                  <ScoreBar key={c.label} label={c.label} score={c.score} max={c.max} description={c.desc} />
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Score Breakdown by Category</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-              {categoryScores.map(cat => <ScoreBar key={cat.label} {...cat} />)}
-            </div>
+            {categoryScores.length === 0 ? (
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see category-level scores.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+                {categoryScores.map(cat => <ScoreBar key={cat.label} {...cat} />)}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -773,7 +848,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AI Coverage Search</h3>
             </div>
             <p className="text-[13px] font-light mb-4" style={{ color: vars.g500 }}>
-              Search the web for earned coverage about your project across Press Releases, Articles, Case Studies, Whitepapers, Blogs, Social, Conferences, Awards and Directories. Each item is scored across Claude, Gemini, ChatGPT, Perplexity and CoPilot.
+              Search the web for earned coverage about your project across Press Releases, Articles, Case Studies, Whitepapers, Blogs, Social, Conferences, Awards and Directories. Each item is scored across ChatGPT and Claude.
             </p>
             <CalloutBrief title="LLM brief">
               <p>You are acting as a senior UK PR media-coverage and earned media reference list builder.</p>
@@ -788,7 +863,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   <li>Business category</li>
                   <li>Spokesperson (if no byline is noted or quoted in the article, return "None")</li>
                   <li>Audience reach - give a public-source figure where possible (monthly UU, print circulation, subscribers) and label as approximate; flag if unverified</li>
-                  <li>Average LLM authority score out of 10 across Claude, Gemini, ChatGPT, Perplexity and CoPilot for this specific media coverage or reference</li>
+                  <li>Average LLM authority score out of 10 across ChatGPT and Claude for this specific media coverage or reference</li>
                 </ul>
               </div>
               <div>
@@ -1077,37 +1152,38 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <Eye size={18} color={vars.accent} />
               <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Visibility Scorecard</h3>
             </div>
-            <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>How your brand appears across the major AI platforms when users ask questions in your category.</p>
-            <div className="overflow-x-auto -mx-4 sm:mx-0">
-              <table className="w-full min-w-[500px]">
-                <thead>
-                  <tr style={{ background: vars.g50 }}>
-                    {["Platform", "Mentions", "Cited", "Rank", "Sentiment", "Trend"].map(h => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {llmScorecard.map(llm => (
-                    <tr key={llm.platform} className="border-t" style={{ borderColor: vars.g200 }}>
-                      <td className="px-4 py-3.5"><span className="text-sm font-medium" style={{ color: vars.navy }}>{llm.platform}</span></td>
-                      <td className="px-4 py-3.5"><span className="text-sm font-semibold" style={{ color: vars.navy }}>{llm.mentions}</span></td>
-                      <td className="px-4 py-3.5">{llm.cited ? <CheckCircle2 size={16} color={vars.green} /> : <X size={16} color={vars.g300} />}</td>
-                      <td className="px-4 py-3.5"><span className="text-sm" style={{ color: vars.g600 }}>#{llm.rank}</span></td>
-                      <td className="px-4 py-3.5">
-                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: llm.sentiment === "Positive" ? "#EFF7F2" : vars.g100, color: llm.sentiment === "Positive" ? vars.green : vars.g500 }}>{llm.sentiment}</span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className="text-sm font-medium flex items-center gap-1" style={{ color: llm.trend >= 0 ? vars.green : vars.red }}>
-                          {llm.trend >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                          {llm.trend >= 0 ? "+" : ""}{llm.trend}%
-                        </span>
-                      </td>
+            <p className="text-sm font-light mb-6" style={{ color: vars.g500 }}>How your brand appears across ChatGPT and Claude when users ask questions in your category.</p>
+            {llmScorecard.length === 0 ? (
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run an Earned Media audit to see your LLM scorecard.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-[500px]">
+                  <thead>
+                    <tr style={{ background: vars.g50 }}>
+                      {["Platform", "Mentions", "Cited", "Appearance Rate", "Trend"].map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {llmScorecard.map(llm => (
+                      <tr key={llm.platform} className="border-t" style={{ borderColor: vars.g200 }}>
+                        <td className="px-4 py-3.5"><span className="text-sm font-medium" style={{ color: vars.navy }}>{llm.platform}</span></td>
+                        <td className="px-4 py-3.5"><span className="text-sm font-semibold" style={{ color: vars.navy }}>{llm.mentions}</span></td>
+                        <td className="px-4 py-3.5">{llm.cited ? <CheckCircle2 size={16} color={vars.green} /> : <X size={16} color={vars.g300} />}</td>
+                        <td className="px-4 py-3.5"><span className="text-sm" style={{ color: vars.g600 }}>{llm.rate}%</span></td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-sm font-medium flex items-center gap-1" style={{ color: llm.trend >= 0 ? vars.green : vars.red }}>
+                            {llm.trend >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                            {llm.trend >= 0 ? "+" : ""}{llm.trend}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
@@ -1116,17 +1192,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Technical &amp; Schema Audit</h3>
             </div>
             <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>Assessment of structured data, crawler access and technical signals that help AI engines understand and trust your content.</p>
-            <div className="space-y-3">
-              {technicalAudit.map(item => (
-                <div key={item.item} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
-                  <div className="flex items-center gap-3 sm:ml-auto">
-                    <StatusBadge status={item.status} />
-                    <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
+            {technicalAudit.length === 0 ? (
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see your technical &amp; schema findings.</p>
+            ) : (
+              <div className="space-y-3">
+                {technicalAudit.map(item => (
+                  <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                    <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
+                    <div className="flex items-center gap-3 sm:ml-auto">
+                      <StatusBadge status={item.status} />
+                      <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-8" style={{ background: "white", borderColor: vars.g200 }}>
@@ -1135,17 +1215,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <h3 className="text-base sm:text-lg font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Architecture Audit</h3>
             </div>
             <p className="text-sm font-light mb-5" style={{ color: vars.g500 }}>How well your website content is structured for AI comprehension, citation and answer extraction.</p>
-            <div className="space-y-3">
-              {contentAudit.map(item => (
-                <div key={item.item} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
-                  <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
-                  <div className="flex items-center gap-3 sm:ml-auto">
-                    <StatusBadge status={item.status} />
-                    <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
+            {contentAudit.length === 0 ? (
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>Run a Website Visibility audit to see your content architecture findings.</p>
+            ) : (
+              <div className="space-y-3">
+                {contentAudit.map(item => (
+                  <div key={item.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                    <span className="text-sm font-medium flex-shrink-0" style={{ color: vars.navy }}>{item.item}</span>
+                    <div className="flex items-center gap-3 sm:ml-auto">
+                      <StatusBadge status={item.status} />
+                      <span className="text-xs font-light flex-1 sm:flex-initial sm:w-64" style={{ color: vars.g500 }}>{item.detail}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4" style={{ background: vars.cream, borderColor: "#E6D7BC" }}>
