@@ -207,7 +207,7 @@ function MarketingIntelligencePage() {
           <TrendingUp size={20} color="#ffffff" />
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
-        <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
+        <p className="text-[15px] font-light" style={{ color: "rgba(255,255,255,0.97)" }}>
           Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
         </p>
       </div>
@@ -219,7 +219,7 @@ function MarketingIntelligencePage() {
             {MARKETING_TYPES.map((mt) => {
               const on = marketingType.includes(mt);
               return (
-                <button key={mt} onClick={() => setMarketingType(on ? marketingType.filter((x) => x !== mt) : [...marketingType, mt])} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: on ? vars.coral : vars.g200, background: on ? "rgba(224,120,86,0.1)" : "white", color: on ? vars.coral : vars.g500 }}>
+                <button key={mt} onClick={() => setMarketingType(on ? marketingType.filter((x) => x !== mt) : [...marketingType, mt])} className="text-[12px] font-semibold px-3 py-1.5 rounded-full border transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md active:scale-95" style={{ borderColor: on ? vars.coral : vars.g200, background: on ? "rgba(224,120,86,0.1)" : "white", color: on ? vars.coral : vars.g500 }}>
                   {mt}
                 </button>
               );
@@ -230,7 +230,7 @@ function MarketingIntelligencePage() {
         <Labelled label="Select Category" hint="Multi-select from the business categories list.">
           <div className="rounded-lg border p-3 mb-2" style={{ borderColor: vars.g200, background: vars.g50 }}>
             {categories.length === 0 ? (
-              <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No categories selected.</p>
+              <p className="text-[13px] font-light italic" style={{ color: vars.g600 }}>No categories selected.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((cat) => (
@@ -279,7 +279,7 @@ function MarketingIntelligencePage() {
               <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
             </button>
           </div>
-          <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>
+          <p className="text-[14px] font-normal leading-relaxed" style={{ color: vars.navy }}>
             Builds an exhaustive, web-verified list of UK PR events for the chosen marketing types and business categories, with one row per opportunity (entry, award, speaker, sponsorship). Events confirmed in the next 12 months are flagged <strong style={{ color: "#1F7244" }}>[C] Confirmed</strong>; events held in the previous 24 months but not yet confirmed forward are flagged <strong style={{ color: "#A04040" }}>[U] Unconfirmed</strong>. Each event carries an LLM authority score (0-100), a relevance summary and named-contact details verified at search time. No URLs, events, titles or emails are invented.
           </p>
           {showLLMBrief && (
@@ -294,8 +294,8 @@ function MarketingIntelligencePage() {
           {results.length === 0 ? (
             <div className="rounded-2xl border p-10 text-center" style={{ background: "white", borderColor: vars.g200 }}>
               <Search size={28} color={vars.g300} className="mx-auto mb-3" />
-              <p className="text-sm font-medium mb-1" style={{ color: vars.g500 }}>No events found for this search</p>
-              <p className="text-[12px]" style={{ color: vars.g400 }}>Try adjusting the marketing type, categories, or time period and search again.</p>
+              <p className="text-sm font-medium mb-1" style={{ color: vars.navy }}>No events found for this search</p>
+              <p className="text-[13px]" style={{ color: vars.g600 }}>Try adjusting the marketing type, categories, or time period and search again.</p>
             </div>
           ) : (
           <>
@@ -330,7 +330,7 @@ function MarketingIntelligencePage() {
                           {e.rank}. {e.name}
                         </p>
                         <a href={e.url} target="_blank" rel="noreferrer" className="text-[11px] underline" style={{ color: vars.accent }}>{e.url}</a>
-                        <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+                        <p className="text-[13px] font-light mt-1" style={{ color: vars.g600 }}>
                           {e.category} · {e.date} · {e.location}
                         </p>
                       </div>
@@ -361,8 +361,8 @@ function MarketingIntelligencePage() {
                             </div>
                             <p className="mt-0.5"><strong>Cost:</strong> {o.cost}</p>
                             <p><strong>Deadline:</strong> <span style={{ color: o.actionable ? vars.coral : vars.g600 }}>{o.deadline}</span></p>
-                            {o.contactDetails && <p className="italic" style={{ color: vars.g500 }}>Contact: {o.contactDetails}</p>}
-                            {o.notes && <p className="italic" style={{ color: vars.g500 }}>{o.notes}</p>}
+                            {o.contactDetails && <p className="italic" style={{ color: vars.g600 }}>Contact: {o.contactDetails}</p>}
+                            {o.notes && <p className="italic" style={{ color: vars.g600 }}>{o.notes}</p>}
                           </li>
                         ))}
                       </ul>
@@ -374,7 +374,7 @@ function MarketingIntelligencePage() {
 
             {/* Download buttons */}
             <div className="px-5 py-4 border-t flex flex-wrap items-center gap-3" style={{ borderColor: vars.g100, background: vars.g50 }}>
-              <p className="text-[11px] font-light flex-1 min-w-[200px]" style={{ color: vars.g500 }}>
+              <p className="text-[12px] font-light flex-1 min-w-[200px]" style={{ color: vars.g600 }}>
                 Both formats include a methodology and source caveats. Excel exports one row per opportunity for sorting.
               </p>
               <button onClick={downloadWordReport} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.navy }}>
