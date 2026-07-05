@@ -52,7 +52,10 @@ export default function MarketingPage({ title, eyebrow, children, onLogin, onBac
       <footer className="py-10 border-t" style={{ background: cream, borderColor: "rgba(16,43,54,0.1)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
-          <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
+          <div className="flex items-center gap-5">
+            <button onClick={() => onNavigate("trust-security")} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>Trust &amp; Security</button>
+            <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
+          </div>
         </div>
       </footer>
     </div>

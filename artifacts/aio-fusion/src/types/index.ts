@@ -181,7 +181,7 @@ export type EventItem = {
 
 export type PublicView =
   | "landing" | "about" | "contact" | "insights" | "pricing"
-  | "for-inhouse" | "for-agencies" | "for-agents";
+  | "for-inhouse" | "for-agencies" | "for-agents" | "trust-security";
 
 export type Outlet = {
   id: number;

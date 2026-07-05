@@ -144,6 +144,7 @@ const ForAgenciesPage = lazy(() => import("./marketing/ForAgenciesPage"));
 const InsightsPage = lazy(() => import("./marketing/InsightsPage"));
 const AboutPage = lazy(() => import("./marketing/AboutPage"));
 const ContactPage = lazy(() => import("./marketing/ContactPage"));
+const TrustSecurityPage = lazy(() => import("./marketing/TrustSecurityPage"));
 
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
@@ -212,6 +213,7 @@ const VIEW_TO_SLUG: Record<string, string> = {
   "for-inhouse": "for-inhouse",
   "for-agencies": "for-agencies",
   "for-agents": "for-agents",
+  "trust-security": "trust-security",
 };
 
 const SLUG_TO_VIEW: Record<string, PublicView> = {
@@ -229,6 +231,9 @@ const SLUG_TO_VIEW: Record<string, PublicView> = {
   "for-agents": "for-agents",
   "ai-agents": "for-agents",
   aiagents: "for-agents",
+  "trust-security": "trust-security",
+  trust: "trust-security",
+  security: "trust-security",
 };
 
 function appBase(): string {
@@ -256,7 +261,7 @@ function viewToUrl(v: string): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing">(() => publicViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security">(() => publicViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
@@ -554,7 +559,7 @@ function App() {
   };
 
   const goToView = (v: string) => {
-    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing") {
+    if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security") {
       if (v === "insights") setInsightsFilter(null);
       setView(v as any);
       window.scrollTo(0, 0);
@@ -590,6 +595,9 @@ function App() {
   }
   if (view === "pricing") {
     return <PricingPage onLogin={enterPlatform} onNavigate={goToView} isAuthed={isAuthed} />;
+  }
+  if (view === "trust-security") {
+    return <TrustSecurityPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "platform-home") {
     return (
