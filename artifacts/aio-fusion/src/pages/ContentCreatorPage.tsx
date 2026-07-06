@@ -569,26 +569,36 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           )}
         </Labelled>
 
-        <div className="rounded-xl border p-4" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
-          <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
-            <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
-          </p>
-          <p className="text-[13px] font-normal mt-1" style={{ color: vars.g600 }}>
-            Fill in the fields below, then click <strong>Create Draft</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
-          </p>
-          {generated && draftSnapshot && (
-            <div className="mt-3">
-              <button
-                onClick={discardDraft}
-                disabled={generating}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ borderColor: vars.g200, color: "#C94A3E" }}
-                title="Discard the AI draft and restore what you had before"
-              >
-                <Undo2 size={14} /> Discard draft
-              </button>
+        <div className="rounded-xl border p-4 flex items-center justify-between gap-4" style={{ borderColor: "rgba(200,73,122,0.35)", background: "rgba(200,73,122,0.05)" }}>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold flex items-center gap-1.5" style={{ color: vars.navy }}>
+              <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
+            </p>
+            <p className="text-[13px] font-normal mt-1" style={{ color: vars.g600 }}>
+              Fill in the fields below, then click <strong>Create Draft</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
+            </p>
+            {generated && draftSnapshot && (
+              <div className="mt-3">
+                <button
+                  onClick={discardDraft}
+                  disabled={generating}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold border bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ borderColor: vars.g200, color: "#C94A3E" }}
+                  title="Discard the AI draft and restore what you had before"
+                >
+                  <Undo2 size={14} /> Discard draft
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="hidden sm:flex relative shrink-0 items-center justify-center w-16 h-16" aria-hidden="true">
+            <div className="absolute w-12 h-12 rounded-full" style={{ background: "rgba(200,73,122,0.12)" }} />
+            <Sparkles size={12} color="#C8497A" className="absolute -top-1 -left-1" />
+            <Sparkles size={9} color="#C8497A" className="absolute bottom-0 -right-1" />
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-lg border-2 bg-white rotate-3" style={{ borderColor: "#C8497A" }}>
+              <FileText size={18} color="#C8497A" />
             </div>
-          )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
