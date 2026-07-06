@@ -219,12 +219,12 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <div
                 key={t}
                 className="aio-pop-in flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-md"
-                style={{ background: "#F1EADB", opacity: hasScore ? 1 : 0.8, animationDelay: `${i * 60}ms` }}
+                style={{ background: "rgba(201,160,78,0.18)", opacity: hasScore ? 1 : 0.8, animationDelay: `${i * 60}ms` }}
               >
-                <span className="text-[14px] font-medium" style={{ color: ink }}>{t}</span>
+                <span className="text-[14px] font-medium" style={{ color: "#7A5E25" }}>{t}</span>
                 <span
                   className="flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold shrink-0"
-                  style={{ background: "rgba(201,160,78,0.28)", color: "#8A6A2E" }}
+                  style={{ background: "rgba(201,160,78,0.32)", color: "#7A5E25" }}
                 >
                   {Math.round(s)}
                 </span>
