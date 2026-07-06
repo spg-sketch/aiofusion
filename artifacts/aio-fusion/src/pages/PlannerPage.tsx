@@ -175,19 +175,11 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <ListIcon size={12} /> List View
               </button>
             </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setShowMethodology(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Scoring methodology">
               <HelpCircle size={13} /> Methodology
             </button>
             <button onClick={() => setShowSettings(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }} title="Score settings">
               <Shield size={13} /> Score Settings
-            </button>
-            <button onClick={() => setShowArchivePicker(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors" style={{ background: paper, color: ink }}>
-              <Archive size={13} /> Select Archived
-            </button>
-            <button onClick={() => sendToOptimiser()} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] text-white transition-colors" style={{ background: accentPink }}>
-              <Plus size={13} /> Add Content
             </button>
           </div>
         </div>
