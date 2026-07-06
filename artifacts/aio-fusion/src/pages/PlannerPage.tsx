@@ -192,11 +192,16 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             return (
               <div
                 key={t}
-                className="aio-pop-in flex items-center gap-2.5 px-4 py-2 rounded-full border transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-lg"
-                style={{ background: "rgba(201,160,78,0.18)", borderColor: vars.gold, opacity: hasScore ? 1 : 0.75, animationDelay: `${i * 60}ms` }}
+                className="aio-pop-in flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-md"
+                style={{ background: "#F1EADB", opacity: hasScore ? 1 : 0.8, animationDelay: `${i * 60}ms` }}
               >
-                <span className="text-[14px] font-semibold" style={{ color: ink }}>{t}</span>
-                <span className="text-[14px] font-bold" style={{ color: "#7A5E25" }}>{Math.round(s)}</span>
+                <span className="text-[14px] font-medium" style={{ color: ink }}>{t}</span>
+                <span
+                  className="flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold shrink-0"
+                  style={{ background: "rgba(201,160,78,0.28)", color: "#8A6A2E" }}
+                >
+                  {Math.round(s)}
+                </span>
               </div>
             );
           })}
