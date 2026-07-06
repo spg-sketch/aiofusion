@@ -74,6 +74,19 @@ field you mean to). To rename cleanly, set BOTH the `name` column and `data.name
 (display uses `pickName(data.name, colName, ...)`, which ignores the "New Project"
 placeholder).
 
+## Self-serve "delete my account and data" (GDPR erasure)
+`POST /api/platform/account/self-delete` (any signed-in account, password
+re-entry required) hard-deletes every table the account owns (projects,
+project_snapshots, archive_items, planner_items, scoring_configs, media_*,
+token_usage, audit_locks, platform_sessions/meta/accounts) — unlike the
+admin-only `accounts/delete`, which reassigns projects instead of deleting them.
+Blocked if the account is the last admin, or still has active sub-accounts
+(caller must remove/reassign those first — never cascade-delete another
+account's data as a side effect). UI lives in the PlatformHomePage signed-in
+card ("Danger Zone").
+**Why:** Privacy Policy promises a right-to-erasure; needed a real self-serve
+path distinct from the existing admin reassignment-based delete.
+
 ## Rule: never seed a hardcoded admin password in production
 `ensureDefaultAdmin` only seeds the known fallback credential in development. In
 production it requires `PLATFORM_ADMIN_PASSWORD`; if unset it skips seeding and

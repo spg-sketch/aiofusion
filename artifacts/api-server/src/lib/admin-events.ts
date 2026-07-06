@@ -10,6 +10,7 @@ export type AdminAction =
   | "forced_llm_audit"
   | "forced_website_audit"
   | "account_delete"
+  | "account_self_delete"
   | "account_role_change"
   | "project_owner_reassign"
   | "platform_migrate"

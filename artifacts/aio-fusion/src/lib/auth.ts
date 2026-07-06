@@ -497,6 +497,20 @@ export async function serverSetSeatCap(
   }
 }
 
+// Self-serve "delete my account and data" (GDPR right to erasure). Requires
+// the caller's own password as a confirmation step. On success the server has
+// hard-deleted the account and everything it owns, and cleared the session
+// cookie, so we clear the local cache too.
+export async function serverSelfDeleteAccount(
+  password: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/account/self-delete", { password });
+  if (!ok) return { ok: false, error: json?.error || "Failed to delete account." };
+  clearSession();
+  saveUsers([]);
+  return { ok: true };
+}
+
 export type SessionInfo = {
   sid: string;
   isCurrent: boolean;

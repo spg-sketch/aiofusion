@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 function PlatformHomePage({
   onCreateProject,
@@ -45,6 +45,10 @@ function PlatformHomePage({
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadMySessions = () => {
     setSessionsLoading(true);
@@ -65,6 +69,19 @@ function PlatformHomePage({
         setMySessions((prev) => prev ? prev.filter((s) => s.sid !== sid) : prev);
       })
       .finally(() => setRevokingSession(null));
+  };
+
+  const handleDeleteAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeleteError(null);
+    if (!deletePassword) { setDeleteError("Enter your password to confirm."); return; }
+    setDeleting(true);
+    void serverSelfDeleteAccount(deletePassword)
+      .then((r) => {
+        if (!r.ok) { setDeleteError(r.error); return; }
+        onSignOut();
+      })
+      .finally(() => setDeleting(false));
   };
 
   const loopSteps: { label: string; sub: string; icon: any }[] = [
@@ -326,6 +343,48 @@ function PlatformHomePage({
                     )
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* DANGER ZONE - self-serve account deletion (GDPR right to erasure) */}
+            <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
+              <button
+                onClick={() => { setShowDeleteAccount((v) => !v); setDeleteError(null); setDeletePassword(""); }}
+                className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+                style={{ color: "rgba(255,255,255,0.6)" }}
+              >
+                <Trash2 size={13} />
+                {showDeleteAccount ? "Cancel account deletion" : "Delete my account and data"}
+              </button>
+              {showDeleteAccount && (
+                <form onSubmit={handleDeleteAccount} className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
+                  <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
+                    This permanently deletes your account, all your projects, archive items, planner entries and other data.
+                    This cannot be undone. {canCreateSubAccounts(session.role) ? "If you have client accounts, remove them first." : ""}
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Confirm your password</label>
+                      <input
+                        type="password"
+                        value={deletePassword}
+                        onChange={(e) => setDeletePassword(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                        style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={deleting}
+                      className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                      style={{ background: vars.red }}
+                    >
+                      {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      Permanently delete
+                    </button>
+                  </div>
+                  {deleteError && <p className="mt-3 text-[13px] font-semibold" style={{ color: "#FFB4B4" }}>{deleteError}</p>}
+                </form>
               )}
             </div>
           </div>

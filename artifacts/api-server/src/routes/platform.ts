@@ -5,6 +5,15 @@ import {
   platformMetaTable,
   platformSessionsTable,
   projectsTable,
+  projectSnapshotsTable,
+  archiveItemsTable,
+  plannerItemsTable,
+  scoringConfigsTable,
+  mediaOutletsTable,
+  mediaContactsTable,
+  mediaCategoriesTable,
+  tokenUsageTable,
+  auditLocksTable,
   adminEventsTable,
 } from "@workspace/db";
 import { and, count, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
@@ -570,6 +579,79 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to delete account" });
+    }
+  },
+);
+
+// Self-serve "delete my account and data" (GDPR right to erasure). Any signed-in
+// account may call this on itself. Requires the caller to re-enter their own
+// password as a confirmation step for such a destructive, irreversible action.
+// An account with active (non-archived) sub-accounts must remove or reassign
+// them first — we never silently cascade-delete another account's data as a
+// side effect of someone else's deletion request.
+router.post(
+  "/platform/account/self-delete",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const username = normUsername(actor.username);
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (!password) {
+        res.status(400).json({ error: "Enter your password to confirm." });
+        return;
+      }
+      const account = await getAccount(username);
+      if (!account || !verifyPassword(password, account.passwordHash)) {
+        res.status(401).json({ error: "Incorrect password." });
+        return;
+      }
+      if (account.role === "admin") {
+        const admins = await db
+          .select({ username: platformAccountsTable.username })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.role, "admin"));
+        if (admins.length <= 1) {
+          res.status(400).json({ error: "You are the last admin, so this account cannot be deleted. Promote another account to admin first." });
+          return;
+        }
+      }
+      const children = await db
+        .select({ username: platformAccountsTable.username })
+        .from(platformAccountsTable)
+        .where(eq(platformAccountsTable.parent, username));
+      if (children.length > 0) {
+        res.status(400).json({
+          error: `You still have ${children.length} client account${children.length === 1 ? "" : "s"} under you. Delete or reassign them first.`,
+        });
+        return;
+      }
+
+      // Hard-delete everything scoped to this account. Order does not matter
+      // (no foreign keys tie these tables together), but we log the event
+      // before removing the account row so the actor/target are still valid.
+      void logAdminEvent({ username: actor.username }, "account_self_delete", username, "account", {
+        role: account.role,
+      });
+      await db.delete(archiveItemsTable).where(eq(archiveItemsTable.owner, username));
+      await db.delete(plannerItemsTable).where(eq(plannerItemsTable.owner, username));
+      await db.delete(scoringConfigsTable).where(eq(scoringConfigsTable.owner, username));
+      await db.delete(auditLocksTable).where(eq(auditLocksTable.owner, username));
+      await db.delete(projectSnapshotsTable).where(eq(projectSnapshotsTable.owner, username));
+      await db.delete(projectsTable).where(eq(projectsTable.owner, username));
+      await db.delete(mediaOutletsTable).where(eq(mediaOutletsTable.accountId, username));
+      await db.delete(mediaContactsTable).where(eq(mediaContactsTable.accountId, username));
+      await db.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, username));
+      await db.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, username));
+      await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
+      await deleteProfile(username);
+      await db.delete(platformMetaTable).where(eq(platformMetaTable.key, archiveKey(username)));
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+
+      clearPlatformCookie(res);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete account. Please try again or contact info@aiofusion.ai." });
     }
   },
 );
