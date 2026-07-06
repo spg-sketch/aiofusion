@@ -1824,11 +1824,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         <div className="px-5 sm:px-8 py-5 sm:py-6" style={{ background: "linear-gradient(135deg, #165265 0%, #1f748f 60%, #2896b9 100%)" }}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
+              <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
               <div className="hidden sm:block w-px h-10" style={{ background: "rgba(255,255,255,0.25)" }} />
               <div className="hidden sm:block">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-white/60 mb-0.5">Authority & Visibility Report</p>
-                <p className="text-white text-sm font-medium" style={{ fontFamily: "'Alice', Georgia, serif" }}>Earned Media Visibility Audit</p>
+                <p className="text-[12px] uppercase tracking-[0.15em] text-white/60 mb-0.5">Authority & Visibility Report</p>
+                <p className="text-white text-lg font-medium" style={{ fontFamily: "'Alice', Georgia, serif" }}>Earned Media Visibility Audit</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
