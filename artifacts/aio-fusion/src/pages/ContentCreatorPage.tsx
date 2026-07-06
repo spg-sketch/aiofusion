@@ -706,12 +706,12 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.g200, color: vars.accent }}>+ Choose categories</button>
+            <button onClick={() => setShowCatPicker(true)} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border" style={{ borderColor: vars.gold, color: "#7A5E25" }}>+ Choose categories</button>
             {projectCategories.length > 0 && (
               <button
                 onClick={() => setMediaTarget(Array.from(new Set([...mediaTarget, ...projectCategories])))}
                 className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
-                style={{ background: "rgba(31,116,143,0.08)", color: vars.accent }}
+                style={{ background: "rgba(201,160,78,0.18)", color: "#7A5E25" }}
                 title={`Add the ${projectCategories.length} categories selected in Project Set-Up 1.9`}
               >
                 Use Project Set-Up categories ({projectCategories.length})
