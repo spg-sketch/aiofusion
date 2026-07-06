@@ -1707,7 +1707,7 @@ export default function IntakePage() {
           </div>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mt-3 mb-6" style={{ color: "rgba(255,255,255,0.85)" }}>
-          This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR set-up and Website set-up sections to build it.
+          This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR Set-Up and AIO Set-Up sections to build it.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
