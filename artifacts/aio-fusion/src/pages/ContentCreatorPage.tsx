@@ -790,7 +790,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={createDraft}
             disabled={generating || optimisingField !== null}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ background: "#C8497A" }}
             title="Write a full draft from your headline, the brief and your Project Data"
           >
@@ -805,7 +805,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title="Download the current draft as a Word document"
           >
@@ -814,7 +814,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={() => setShowDownloadNotesModal(true)}
             disabled={changeLog.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title={changeLog.length === 0 ? "Run Optimise first to generate notes" : "Download the optimised piece with a change log explaining where each key message was embedded - as Word or PDF"}
           >
@@ -823,7 +823,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={shareDraftFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title="Open your email client with the current draft ready to send for review"
           >
@@ -832,7 +832,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={acceptAndArchive}
             disabled={!hasAnyContent}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
             title="Sign off this piece and save it to the Archive"
           >
@@ -841,7 +841,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={sendToMediaResearchFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: "#84AB7D", color: "#84AB7D", background: "#ffffff" }}
             title="Save the draft and jump to Media Research to find target publications and journalists"
           >
@@ -850,7 +850,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={pushToCommsPlanner}
             disabled={!hasAnyContent}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ background: "#D4922A" }}
             title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}
           >
