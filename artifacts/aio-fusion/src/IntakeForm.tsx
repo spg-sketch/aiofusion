@@ -1264,7 +1264,7 @@ export default function IntakePage() {
 
   const statusBadge = (() => {
     if (intakeStatus === "Accepted") return { bg: "rgba(61,155,107,0.12)", color: vars.green, label: "Accepted" };
-    if (intakeStatus === "Optimised") return { bg: "rgba(40,150,185,0.12)", color: vars.teal, label: "Optimised" };
+    if (intakeStatus === "Optimised") return { bg: vars.navy, color: "#8FA9D6", label: "Optimised" };
     return { bg: "rgba(212,146,42,0.14)", color: vars.amber, label: "Draft" };
   })();
 
