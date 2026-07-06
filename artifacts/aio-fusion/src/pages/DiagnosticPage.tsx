@@ -653,10 +653,10 @@ Engine used:
         <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
           {copiedKey === "vibe" ? <CheckCircle2 size={14} /> : <Code2 size={14} />} {copiedKey === "vibe" ? "Copied" : "Vibe Code Prompt"}
         </button>
-        <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.navy }}>
+        <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           {copiedKey === "seo" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "seo" ? "Copied" : "Copy SEO Improvements"}
         </button>
-        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.g200, color: vars.g600 }}>
+        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           Run New Diagnostic
         </button>
         <div className="flex items-center gap-2 sm:ml-auto">
