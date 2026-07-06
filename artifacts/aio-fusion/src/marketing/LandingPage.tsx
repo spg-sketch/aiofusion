@@ -357,6 +357,8 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <button onClick={() => onNavigate("contact")} className="hover:opacity-60">Contact</button>
               <button onClick={() => onNavigate("about")} className="hover:opacity-60">About</button>
               <button onClick={() => onNavigate("trust-security")} className="hover:opacity-60">Trust &amp; Security</button>
+              <button onClick={() => onNavigate("privacy-policy")} className="hover:opacity-60">Privacy Policy</button>
+              <button onClick={() => onNavigate("terms-conditions")} className="hover:opacity-60">Terms &amp; Conditions</button>
               <button onClick={() => onNavigate("for-agents")} className="hover:opacity-60 opacity-70">For AI agents</button>
             </div>
             <p className="text-[11px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion 2026</p>

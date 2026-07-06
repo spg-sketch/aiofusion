@@ -54,6 +54,8 @@ export default function MarketingPage({ title, eyebrow, children, onLogin, onBac
           <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
           <div className="flex items-center gap-5">
             <button onClick={() => onNavigate("trust-security")} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>Trust &amp; Security</button>
+            <button onClick={() => onNavigate("privacy-policy")} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>Privacy Policy</button>
+            <button onClick={() => onNavigate("terms-conditions")} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>Terms &amp; Conditions</button>
             <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
           </div>
         </div>
