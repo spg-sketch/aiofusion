@@ -2534,7 +2534,7 @@ export default function IntakePage() {
                 <button
                   onClick={downloadProjectData}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] transition-all duration-300 whitespace-nowrap border hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]/40"
-                  style={{ background: "white", color: "#0a1628", borderColor: "rgba(16,43,54,0.2)" }}
+                  style={{ background: "white", color: "#0a1628", borderColor: vars.navy, borderWidth: 2 }}
                   title="Open the print dialog so you can save the full Project Data as a PDF"
                 >
                   <Download size={13} /> Download PDF
