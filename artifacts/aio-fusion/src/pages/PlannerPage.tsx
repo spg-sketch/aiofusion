@@ -131,10 +131,6 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   return (
     <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
       <div className="mb-6">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-3" style={{ background: accentSoft, border: `1px solid ${accentPink}40` }}>
-          <Calendar size={12} color={accentPink} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accentPink }}>Comms Planner</span>
-        </div>
         <div className="flex items-center gap-3">
           <CalendarDays size={26} color="#ffffff" />
           <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Comms Planner</h1>
