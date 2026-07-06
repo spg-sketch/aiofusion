@@ -85,26 +85,44 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const weeks = Array.from({ length: 8 }, (_, i) => startWeek + i);
 
   const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
   const [calendarScrollState, setCalendarScrollState] = useState({ canLeft: false, canRight: false });
+  const [calendarScrollWidth, setCalendarScrollWidth] = useState(0);
   useEffect(() => {
     const el = calendarScrollRef.current;
     if (!el || view !== "spreadsheet") {
       setCalendarScrollState({ canLeft: false, canRight: false });
       return;
     }
+    let syncing = false;
     const update = () => {
       setCalendarScrollState({
         canLeft: el.scrollLeft > 4,
         canRight: el.scrollLeft < el.scrollWidth - el.clientWidth - 4,
       });
+      setCalendarScrollWidth(el.scrollWidth);
+      if (topScrollRef.current && !syncing) {
+        syncing = true;
+        topScrollRef.current.scrollLeft = el.scrollLeft;
+        syncing = false;
+      }
+    };
+    const onTopScroll = () => {
+      if (topScrollRef.current && !syncing) {
+        syncing = true;
+        el.scrollLeft = topScrollRef.current.scrollLeft;
+        syncing = false;
+      }
     };
     update();
     el.addEventListener("scroll", update, { passive: true });
+    topScrollRef.current?.addEventListener("scroll", onTopScroll, { passive: true });
     window.addEventListener("resize", update);
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => {
       el.removeEventListener("scroll", update);
+      topScrollRef.current?.removeEventListener("scroll", onTopScroll);
       window.removeEventListener("resize", update);
       ro.disconnect();
     };
@@ -214,13 +232,13 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             return (
               <div
                 key={t}
-                className="aio-pop-in flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-md"
-                style={{ background: "rgba(201,160,78,0.18)", opacity: hasScore ? 1 : 0.8, animationDelay: `${i * 60}ms` }}
+                className="aio-pop-in flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-lg"
+                style={{ background: "rgba(201,160,78,0.18)", borderColor: vars.gold, boxShadow: "0 3px 10px rgba(201,160,78,0.28)", opacity: hasScore ? 1 : 0.8, animationDelay: `${i * 60}ms` }}
               >
-                <span className="text-[14px] font-medium" style={{ color: "#7A5E25" }}>{t}</span>
+                <span className="text-[14px] font-bold" style={{ color: "#7A5E25" }}>{t}</span>
                 <span
                   className="flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold shrink-0"
-                  style={{ background: "rgba(201,160,78,0.32)", color: "#7A5E25" }}
+                  style={{ background: vars.gold, color: "white" }}
                 >
                   {Math.round(s)}
                 </span>
@@ -254,6 +272,35 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <div className="px-5 py-3 border-b flex items-center justify-between flex-wrap gap-2" style={{ borderColor: vars.g200 }}>
                 <h3 className="text-[19px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
                 <span className="text-[13px] font-light" style={{ color: vars.g500 }}>Click any row to open in the Content Optimiser</span>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 px-5 py-2 border-b" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                <button
+                  onClick={() => calendarScrollRef.current?.scrollBy({ left: -360, behavior: "smooth" })}
+                  disabled={!calendarScrollState.canLeft}
+                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
+                  style={{ background: vars.navy, color: "white" }}
+                  aria-label="Scroll calendar left"
+                  title="Scroll left"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div
+                  ref={topScrollRef}
+                  className="overflow-x-auto flex-1"
+                  style={{ height: 16 }}
+                >
+                  <div style={{ width: calendarScrollWidth || "100%", height: 1 }} />
+                </div>
+                <button
+                  onClick={() => calendarScrollRef.current?.scrollBy({ left: 360, behavior: "smooth" })}
+                  disabled={!calendarScrollState.canRight}
+                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-30 disabled:cursor-default hover:scale-110"
+                  style={{ background: vars.navy, color: "white" }}
+                  aria-label="Scroll calendar right"
+                  title="Scroll right"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
               <div className="relative">
                 {calendarScrollState.canLeft && (
