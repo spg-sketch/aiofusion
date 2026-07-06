@@ -834,9 +834,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             disabled={!hasAnyContent}
             className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
             style={{ borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
-            title="Sign off this piece and save it to the Archive"
+            title="Sign off this piece and save it to the Content Library"
           >
-            <Archive size={14} /> Archive
+            <Archive size={14} /> Save to Content Library
           </button>
           <button
             onClick={sendToMediaResearchFromCreator}
