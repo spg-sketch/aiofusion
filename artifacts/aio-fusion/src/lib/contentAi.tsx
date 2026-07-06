@@ -124,11 +124,13 @@ export function GenerationProgress({
   chars,
   accent = vars.accent,
   compact = false,
+  textColor,
 }: {
   stages: string[];
   chars: number;
   accent?: string;
   compact?: boolean;
+  textColor?: string;
 }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -150,7 +152,7 @@ export function GenerationProgress({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <Loader2 size={compact ? 13 : 15} className="animate-spin flex-shrink-0" style={{ color: accent }} />
-          <span className={`font-semibold truncate ${compact ? "text-[12px]" : "text-[13px]"}`} style={{ color: accent }}>
+          <span className={`font-semibold truncate ${compact ? "text-[12px]" : "text-[13px]"}`} style={{ color: textColor || accent }}>
             {stage}…
           </span>
         </div>

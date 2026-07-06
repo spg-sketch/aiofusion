@@ -753,6 +753,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             ]}
             chars={generateChars}
             accent={vars.coral}
+            textColor="#ffffff"
           />
         </div>
       )}
@@ -774,6 +775,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             ]}
             chars={creatorChars}
             accent={vars.coral}
+            textColor="#ffffff"
             compact
           />
         </div>
