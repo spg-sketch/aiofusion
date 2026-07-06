@@ -3,7 +3,7 @@ import {
   ChevronRight, ChevronLeft, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
   MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
-  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
+  Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList,
   Lightbulb, ClipboardPaste, Upload, Calendar, CalendarDays, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
@@ -470,14 +470,6 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </button>
           </div>
         </div>
-        <button
-          onClick={() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.12em] transition-colors"
-          style={{ background: "rgba(255,255,255,0.08)", color: paper, border: "1px solid rgba(255,255,255,0.18)" }}
-          title="Back to top"
-        >
-          <ArrowUpRight size={12} /> Back to top
-        </button>
       </div>
 
       {/* Methodology modal */}
