@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
-  ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
+  ChevronRight, ChevronLeft, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
   MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
@@ -83,6 +83,32 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
   const startWeek = getISOWeek(new Date());
   const weeks = Array.from({ length: 8 }, (_, i) => startWeek + i);
+
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
+  const [calendarScrollState, setCalendarScrollState] = useState({ canLeft: false, canRight: false });
+  useEffect(() => {
+    const el = calendarScrollRef.current;
+    if (!el || view !== "spreadsheet") {
+      setCalendarScrollState({ canLeft: false, canRight: false });
+      return;
+    }
+    const update = () => {
+      setCalendarScrollState({
+        canLeft: el.scrollLeft > 4,
+        canRight: el.scrollLeft < el.scrollWidth - el.clientWidth - 4,
+      });
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      ro.disconnect();
+    };
+  }, [view, projects, cfg]);
 
   const totals = projects.reduce(
     (acc, p) => {
@@ -233,7 +259,34 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <h3 className="text-[19px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Content Marketing Calendar</h3>
                 <span className="text-[13px] font-light" style={{ color: vars.g500 }}>Click any row to open in the Content Optimiser</span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="relative">
+                {calendarScrollState.canLeft && (
+                  <div className="hidden sm:flex absolute inset-y-0 left-0 items-start pointer-events-none" style={{ zIndex: 20 }}>
+                    <button
+                      onClick={() => calendarScrollRef.current?.scrollBy({ left: -360, behavior: "smooth" })}
+                      className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
+                      style={{ position: "sticky", top: 160, marginLeft: 8, background: "rgba(10,22,40,0.9)", color: "white" }}
+                      aria-label="Scroll calendar left"
+                      title="Scroll left"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                  </div>
+                )}
+                {calendarScrollState.canRight && (
+                  <div className="hidden sm:flex absolute inset-y-0 right-0 items-start pointer-events-none" style={{ zIndex: 20 }}>
+                    <button
+                      onClick={() => calendarScrollRef.current?.scrollBy({ left: 360, behavior: "smooth" })}
+                      className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full shadow-lg transition-transform hover:scale-110"
+                      style={{ position: "sticky", top: 160, marginRight: 8, background: "rgba(10,22,40,0.9)", color: "white" }}
+                      aria-label="Scroll calendar right"
+                      title="Scroll right"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                )}
+                <div ref={calendarScrollRef} className="overflow-x-auto">
                 <table className="w-full text-[11px] border-collapse">
                   <thead>
                     <tr>
@@ -295,6 +348,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           </div>
