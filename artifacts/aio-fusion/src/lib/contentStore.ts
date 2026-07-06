@@ -65,14 +65,27 @@ export function effectiveProjectId(clientId?: string): string {
   return id && id !== "default" ? id : "default";
 }
 
+// True once the initial server fetch (see initContentStore) has completed at
+// least once, regardless of whether any component is listening yet.
+export function isContentStoreReady(): boolean {
+  return _contentStoreReady;
+}
+
 // Subscribe to content-store changes and force a re-render. Returns a version
 // counter that increments on every change so components can use it as a
-// useEffect dependency.
+// useEffect dependency. Initialises from the current ready flag (not always
+// 0) so a component that mounts *after* initContentStore() has already
+// resolved and fired its event doesn't get stuck showing a "loading" state
+// forever - it starts already "loaded".
 export function useContentStore(): number {
-  const [version, setVersion] = useState(0);
+  const [version, setVersion] = useState(() => (_contentStoreReady ? 1 : 0));
   useEffect(() => {
     const handler = () => setVersion((v) => v + 1);
     window.addEventListener("aio:content-store-changed", handler);
+    // Close the narrow window between this component's initial render and
+    // this effect running: if the store became ready in between, sync now
+    // instead of waiting for a future change event that may never come.
+    if (_contentStoreReady) setVersion((v) => (v > 0 ? v : 1));
     return () => window.removeEventListener("aio:content-store-changed", handler);
   }, []);
   return version;
