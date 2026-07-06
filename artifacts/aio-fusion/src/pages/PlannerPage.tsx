@@ -186,13 +186,17 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <span className="text-[12px] font-light ml-auto" style={{ color: "rgba(251,246,236,0.55)" }}>All {Object.keys(cfg.typeWeights).length} configured types</span>
         </div>
         <div className="p-6 flex flex-wrap gap-3">
-          {Object.keys(cfg.typeWeights).sort((a, b) => (totals.byType[b] || 0) - (totals.byType[a] || 0)).map((t) => {
+          {Object.keys(cfg.typeWeights).sort((a, b) => (totals.byType[b] || 0) - (totals.byType[a] || 0)).map((t, i) => {
             const s = totals.byType[t] || 0;
             const hasScore = s > 0;
             return (
-              <div key={t} className="flex items-center gap-2.5 px-4 py-2 rounded-full border transition-all duration-200 hover:-translate-y-1 hover:shadow-md" style={{ background: hasScore ? "rgba(201,160,78,0.18)" : paper, borderColor: hasScore ? vars.gold : "rgba(16,43,54,0.12)", opacity: hasScore ? 1 : 0.65 }}>
+              <div
+                key={t}
+                className="aio-pop-in flex items-center gap-2.5 px-4 py-2 rounded-full border transition-all duration-200 hover:-translate-y-1 hover:scale-105 hover:shadow-lg"
+                style={{ background: "rgba(201,160,78,0.18)", borderColor: vars.gold, opacity: hasScore ? 1 : 0.75, animationDelay: `${i * 60}ms` }}
+              >
                 <span className="text-[14px] font-semibold" style={{ color: ink }}>{t}</span>
-                <span className="text-[14px] font-bold" style={{ color: hasScore ? "#7A5E25" : vars.g400 }}>{Math.round(s)}</span>
+                <span className="text-[14px] font-bold" style={{ color: "#7A5E25" }}>{Math.round(s)}</span>
               </div>
             );
           })}

@@ -26,6 +26,16 @@
   100% { left: 100%; }
 }
 
+@keyframes aio-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.aio-pop-in {
+  animation: aio-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
 .aio-indeterminate-bar {
   position: absolute;
   top: 0;
