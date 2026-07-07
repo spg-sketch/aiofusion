@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -34,6 +34,48 @@ function UsersAdminPage({
   const green = vars.green;
   const [tick, setTick] = useState(0);
   const [users, setUsers] = useState<LocalUser[]>(() => getLocalUsers());
+
+  // ── Pending approvals ─────────────────────────────────────────────────────
+  const [pendingAccounts, setPendingAccounts] = useState<PendingAccount[] | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [approvingUser, setApprovingUser] = useState<string | null>(null);
+  const [rejectingUser, setRejectingUser] = useState<string | null>(null);
+
+  const loadPendingAccounts = () => {
+    setPendingLoading(true);
+    setPendingError(null);
+    void serverGetPendingAccounts()
+      .then((r) => {
+        if (r.ok) setPendingAccounts(r.accounts);
+        else setPendingError(r.error);
+      })
+      .finally(() => setPendingLoading(false));
+  };
+
+  useEffect(() => { if (session.role === "admin") loadPendingAccounts(); }, [session.role]);
+
+  const handleApprove = (username: string) => {
+    setApprovingUser(username);
+    void serverApproveAccount(username)
+      .then((r) => {
+        if (!r.ok) { setPendingError(r.error); return; }
+        setPendingAccounts((prev) => prev ? prev.filter((a) => a.username !== username) : prev);
+        refresh();
+      })
+      .finally(() => setApprovingUser(null));
+  };
+
+  const handleReject = (username: string) => {
+    if (!confirm(`Reject and permanently delete the application from '${username}'?`)) return;
+    setRejectingUser(username);
+    void serverRejectAccount(username)
+      .then((r) => {
+        if (!r.ok) { setPendingError(r.error); return; }
+        setPendingAccounts((prev) => prev ? prev.filter((a) => a.username !== username) : prev);
+      })
+      .finally(() => setRejectingUser(null));
+  };
 
   // Per-account token totals fetched once on mount (admin only).
   const [tokenTotals, setTokenTotals] = useState<Record<string, { calls: number; cost: number }>>({});
@@ -913,6 +955,84 @@ function UsersAdminPage({
             Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only.
           </p>
         </div>
+
+        {/* PENDING APPROVALS */}
+        {(pendingLoading || (pendingAccounts && pendingAccounts.length > 0) || pendingError) && (
+          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `2px solid #F59E0B`, boxShadow: "0 8px 24px -12px rgba(245,158,11,0.2)" }}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "#FDE68A", background: "#FFFBEB" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "#FEF3C7" }}>
+                  <AlertTriangle size={16} color="#D97706" />
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+                    Pending approvals {pendingAccounts && pendingAccounts.length > 0 ? `(${pendingAccounts.length})` : ""}
+                  </h2>
+                  <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                    These accounts signed up and are waiting for access.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={loadPendingAccounts}
+                disabled={pendingLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5 disabled:opacity-40"
+                style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+              >
+                <RefreshCw size={11} className={pendingLoading ? "animate-spin" : ""} /> Refresh
+              </button>
+            </div>
+            {pendingError && (
+              <p className="px-6 py-4 text-[13px] font-semibold" style={{ color: accent }}>{pendingError}</p>
+            )}
+            {pendingLoading && !pendingAccounts && (
+              <div className="px-6 py-4 flex items-center gap-2 text-[13px]" style={{ color: vars.g500 }}>
+                <Loader2 size={14} className="animate-spin" /> Loading…
+              </div>
+            )}
+            {pendingAccounts && pendingAccounts.length > 0 && (
+              <ul className="divide-y" style={{ borderColor: vars.g200 }}>
+                {pendingAccounts.map((a) => (
+                  <li key={a.username} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: "#FEF3C7", color: "#D97706" }}>
+                        <Building2 size={16} />
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-bold" style={{ color: ink }}>{a.displayName ?? a.username}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                          {a.email && <span className="text-[12px] font-light" style={{ color: vars.g500 }}>{a.email}</span>}
+                          {a.website && <a href={a.website} target="_blank" rel="noopener noreferrer" className="text-[12px] font-light hover:underline" style={{ color: "#1A647B" }}>{a.website.replace(/^https?:\/\//, "")}</a>}
+                          <span className="text-[11px]" style={{ color: vars.g400 }}>Applied {new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleApprove(a.username)}
+                        disabled={approvingUser === a.username || rejectingUser === a.username}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 disabled:opacity-40"
+                        style={{ background: vars.green, color: "white" }}
+                      >
+                        {approvingUser === a.username ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleReject(a.username)}
+                        disabled={approvingUser === a.username || rejectingUser === a.username}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80 disabled:opacity-40"
+                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                      >
+                        {rejectingUser === a.username ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
+                        Reject
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* GENERATE FROM URL */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>

@@ -133,10 +133,37 @@ export async function ensureDefaultAdmin(): Promise<void> {
 
 // --- Accounts ---------------------------------------------------------------
 
-export async function getAccount(username: string): Promise<
-  | { username: string; passwordHash: string; role: Role; parent: string | null; maxSeats: number | null }
-  | null
-> {
+export type AccountStatus = "active" | "pending_approval" | "suspended";
+
+type AccountRow = {
+  username: string;
+  passwordHash: string;
+  role: Role;
+  parent: string | null;
+  maxSeats: number | null;
+  email: string | null;
+  website: string | null;
+  status: AccountStatus;
+};
+
+function rowToAccount(row: typeof platformAccountsTable.$inferSelect): AccountRow {
+  const s = row.status as string;
+  const status: AccountStatus =
+    s === "pending_approval" ? "pending_approval" :
+    s === "suspended" ? "suspended" : "active";
+  return {
+    username: row.username,
+    passwordHash: row.passwordHash,
+    role: normalizeRole(row.role),
+    parent: row.parent ?? null,
+    maxSeats: row.maxSeats ?? null,
+    email: row.email ?? null,
+    website: row.website ?? null,
+    status,
+  };
+}
+
+export async function getAccount(username: string): Promise<AccountRow | null> {
   const u = normUsername(username);
   if (!u) return null;
   const [row] = await db
@@ -145,13 +172,38 @@ export async function getAccount(username: string): Promise<
     .where(eq(platformAccountsTable.username, u))
     .limit(1);
   if (!row) return null;
-  return {
-    username: row.username,
-    passwordHash: row.passwordHash,
-    role: normalizeRole(row.role),
-    parent: row.parent,
-    maxSeats: row.maxSeats ?? null,
-  };
+  return rowToAccount(row);
+}
+
+// Looks up an account by username first, then falls back to email. Used by the
+// login endpoint so that both legacy username logins and new email logins work.
+export async function getAccountByIdentifier(identifier: string): Promise<AccountRow | null> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return null;
+  // Try username first (exact lowercase match).
+  const byUsername = await getAccount(trimmed);
+  if (byUsername) return byUsername;
+  // Fall back to email lookup (case-insensitive).
+  const emailLower = trimmed.toLowerCase();
+  const [row] = await db
+    .select()
+    .from(platformAccountsTable)
+    .where(eq(platformAccountsTable.email, emailLower))
+    .limit(1);
+  if (!row) return null;
+  return rowToAccount(row);
+}
+
+// Check whether an email is already registered (for sign-up uniqueness check).
+export async function emailExists(email: string): Promise<boolean> {
+  const emailLower = email.trim().toLowerCase();
+  if (!emailLower) return false;
+  const [row] = await db
+    .select({ username: platformAccountsTable.username })
+    .from(platformAccountsTable)
+    .where(eq(platformAccountsTable.email, emailLower))
+    .limit(1);
+  return !!row;
 }
 
 // The set of usernames a given account may see, mirroring the browser rule:

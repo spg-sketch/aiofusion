@@ -511,6 +511,65 @@ export async function serverSelfDeleteAccount(
   return { ok: true };
 }
 
+// Self-serve sign-up. Creates a pending_approval agency account. Returns a
+// special status value so the caller can show the right holding screen.
+export async function serverSignUp(data: {
+  name: string;
+  email: string;
+  companyName: string;
+  website?: string;
+  password: string;
+}): Promise<{ ok: true; status: "pending_approval" } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/signup", data);
+  if (!ok) return { ok: false, error: json?.error || "Sign-up failed. Please try again." };
+  return { ok: true, status: "pending_approval" };
+}
+
+export type PendingAccount = {
+  username: string;
+  email: string | null;
+  website: string | null;
+  displayName: string | null;
+  createdAt: string;
+};
+
+// Admin: list all pending-approval accounts.
+export async function serverGetPendingAccounts(): Promise<
+  { ok: true; accounts: PendingAccount[] } | { ok: false; error: string }
+> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/admin/pending`, { credentials: "include" });
+    if (!resp.ok) {
+      let json: any = null;
+      try { json = await resp.json(); } catch { /* no body */ }
+      return { ok: false, error: json?.error || "Failed to load pending accounts." };
+    }
+    const json = (await resp.json()) as { accounts: PendingAccount[] };
+    return { ok: true, accounts: json.accounts ?? [] };
+  } catch {
+    return { ok: false, error: "Failed to load pending accounts." };
+  }
+}
+
+// Admin: approve a pending account.
+export async function serverApproveAccount(
+  username: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson(`/api/platform/admin/accounts/${encodeURIComponent(username)}/approve`);
+  if (!ok) return { ok: false, error: json?.error || "Failed to approve account." };
+  return { ok: true };
+}
+
+// Admin: reject (delete) a pending account.
+export async function serverRejectAccount(
+  username: string,
+  reason?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson(`/api/platform/admin/accounts/${encodeURIComponent(username)}/reject`, { reason });
+  if (!ok) return { ok: false, error: json?.error || "Failed to reject account." };
+  return { ok: true };
+}
+
 export type SessionInfo = {
   sid: string;
   isCurrent: boolean;

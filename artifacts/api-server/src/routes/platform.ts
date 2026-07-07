@@ -23,6 +23,8 @@ import {
   normUsername,
   USERNAME_RE,
   getAccount,
+  getAccountByIdentifier,
+  emailExists,
   getVisibleUsernames,
   canManage,
   normalizeRole,
@@ -171,24 +173,36 @@ router.get("/platform/status", async (_req: Request, res: Response) => {
 
 router.post("/platform/login", loginLimiter, async (req: Request, res: Response) => {
   try {
-    const username = normUsername(req.body?.username);
+    // Accept either a username or an email in the `username` field so that
+    // legacy username logins and new email logins both work without change.
+    const identifier = typeof req.body?.username === "string" ? req.body.username.trim() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
-    if (!username || !password) {
-      res.status(400).json({ error: "Enter a username and password." });
+    if (!identifier || !password) {
+      res.status(400).json({ error: "Enter your username (or email) and password." });
       return;
     }
-    const account = await getAccount(username);
+    const account = await getAccountByIdentifier(identifier);
     if (!account || !verifyPassword(password, account.passwordHash)) {
       res.status(401).json({ error: "Incorrect username or password." });
       return;
     }
+    // Block archived accounts (soft-deactivated via platform_meta flag).
     const [archivedRow] = await db
       .select()
       .from(platformMetaTable)
-      .where(eq(platformMetaTable.key, archiveKey(username)))
+      .where(eq(platformMetaTable.key, archiveKey(account.username)))
       .limit(1);
     if (archivedRow?.value === "true") {
       res.status(403).json({ error: "This account has been archived. Contact your administrator." });
+      return;
+    }
+    // Block accounts that haven't been approved yet.
+    if (account.status === "pending_approval") {
+      res.status(403).json({ error: "pending_approval" });
+      return;
+    }
+    if (account.status === "suspended") {
+      res.status(403).json({ error: "This account has been suspended. Contact your administrator." });
       return;
     }
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
@@ -198,6 +212,167 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     res.json({ account: { username: account.username, role: account.role } });
   } catch {
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// --- Self-serve sign-up (public, no auth required) --------------------------
+//
+// Creates a new agency account with status=pending_approval. The account
+// cannot log in until an admin approves it. A username is auto-derived from
+// the company name; the owner contacts us via email listed on the record.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post("/platform/signup", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 64) : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const companyName = typeof req.body?.companyName === "string" ? req.body.companyName.trim().slice(0, 64) : "";
+    const website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 128) : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+    if (!name) { res.status(400).json({ error: "Your name is required." }); return; }
+    if (!email || !EMAIL_RE.test(email)) { res.status(400).json({ error: "A valid email address is required." }); return; }
+    if (!companyName) { res.status(400).json({ error: "Company name is required." }); return; }
+    if (!password || password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters." }); return; }
+
+    // Email must be unique.
+    if (await emailExists(email)) {
+      res.status(409).json({ error: "An account with that email already exists. Try signing in instead." });
+      return;
+    }
+
+    // Derive a slug username from the company name: lowercase, spaces→hyphens,
+    // strip non-alphanumeric. Append a counter if already taken.
+    const baseSlug = companyName
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .slice(0, 24)
+      .replace(/^-+|-+$/g, "") || "account";
+
+    let username = baseSlug;
+    let attempt = 0;
+    while (await getAccount(username)) {
+      attempt++;
+      username = `${baseSlug}-${attempt}`;
+    }
+
+    // Store display name in platform_meta so it shows up everywhere company
+    // names are rendered without requiring a schema change.
+    const displayNameKey = `account:profile:${username}`;
+    const displayNameValue = JSON.stringify({ displayName: companyName, ownerName: name });
+
+    await db.insert(platformAccountsTable).values({
+      username,
+      passwordHash: hashPassword(password),
+      role: "agency",
+      email,
+      website: website || null,
+      status: "pending_approval",
+    });
+
+    await db
+      .insert(platformMetaTable)
+      .values({ key: displayNameKey, value: displayNameValue })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: displayNameValue } });
+
+    res.status(201).json({ ok: true, username, status: "pending_approval" });
+  } catch (err) {
+    console.error("[signup]", err);
+    res.status(500).json({ error: "Sign-up failed. Please try again." });
+  }
+});
+
+// --- Admin: list pending accounts -------------------------------------------
+
+router.get("/platform/admin/pending", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (req.account!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.status, "pending_approval"));
+
+    const displayNames = await getDisplayNames();
+
+    const accounts = rows.map((r) => ({
+      username: r.username,
+      email: r.email ?? null,
+      website: r.website ?? null,
+      displayName: displayNames.get(r.username) ?? null,
+      createdAt: r.createdAt,
+    }));
+
+    res.json({ accounts });
+  } catch {
+    res.status(500).json({ error: "Failed to load pending accounts." });
+  }
+});
+
+// --- Admin: approve a pending account ---------------------------------------
+
+router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (req.account!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    const target = normUsername(req.params.username);
+    if (!target) { res.status(400).json({ error: "Username required." }); return; }
+    const account = await getAccount(target);
+    if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+    if (account.status !== "pending_approval") {
+      res.status(400).json({ error: "Account is not pending approval." });
+      return;
+    }
+    await db
+      .update(platformAccountsTable)
+      .set({ status: "active" })
+      .where(eq(platformAccountsTable.username, target));
+
+    void logAdminEvent(
+      { username: req.account!.username },
+      "account_approve",
+      target,
+      "account",
+      { email: account.email },
+    );
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Failed to approve account." });
+  }
+});
+
+// --- Admin: reject (delete) a pending account -------------------------------
+
+router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (req.account!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    const target = normUsername(req.params.username);
+    if (!target) { res.status(400).json({ error: "Username required." }); return; }
+    const account = await getAccount(target);
+    if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+    // Hard-delete the rejected application — no data was ever created.
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, target));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, `%:${target}`));
+    void logAdminEvent(
+      { username: req.account!.username },
+      "account_reject",
+      target,
+      "account",
+      { email: account.email, reason: req.body?.reason ?? null },
+    );
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Failed to reject account." });
   }
 });
 

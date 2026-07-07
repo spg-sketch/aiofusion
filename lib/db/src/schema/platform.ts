@@ -16,6 +16,14 @@ import { integer, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core"
 //  - `maxSeats`     is the optional cap on how many sub-accounts may exist
 //                   under this account. NULL = no limit. Only meaningful for
 //                   agency-type accounts.
+//  - `email`        is the owner's work email — used as an alternative login
+//                   handle for new accounts. Optional for legacy accounts.
+//  - `website`      is the company website URL. Collected at sign-up and
+//                   pre-fills the intake form.
+//  - `status`       controls whether the account can access the platform.
+//                   "active" (default) = full access.
+//                   "pending_approval" = signed up but not yet approved by admin.
+//                   "suspended" = manually suspended by admin.
 export const platformAccountsTable = pgTable("platform_accounts", {
   username: varchar("username").primaryKey(),
   passwordHash: text("password_hash").notNull(),
@@ -25,6 +33,9 @@ export const platformAccountsTable = pgTable("platform_accounts", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  email: varchar("email"),
+  website: varchar("website"),
+  status: varchar("status").notNull().default("active"),
 });
 
 // Server-issued sessions for platform accounts. Kept separate from the OIDC
@@ -53,3 +64,4 @@ export const platformMetaTable = pgTable("platform_meta", {
 
 export type PlatformAccountRow = typeof platformAccountsTable.$inferSelect;
 export type InsertPlatformAccount = typeof platformAccountsTable.$inferInsert;
+export type AccountStatus = "active" | "pending_approval" | "suspended";

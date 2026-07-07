@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 function PlatformHomePage({
   onCreateProject,
@@ -49,6 +49,36 @@ function PlatformHomePage({
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Sign-up form
+  const [showSignup, setShowSignup] = useState(false);
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupCompany, setSignupCompany] = useState("");
+  const [signupWebsite, setSignupWebsite] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState<string | null>(null);
+  const [signupDone, setSignupDone] = useState(false);
+
+  const handleSignup = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignupError(null);
+    setSignupLoading(true);
+    void serverSignUp({
+      name: signupName,
+      email: signupEmail,
+      companyName: signupCompany,
+      website: signupWebsite || undefined,
+      password: signupPassword,
+    }).then((r) => {
+      if (r.ok) {
+        setSignupDone(true);
+      } else {
+        setSignupError(r.error);
+      }
+    }).finally(() => setSignupLoading(false));
+  };
 
   const loadMySessions = () => {
     setSessionsLoading(true);
@@ -127,80 +157,189 @@ function PlatformHomePage({
           </p>
         </div>
 
-        {/* LOGIN / SESSION - full-width across the page */}
+        {/* LOGIN / SIGN-UP / SESSION - full-width across the page */}
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "white", color: "#1A647B" }}>
-                <LogIn size={20} />
-              </div>
-              <div>
-                <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
-                <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Enter your account details to continue.</p>
-              </div>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setLoginError(null);
-                void (async () => {
-                  const result = await serverLogin(username, password);
-                  if (result.ok) {
-                    setUsername("");
-                    setPassword("");
-                    onLoginSuccess(result.session);
-                  } else {
-                    setLoginError(result.error);
-                  }
-                })();
-              }}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
-            >
-              <div className="lg:col-span-5">
-                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Username</label>
-                <div className="relative">
-                  <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="username"
-                    autoComplete="username"
-                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
-                    style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
-                  />
+
+            {/* Pending approval success screen */}
+            {signupDone ? (
+              <div className="flex flex-col items-center text-center py-6 gap-5">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.15)" }}>
+                  <CheckCircle2 size={32} color="white" />
                 </div>
-              </div>
-              <div className="lg:col-span-4">
-                <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password</label>
-                <div className="relative">
-                  <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    autoComplete="current-password"
-                    className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
-                    style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
-                  />
+                <div>
+                  <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Application received</h2>
+                  <p className="text-[15px] font-light max-w-lg leading-[1.7]" style={{ color: "rgba(255,255,255,0.85)" }}>
+                    Thanks for signing up. Your account is now <strong style={{ color: "white" }}>pending approval</strong> — we'll review your application and be in touch shortly.
+                  </p>
+                  <p className="text-[13px] mt-3 font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
+                    Once approved you can sign in with the email and password you just created.
+                  </p>
                 </div>
-              </div>
-              <div className="lg:col-span-3">
                 <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
-                  style={{ background: accent }}
+                  onClick={() => { setSignupDone(false); setShowSignup(false); }}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110"
+                  style={{ background: accent, color: "white" }}
                 >
-                  <LogIn size={16} /> Sign in
+                  <LogIn size={15} /> Back to sign in
                 </button>
               </div>
-              {loginError && (
-                <p className="lg:col-span-12 text-[13px] font-semibold text-center" style={{ color: vars.red }}>
-                  {loginError}
-                </p>
-              )}
-            </form>
+            ) : showSignup ? (
+              /* --- SIGN-UP FORM --- */
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "white", color: "#1A647B" }}>
+                      <Building2 size={20} />
+                    </div>
+                    <div>
+                      <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Create an account</h2>
+                      <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Fill in your details and we'll review your application.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowSignup(false); setSignupError(null); }}
+                    className="text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity"
+                    style={{ color: "rgba(255,255,255,0.7)" }}
+                  >
+                    ← Sign in instead
+                  </button>
+                </div>
+                <form onSubmit={handleSignup} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Your name</label>
+                    <div className="relative">
+                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input type="text" value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="First and last name" autoComplete="name" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Work email</label>
+                    <div className="relative">
+                      <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input type="email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Company name</label>
+                    <div className="relative">
+                      <Building2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input type="text" value={signupCompany} onChange={(e) => setSignupCompany(e.target.value)} placeholder="e.g. Acme Agency Ltd" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Company website <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.5)" }}>(optional)</span></label>
+                    <div className="relative">
+                      <Globe size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input type="url" value={signupWebsite} onChange={(e) => setSignupWebsite(e.target.value)} placeholder="https://yourcompany.com" autoComplete="url" className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password <span className="font-normal normal-case tracking-normal text-[11px]" style={{ color: "rgba(255,255,255,0.5)" }}>(min 8 characters)</span></label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="Choose a strong password" autoComplete="new-password" required className="w-full pl-10 pr-3 py-3 rounded-xl border text-[14px] focus:outline-none focus:ring-2" style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }} />
+                    </div>
+                  </div>
+                  {signupError && (
+                    <p className="sm:col-span-2 text-[13px] font-semibold text-center py-2 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.25)" }}>{signupError}</p>
+                  )}
+                  <div className="sm:col-span-2">
+                    <button type="submit" disabled={signupLoading} className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed" style={{ background: accent }}>
+                      {signupLoading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                      {signupLoading ? "Submitting…" : "Submit application"}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              /* --- SIGN-IN FORM --- */
+              <>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: "white", color: "#1A647B" }}>
+                    <LogIn size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in to the platform</h2>
+                    <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Enter your username (or email) and password to continue.</p>
+                  </div>
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setLoginError(null);
+                    void (async () => {
+                      const result = await serverLogin(username, password);
+                      if (result.ok) {
+                        setUsername("");
+                        setPassword("");
+                        onLoginSuccess(result.session);
+                      } else {
+                        setLoginError(result.error === "pending_approval"
+                          ? "Your account is pending approval. You'll be notified once it's been reviewed."
+                          : result.error);
+                      }
+                    })();
+                  }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 lg:items-end"
+                >
+                  <div className="lg:col-span-5">
+                    <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Username or email</label>
+                    <div className="relative">
+                      <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="username or email"
+                        autoComplete="username"
+                        className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                        style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
+                      />
+                    </div>
+                  </div>
+                  <div className="lg:col-span-4">
+                    <label className="text-[12px] font-bold uppercase tracking-[0.18em] block mb-2" style={{ color: "white" }}>Password</label>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: vars.g400 }} />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password"
+                        autoComplete="current-password"
+                        className="w-full pl-10 pr-3 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                        style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
+                      />
+                    </div>
+                  </div>
+                  <div className="lg:col-span-3">
+                    <button
+                      type="submit"
+                      className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      <LogIn size={16} /> Sign in
+                    </button>
+                  </div>
+                  {loginError && (
+                    <p className="lg:col-span-12 text-[13px] font-semibold text-center" style={{ color: vars.red }}>
+                      {loginError}
+                    </p>
+                  )}
+                </form>
+                <div className="mt-5 pt-5 flex items-center gap-3" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+                  <span className="text-[13px] font-light" style={{ color: "rgba(255,255,255,0.6)" }}>New to AIO Fusion?</span>
+                  <button
+                    onClick={() => { setShowSignup(true); setLoginError(null); }}
+                    className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-80 transition-opacity"
+                    style={{ color: "white" }}
+                  >
+                    Create an account <ArrowRight size={13} />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: "#1A647B", boxShadow: "0 12px 32px -12px rgba(26,100,123,0.35)" }}>
