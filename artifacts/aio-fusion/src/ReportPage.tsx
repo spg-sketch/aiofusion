@@ -475,7 +475,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             This is your shareable scorecard for the whole project. It pulls your audit scores, earned media and planned activity into one place so you can see how your AI authority is growing over time. Clear measurement shows what is working and proves the impact of your AIO strategy to clients and stakeholders.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.navy }}>
             <Printer size={16} /> Print
           </button>
