@@ -15,7 +15,8 @@ export type AdminAction =
   | "project_owner_reassign"
   | "platform_migrate"
   | "impersonate_start"
-  | "impersonate_exit";
+  | "impersonate_exit"
+  | "account_reparent";
 
 export async function logAdminEvent(
   actor: AdminActor,

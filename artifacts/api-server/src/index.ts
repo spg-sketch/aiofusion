@@ -3,6 +3,8 @@ import { logger } from "./lib/logger";
 import { ensureDefaultAdmin } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
 import { pruneExpiredSessions } from "./lib/auth";
+import { db, platformAccountsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -41,6 +43,19 @@ app.listen(port, (err) => {
   pruneExpiredSessions().catch((err) => {
     logger.error({ err }, "Failed to prune expired sessions on startup");
   });
+
+  // One-time data migration: move the 'patrick' demo account under the
+  // 'aiodemo' (AIO Demonstration) agency so it can share the demo projects.
+  // Safe to run repeatedly — it only fires when the parent is still 'admin'.
+  db.update(platformAccountsTable)
+    .set({ parent: "aiodemo" })
+    .where(and(
+      eq(platformAccountsTable.username, "patrick"),
+      eq(platformAccountsTable.parent, "admin"),
+    ))
+    .catch((err) => {
+      logger.warn({ err }, "Failed to reparent 'patrick' to 'aiodemo' (non-fatal)");
+    });
 
   setInterval(() => {
     pruneExpiredSessions().catch((err) => {

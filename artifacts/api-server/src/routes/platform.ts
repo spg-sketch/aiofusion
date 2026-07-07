@@ -960,6 +960,66 @@ router.post(
   },
 );
 
+// Move an account to a different parent (re-parent). Admin-only. The new
+// parent must exist and be an agency or admin account; you cannot re-parent
+// to a leaf client. Passing an empty string for newParent places the account
+// directly under admin (parent = null).
+router.post(
+  "/platform/accounts/reparent",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      if (actor.role !== "admin") {
+        res.status(403).json({ error: "Only an admin can move accounts." });
+        return;
+      }
+      const target = normUsername(req.body?.username);
+      const rawParent = typeof req.body?.newParent === "string" ? req.body.newParent.trim() : "";
+      const newParent = rawParent ? normUsername(rawParent) : null;
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (existing.role === "admin") {
+        res.status(400).json({ error: "Cannot re-parent the admin account." });
+        return;
+      }
+      if (newParent) {
+        const parentAccount = await getAccount(newParent);
+        if (!parentAccount) {
+          res.status(404).json({ error: "New parent account not found." });
+          return;
+        }
+        if (parentAccount.role === "client") {
+          res.status(400).json({ error: "Cannot nest under a client account. Choose an agency or admin." });
+          return;
+        }
+      }
+      const prevParent = existing.parent ?? null;
+      await db
+        .update(platformAccountsTable)
+        .set({ parent: newParent ?? "admin" })
+        .where(eq(platformAccountsTable.username, target));
+      void logAdminEvent(
+        { username: actor.username },
+        "account_reparent",
+        target,
+        "account",
+        { previousParent: prevParent, newParent: newParent ?? "admin" },
+      );
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to move account" });
+    }
+  },
+);
+
 // --- Admin events (audit log) -----------------------------------------------
 
 function buildAuditConditions(query: Request["query"]) {

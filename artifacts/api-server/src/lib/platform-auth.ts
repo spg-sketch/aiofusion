@@ -156,7 +156,9 @@ export async function getAccount(username: string): Promise<
 
 // The set of usernames a given account may see, mirroring the browser rule:
 // an admin sees everything (returns null = no filter); a normal account sees
-// itself plus every descendant sub-account (recursively).
+// itself plus every descendant sub-account (recursively). Client accounts also
+// see their direct parent so they can access shared/demo projects owned at the
+// agency level without needing to log in as the agency.
 export async function getVisibleUsernames(
   account: PlatformAccount,
 ): Promise<string[] | null> {
@@ -168,15 +170,23 @@ export async function getVisibleUsernames(
     })
     .from(platformAccountsTable);
   const childrenByParent = new Map<string, string[]>();
+  let accountParent: string | null = null;
   for (const r of rows) {
     const parent = normUsername(r.parent);
     if (!parent) continue;
     const list = childrenByParent.get(parent) || [];
     list.push(normUsername(r.username));
     childrenByParent.set(parent, list);
+    if (normUsername(r.username) === normUsername(account.username)) {
+      accountParent = parent;
+    }
   }
   const start = normUsername(account.username);
   const visible = new Set<string>([start]);
+  // Include the direct parent so agency-level projects are visible to clients.
+  // We do NOT add it to the queue, so we never expand sideways into the
+  // parent's other sub-accounts.
+  if (accountParent) visible.add(accountParent);
   const queue = [start];
   while (queue.length) {
     const current = queue.shift()!;
