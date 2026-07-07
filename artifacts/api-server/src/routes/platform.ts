@@ -360,6 +360,10 @@ router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, as
     if (!target) { res.status(400).json({ error: "Username required." }); return; }
     const account = await getAccount(target);
     if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+    if (account.status !== "pending_approval") {
+      res.status(400).json({ error: "Only pending accounts can be rejected." });
+      return;
+    }
     // Hard-delete the rejected application — no data was ever created.
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, target));
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, `%:${target}`));
