@@ -4,6 +4,7 @@ import {
   archiveItemsTable,
   plannerItemsTable,
   scoringConfigsTable,
+  projectsTable,
 } from "@workspace/db";
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -22,6 +23,27 @@ function canSeeOwner(owner: string, visible: string[] | null): boolean {
   return visible.includes(normUsername(owner));
 }
 
+// Resolve the set of project IDs the request may see, based on project
+// ownership rather than item ownership. Returns null for an admin (sees all).
+// Any account that can see a project in their sidebar can see all archive and
+// planner items belonging to that project, regardless of which sub-account
+// created them.
+async function visibleProjectIds(req: Request): Promise<string[] | null> {
+  const owners = await getVisibleUsernames(req.account!);
+  if (owners === null) return null; // admin sees everything
+  if (owners.length === 0) return [];
+  const rows = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(
+      and(
+        isNull(projectsTable.deletedAt),
+        inArray(projectsTable.owner, owners),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
 // ---------------------------------------------------------------------------
 // Content Archive  GET    /api/store/archive
 //                  POST   /api/store/archive
@@ -34,24 +56,38 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const visible = await visibleOwners(req);
+      const projectIds = await visibleProjectIds(req);
       const projectId =
         typeof req.query.projectId === "string" && req.query.projectId
           ? req.query.projectId
           : null;
 
+      // Build the WHERE clause: project-visibility filter + optional ?projectId
+      // scoping + soft-delete guard.
+      const visibilityClause =
+        projectIds === null
+          ? undefined // admin: no project filter
+          : projectIds.length === 0
+            ? isNull(null as never) // no visible projects → return nothing
+            : inArray(archiveItemsTable.projectId, projectIds);
+
+      const projectScopeClause = projectId
+        ? eq(archiveItemsTable.projectId, projectId)
+        : undefined;
+
+      const whereClause = and(
+        isNull(archiveItemsTable.deletedAt),
+        visibilityClause,
+        projectScopeClause,
+      );
+
       const rows = await db
         .select()
         .from(archiveItemsTable)
-        .where(isNull(archiveItemsTable.deletedAt))
+        .where(whereClause)
         .orderBy(archiveItemsTable.createdAt);
 
-      const allowed = rows.filter((r) => canSeeOwner(r.owner, visible));
-      const filtered = projectId
-        ? allowed.filter((r) => r.projectId === projectId)
-        : allowed;
-
-      res.json({ items: filtered });
+      res.json({ items: rows });
     } catch {
       res.status(500).json({ error: "Failed to load archive" });
     }
@@ -262,24 +298,38 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const visible = await visibleOwners(req);
+      const projectIds = await visibleProjectIds(req);
       const projectId =
         typeof req.query.projectId === "string" && req.query.projectId
           ? req.query.projectId
           : null;
 
+      // Build the WHERE clause: project-visibility filter + optional ?projectId
+      // scoping + soft-delete guard.
+      const visibilityClause =
+        projectIds === null
+          ? undefined // admin: no project filter
+          : projectIds.length === 0
+            ? isNull(null as never) // no visible projects → return nothing
+            : inArray(plannerItemsTable.projectId, projectIds);
+
+      const projectScopeClause = projectId
+        ? eq(plannerItemsTable.projectId, projectId)
+        : undefined;
+
+      const whereClause = and(
+        isNull(plannerItemsTable.deletedAt),
+        visibilityClause,
+        projectScopeClause,
+      );
+
       const rows = await db
         .select()
         .from(plannerItemsTable)
-        .where(isNull(plannerItemsTable.deletedAt))
+        .where(whereClause)
         .orderBy(plannerItemsTable.week, plannerItemsTable.createdAt);
 
-      const allowed = rows.filter((r) => canSeeOwner(r.owner, visible));
-      const filtered = projectId
-        ? allowed.filter((r) => r.projectId === projectId)
-        : allowed;
-
-      res.json({ items: filtered });
+      res.json({ items: rows });
     } catch {
       res.status(500).json({ error: "Failed to load planner" });
     }
