@@ -618,7 +618,10 @@ function App() {
       <>
         <PlatformHomePage
           session={session}
-          onLoginSuccess={(s) => setSessionState(s)}
+          onLoginSuccess={(s) => {
+            setSessionState(s);
+            void initContentStore().then(() => resyncProjects());
+          }}
           onSignOut={handleSignOut}
           onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
           onManageSubAccounts={() => requireSessionThen(() => setView("sub-accounts"))}
