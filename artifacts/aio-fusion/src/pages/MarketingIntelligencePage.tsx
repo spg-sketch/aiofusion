@@ -208,7 +208,7 @@ function MarketingIntelligencePage() {
           <h1 className="text-3xl sm:text-4xl tracking-tight" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Marketing Intelligence</h1>
         </div>
         <p className="text-[15px] font-light" style={{ color: "rgba(255,255,255,0.97)" }}>
-          Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
+          Find the awards, conferences and speaker platforms worth pursuing, each scored on the AI authority it can deliver. Award wins and speaking slots create the credible, independent mentions that AI tools reward, strengthening your place in their answers. Recommendations are tailored to your Project Data brief.
         </p>
       </div>
 
