@@ -32,7 +32,7 @@ export const navSections: NavSection[] = [
       { label: "Comms Planner", id: "planner", sub: "Plan and score the PR / marketing schedule" },
       { label: "Content Creator", id: "creator", sub: "Generate pitches and articles" },
       { label: "Content Optimiser & Editor", id: "optimiser", sub: "Optimise and edit drafts" },
-      { label: "Archive", id: "archive", sub: "Searchable content library" },
+      { label: "Content Library", id: "archive", sub: "Saved draft and final content" },
     ],
   },
   {
