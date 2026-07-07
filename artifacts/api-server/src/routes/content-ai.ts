@@ -692,7 +692,9 @@ async function fetchMediaDbContext(mediaCategories: string[]): Promise<string> {
       .from(mediaOutletsTable)
       .where(isNull(mediaOutletsTable.deletedAt));
 
-    const globalOutlets = outlets.filter((o) => o.accountId === null);
+    // Include both truly global (null) records and admin-curated records —
+    // both are platform-wide reference data visible to all accounts.
+    const globalOutlets = outlets.filter((o) => o.accountId === null || o.accountId === "admin");
 
     // Filter to outlets whose category matches any requested media category.
     const catLower = mediaCategories.map((c) => c.toLowerCase().trim());
