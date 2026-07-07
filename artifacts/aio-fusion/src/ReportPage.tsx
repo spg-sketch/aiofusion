@@ -1239,7 +1239,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <p className="text-[12px] font-light" style={{ color: vars.g600 }}>The Website Technical GEO module consumes Project Data sections 1-3 and 7-8, then produces a downloadable, itemised action list to drive these scores up.</p>
             </div>
             {onNavigate && (
-              <button onClick={() => onNavigate("seo-audit")} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0" style={{ background: vars.accent }}>
+              <button onClick={() => onNavigate("seo-audit")} className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0 whitespace-nowrap" style={{ background: vars.accent }}>
                 Open Website Technical GEO <ArrowRight size={14} />
               </button>
             )}
