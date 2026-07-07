@@ -2,11 +2,18 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronRight, Lock, BarChart3, ArrowLeft, Clock, Menu, X,
   FileEdit, Search, Globe, CalendarDays, PenTool, Wand2, Archive as ArchiveIcon,
-  Users, Database, TrendingUp, PieChart,
+  Users, Database, TrendingUp, PieChart, Trash2,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
-import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from "../lib/diagnosticStore";
+import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "../LlmCheckPage";
+import {
+  loadSavedDiagnostics, loadSavedScored, persistSavedDiagnostics, persistSavedScored,
+  contentGeoKey, techGeoKey, type SavedDiagnostic, type SavedScored,
+} from "../lib/diagnosticStore";
+import {
+  syncAuditsForProject, syncDiagnosticsForProject, syncContentGeoForProject, syncTechGeoForProject,
+  deleteServerDiagnostic, deleteServerContentGeo, deleteServerTechGeo,
+} from "../lib/auditSync";
 import type { Client, NavItem, NavSection } from "../types";
 
 export const navSections: NavSection[] = [
@@ -107,10 +114,86 @@ function SidebarContent({
   wide?: boolean;
   onToggleWide?: () => void;
 }) {
-  const recentAudits = loadSavedAudits(activeClient.id).slice(0, 3);
-  const recentDiagnostics = loadSavedDiagnostics(activeClient.id).slice(0, 3);
-  const recentContentGeo = loadSavedScored(contentGeoKey(activeClient.id)).slice(0, 3);
-  const recentTechGeo = loadSavedScored(techGeoKey(activeClient.id)).slice(0, 3);
+  const [allAudits, setAllAudits] = useState<SavedAudit[]>(
+    () => loadSavedAudits(activeClient.id),
+  );
+  const [allDiagnostics, setAllDiagnostics] = useState<SavedDiagnostic[]>(
+    () => loadSavedDiagnostics(activeClient.id),
+  );
+  const [allContentGeo, setAllContentGeo] = useState<SavedScored[]>(
+    () => loadSavedScored(contentGeoKey(activeClient.id)),
+  );
+  const [allTechGeo, setAllTechGeo] = useState<SavedScored[]>(
+    () => loadSavedScored(techGeoKey(activeClient.id)),
+  );
+
+  useEffect(() => {
+    setAllAudits(loadSavedAudits(activeClient.id));
+    setAllDiagnostics(loadSavedDiagnostics(activeClient.id));
+    setAllContentGeo(loadSavedScored(contentGeoKey(activeClient.id)));
+    setAllTechGeo(loadSavedScored(techGeoKey(activeClient.id)));
+    void Promise.all([
+      syncAuditsForProject(activeClient.id),
+      syncDiagnosticsForProject(activeClient.id),
+      syncContentGeoForProject(activeClient.id),
+      syncTechGeoForProject(activeClient.id),
+    ]).then(([audits, diags, cgeo, tgeo]) => {
+      setAllAudits(audits);
+      setAllDiagnostics(diags);
+      setAllContentGeo(cgeo as SavedScored[]);
+      setAllTechGeo(tgeo as SavedScored[]);
+    });
+
+    const onChanged = () => {
+      setAllAudits(loadSavedAudits(activeClient.id));
+      setAllDiagnostics(loadSavedDiagnostics(activeClient.id));
+      setAllContentGeo(loadSavedScored(contentGeoKey(activeClient.id)));
+      setAllTechGeo(loadSavedScored(techGeoKey(activeClient.id)));
+    };
+    window.addEventListener("aio:saved-audits-changed", onChanged);
+    return () => window.removeEventListener("aio:saved-audits-changed", onChanged);
+  }, [activeClient.id]);
+
+  async function deleteDiagnostic(id: string) {
+    const ok = await deleteServerDiagnostic(activeClient.id, id);
+    if (!ok) {
+      alert("Could not delete — the server could not be reached. Please try again.");
+      return;
+    }
+    const next = allDiagnostics.filter((d) => d.id !== id);
+    persistSavedDiagnostics(activeClient.id, next);
+    setAllDiagnostics(next);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  async function deleteContentGeoItem(id: string) {
+    const ok = await deleteServerContentGeo(activeClient.id, id);
+    if (!ok) {
+      alert("Could not delete — the server could not be reached. Please try again.");
+      return;
+    }
+    const next = allContentGeo.filter((s) => s.id !== id);
+    persistSavedScored(contentGeoKey(activeClient.id), next);
+    setAllContentGeo(next);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  async function deleteTechGeoItem(id: string) {
+    const ok = await deleteServerTechGeo(activeClient.id, id);
+    if (!ok) {
+      alert("Could not delete — the server could not be reached. Please try again.");
+      return;
+    }
+    const next = allTechGeo.filter((s) => s.id !== id);
+    persistSavedScored(techGeoKey(activeClient.id), next);
+    setAllTechGeo(next);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  const recentAudits = allAudits.slice(0, 3);
+  const recentDiagnostics = allDiagnostics.slice(0, 3);
+  const recentContentGeo = allContentGeo.slice(0, 3);
+  const recentTechGeo = allTechGeo.slice(0, 3);
   return (
     <>
       <div className="flex flex-col items-center gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
@@ -265,60 +348,87 @@ function SidebarContent({
                   {item.id === "diagnostic" && recentDiagnostics.length > 0 && (
                     <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentDiagnostics.map((d) => (
-                        <button
-                          key={d.id}
-                          onClick={() => { onOpenSavedDiagnostic?.(d.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
-                          title={`Open saved audit (${d.result.overallScore}% readiness)`}
-                        >
-                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#4B5563" }}>
-                            {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: "#4B5563" }}>
-                            {d.result.overallScore}%
-                          </span>
-                        </button>
+                        <div key={d.id} className="flex items-center gap-1 group/histitem">
+                          <button
+                            onClick={() => { onOpenSavedDiagnostic?.(d.id); onItemClick?.(); }}
+                            className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
+                            title={`Open saved audit (${d.result.overallScore}% readiness)`}
+                          >
+                            <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                            <span className="text-[11px] font-medium truncate flex-1" style={{ color: "#4B5563" }}>
+                              {new Date(d.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(d.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            <span className="text-[11px] font-bold flex-shrink-0" style={{ color: "#4B5563" }}>
+                              {d.result.overallScore}%
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => deleteDiagnostic(d.id)}
+                            className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
+                            title="Remove this saved audit"
+                            style={{ color: vars.g400 }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
                   {item.id === "geo-content" && recentContentGeo.length > 0 && (
                     <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentContentGeo.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => { onOpenSavedContentGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
-                          title={`Open saved audit (${s.score}% readiness)`}
-                        >
-                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
-                            {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
-                            {s.score}%
-                          </span>
-                        </button>
+                        <div key={s.id} className="flex items-center gap-1 group/histitem">
+                          <button
+                            onClick={() => { onOpenSavedContentGeo?.(s.id); onItemClick?.(); }}
+                            className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
+                            title={`Open saved audit (${s.score}% readiness)`}
+                          >
+                            <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                            <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
+                              {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
+                              {s.score}%
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => deleteContentGeoItem(s.id)}
+                            className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
+                            title="Remove this saved audit"
+                            style={{ color: vars.g400 }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
                   {item.id === "seo-audit" && recentTechGeo.length > 0 && (
                     <div className="mt-1 mb-2 ml-4 pl-3 border-l space-y-1" style={{ borderColor: vars.g200 }}>
                       {recentTechGeo.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => { onOpenSavedTechGeo?.(s.id); onItemClick?.(); }}
-                          className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
-                          title={`Open saved audit (${s.score}% readiness)`}
-                        >
-                          <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
-                          <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
-                            {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                          <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
-                            {s.score}%
-                          </span>
-                        </button>
+                        <div key={s.id} className="flex items-center gap-1 group/histitem">
+                          <button
+                            onClick={() => { onOpenSavedTechGeo?.(s.id); onItemClick?.(); }}
+                            className="flex items-center gap-2 flex-1 min-w-0 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-black/5"
+                            title={`Open saved audit (${s.score}% readiness)`}
+                          >
+                            <Clock size={12} style={{ color: vars.g400 }} className="flex-shrink-0" />
+                            <span className="text-[11px] font-medium truncate flex-1" style={{ color: vars.g500 }}>
+                              {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, {new Date(s.savedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            <span className="text-[11px] font-bold flex-shrink-0" style={{ color: vars.teal }}>
+                              {s.score}%
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => deleteTechGeoItem(s.id)}
+                            className="opacity-0 group-hover/histitem:opacity-100 p-1 rounded transition-opacity hover:bg-black/5 flex-shrink-0"
+                            title="Remove this saved audit"
+                            style={{ color: vars.g400 }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}

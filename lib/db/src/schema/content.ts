@@ -79,3 +79,54 @@ export type InsertArchiveItem = typeof archiveItemsTable.$inferInsert;
 export type PlannerItemRow = typeof plannerItemsTable.$inferSelect;
 export type InsertPlannerItem = typeof plannerItemsTable.$inferInsert;
 export type ScoringConfigRow = typeof scoringConfigsTable.$inferSelect;
+
+// Saved Earned Media audit results — one row per audit run per project.
+// Replaces per-browser localStorage so every login on the same project sees
+// the same audit history. `result` is the full LlmCheckResult JSON blob.
+export const savedAuditsTable = pgTable("saved_audits", {
+  id: varchar("id").primaryKey(),
+  projectId: varchar("project_id").notNull(),
+  owner: varchar("owner").notNull(),
+  savedAt: varchar("saved_at").notNull(),
+  result: jsonb("result").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+// Saved Website/GEO diagnostic results — one row per diagnostic run per
+// project. `result` is the full DiagnosticResult JSON blob.
+export const savedDiagnosticsTable = pgTable("saved_diagnostics", {
+  id: varchar("id").primaryKey(),
+  projectId: varchar("project_id").notNull(),
+  owner: varchar("owner").notNull(),
+  savedAt: varchar("saved_at").notNull(),
+  result: jsonb("result").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+export type SavedAuditRow = typeof savedAuditsTable.$inferSelect;
+export type SavedDiagnosticRow = typeof savedDiagnosticsTable.$inferSelect;
+
+// Saved Content GEO scores — one row per scan per project.
+// `result` holds the full SavedScored JSON blob { id, savedAt, score }.
+export const savedContentGeoTable = pgTable("saved_content_geo", {
+  id: varchar("id").primaryKey(),
+  projectId: varchar("project_id").notNull(),
+  owner: varchar("owner").notNull(),
+  savedAt: varchar("saved_at").notNull(),
+  result: jsonb("result").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+// Saved Technical GEO scores — one row per scan per project.
+// `result` holds the full SavedTechGeo JSON blob { id, savedAt, score, result }.
+export const savedTechGeoTable = pgTable("saved_tech_geo", {
+  id: varchar("id").primaryKey(),
+  projectId: varchar("project_id").notNull(),
+  owner: varchar("owner").notNull(),
+  savedAt: varchar("saved_at").notNull(),
+  result: jsonb("result").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
+export type SavedContentGeoRow = typeof savedContentGeoTable.$inferSelect;
+export type SavedTechGeoRow = typeof savedTechGeoTable.$inferSelect;

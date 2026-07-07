@@ -4,6 +4,7 @@ import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
 import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
+import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
 import {
   Eye,
@@ -121,7 +122,7 @@ interface LlmCheckResult {
 
 export type SavedAudit = { id: string; savedAt: string; result: LlmCheckResult };
 
-const savedAuditsKey = (clientId: string) => `aio.savedAudits.${clientId}`;
+export const savedAuditsKey = (clientId: string) => `aio.savedAudits.${clientId}`;
 
 export function loadSavedAudits(clientId: string): SavedAudit[] {
   try {
@@ -642,6 +643,11 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     setAuditLock({ locked: false });
     setShowRunConfirm(false);
     setPendingForce(false);
+    // Sync audit history from server: server wins on conflict, local-only
+    // items are pushed up. Update state once the merge is ready.
+    void syncAuditsForProject(activeClient.id).then((merged) => {
+      setSavedAudits(merged);
+    });
   }, [activeClient.id]);
 
   // Fetch audit lock status for this project whenever the active client changes.
@@ -687,6 +693,8 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     }
     setSavedAudits(next);
     setJustSaved(true);
+    // Mirror to server so other logins on the same project see this audit.
+    void pushServerAudit(activeClient.id, entry);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 
@@ -698,7 +706,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteSavedAudit(id: string) {
+  async function deleteSavedAudit(id: string) {
+    // Await server deletion first. If it fails, do not update local state so
+    // the item is not "resurrected" on the next sync from the server.
+    const ok = await deleteServerAudit(activeClient.id, id);
+    if (!ok) {
+      alert("Could not delete the audit — the server could not be reached. Please try again.");
+      return;
+    }
     const next = savedAudits.filter((a) => a.id !== id);
     if (!persistSavedAudits(activeClient.id, next)) {
       alert("Could not update saved audits - your browser storage may be unavailable.");

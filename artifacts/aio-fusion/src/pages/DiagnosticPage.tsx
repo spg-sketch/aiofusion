@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { ratingConfig, type DiagnosticResult, type SavedDiagnostic, loadSavedDiagnostics, persistSavedDiagnostics, contentGeoKey, techGeoKey, loadSavedScored, persistSavedScored, type SavedScored } from "../lib/diagnosticStore";
+import { syncDiagnosticsForProject, pushServerDiagnostic } from "../lib/auditSync";
 import { apiBase } from "../lib/contentAi";
 import type { Client } from "../lib/projectTypes";
 import { getSession as getLocalSession } from "../lib/auth";
@@ -47,6 +48,10 @@ function DiagnosticPage({
     setDiagAuditLock({ locked: false });
     setShowDiagConfirm(false);
     setDiagPendingForce(false);
+    // Sync diagnostic history from server so all logins see the same results.
+    void syncDiagnosticsForProject(activeClient.id).then((merged) => {
+      setSavedDiagnostics(merged);
+    });
   }, [activeClient.id]);
 
   useEffect(() => {
@@ -87,6 +92,8 @@ function DiagnosticPage({
     }
     setSavedDiagnostics(next);
     setJustSaved(true);
+    // Mirror to server so all logins on the same project see this diagnostic.
+    void pushServerDiagnostic(activeClient.id, entry);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 
@@ -106,6 +113,8 @@ function DiagnosticPage({
     if (!persistSavedDiagnostics(activeClient.id, next)) return;
     setSavedDiagnostics(next);
     setJustSaved(true);
+    // Mirror to server so all logins on the same project see this diagnostic.
+    void pushServerDiagnostic(activeClient.id, entry);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 

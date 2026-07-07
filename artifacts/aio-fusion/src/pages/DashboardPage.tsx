@@ -10,8 +10,9 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, FileCheck, FolderCheck,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
-import { loadSavedDiagnostics } from "../lib/diagnosticStore";
+import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "../LlmCheckPage";
+import { loadSavedDiagnostics, type SavedDiagnostic } from "../lib/diagnosticStore";
+import { syncAuditsForProject, syncDiagnosticsForProject } from "../lib/auditSync";
 import { loadArchive, loadPlannerProjects, useContentStore } from "../lib/contentStore";
 import { loadIntakeData } from "../IntakeForm";
 import { loadCycle } from "../lib/cycleHistory";
@@ -68,11 +69,28 @@ function DashboardPage({
       .catch(() => {});
   }, [activeClient.id]);
 
-  // ── Live audit data ───────────────────────────────────────────────────────
-  const savedAudits = loadSavedAudits(activeClient.id);
-  const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
+  // ── Live audit data (server-first: pull from server on mount so all
+  //    logins on the same project see the same latest scores) ────────────────
+  const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(
+    () => loadSavedAudits(activeClient.id),
+  );
+  const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(
+    () => loadSavedDiagnostics(activeClient.id),
+  );
 
-  const savedDiagnostics = loadSavedDiagnostics(activeClient.id);
+  useEffect(() => {
+    setSavedAudits(loadSavedAudits(activeClient.id));
+    setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
+    void Promise.all([
+      syncAuditsForProject(activeClient.id),
+      syncDiagnosticsForProject(activeClient.id),
+    ]).then(([audits, diags]) => {
+      setSavedAudits(audits);
+      setSavedDiagnostics(diags);
+    });
+  }, [activeClient.id]);
+
+  const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
   const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[0] : null;
 
   // ── Live archive + planner ─────────────────────────────────────────────

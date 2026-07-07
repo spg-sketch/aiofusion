@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureDefaultAdmin } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
+import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { pruneExpiredSessions } from "./lib/auth";
 import { db, platformAccountsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -38,6 +39,10 @@ app.listen(port, (err) => {
 
   ensureAuditLocksTable().catch((err) => {
     logger.error({ err }, "Failed to ensure audit_locks table");
+  });
+
+  ensureSavedAuditTables().catch((err) => {
+    logger.error({ err }, "Failed to ensure saved audit tables");
   });
 
   pruneExpiredSessions().catch((err) => {

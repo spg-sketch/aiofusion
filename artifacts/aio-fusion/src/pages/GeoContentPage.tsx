@@ -12,6 +12,7 @@ import {
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/contentAi";
 import { contentGeoKey, techGeoKey, loadSavedScored, persistSavedScored, type SavedScored } from "../lib/diagnosticStore";
+import { syncContentGeoForProject, pushServerContentGeo } from "../lib/auditSync";
 import type { Client } from "../lib/projectTypes";
 import { getActiveProjectId } from "../IntakeForm";
 function GeoContentPage({
@@ -50,6 +51,10 @@ function GeoContentPage({
     setHasResults(false);
     setScanning(false);
     setJustSaved(false);
+    // Sync Content GEO history from server so all logins see the same scores.
+    void syncContentGeoForProject(activeClient.id).then((merged) => {
+      setSavedContentGeo(merged);
+    });
   }, [activeClient.id]);
 
   useEffect(() => {
@@ -77,6 +82,8 @@ function GeoContentPage({
     }
     setSavedContentGeo(next);
     setJustSaved(true);
+    // Mirror to server so all logins on the same project see this score.
+    void pushServerContentGeo(activeClient.id, entry);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 

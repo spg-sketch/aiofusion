@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
 import { getSpokespeople } from "./IntakeForm";
-import { loadSavedAudits, authorityIndexFor } from "./LlmCheckPage";
-import { loadSavedDiagnostics } from "./lib/diagnosticStore";
+import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckPage";
+import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
+import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
 import {
   Download,
   Printer,
@@ -193,12 +194,27 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const projectStartDate = "2026-01-08";
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  // ── Live audit data (same sources as the Dashboard) ─────────────────────
-  const savedAudits = useMemo(() => loadSavedAudits(activeClient.id), [activeClient.id]);
+  // ── Live audit data — loaded from localStorage, then synced from server ──
+  const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
+  const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
+
+  useEffect(() => {
+    // Load from localStorage immediately so the page renders with local data,
+    // then pull from the server and refresh with the merged (shared) history.
+    setSavedAudits(loadSavedAudits(activeClient.id));
+    setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
+    void Promise.all([
+      syncAuditsForProject(activeClient.id),
+      syncDiagnosticsForProject(activeClient.id),
+    ]).then(([audits, diags]) => {
+      setSavedAudits(audits);
+      setSavedDiagnostics(diags);
+    });
+  }, [activeClient.id]);
+
   const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
   const previousAudit = savedAudits.length > 1 ? savedAudits[1] : null;
 
-  const savedDiagnostics = useMemo(() => loadSavedDiagnostics(activeClient.id), [activeClient.id]);
   const latestDiagnostic = savedDiagnostics.length > 0 ? savedDiagnostics[0] : null;
   const previousDiagnostic = savedDiagnostics.length > 1 ? savedDiagnostics[1] : null;
 

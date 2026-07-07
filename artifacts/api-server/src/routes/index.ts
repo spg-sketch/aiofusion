@@ -8,6 +8,7 @@ import aiAssistRouter from "./ai-assist";
 import contentAiRouter from "./content-ai";
 import storeRouter from "./store";
 import storeContentRouter from "./store-content";
+import storeAuditsRouter from "./store-audits";
 import mediaDbRouter from "./media-db";
 import platformRouter from "./platform";
 import adminRouter from "./admin";
@@ -25,6 +26,7 @@ router.use(aiAssistRouter);
 router.use(contentAiRouter);
 router.use(storeRouter);
 router.use(storeContentRouter);
+router.use(storeAuditsRouter);
 router.use(mediaDbRouter);
 
 export default router;

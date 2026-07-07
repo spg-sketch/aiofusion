@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { syncTechGeoForProject, pushServerTechGeo } from "./lib/auditSync";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
@@ -245,6 +246,10 @@ export default function SeoAuditPage({
     setError("");
     setLoading(false);
     setJustSaved(false);
+    // Sync Tech GEO history from server so all logins see the same scores.
+    void syncTechGeoForProject(activeClient.id).then((merged) => {
+      setSavedTechGeo(merged as SavedTechGeo[]);
+    });
   }, [activeClient.id]);
 
   useEffect(() => {
@@ -279,6 +284,8 @@ export default function SeoAuditPage({
     }
     setSavedTechGeo(next);
     setJustSaved(true);
+    // Mirror to server so all logins on the same project see this score.
+    void pushServerTechGeo(activeClient.id, entry as Parameters<typeof pushServerTechGeo>[1]);
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 
