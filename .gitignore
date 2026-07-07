@@ -54,3 +54,7 @@ Thumbs.db
 # empty-dump failure (git keeps tracked files even when ignored).
 /backups/*.sql
 /backups/*.sql.gz
+
+# User-uploaded assets (screenshots, documents, CSVs) — these are workspace
+# uploads for reference only and must not be committed to the repo.
+/attached_assets/
