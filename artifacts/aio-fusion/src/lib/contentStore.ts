@@ -57,6 +57,14 @@ let _archiveCache:  (ArchiveItem & { projectId: string })[] | null = null;
 let _plannerCache:  (PlannerProject & { projectId: string })[] | null = null;
 let _scoringCache:  ScoringConfig | null = null;
 let _contentStoreReady = false;
+let _contentStoreAuthError = false;
+
+// True if the last initContentStore call received a 401 — i.e. the session
+// has expired or is missing. Use this to show a "please log in" message
+// rather than a misleading "Library is empty" state.
+export function isContentStoreAuthError(): boolean {
+  return _contentStoreAuthError;
+}
 
 // Resolve the effective project id for a given clientId argument (mirrors the
 // old scopedStoreKey logic so call sites that pass client.id still work).
@@ -99,12 +107,16 @@ export async function initContentStore(): Promise<void> {
   _archiveCache = null;
   _plannerCache = null;
   _scoringCache = null;
+  _contentStoreAuthError = false;
   try {
     const [archRes, planRes, cfgRes] = await Promise.all([
       fetch(`${apiBase()}/api/store/archive`,       { credentials: "include" }),
       fetch(`${apiBase()}/api/store/planner`,        { credentials: "include" }),
       fetch(`${apiBase()}/api/store/scoring-config`, { credentials: "include" }),
     ]);
+    if (archRes.status === 401 || planRes.status === 401 || cfgRes.status === 401) {
+      _contentStoreAuthError = true;
+    }
     if (archRes.ok)  _archiveCache  = (await archRes.json()).items  ?? [];
     else             _archiveCache  = [];
     if (planRes.ok)  _plannerCache  = (await planRes.json()).items  ?? [];
