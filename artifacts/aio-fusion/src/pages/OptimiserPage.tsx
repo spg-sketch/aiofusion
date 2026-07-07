@@ -689,38 +689,39 @@ OUTPUT INSTRUCTIONS:
               </div>
             )}
 
-            {/* Action bar - freestanding pill buttons mirroring the Project Set-Up nav buttons */}
-            <div className="flex flex-wrap items-center gap-3 pt-4 mt-4 border-t" style={{ borderColor: vars.g100 }}>
-              <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none" style={{ background: "#C8497A" }}>
-                {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
-              </button>
-              {optimised && (
-                <button onClick={rejectOptimised} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: "#B03D33" }}>
-                  <X size={14} /> Reject Optimised
-                </button>
-              )}
-              <button onClick={downloadDraft} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.navy, color: vars.navy }}>
-                <Download size={14} /> Download
-              </button>
-              <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none" style={{ borderColor: vars.navy, color: vars.navy }}>
-                <FileText size={14} /> Optimised Notes
-              </button>
-              <button onClick={shareDraft} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.navy, color: vars.navy }}>
-                <Send size={14} /> Share draft
-              </button>
-              <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: "#C8497A", color: "#C8497A" }}>
-                <Archive size={14} /> Archive
-              </button>
-              {canResearch && (
-                <button onClick={sendToMediaResearch} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 bg-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: vars.green, color: vars.green }}>
-                  <Target size={14} /> Media Research
-                </button>
-              )}
-              <button onClick={pushToPlanner} className="flex items-center gap-2 px-6 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.gold }}>
-                <Calendar size={14} /> Push to Comms Planner
-              </button>
-            </div>
           </div>
+        </div>
+
+        {/* Action bar - outside white card, on dark page background */}
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <button onClick={() => setShowOptimiseBriefModal(true)} disabled={optimising} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none" style={{ background: "#C8497A" }}>
+            {optimising ? <><Loader2 size={14} className="animate-spin" /> Optimising…</> : <><Sparkles size={14} /> Optimise</>}
+          </button>
+          {optimised && (
+            <button onClick={rejectOptimised} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95" style={{ background: "#B03D33" }}>
+              <X size={14} /> Reject Optimised
+            </button>
+          )}
+          <button onClick={downloadDraft} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95" style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}>
+            <Download size={14} /> Download
+          </button>
+          <button onClick={() => setShowDownloadNotesModal(true)} disabled={!actionNotes.trim()} title={!actionNotes.trim() ? "Run the optimiser first to generate Action Notes" : undefined} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none" style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}>
+            <FileText size={14} /> Optimised Notes
+          </button>
+          <button onClick={shareDraft} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95" style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}>
+            <Send size={14} /> Share draft
+          </button>
+          <button onClick={() => archiveItem(contentStatus === "Final" ? "Final" : "Draft")} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95" style={{ borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}>
+            <Archive size={14} /> Save to Content Library
+          </button>
+          {canResearch && (
+            <button onClick={sendToMediaResearch} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95" style={{ background: "#84AB7D" }}>
+              <Users size={14} /> Media Research
+            </button>
+          )}
+          <button onClick={pushToPlanner} className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95" style={{ background: vars.gold }}>
+            <Calendar size={14} /> Push to Comms Planner
+          </button>
         </div>
 
         {/* Inline Optimisation Results - only when optimised */}
