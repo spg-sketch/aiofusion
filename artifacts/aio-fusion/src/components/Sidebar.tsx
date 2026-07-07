@@ -215,9 +215,9 @@ function SidebarContent({
                       const Icon = ITEM_ICONS[item.id];
                       return (
                         <span
-                          className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${isLocked ? "" : "group-hover:scale-110 group-hover:-translate-y-0.5"}`}
+                          className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 ${isLocked ? "" : "group-hover:scale-110 group-hover:-translate-y-0.5 group-hover:bg-white/[0.55]"}`}
                           style={{
-                            background: isActive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.55)",
+                            background: isActive ? "rgba(255,255,255,0.7)" : undefined,
                             color: isLocked ? "rgba(0,0,0,0.35)" : "#000000",
                           }}
                         >
