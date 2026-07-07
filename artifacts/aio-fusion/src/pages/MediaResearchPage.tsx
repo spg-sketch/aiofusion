@@ -538,15 +538,15 @@ function MediaResearchPage() {
                 </p>
                 <button
                   onClick={downloadWordDoc}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-                  style={{ borderColor: vars.g200, color: vars.navy }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border-2 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95"
+                  style={{ borderColor: vars.navy, color: vars.navy }}
                 >
                   <FileText size={13} color="#2B579A" /> Download as Word doc
                 </button>
                 <button
                   onClick={downloadExcelDoc}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border bg-white"
-                  style={{ borderColor: vars.g200, color: vars.navy }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border-2 bg-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95"
+                  style={{ borderColor: vars.navy, color: vars.navy }}
                 >
                   <FileText size={13} color="#1F7244" /> Download as Excel doc
                 </button>
