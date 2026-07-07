@@ -301,7 +301,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
                 <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full" style={{ background: vars.gold, opacity: 0.4 }} />
                 <div className="absolute -bottom-10 -left-10 w-52 h-52 rounded-full" style={{ background: vars.teal, opacity: 0.3 }} />
                 <div className="absolute inset-0 flex items-center justify-center p-12">
-                  <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="w-full max-w-[200px]" />
+                  <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="w-full max-w-[200px]" />
                 </div>
               </div>
             </div>

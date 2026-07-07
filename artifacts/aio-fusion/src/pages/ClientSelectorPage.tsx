@@ -70,7 +70,7 @@ export default function ClientSelectorPage({
         style={{ background: teal, borderBottom: "1px solid rgba(255,255,255,0.15)" }}
       >
         <button onClick={onBackToPlatformHome} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
         <div className="flex items-center gap-4">
           <button onClick={onBackToPlatformHome} className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl" style={{ background: accent, color: "white" }}>

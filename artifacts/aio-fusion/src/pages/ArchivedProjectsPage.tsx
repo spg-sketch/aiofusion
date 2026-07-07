@@ -5,7 +5,7 @@ function ArchivedProjectsPage({ onBack }: { onBack: () => void }) {
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: vars.g50 }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
         <div className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
+          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </div>
         <button onClick={onBack} className="flex items-center gap-2 px-5 py-2 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:brightness-110 hover:-translate-y-0.5" style={{ background: vars.accent }}>
           ← PLATFORM HOME
