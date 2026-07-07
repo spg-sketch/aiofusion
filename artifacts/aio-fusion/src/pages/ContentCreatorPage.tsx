@@ -799,7 +799,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
           </button>
           {!generating && !optimisingField && (() => { const hint = getTypicalDurationHint("content-draft"); return hint ? (
-            <span className="flex items-center gap-1 text-[11px]" style={{ color: vars.g400 }}>
+            <span className="flex items-center gap-1 text-[11px]" style={{ color: "#ffffff" }}>
               <Clock size={12} />
               {hint}
             </span>
