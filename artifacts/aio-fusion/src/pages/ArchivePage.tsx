@@ -121,7 +121,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
     <div className="p-6 sm:p-10 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl mb-1.5 flex items-center gap-2" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>
-          <Archive size={22} color="#ffffff" /> Archive - {projectName}
+          <Archive size={22} color="#ffffff" /> Content Library - {projectName}
         </h1>
         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
           Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept archive lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time. Click any card to send it back to the Content Optimiser.
@@ -201,7 +201,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={36} color={vars.teal} className="mx-auto mb-4" />
-          <p className="text-[16px] font-medium" style={{ color: vars.navy }}>{!contentVersion ? "Loading your content…" : archive.length === 0 ? "Archive is empty" : "No matching items"}</p>
+          <p className="text-[16px] font-medium" style={{ color: vars.navy }}>{!contentVersion ? "Loading your content…" : archive.length === 0 ? "Content Library is empty" : "No matching items"}</p>
           <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>{!contentVersion ? "Fetching your saved pieces from the server." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
         </div>
       ) : (
