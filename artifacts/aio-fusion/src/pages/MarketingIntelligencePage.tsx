@@ -275,8 +275,8 @@ function MarketingIntelligencePage() {
                 <><Search size={14} /> Search Events</>
               )}
             </button>
-            <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] font-semibold border bg-white" style={{ borderColor: vars.g200, color: vars.accent }}>
-              <FileText size={13} /> {showLLMBrief ? "Hide" : "View"} LLM brief
+            <button onClick={() => setShowLLMBrief((v) => !v)} className="flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] border-2 transition-colors" style={{ borderColor: "#C8497A", color: showLLMBrief ? "white" : "#C8497A", background: showLLMBrief ? "#C8497A" : "white" }}>
+              <Sparkles size={12} /> {showLLMBrief ? "Hide LLM brief" : "LLM Brief"}
             </button>
           </div>
           <p className="text-[14px] font-normal leading-relaxed" style={{ color: vars.navy }}>
