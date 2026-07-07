@@ -770,10 +770,7 @@ function App() {
         onLogoUpdate={handleLogoUpdate}
         onBackToPlatformHome={() => setView("platform-home")}
         onCreateProject={beginCreateProject}
-        onArchivedProjects={() => {
-          setActiveClient({ id: "archive-view", name: "Archive", initials: "AR", color: vars.accent, avgScore: 0, scoreTrend: 0 } as Client);
-          setCurrentPage("archive");
-        }}
+        onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
         onGuidance={() => {
           setInsightsFilter("Guidance");
           setView("insights");
