@@ -124,7 +124,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <Archive size={22} color="#ffffff" /> Content Library - {projectName}
         </h1>
         <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.85)" }}>
-          Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept archive lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time. Click any card to send it back to the Content Optimiser.
+          Your full, searchable library of every accepted, drafted and reviewed piece for this project, filtered by message, spokesperson, content type and time period. A well kept library lets you reuse proven content and keep messaging consistent, which compounds your authority with AI over time.
         </p>
       </div>
 
