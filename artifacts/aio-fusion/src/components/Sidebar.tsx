@@ -161,9 +161,8 @@ function SidebarContent({
             }}
           >
             <span
-              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110"
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 group-hover:scale-110 group-hover:bg-white/[0.18]"
               style={{
-                background: "rgba(255,255,255,0.18)",
                 color: "#ffffff",
               }}
             >
