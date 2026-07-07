@@ -6,7 +6,7 @@ import {
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, PenTool, ClipboardList, ArrowUpRight,
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
-  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
+  Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon,
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
@@ -787,8 +787,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         </div>
       )}
 
-      {/* Content Actions - freestanding pill buttons, same design as the Project Set-Up footer buttons */}
-      <div className="mt-8 flex flex-wrap items-center gap-3">
+      {/* Content Actions - two intentional rows */}
+      <div className="mt-8 flex flex-col gap-3">
+        {/* Row 1: primary workflow actions */}
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={createDraft}
             disabled={generating || optimisingField !== null}
@@ -798,12 +800,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           >
             {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
           </button>
-          {!generating && !optimisingField && (() => { const hint = getTypicalDurationHint("content-draft"); return hint ? (
-            <span className="flex items-center gap-1 text-[11px]" style={{ color: "#ffffff" }}>
-              <Clock size={12} />
-              {hint}
-            </span>
-          ) : null; })()}
           <button
             onClick={downloadDoc}
             disabled={!hasAnyContent}
@@ -831,11 +827,14 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           >
             <Send size={14} /> Share draft
           </button>
+        </div>
+        {/* Row 2: destination actions */}
+        <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={acceptAndArchive}
             disabled={!hasAnyContent}
             className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
-            style={{ borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
+            style={hasAnyContent ? { borderColor: "#C8497A", color: "#ffffff", background: "#C8497A" } : { borderColor: "#C8497A", color: "#C8497A", background: "#ffffff" }}
             title="Sign off this piece and save it to the Content Library"
           >
             <Archive size={14} /> Save to Content Library
@@ -843,8 +842,8 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={sendToMediaResearchFromCreator}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
-            style={{ background: "#84AB7D" }}
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+            style={hasAnyContent ? { borderColor: "#84AB7D", color: "#ffffff", background: "#84AB7D" } : { borderColor: "#84AB7D", color: "#84AB7D", background: "#ffffff" }}
             title="Save the draft and jump to Media Research to find target publications and journalists"
           >
             <Users size={14} /> Media Research
@@ -852,12 +851,13 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           <button
             onClick={pushToCommsPlanner}
             disabled={!hasAnyContent}
-            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] ml-auto text-white transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
-            style={{ background: "#D4922A" }}
+            className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
+            style={hasAnyContent ? { borderColor: "#D4922A", color: "#ffffff", background: "#D4922A" } : { borderColor: "#D4922A", color: "#D4922A", background: "#ffffff" }}
             title={pubDate ? `Push this piece to the Comms Planner for w/c ${pubDate}` : "Push this piece to the Comms Planner (uses current week if no publication date set)"}
           >
             <Calendar size={14} /> Push to Comms Planner
           </button>
+        </div>
       </div>
 
       {/* Change Log - shown after Optimise has been run */}

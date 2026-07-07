@@ -127,16 +127,17 @@ describe("getVisibleUsernames (account isolation)", () => {
     expect(visible).not.toContain("admin");
   });
 
-  it("limits a client to itself plus its own descendants only", async () => {
+  it("lets a client see itself, its direct parent, and its own descendants", async () => {
+    // clients can see agency-level (parent) projects without logging in as the agency
     const visible = await getVisibleUsernames({ username: "client1", role: "user" });
-    expect(new Set(visible)).toEqual(new Set(["client1", "subclient"]));
-    expect(visible).not.toContain("agency");
+    expect(new Set(visible)).toEqual(new Set(["client1", "subclient", "agency"]));
     expect(visible).not.toContain("client2");
+    expect(visible).not.toContain("other");
   });
 
-  it("limits a leaf client to only itself", async () => {
+  it("lets a leaf client see itself and its direct parent only", async () => {
     const visible = await getVisibleUsernames({ username: "client2", role: "user" });
-    expect(visible).toEqual(["client2"]);
+    expect(new Set(visible)).toEqual(new Set(["client2", "agency"]));
   });
 });
 
@@ -160,5 +161,11 @@ describe("canManage (account management rules)", () => {
     expect(await canManage(agency, "client1")).toBe(true);
     expect(await canManage(agency, "agency")).toBe(false);
     expect(await canManage(agency, "other")).toBe(false);
+  });
+
+  it("a client cannot manage its parent even though it can see parent projects", async () => {
+    const client = { username: "client1", role: "user" as const };
+    expect(await canManage(client, "agency")).toBe(false);
+    expect(await canManage(client, "client1")).toBe(false);
   });
 });

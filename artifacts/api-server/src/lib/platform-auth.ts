@@ -202,7 +202,9 @@ export async function getVisibleUsernames(
 
 // Whether `actor` is allowed to manage (change password / delete) `target`.
 // Admins may manage anyone; a normal account may manage its own descendants
-// but never itself via these admin paths.
+// but never itself via these admin paths. This intentionally does NOT include
+// the parent account that getVisibleUsernames adds for project-visibility —
+// management rights are downward-only in the hierarchy.
 export async function canManage(
   actor: PlatformAccount,
   targetUsername: string,
@@ -210,9 +212,35 @@ export async function canManage(
   const target = normUsername(targetUsername);
   if (!target) return false;
   if (actor.role === "admin") return true;
-  const visible = await getVisibleUsernames(actor);
-  if (visible === null) return true;
-  return visible.includes(target) && target !== normUsername(actor.username);
+  const start = normUsername(actor.username);
+  if (target === start) return false; // cannot manage yourself via admin paths
+  // Build descendants-only set (no parent lookup).
+  const rows = await db
+    .select({
+      username: platformAccountsTable.username,
+      parent: platformAccountsTable.parent,
+    })
+    .from(platformAccountsTable);
+  const childrenByParent = new Map<string, string[]>();
+  for (const r of rows) {
+    const parent = normUsername(r.parent);
+    if (!parent) continue;
+    const list = childrenByParent.get(parent) || [];
+    list.push(normUsername(r.username));
+    childrenByParent.set(parent, list);
+  }
+  const descendants = new Set<string>();
+  const queue = [start];
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const child of childrenByParent.get(current) || []) {
+      if (!descendants.has(child)) {
+        descendants.add(child);
+        queue.push(child);
+      }
+    }
+  }
+  return descendants.has(target);
 }
 
 // --- Sessions ---------------------------------------------------------------
