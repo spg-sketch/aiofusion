@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { loadPlannerProjects, savePlannerProjects, useContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
+import { loadPlannerProjects, savePlannerProjects, useContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, aggregatePlanScore, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
 import { getKeyMessages, getSpokespeople, getActiveProjectId } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
@@ -184,19 +184,16 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
     };
   }, [view, projects, cfg]);
 
-  const totals = projects.reduce(
-    (acc, p) => {
-      const s = scoreProject(p, cfg);
-      acc.visibility += s.visibility;
-      acc.authority += s.authority;
-      acc.byType[p.contentType] = (acc.byType[p.contentType] || 0) + s.visibility + s.authority;
-      return acc;
-    },
-    { visibility: 0, authority: 0, byType: {} as Record<string, number> },
-  );
-  const projectedTotal = Math.round(totals.visibility + totals.authority);
-  const visPct = Math.min(100, Math.round((totals.visibility / 50) * 100));
-  const authPct = Math.min(100, Math.round((totals.authority / 50) * 100));
+  const byType = projects.reduce((acc, p) => {
+    const s = scoreProject(p, cfg);
+    acc[p.contentType] = (acc[p.contentType] || 0) + s.visibility + s.authority;
+    return acc;
+  }, {} as Record<string, number>);
+  const planScore = aggregatePlanScore(projects, cfg);
+  const totals = { visibility: planScore.visibility, authority: planScore.authority, byType };
+  const projectedTotal = planScore.total;
+  const visPct = Math.round((planScore.visibility / 50) * 100);
+  const authPct = Math.round((planScore.authority / 50) * 100);
 
   const ink = "#102B36";
   const paper = "#FBF6EC";
@@ -577,6 +574,10 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 <li><strong style={{ color: vars.navy }}>Visibility</strong> - how many channels and audiences see it. Press releases and social posts score high here.</li>
               </ul>
               <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below - change any value in <em>Score settings</em>.</p>
+              <div className="rounded-lg p-3 border" style={{ background: "rgba(200,73,122,0.05)", borderColor: "rgba(200,73,122,0.2)" }}>
+                <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>How the plan total is calculated</p>
+                <p>Each new piece of content adds to your plan score, but with <strong style={{ color: vars.navy }}>diminishing returns</strong> — the first high-quality article makes the biggest difference, and a well-rounded plan of different content types will always score higher than repeating the same format. This keeps the Visibility and Authority totals meaningful and capped at 50 each (100 combined), no matter how many items are in the plan.</p>
+              </div>
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
                 <table className="w-full text-[12px]">
                   <thead style={{ background: vars.g50 }}>

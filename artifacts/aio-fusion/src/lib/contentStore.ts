@@ -443,6 +443,18 @@ export function scoreProject(p: PlannerProject, cfg: ScoringConfig = loadScoring
   return { visibility: Math.min(50, visibility * 5), authority: Math.min(50, authority * 5) };
 }
 
+export function aggregatePlanScore(
+  projects: PlannerProject[],
+  cfg: ScoringConfig = loadScoringConfig(),
+): { visibility: number; authority: number; total: number } {
+  const MAX = 50;
+  const rawVis = projects.reduce((sum, p) => sum + scoreProject(p, cfg).visibility, 0);
+  const rawAuth = projects.reduce((sum, p) => sum + scoreProject(p, cfg).authority, 0);
+  const visibility = Math.round(MAX * (1 - Math.exp(-rawVis / MAX)) * 10) / 10;
+  const authority  = Math.round(MAX * (1 - Math.exp(-rawAuth / MAX)) * 10) / 10;
+  return { visibility, authority, total: Math.round(visibility + authority) };
+}
+
 export const STATUS_COLOURS: Record<PlannerStatus, { bg: string; fg: string }> = {
   Planned:  { bg: "rgba(156,163,175,0.18)", fg: "#6B7280" },
   Drafting: { bg: "rgba(212,146,42,0.18)",  fg: "#D4922A" },
