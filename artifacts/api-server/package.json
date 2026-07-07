@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "demo-run": "tsx scripts/demo-run.ts"
+    "demo-run": "tsx scripts/demo-run.ts",
+    "seed:media-marketing": "tsx scripts/seed-media-marketing.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",
