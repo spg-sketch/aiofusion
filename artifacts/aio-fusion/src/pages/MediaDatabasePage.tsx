@@ -341,8 +341,8 @@ function MediaDatabasePage() {
       {activeTab === "contacts" && (
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-5">
-            <input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Search contacts..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px]" style={{ borderColor: vars.g200 }} />
-            <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: vars.navy }}>
+            <input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Search contacts..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white text-white" style={{ borderColor: vars.g200 }} />
+            <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "#ffffff" }}>
               <option value="">All outlets</option>
               {outletOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.name}</option>)}
             </select>

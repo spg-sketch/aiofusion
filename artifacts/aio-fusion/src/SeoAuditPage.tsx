@@ -316,19 +316,19 @@ export default function SeoAuditPage({
   }
 
   return (
-    <div className="min-h-screen" style={{ background: vars.g50 }}>
+    <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: vars.lightBg }}>
-              <Globe size={20} style={{ color: vars.accent }} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.15)" }}>
+              <Globe size={20} color="#ffffff" />
             </div>
             <div>
-              <h1 className="text-[22px] font-bold flex items-center" style={{ color: vars.navy, fontFamily: "Alice, serif" }}>
+              <h1 className="text-[22px] font-bold flex items-center" style={{ color: "#ffffff", fontFamily: "Alice, serif" }}>
                 Website GEO Assessment
                 <InfoTip text="Crawls a URL and checks meta tags, headings, schema markup, links, images, AI crawler access, and Google PageSpeed scores. Returns prioritised fixes to improve AI discoverability and citation-worthiness." width={260} />
               </h1>
-              <p className="text-[13px]" style={{ color: vars.g500 }}>
+              <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.75)" }}>
                 Technical website analysis with AI readiness scoring
               </p>
             </div>
@@ -524,8 +524,8 @@ export default function SeoAuditPage({
         )}
 
         {!result && !loading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: vars.lightBg }}>
+          <div className="rounded-xl border p-10 flex flex-col items-center justify-center" style={{ background: "white", borderColor: vars.g200 }}>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: vars.g100 }}>
               <Search size={28} style={{ color: vars.accent }} />
             </div>
             <p className="text-[15px] font-semibold" style={{ color: vars.navy }}>Enter a URL to begin</p>
