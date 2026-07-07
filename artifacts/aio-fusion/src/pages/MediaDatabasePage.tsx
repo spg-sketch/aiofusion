@@ -258,7 +258,6 @@ function MediaDatabasePage() {
     <div className="min-h-screen p-6 max-w-6xl mx-auto" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Header */}
       <div className="mb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] mb-1" style={{ color: vars.accent }}>Content Management</p>
         <div className="flex items-center gap-2.5">
           <Database size={24} color="#ffffff" />
           <h1 className="text-[28px] font-semibold mb-1" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Database</h1>
