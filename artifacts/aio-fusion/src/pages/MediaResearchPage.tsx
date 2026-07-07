@@ -374,7 +374,7 @@ function MediaResearchPage() {
             <button
               onClick={runRecommendMedia}
               disabled={generating}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-60"
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ background: vars.coral }}
             >
               {generating ? (
