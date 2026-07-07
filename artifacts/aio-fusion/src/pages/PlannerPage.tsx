@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadPlannerProjects, savePlannerProjects, useContentStore, loadArchive, getISOWeek, weekDateLabel, DEFAULT_SCORING, STATUS_COLOURS, scoreProject, loadScoringConfig, saveScoringConfig, type PlannerProject, type PlannerStatus, type ScoringConfig } from "../lib/contentStore";
-import { getKeyMessages, getSpokespeople } from "../IntakeForm";
+import { getKeyMessages, getSpokespeople, getActiveProjectId } from "../IntakeForm";
 import { CONTENT_TYPES } from "./shared";
 import InfoTip from "../InfoTip";
 function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
@@ -83,6 +83,62 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
   const startWeek = getISOWeek(new Date());
   const weeks = Array.from({ length: 8 }, (_, i) => startWeek + i);
+
+  // --- Date range for calendar view ---
+  const _getRangeKey = () => {
+    try {
+      const pid = getActiveProjectId();
+      const id = pid && pid !== "default" ? pid : "default";
+      return id === "default" ? "aio.planner.range.v1" : `aio.planner.range.v1::${id}`;
+    } catch { return "aio.planner.range.v1"; }
+  };
+  const _defaultRangeStart = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const _defaultRangeEnd = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 49);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const [rangeStart, setRangeStart] = useState<string>(() => {
+    try { const s = localStorage.getItem(_getRangeKey()); if (s) { const p = JSON.parse(s); if (p.start) return p.start; } } catch { /* noop */ }
+    return _defaultRangeStart();
+  });
+  const [rangeEnd, setRangeEnd] = useState<string>(() => {
+    try { const s = localStorage.getItem(_getRangeKey()); if (s) { const p = JSON.parse(s); if (p.end) return p.end; } } catch { /* noop */ }
+    return _defaultRangeEnd();
+  });
+  useEffect(() => {
+    try { localStorage.setItem(_getRangeKey(), JSON.stringify({ start: rangeStart, end: rangeEnd })); } catch { /* noop */ }
+  }, [rangeStart, rangeEnd]);
+  const resetRange = () => {
+    try { localStorage.removeItem(_getRangeKey()); } catch { /* noop */ }
+    setRangeStart(_defaultRangeStart());
+    setRangeEnd(_defaultRangeEnd());
+  };
+  const calendarWeeks = useMemo(() => {
+    const start = rangeStart ? new Date(rangeStart + "T00:00:00") : new Date();
+    const end = rangeEnd ? new Date(rangeEnd + "T00:00:00") : new Date();
+    // Normalize each date to the Monday of its ISO week so week boundaries
+    // are respected regardless of which day of the week the user picks.
+    const mondayOf = (d: Date): Date => {
+      const day = d.getDay() || 7;
+      const mon = new Date(d);
+      mon.setDate(d.getDate() - (day - 1));
+      return mon;
+    };
+    const startMon = mondayOf(start);
+    const endMon = mondayOf(end);
+    if (endMon < startMon) return [getISOWeek(startMon)];
+    const result: number[] = [];
+    const cur = new Date(startMon);
+    while (cur <= endMon && result.length < 52) {
+      result.push(getISOWeek(cur));
+      cur.setDate(cur.getDate() + 7);
+    }
+    return result;
+  }, [rangeStart, rangeEnd]);
 
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -250,6 +306,38 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         const COLS = ["Week of", "Content Type", "Content Title", "Status", "Key Message", "Spokesperson", "Release Date", "Authority Score", "Action Notes"];
         return (
           <div>
+            {/* Date range selector */}
+            <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+              <span className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "#ffffff", background: ink, padding: "4px 10px", borderRadius: 9999 }}>Date range:</span>
+              <label className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>From</span>
+                <input
+                  type="date"
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                  className="text-[13px] rounded-lg border px-2 py-1 outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, color: ink, background: paper, fontFamily: "inherit", focusRingColor: accentPink } as React.CSSProperties}
+                />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>To</span>
+                <input
+                  type="date"
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                  className="text-[13px] rounded-lg border px-2 py-1 outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, color: ink, background: paper, fontFamily: "inherit" }}
+                />
+              </label>
+              <button
+                onClick={resetRange}
+                className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+                style={{ color: accentPink, background: accentSoft, border: `1px solid ${accentPink}40` }}
+              >
+                Reset to default
+              </button>
+              <span className="text-[12px] font-light" style={{ color: vars.g500 }}>{calendarWeeks.length} week{calendarWeeks.length === 1 ? "" : "s"}</span>
+            </div>
             {/* Status key - horizontal strip ABOVE the calendar so it never obscures entries */}
             <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
               <span className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "#ffffff", background: vars.navy, padding: "4px 10px", borderRadius: 9999 }}>Status key:</span>
@@ -331,7 +419,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {weeks.map((w) => {
+                    {calendarWeeks.map((w) => {
                       const wkProjects = projects.filter((p) => p.week === w);
                       const rowCount = Math.max(SLOTS_PER_WEEK, wkProjects.length);
                       const label = weekDateLabel(w);
