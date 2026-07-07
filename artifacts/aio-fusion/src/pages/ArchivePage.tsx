@@ -201,7 +201,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       {filtered.length === 0 ? (
         <div className="bg-white border rounded-2xl p-10 text-center" style={{ borderColor: vars.g200 }}>
           <Archive size={36} color={vars.teal} className="mx-auto mb-4" />
-          <p className="text-[16px] font-medium" style={{ color: vars.navy }}>{!contentVersion ? "Loading your content…" : archive.length === 0 ? "Content Library is empty" : "No matching items"}</p>
+          <p className="text-[16px] font-medium" style={{ color: vars.navy }}>{!contentVersion ? "Loading your content…" : archive.length === 0 ? "Library is empty" : "No matching items"}</p>
           <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>{!contentVersion ? "Fetching your saved pieces from the server." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}</p>
         </div>
       ) : (
