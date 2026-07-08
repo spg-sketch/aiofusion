@@ -193,6 +193,7 @@ import {
   db,
   platformUsersTable,
   platformAccountsTable,
+  platformCompaniesTable,
   platformMembershipsTable,
   platformSessionsTable,
 } from "@workspace/db";
@@ -738,6 +739,87 @@ describe("GET /api/platform/auth/google/callback", () => {
     // Cleanup the auto-created account row.
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.email, "brand-new@example.com"));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, "brand-new@example.com"));
+  });
+
+  it("matches an existing user by googleId when their Google email has changed", async () => {
+    // Simulates a user who changed their email address in Google. The
+    // platform_users row still has the OLD email, but the same stable
+    // googleId. The callback must resolve identity via googleId (not email)
+    // and route the user to their existing workspace without creating a
+    // duplicate platform_users row.
+    const OLD_EMAIL = "old-email-changed@example.com";
+    const NEW_EMAIL = "new-email-changed@example.com";
+    const EMAIL_CHANGE_GOOGLE_ID = "google-sub-email-change-test";
+    const EMAIL_CHANGE_SLUG = "email-change-co";
+
+    const ph = hashPassword("unused-pw");
+    await db.insert(platformAccountsTable).values({
+      username: EMAIL_CHANGE_SLUG,
+      passwordHash: ph,
+      role: "agency",
+      status: "active",
+      email: OLD_EMAIL,
+    });
+    await db.insert(platformCompaniesTable).values({
+      slug: EMAIL_CHANGE_SLUG,
+      role: "agency",
+    });
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, EMAIL_CHANGE_SLUG));
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: OLD_EMAIL,
+        name: "Email Change User",
+        googleId: EMAIL_CHANGE_GOOGLE_ID,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: EMAIL_CHANGE_SLUG,
+      role: "owner",
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      makeFetchStub(
+        { access_token: "mock-access-token" },
+        { email: NEW_EMAIL, name: "Email Change User", id: EMAIL_CHANGE_GOOGLE_ID },
+      ),
+    );
+
+    try {
+      const res = await callCallback();
+      expect(res.status).toBe(302);
+      const location = res.headers.get("location") ?? "";
+      expect(location).toContain("oauth_status=ok");
+
+      // Still matched via googleId — no duplicate platform_users row created
+      // for the new email address.
+      const usersByGoogleId = await db
+        .select()
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.googleId, EMAIL_CHANGE_GOOGLE_ID));
+      expect(usersByGoogleId.length).toBe(1);
+      expect(usersByGoogleId[0]!.id).toBe(user!.id);
+
+      // Routed to their existing workspace/company via the session.
+      const sessions = await db
+        .select()
+        .from(platformSessionsTable)
+        .where(eq(platformSessionsTable.username, EMAIL_CHANGE_SLUG));
+      expect(sessions.length).toBe(1);
+      expect(sessions[0]!.userId).toBe(user!.id);
+    } finally {
+      await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, EMAIL_CHANGE_SLUG));
+      await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, EMAIL_CHANGE_SLUG));
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.googleId, EMAIL_CHANGE_GOOGLE_ID));
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, EMAIL_CHANGE_SLUG));
+      await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, EMAIL_CHANGE_SLUG));
+    }
   });
 
   it("redirects with invalid_state error when CSRF state does not match", async () => {
