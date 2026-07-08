@@ -1,17 +1,140 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import crypto from "crypto";
 
-// Mock the database layer. getVisibleUsernames / canManage read the full account
-// list via `db.select({...}).from(table)`, so we expose a settable row list and
-// return it from that call chain. No real database is touched.
-const accountRows = vi.hoisted(() => ({ value: [] as Array<{ username: string; parent: string | null }> }));
+// ---------------------------------------------------------------------------
+// In-memory database mock.
+//
+// getVisibleUsernames / canManage read the full account list via
+// `db.select({...}).from(platformAccountsTable)` — we expose a settable
+// accountRows array and return it from that call chain.
+//
+// ensurePlatformUser performs inserts + upserts on three tables
+// (platform_users, platform_companies, platform_memberships).  We model
+// those with simple Map/Set structures that honour the same uniqueness rules
+// as the real DB so we can test idempotency without a real database.
+// ---------------------------------------------------------------------------
+const mock = vi.hoisted(() => {
+  type AccountRow = { username: string; parent: string | null };
+
+  // Used by getVisibleUsernames / canManage.
+  const accountRows: AccountRow[] = [];
+
+  // Used by ensurePlatformUser / ensurePlatformCompany / getUserByEmail.
+  const usersByEmail = new Map<string, { id: string; email: string; name: string | null; googleId: string | null; passwordHash: string | null }>();
+  const companiesBySlug = new Map<string, { id: string; slug: string; role: string; parentSlug: string | null; maxSeats: number | null; status: string }>();
+  const memberships = new Set<string>(); // "userId::companyId" pairs
+
+  function genUuid() {
+    return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  }
+
+  const db = {
+    select: (_projection?: unknown) => ({
+      from: (table: unknown) => {
+        // getVisibleUsernames / canManage call select().from(platformAccountsTable)
+        // ensurePlatformUser calls select().from(platformUsersTable) etc.
+        // We key on which table object is passed using the __table marker.
+        const tbl = table as { __table?: string };
+        if (tbl.__table === "platform_users") {
+          return {
+            where: (pred: { email?: string }) => ({
+              limit: () =>
+                Promise.resolve(
+                  pred.email ? (usersByEmail.has(pred.email) ? [usersByEmail.get(pred.email)] : []) : [],
+                ),
+            }),
+          };
+        }
+        if (tbl.__table === "platform_companies") {
+          return {
+            where: (pred: { slug?: string }) => ({
+              limit: () =>
+                Promise.resolve(
+                  pred.slug ? (companiesBySlug.has(pred.slug) ? [companiesBySlug.get(pred.slug)] : []) : [],
+                ),
+            }),
+          };
+        }
+        // Default: return accountRows (for getVisibleUsernames / canManage).
+        return Promise.resolve(accountRows.map((r) => ({ ...r })));
+      },
+    }),
+    insert: (table: unknown) => ({
+      values: (values: Record<string, unknown>) => {
+        const tbl = table as { __table?: string };
+        const doInsert = () => {
+          if (tbl.__table === "platform_users") {
+            const email = values.email as string;
+            if (!usersByEmail.has(email)) {
+              const id = genUuid();
+              usersByEmail.set(email, {
+                id,
+                email,
+                name: (values.name as string | null) ?? null,
+                googleId: (values.googleId as string | null) ?? null,
+                passwordHash: (values.passwordHash as string | null) ?? null,
+              });
+            }
+            return [usersByEmail.get(email)];
+          }
+          if (tbl.__table === "platform_companies") {
+            const slug = values.slug as string;
+            if (!companiesBySlug.has(slug)) {
+              const id = genUuid();
+              companiesBySlug.set(slug, {
+                id,
+                slug,
+                role: (values.role as string) ?? "agency",
+                parentSlug: (values.parentSlug as string | null) ?? null,
+                maxSeats: (values.maxSeats as number | null) ?? null,
+                status: (values.status as string) ?? "active",
+              });
+            }
+            return [companiesBySlug.get(slug)];
+          }
+          if (tbl.__table === "platform_memberships") {
+            const key = `${values.userId}::${values.companyId}`;
+            memberships.add(key);
+          }
+          return [];
+        };
+        const returning = (_projection?: unknown) => Promise.resolve(doInsert());
+        return {
+          onConflictDoNothing: () => ({ returning, then: (r: (v: unknown) => unknown) => r(doInsert()) }),
+          onConflictDoUpdate: () => ({
+            returning,
+            then: (r: (v: unknown) => unknown) => r(doInsert()),
+          }),
+          returning,
+          then: (r: (v: unknown) => unknown) => r(doInsert()),
+        };
+      },
+    }),
+    delete: () => ({ where: () => Promise.resolve() }),
+    update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+  };
+
+  return { accountRows, usersByEmail, companiesBySlug, memberships, db };
+});
+
 vi.mock("@workspace/db", () => ({
-  db: {
-    select: () => ({ from: () => Promise.resolve(accountRows.value) }),
-  },
-  platformAccountsTable: {},
-  platformSessionsTable: {},
-  platformMetaTable: {},
-  projectsTable: {},
+  db: mock.db,
+  platformAccountsTable: { __table: "platform_accounts" },
+  platformUsersTable: { __table: "platform_users" },
+  platformCompaniesTable: { __table: "platform_companies" },
+  platformMembershipsTable: { __table: "platform_memberships" },
+  platformSessionsTable: { __table: "platform_sessions" },
+  platformMetaTable: { __table: "platform_meta" },
+  projectsTable: { __table: "projects" },
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: (_col: unknown, val: unknown) => ({ __eq: val }),
+  ne: (_col: unknown, val: unknown) => ({ __ne: val }),
+  and: (...parts: unknown[]) => ({ __and: parts }),
+  desc: (_col: unknown) => ({}),
+  inArray: (_col: unknown, vals: unknown[]) => ({ __inArray: vals }),
+  sql: Object.assign(() => ({}), { raw: () => ({}) }),
 }));
 
 import {
@@ -23,8 +146,12 @@ import {
   canManage,
   normalizeRole,
   canCreateSubAccounts,
+  ensurePlatformUser,
 } from "./platform-auth";
 
+// ---------------------------------------------------------------------------
+// normalizeRole
+// ---------------------------------------------------------------------------
 describe("normalizeRole (role overload + legacy handling)", () => {
   it("passes through the known roles unchanged", () => {
     expect(normalizeRole("admin")).toBe("admin");
@@ -44,6 +171,9 @@ describe("normalizeRole (role overload + legacy handling)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// canCreateSubAccounts
+// ---------------------------------------------------------------------------
 describe("canCreateSubAccounts (creation gating)", () => {
   it("lets the master and agencies (incl. legacy users) create sub-accounts", () => {
     expect(canCreateSubAccounts("admin")).toBe(true);
@@ -56,6 +186,9 @@ describe("canCreateSubAccounts (creation gating)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Password hashing
+// ---------------------------------------------------------------------------
 describe("password hashing", () => {
   it("verifies a correct password against its own hash", () => {
     const stored = hashPassword("correct horse battery");
@@ -83,6 +216,9 @@ describe("password hashing", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Username normalisation
+// ---------------------------------------------------------------------------
 describe("username normalisation and validation", () => {
   it("lowercases and trims, and tolerates non-strings", () => {
     expect(normUsername("  Agency_One  ")).toBe("agency_one");
@@ -100,17 +236,20 @@ describe("username normalisation and validation", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// getVisibleUsernames
+// ---------------------------------------------------------------------------
 describe("getVisibleUsernames (account isolation)", () => {
   beforeEach(() => {
-    // admin, an agency, two of its clients, and an unrelated account.
-    accountRows.value = [
+    mock.accountRows.length = 0;
+    mock.accountRows.push(
       { username: "admin", parent: null },
       { username: "agency", parent: null },
       { username: "client1", parent: "agency" },
       { username: "client2", parent: "agency" },
       { username: "subclient", parent: "client1" },
       { username: "other", parent: null },
-    ];
+    );
   });
 
   it("returns null for an admin (no filter, sees everything)", async () => {
@@ -128,7 +267,6 @@ describe("getVisibleUsernames (account isolation)", () => {
   });
 
   it("lets a client see itself, its direct parent, and its own descendants", async () => {
-    // clients can see agency-level (parent) projects without logging in as the agency
     const visible = await getVisibleUsernames({ username: "client1", role: "user" });
     expect(new Set(visible)).toEqual(new Set(["client1", "subclient", "agency"]));
     expect(visible).not.toContain("client2");
@@ -141,14 +279,18 @@ describe("getVisibleUsernames (account isolation)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// canManage
+// ---------------------------------------------------------------------------
 describe("canManage (account management rules)", () => {
   beforeEach(() => {
-    accountRows.value = [
+    mock.accountRows.length = 0;
+    mock.accountRows.push(
       { username: "admin", parent: null },
       { username: "agency", parent: null },
       { username: "client1", parent: "agency" },
       { username: "other", parent: null },
-    ];
+    );
   });
 
   it("admins can manage anyone", async () => {
@@ -167,5 +309,52 @@ describe("canManage (account management rules)", () => {
     const client = { username: "client1", role: "user" as const };
     expect(await canManage(client, "agency")).toBe(false);
     expect(await canManage(client, "client1")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ensurePlatformUser — idempotency
+// ---------------------------------------------------------------------------
+describe("ensurePlatformUser (idempotency)", () => {
+  beforeEach(() => {
+    // Reset user/company/membership state between tests.
+    mock.usersByEmail.clear();
+    mock.companiesBySlug.clear();
+    mock.memberships.clear();
+  });
+
+  it("calling twice with the same email returns the same UUID", async () => {
+    const id1 = await ensurePlatformUser({
+      email: "idempotent@example.com",
+      name: "Idempotent User",
+      companyUsername: "idempotent-co",
+    });
+    const id2 = await ensurePlatformUser({
+      email: "idempotent@example.com",
+      name: "Idempotent User",
+      companyUsername: "idempotent-co",
+    });
+    expect(typeof id1).toBe("string");
+    expect(id1.length).toBeGreaterThan(0);
+    expect(id1).toBe(id2);
+  });
+
+  it("calling with two different emails creates two distinct UUIDs", async () => {
+    const id1 = await ensurePlatformUser({
+      email: "user-a@example.com",
+      companyUsername: "company-a",
+    });
+    const id2 = await ensurePlatformUser({
+      email: "user-b@example.com",
+      companyUsername: "company-b",
+    });
+    expect(id1).not.toBe(id2);
+  });
+
+  it("repeated calls do not accumulate duplicate company rows", async () => {
+    await ensurePlatformUser({ email: "c@example.com", companyUsername: "my-corp" });
+    await ensurePlatformUser({ email: "c@example.com", companyUsername: "my-corp" });
+    const companiesForSlug = [...mock.companiesBySlug.keys()].filter((k) => k === "my-corp");
+    expect(companiesForSlug.length).toBe(1);
   });
 });
