@@ -57,7 +57,10 @@ export const platformAccountsTable = pgTable("platform_accounts", {
 //  - `status`    "active" | "pending_approval" | "suspended".
 export const platformCompaniesTable = pgTable("platform_companies", {
   id: uuid("id").primaryKey().defaultRandom(),
-  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  slug: varchar("slug", { length: 64 })
+    .notNull()
+    .unique()
+    .references(() => platformAccountsTable.username, { onDelete: "cascade" }),
   role: varchar("role").notNull().default("agency"),
   parentSlug: varchar("parent_slug", { length: 64 }),
   maxSeats: integer("max_seats"),

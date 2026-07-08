@@ -3,6 +3,8 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
   platformAccountsTable,
+  platformCompaniesTable,
+  platformMembershipsTable,
   platformMetaTable,
   platformSessionsTable,
   projectsTable,
@@ -1081,6 +1083,17 @@ router.post(
         .update(projectsTable)
         .set({ owner: normUsername(actor.username) })
         .where(eq(projectsTable.owner, target));
+      // Remove membership rows for this company explicitly before the account
+      // row is deleted, so the cascade FK (platform_companies.slug →
+      // platform_accounts.username) does not race against the DELETE below on
+      // databases where the constraint has not yet been backfilled by the
+      // startup migration. This is safe to run regardless of FK state.
+      await db
+        .delete(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.companySlug, target));
+      await db
+        .delete(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.slug, target));
       await db
         .delete(platformAccountsTable)
         .where(eq(platformAccountsTable.username, target));
@@ -1162,6 +1175,14 @@ router.post(
       await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
       await deleteProfile(username);
       await db.delete(platformMetaTable).where(eq(platformMetaTable.key, archiveKey(username)));
+      // Clean up membership and company rows so no orphaned references remain
+      // in the new user/company layer after the legacy account row is deleted.
+      await db
+        .delete(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.companySlug, username));
+      await db
+        .delete(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.slug, username));
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
 
       clearPlatformCookie(res);
@@ -1462,6 +1483,20 @@ router.post(
         .update(platformAccountsTable)
         .set({ role: newRole })
         .where(eq(platformAccountsTable.username, target));
+      // Keep platform_companies.role in sync so membership queries that join
+      // on the company layer see the correct workspace role without needing to
+      // fall back to the legacy accounts table.
+      await db
+        .update(platformCompaniesTable)
+        .set({ role: newRole })
+        .where(eq(platformCompaniesTable.slug, target));
+      // Update the membership role for the owner of this company so the
+      // membership layer reflects the current role (owner membership role
+      // mirrors the account role for single-owner companies).
+      await db
+        .update(platformMembershipsTable)
+        .set({ role: newRole === "admin" ? "admin" : "owner" })
+        .where(eq(platformMembershipsTable.companySlug, target));
       void logAdminEvent(
         { username: actor.username },
         "account_role_change",
@@ -1518,16 +1553,23 @@ router.post(
         }
       }
       const prevParent = existing.parent ?? null;
+      const resolvedParent = newParent ?? "admin";
       await db
         .update(platformAccountsTable)
-        .set({ parent: newParent ?? "admin" })
+        .set({ parent: resolvedParent })
         .where(eq(platformAccountsTable.username, target));
+      // Keep platform_companies.parentSlug in sync so the company hierarchy
+      // layer stays consistent with the legacy accounts layer.
+      await db
+        .update(platformCompaniesTable)
+        .set({ parentSlug: resolvedParent })
+        .where(eq(platformCompaniesTable.slug, target));
       void logAdminEvent(
         { username: actor.username },
         "account_reparent",
         target,
         "account",
-        { previousParent: prevParent, newParent: newParent ?? "admin" },
+        { previousParent: prevParent, newParent: resolvedParent },
       );
       res.json({ ok: true });
     } catch {
