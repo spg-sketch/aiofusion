@@ -198,7 +198,7 @@ import {
   platformSessionsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { hashPassword } from "../lib/platform-auth";
+import { hashPassword, getPrimaryMembership } from "../lib/platform-auth";
 import platformRouter from "./platform";
 
 // ---------------------------------------------------------------------------
@@ -623,6 +623,8 @@ describe("GET /api/platform/auth/google/callback", () => {
     delete process.env.GOOGLE_CLIENT_SECRET;
     // Clean up any rows created during this suite.
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, ACCOUNT_SLUG));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, ACCOUNT_SLUG));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, ACCOUNT_SLUG));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, GOOGLE_EMAIL));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, ACCOUNT_SLUG));
   });
@@ -853,5 +855,82 @@ describe("GET /api/platform/auth/google/callback", () => {
     const res = await callCallback();
     expect(res.status).toBe(302);
     expect(res.headers.get("location") ?? "").toContain("not_configured");
+  });
+
+  it("blocks a suspended account re-authenticating via Google (session expired, re-login attempted)", async () => {
+    // Seed a suspended platform_accounts row plus a matching platform_users
+    // row with googleId already set (simulates a previously-linked Google
+    // user whose account was suspended after their session expired).
+    const ph = hashPassword("unused-pw");
+    await db.insert(platformAccountsTable).values({
+      username: ACCOUNT_SLUG,
+      passwordHash: ph,
+      role: "agency",
+      status: "suspended",
+      email: GOOGLE_EMAIL,
+    });
+    await db.insert(platformUsersTable).values({
+      email: GOOGLE_EMAIL,
+      name: GOOGLE_NAME,
+      googleId: GOOGLE_ID,
+    }).onConflictDoNothing();
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, GOOGLE_EMAIL));
+
+    await db.insert(platformCompaniesTable).values({
+      slug: ACCOUNT_SLUG,
+      role: "agency",
+      status: "suspended",
+      email: GOOGLE_EMAIL,
+    }).onConflictDoNothing();
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, ACCOUNT_SLUG));
+
+    if (!user || !company) {
+      throw new Error("Test setup failed: expected user and company rows to exist");
+    }
+    await db.insert(platformMembershipsTable).values({
+      userId: user.id,
+      companyId: company.id,
+      companySlug: ACCOUNT_SLUG,
+      role: "owner",
+    }).onConflictDoNothing();
+
+    // Guard the intended branch coverage: this test must exercise the
+    // existing-user + membership path (platform.ts ~line 592-605), not the
+    // legacy email-fallback path, so confirm the membership actually exists
+    // before invoking the callback.
+    const membershipCheck = await getPrimaryMembership(user.id);
+    if (!membershipCheck) {
+      throw new Error("Test setup failed: expected membership row to exist");
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      makeFetchStub(
+        { access_token: "mock-access-token" },
+        { email: GOOGLE_EMAIL, name: GOOGLE_NAME, id: GOOGLE_ID },
+      ),
+    );
+
+    const res = await callCallback();
+
+    // The route should still resolve the correct Google identity...
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    // ...but must redirect to the suspended state, never a successful login.
+    expect(location).toContain("oauth_status=suspended");
+    expect(location).not.toContain("oauth_status=ok");
+
+    // No session should have been created for the suspended account.
+    const sessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, ACCOUNT_SLUG));
+    expect(sessions.length).toBe(0);
   });
 });
