@@ -22,7 +22,21 @@ const mock = vi.hoisted(() => {
   // Used by ensurePlatformUser / ensurePlatformCompany / getUserByEmail.
   const usersByEmail = new Map<string, { id: string; email: string; name: string | null; googleId: string | null; passwordHash: string | null }>();
   const companiesBySlug = new Map<string, { id: string; slug: string; role: string; parentSlug: string | null; maxSeats: number | null; status: string }>();
+  const companiesById = new Map<string, { id: string; slug: string; role: string; parentSlug: string | null; maxSeats: number | null; status: string }>();
   const memberships = new Set<string>(); // "userId::companyId" pairs
+
+  // Used by getPlatformSessionAccount tests.
+  type SessionRow = {
+    sid: string; username: string; userId: string | null; activeCompanyId: string | null;
+    expiresAt: Date; ipHint: string | null; createdAt: Date;
+  };
+  const sessionRows = new Map<string, SessionRow>();
+
+  type FullAccountRow = {
+    username: string; passwordHash: string; role: string; parent: string | null;
+    maxSeats: number | null; email: string | null; website: string | null; status: string;
+  };
+  const fullAccountRows = new Map<string, FullAccountRow>();
 
   function genUuid() {
     return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
@@ -37,26 +51,58 @@ const mock = vi.hoisted(() => {
         const tbl = table as { __table?: string };
         if (tbl.__table === "platform_users") {
           return {
-            where: (pred: { email?: string }) => ({
-              limit: () =>
-                Promise.resolve(
-                  pred.email ? (usersByEmail.has(pred.email) ? [usersByEmail.get(pred.email)] : []) : [],
-                ),
+            where: (pred: { __eq?: string }) => ({
+              limit: () => {
+                const val = pred.__eq;
+                const row = val ? usersByEmail.get(val) : undefined;
+                return Promise.resolve(row ? [row] : []);
+              },
             }),
           };
         }
         if (tbl.__table === "platform_companies") {
           return {
-            where: (pred: { slug?: string }) => ({
-              limit: () =>
-                Promise.resolve(
-                  pred.slug ? (companiesBySlug.has(pred.slug) ? [companiesBySlug.get(pred.slug)] : []) : [],
-                ),
+            where: (pred: { __eq?: string }) => ({
+              limit: () => {
+                const val = pred.__eq;
+                if (!val) return Promise.resolve([]);
+                // Support lookup by id (used by getPlatformSessionAccount) and by slug.
+                const byId = companiesById.get(val);
+                if (byId) return Promise.resolve([byId]);
+                const bySlug = companiesBySlug.get(val);
+                if (bySlug) return Promise.resolve([bySlug]);
+                return Promise.resolve([]);
+              },
             }),
           };
         }
-        // Default: return accountRows (for getVisibleUsernames / canManage).
-        return Promise.resolve(accountRows.map((r) => ({ ...r })));
+        if (tbl.__table === "platform_sessions") {
+          return {
+            where: (pred: { __eq?: string }) => ({
+              limit: () => {
+                const sid = pred.__eq;
+                const row = sid ? sessionRows.get(sid) : undefined;
+                return Promise.resolve(row ? [row] : []);
+              },
+            }),
+          };
+        }
+        // platform_accounts: support both direct await (getVisibleUsernames / canManage)
+        // and .where().limit() chaining (getAccount).
+        if (tbl.__table === "platform_accounts") {
+          const allRows = accountRows.map((r) => ({ ...r }));
+          return Object.assign(Promise.resolve(allRows), {
+            where: (pred: { __eq?: string }) => ({
+              limit: () => {
+                const val = pred.__eq;
+                const row = val ? fullAccountRows.get(val) : undefined;
+                return Promise.resolve(row ? [row] : []);
+              },
+            }),
+          });
+        }
+        // Default: return empty array for any unrecognised table.
+        return Promise.resolve([]);
       },
     }),
     insert: (table: unknown) => ({
@@ -114,7 +160,7 @@ const mock = vi.hoisted(() => {
     update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
   };
 
-  return { accountRows, usersByEmail, companiesBySlug, memberships, db };
+  return { accountRows, usersByEmail, companiesBySlug, companiesById, memberships, sessionRows, fullAccountRows, db };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -147,6 +193,7 @@ import {
   normalizeRole,
   canCreateSubAccounts,
   ensurePlatformUser,
+  getPlatformSessionAccount,
 } from "./platform-auth";
 
 // ---------------------------------------------------------------------------
@@ -356,5 +403,141 @@ describe("ensurePlatformUser (idempotency)", () => {
     await ensurePlatformUser({ email: "c@example.com", companyUsername: "my-corp" });
     const companiesForSlug = [...mock.companiesBySlug.keys()].filter((k) => k === "my-corp");
     expect(companiesForSlug.length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPlatformSessionAccount — fallback paths
+//
+// The function tries platform_companies (by activeCompanyId) first, then falls
+// back to platform_accounts. These tests verify the fallback works correctly
+// so a missing company row does not silently lock out a user.
+// ---------------------------------------------------------------------------
+describe("getPlatformSessionAccount (session resolution + fallback)", () => {
+  const FUTURE = new Date(Date.now() + 1_000_000_000);
+  const PAST = new Date(Date.now() - 1_000);
+
+  beforeEach(() => {
+    mock.sessionRows.clear();
+    mock.fullAccountRows.clear();
+    mock.companiesById.clear();
+  });
+
+  it("returns null for an unknown session id", async () => {
+    const result = await getPlatformSessionAccount("nonexistent-sid");
+    expect(result).toBeNull();
+  });
+
+  it("returns null and cleans up an expired session", async () => {
+    mock.sessionRows.set("expired-sid", {
+      sid: "expired-sid",
+      username: "myagency",
+      userId: null,
+      activeCompanyId: null,
+      expiresAt: PAST,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+    const result = await getPlatformSessionAccount("expired-sid");
+    expect(result).toBeNull();
+  });
+
+  it("resolves via platform_companies when activeCompanyId is present and the row exists", async () => {
+    const companyId = "company-uuid-001";
+    mock.companiesById.set(companyId, {
+      id: companyId,
+      slug: "myagency",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "active",
+    });
+    mock.sessionRows.set("valid-new-sid", {
+      sid: "valid-new-sid",
+      username: "myagency",
+      userId: "user-uuid-001",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("valid-new-sid");
+    expect(result).not.toBeNull();
+    expect(result!.username).toBe("myagency");
+    expect(result!.role).toBe("agency");
+    expect(result!.userId).toBe("user-uuid-001");
+    expect(result!.activeCompanyId).toBe(companyId);
+  });
+
+  it("falls back to platform_accounts when activeCompanyId points to a missing company row", async () => {
+    mock.fullAccountRows.set("myagency", {
+      username: "myagency",
+      passwordHash: "scrypt$salt$hash",
+      role: "agency",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "active",
+    });
+    mock.sessionRows.set("orphan-company-sid", {
+      sid: "orphan-company-sid",
+      username: "myagency",
+      userId: "user-uuid-002",
+      activeCompanyId: "missing-company-uuid",
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("orphan-company-sid");
+    expect(result).not.toBeNull();
+    expect(result!.username).toBe("myagency");
+    expect(result!.role).toBe("agency");
+  });
+
+  it("resolves a legacy session (no activeCompanyId, no userId) via platform_accounts only", async () => {
+    mock.fullAccountRows.set("legacyuser", {
+      username: "legacyuser",
+      passwordHash: "scrypt$salt$hash",
+      role: "user",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "active",
+    });
+    mock.sessionRows.set("legacy-sid", {
+      sid: "legacy-sid",
+      username: "legacyuser",
+      userId: null,
+      activeCompanyId: null,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("legacy-sid");
+    expect(result).not.toBeNull();
+    expect(result!.username).toBe("legacyuser");
+    expect(result!.role).toBe("user");
+    expect(result!.userId).toBeUndefined();
+    expect(result!.activeCompanyId).toBeUndefined();
+  });
+
+  it("returns null when both the company row is missing and the account row is missing", async () => {
+    mock.sessionRows.set("ghost-sid", {
+      sid: "ghost-sid",
+      username: "deletedaccount",
+      userId: null,
+      activeCompanyId: null,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("ghost-sid");
+    expect(result).toBeNull();
   });
 });
