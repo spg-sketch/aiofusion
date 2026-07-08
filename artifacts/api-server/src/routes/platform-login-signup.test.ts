@@ -714,6 +714,7 @@ describe("GET /api/platform/auth/google/callback", () => {
 
     expect(users.length).toBe(1);
     expect(users[0]!.email).toBe(GOOGLE_EMAIL);
+    expect(users[0]!.googleId).toBe(GOOGLE_ID);
   });
 
   it("redirects to /?oauth_status=pending for a brand-new Google sign-up (no account)", async () => {
