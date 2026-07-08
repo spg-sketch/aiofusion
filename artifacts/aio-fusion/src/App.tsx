@@ -459,6 +459,16 @@ function App() {
 
   useEffect(() => { removeDemoSeedData(); }, []);
 
+  // Navigate to the platform-home view when returning from a Google OAuth
+  // redirect (e.g. /?oauth_status=ok). The session cookie is already set by
+  // the server; the existing /api/platform/me call will pick it up.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("oauth_status")) {
+      setView("platform-home");
+    }
+  }, []);
+
   // --- Browser history sync ---------------------------------------------
   // The app navigates via internal state (view/currentPage) rather than URLs.
   // Without this, the browser Back button has no in-app history to step

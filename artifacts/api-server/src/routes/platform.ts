@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
@@ -377,6 +378,174 @@ router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, as
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to reject account." });
+  }
+});
+
+// --- Google OAuth 2.0 sign-in / sign-up -------------------------------------
+
+const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
+const OAUTH_STATE_COOKIE = "aio_oauth_state";
+
+function getGoogleCallbackUrl(req: Request): string {
+  if (process.env.NODE_ENV !== "production") {
+    const host = req.get("x-forwarded-host") || req.get("host") || "";
+    const hostname = host.split(":")[0];
+    if (hostname) return `https://${hostname}/api/platform/auth/google/callback`;
+  }
+  return "https://www.aiofusion.ai/api/platform/auth/google/callback";
+}
+
+function getFrontendOrigin(req: Request): string {
+  if (process.env.NODE_ENV !== "production") {
+    const host = req.get("x-forwarded-host") || req.get("host") || "";
+    const hostname = host.split(":")[0];
+    if (hostname) return `https://${hostname}`;
+  }
+  return "https://www.aiofusion.ai";
+}
+
+router.get("/platform/auth/google", (req: Request, res: Response) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    res.status(503).json({ error: "Google Sign-In is not configured." });
+    return;
+  }
+  const state = crypto.randomBytes(16).toString("hex");
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 10 * 60 * 1000,
+    path: "/",
+  });
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: getGoogleCallbackUrl(req),
+    response_type: "code",
+    scope: "openid email profile",
+    state,
+    access_type: "online",
+    prompt: "select_account",
+  });
+  res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
+});
+
+router.get("/platform/auth/google/callback", async (req: Request, res: Response) => {
+  const origin = getFrontendOrigin(req);
+  try {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_configured`);
+      return;
+    }
+    const { code, state, error: oauthError } = req.query as Record<string, string>;
+    if (oauthError) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${encodeURIComponent(oauthError)}`);
+      return;
+    }
+    // Verify CSRF state
+    const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+    if (!state || state !== storedState) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=invalid_state`);
+      return;
+    }
+    if (!code) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_code`);
+      return;
+    }
+    // Exchange authorisation code for access token
+    const tokenRes = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: getGoogleCallbackUrl(req),
+        grant_type: "authorization_code",
+      }).toString(),
+    });
+    if (!tokenRes.ok) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=token_exchange_failed`);
+      return;
+    }
+    const tokens = await tokenRes.json() as { access_token?: string; error?: string };
+    if (!tokens.access_token) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_access_token`);
+      return;
+    }
+    // Fetch the user's Google profile
+    const userInfoRes = await fetch(GOOGLE_USERINFO_ENDPOINT, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!userInfoRes.ok) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=userinfo_failed`);
+      return;
+    }
+    const userInfo = await userInfoRes.json() as { email?: string; name?: string; given_name?: string };
+    if (!userInfo.email) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
+      return;
+    }
+    // Look up an existing account by email (case-insensitive)
+    const [existing] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(ilike(platformAccountsTable.email, userInfo.email))
+      .limit(1);
+    if (existing) {
+      if (existing.status === "pending_approval") {
+        res.redirect(`${origin}/?oauth_status=pending`);
+        return;
+      }
+      if (existing.status === "suspended") {
+        res.redirect(`${origin}/?oauth_status=suspended`);
+        return;
+      }
+      // Active account — create a session and redirect in
+      const sid = await createPlatformSession(existing.username, makeIpHint(req));
+      setPlatformCookie(res, sid);
+      res.redirect(`${origin}/?oauth_status=ok`);
+      return;
+    }
+    // No account — register a new pending one from the Google profile
+    const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
+    const emailDomain = userInfo.email.split("@")[1] ?? "";
+    let baseSlug = (emailDomain.split(".")[0] ?? "user")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 24);
+    if (!baseSlug || !USERNAME_RE.test(baseSlug)) baseSlug = "user";
+    let username = baseSlug;
+    for (let i = 1; ; i++) {
+      if (!(await getAccount(username))) break;
+      username = `${baseSlug}-${i}`;
+    }
+    await db.insert(platformAccountsTable).values({
+      username,
+      passwordHash: hashPassword(crypto.randomBytes(32).toString("hex")),
+      role: "agency",
+      status: "pending_approval",
+      email: userInfo.email,
+      website: null,
+    });
+    await db.insert(platformMetaTable).values({
+      key: `account:profile:${username}`,
+      value: JSON.stringify({ displayName, ownerName: displayName }),
+    }).onConflictDoUpdate({
+      target: platformMetaTable.key,
+      set: { value: JSON.stringify({ displayName, ownerName: displayName }) },
+    });
+    res.redirect(`${origin}/?oauth_status=pending`);
+  } catch (err) {
+    console.error("Google OAuth callback error:", err);
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
   }
 });
 
