@@ -696,7 +696,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatTile label="Earned Media Authority Score" value={String(earnedAuthorityScore)} sub="weighted from tracker" color={vars.navy} icon={Sparkles} />
-            <StatTile label="Earned Media Authority Trend" value="+6" sub="vs prior period" color={vars.green} icon={TrendingUp} />
+            <StatTile label="Earned Media Authority Trend" value={earnedTrendDelta === null ? (latestAudit ? "New" : "–") : `${earnedTrendDelta >= 0 ? "+" : ""}${earnedTrendDelta}`} sub="vs prior period" color={earnedTrendDelta !== null && earnedTrendDelta < 0 ? vars.red : vars.green} icon={TrendingUp} />
             <StatTile label="Audience Reach" value={`${(audienceReach / 1_000_000).toFixed(2)}M`} sub="period total" color={vars.navy} icon={Eye} />
             <StatTile label="Authority / piece" value={String(authorityPerPiece)} sub="avg score across rows" color={vars.accent} icon={BarChart3} />
           </div>
