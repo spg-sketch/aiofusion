@@ -212,6 +212,19 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     });
   }, [activeClient.id]);
 
+  // Re-read from localStorage whenever an audit or diagnostic is saved/deleted
+  // anywhere in the app (LlmCheckPage, Sidebar, DiagnosticPage, etc. all fire
+  // this event after updating localStorage). Without this listener the stat
+  // tiles on ReportPage show stale numbers until the user switches project.
+  useEffect(() => {
+    const handler = () => {
+      setSavedAudits(loadSavedAudits(activeClient.id));
+      setSavedDiagnostics(loadSavedDiagnostics(activeClient.id));
+    };
+    window.addEventListener("aio:saved-audits-changed", handler);
+    return () => window.removeEventListener("aio:saved-audits-changed", handler);
+  }, [activeClient.id]);
+
   const latestAudit = savedAudits.length > 0 ? savedAudits[0] : null;
   const previousAudit = savedAudits.length > 1 ? savedAudits[1] : null;
 
