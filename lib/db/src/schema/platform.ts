@@ -38,6 +38,37 @@ export const platformAccountsTable = pgTable("platform_accounts", {
   status: varchar("status").notNull().default("active"),
 });
 
+// Company/workspace records. Each platform_accounts row (which acts as the
+// legacy auth + workspace slug) has a corresponding platform_companies row
+// that gives it a stable UUID identity. This decouples the human user
+// (platform_users) from the workspace they belong to, and lets a user belong
+// to multiple workspaces.
+//
+//  - `id`        Stable UUID; referenced by memberships and sessions.
+//  - `slug`      The canonical lowercased slug (= platform_accounts.username).
+//                Unique, used for URL paths and store keys so existing data
+//                is compatible without migration.
+//  - `role`      "admin" | "agency" | "client" | "user" — mirrors
+//                platform_accounts.role for workspace-level access rules.
+//  - `parentSlug` The parent company's slug (mirrors platform_accounts.parent).
+//  - `maxSeats`  Optional seat cap for agency accounts.
+//  - `email`     Contact email for the company.
+//  - `website`   Company website URL.
+//  - `status`    "active" | "pending_approval" | "suspended".
+export const platformCompaniesTable = pgTable("platform_companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  role: varchar("role").notNull().default("agency"),
+  parentSlug: varchar("parent_slug", { length: 64 }),
+  maxSeats: integer("max_seats"),
+  email: varchar("email", { length: 255 }),
+  website: varchar("website", { length: 512 }),
+  status: varchar("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Individual human users, separate from company/agency accounts.
 //
 //  - `id`           UUID primary key, issued by the database.
@@ -57,23 +88,25 @@ export const platformUsersTable = pgTable("platform_users", {
     .defaultNow(),
 });
 
-// Links a human user to a company/agency account.
+// Links a human user to a company workspace.
 //
-//  - `userId`     References platform_users.id.
-//  - `companyId`  References platform_accounts.username (the company's slug).
-//  - `role`       The user's role within this company:
-//                   "owner"  — created the account; full control.
-//                   "admin"  — platform-wide admin (only used for the admin account).
-//                   "member" — future team member invite.
+//  - `userId`      References platform_users.id.
+//  - `companyId`   References platform_companies.id (stable UUID).
+//  - `companySlug` Denormalised slug for fast lookups without joining companies.
+//  - `role`        The user's role within this company:
+//                    "owner"  — created the account; full control.
+//                    "admin"  — platform-wide admin (only for the admin account).
+//                    "member" — future team member invite.
 export const platformMembershipsTable = pgTable(
   "platform_memberships",
   {
     userId: uuid("user_id")
       .notNull()
       .references(() => platformUsersTable.id, { onDelete: "cascade" }),
-    companyId: varchar("company_id")
+    companyId: uuid("company_id")
       .notNull()
-      .references(() => platformAccountsTable.username, { onDelete: "cascade" }),
+      .references(() => platformCompaniesTable.id, { onDelete: "cascade" }),
+    companySlug: varchar("company_slug", { length: 64 }).notNull(),
     role: varchar("role").notNull().default("owner"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -86,15 +119,20 @@ export const platformMembershipsTable = pgTable(
 // `sessions` table so the two auth systems never interfere. The session id is a
 // random token stored in an httpOnly cookie.
 //
-//  - `ipHint`   is the first two octets of the login IP (e.g. "192.168.x.x")
-//               stored so the sessions list can show approximate origin without
-//               persisting a full IP address.
-//  - `userId`   the platform_users.id of the logged-in user (NULL for legacy
-//               sessions created before the users table existed).
+//  - `username`         Legacy company slug; kept for backward compat while
+//                       all store/audit routes still key on it.
+//  - `userId`           platform_users.id of the signed-in human; NULL for
+//                       sessions created before the users table existed.
+//  - `activeCompanyId`  platform_companies.id of the active workspace; NULL
+//                       for legacy sessions. Enables multi-company context
+//                       switching without a new login.
+//  - `ipHint`           First two octets of the login IP, stored coarsely so
+//                       the sessions list can show approximate origin.
 export const platformSessionsTable = pgTable("platform_sessions", {
   sid: varchar("sid").primaryKey(),
   username: varchar("username").notNull(),
   userId: uuid("user_id"),
+  activeCompanyId: uuid("active_company_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -112,6 +150,9 @@ export const platformMetaTable = pgTable("platform_meta", {
 export type PlatformAccountRow = typeof platformAccountsTable.$inferSelect;
 export type InsertPlatformAccount = typeof platformAccountsTable.$inferInsert;
 export type AccountStatus = "active" | "pending_approval" | "suspended";
+
+export type PlatformCompanyRow = typeof platformCompaniesTable.$inferSelect;
+export type InsertPlatformCompany = typeof platformCompaniesTable.$inferInsert;
 
 export type PlatformUserRow = typeof platformUsersTable.$inferSelect;
 export type InsertPlatformUser = typeof platformUsersTable.$inferInsert;

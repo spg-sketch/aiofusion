@@ -3,6 +3,7 @@ import { type Request, type Response } from "express";
 import {
   db,
   platformAccountsTable,
+  platformCompaniesTable,
   platformSessionsTable,
   platformUsersTable,
   platformMembershipsTable,
@@ -32,6 +33,8 @@ export interface PlatformAccount {
   role: Role;
   /** UUID from platform_users — present on new sessions, undefined on legacy sessions. */
   userId?: string;
+  /** UUID from platform_companies — present on new sessions, undefined on legacy sessions. */
+  activeCompanyId?: string;
 }
 
 // Normalise an arbitrary stored/incoming role string to a known Role. The
@@ -140,11 +143,66 @@ export async function ensureDefaultAdmin(): Promise<void> {
     .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME));
 }
 
+// --- Platform companies (workspace layer) -----------------------------------
+//
+// Each platform_accounts row has a corresponding platform_companies row that
+// gives it a stable UUID identity decoupled from the slug-based primary key.
+
+// Find a company by its slug (= old platform_accounts.username).
+export async function getCompanyBySlug(
+  slug: string,
+): Promise<typeof platformCompaniesTable.$inferSelect | null> {
+  const s = normUsername(slug);
+  if (!s) return null;
+  const [row] = await db
+    .select()
+    .from(platformCompaniesTable)
+    .where(eq(platformCompaniesTable.slug, s))
+    .limit(1);
+  return row ?? null;
+}
+
+// Upsert a platform_companies row for the given account slug. Returns the
+// company UUID. Idempotent — safe to call repeatedly.
+export async function ensurePlatformCompany(opts: {
+  slug: string;
+  role?: string;
+  parentSlug?: string | null;
+  maxSeats?: number | null;
+  email?: string | null;
+  website?: string | null;
+  status?: string;
+}): Promise<string> {
+  const slug = normUsername(opts.slug);
+  const [company] = await db
+    .insert(platformCompaniesTable)
+    .values({
+      slug,
+      role: opts.role ?? "agency",
+      parentSlug: opts.parentSlug ?? null,
+      maxSeats: opts.maxSeats ?? null,
+      email: opts.email ?? null,
+      website: opts.website ?? null,
+      status: opts.status ?? "active",
+    })
+    .onConflictDoUpdate({
+      target: platformCompaniesTable.slug,
+      set: {
+        ...(opts.role != null ? { role: opts.role } : {}),
+        ...(opts.email != null ? { email: opts.email } : {}),
+        ...(opts.website != null ? { website: opts.website } : {}),
+        ...(opts.status != null ? { status: opts.status } : {}),
+      },
+    })
+    .returning({ id: platformCompaniesTable.id });
+  return company!.id;
+}
+
 // --- Platform users (human identity layer) ----------------------------------
 //
 // Each human user has exactly one platform_users row. They may be members of
-// one or more platform_accounts (companies/agencies). On sign-up and login
-// we ensure a users row exists and is linked to the account via a membership.
+// one or more platform_companies. On sign-up and login we ensure a users row
+// exists and is linked to the company via a membership.
 
 // Find a user by email (case-insensitive).
 export async function getUserByEmail(email: string): Promise<typeof platformUsersTable.$inferSelect | null> {
@@ -169,8 +227,17 @@ export async function getUserByGoogleId(googleId: string): Promise<typeof platfo
   return row ?? null;
 }
 
-// Create a platform_users row and a membership linking it to the given company
-// (platform_accounts.username). Returns the user id. Idempotent on email.
+// Link a Google id to an existing user (e.g. when they first use Google Sign-In
+// on an account that was originally created with a password).
+export async function linkGoogleId(userId: string, googleId: string): Promise<void> {
+  await db
+    .update(platformUsersTable)
+    .set({ googleId })
+    .where(eq(platformUsersTable.id, userId));
+}
+
+// Create a platform_users row, ensure a platform_companies row, and link them
+// via a membership. Returns the user id. Idempotent on email.
 export async function ensurePlatformUser(opts: {
   email: string;
   name?: string | null;
@@ -178,11 +245,16 @@ export async function ensurePlatformUser(opts: {
   googleId?: string | null;
   companyUsername: string;
   membershipRole?: string;
+  companyRole?: string;
+  companyParentSlug?: string | null;
+  companyMaxSeats?: number | null;
+  companyEmail?: string | null;
+  companyWebsite?: string | null;
+  companyStatus?: string;
 }): Promise<string> {
   const emailLower = opts.email.trim().toLowerCase();
 
-  // Upsert user row: if email already exists, update name/googleId/passwordHash
-  // only when the new value is non-null (don't wipe existing data).
+  // 1. Upsert user row.
   const [user] = await db
     .insert(platformUsersTable)
     .values({
@@ -203,26 +275,29 @@ export async function ensurePlatformUser(opts: {
 
   const userId = user!.id;
 
-  // Upsert membership row.
+  // 2. Ensure company row exists and get its UUID.
+  const companyId = await ensurePlatformCompany({
+    slug: opts.companyUsername,
+    role: opts.companyRole,
+    parentSlug: opts.companyParentSlug,
+    maxSeats: opts.companyMaxSeats,
+    email: opts.companyEmail,
+    website: opts.companyWebsite,
+    status: opts.companyStatus,
+  });
+
+  // 3. Upsert membership linking user ↔ company UUID.
   await db
     .insert(platformMembershipsTable)
     .values({
       userId,
-      companyId: normUsername(opts.companyUsername),
+      companyId,
+      companySlug: normUsername(opts.companyUsername),
       role: opts.membershipRole ?? "owner",
     })
     .onConflictDoNothing();
 
   return userId;
-}
-
-// Link a Google id to an existing user (e.g. when they first use Google Sign-In
-// on an account that was originally created with a password).
-export async function linkGoogleId(userId: string, googleId: string): Promise<void> {
-  await db
-    .update(platformUsersTable)
-    .set({ googleId })
-    .where(eq(platformUsersTable.id, userId));
 }
 
 // --- Accounts ---------------------------------------------------------------
@@ -399,25 +474,22 @@ export type SessionInfo = {
   ipHint: string | null;
 };
 
-// Create a new session for the given username. Single-session enforcement:
-// all existing sessions for the account are deleted first so only one device
-// can hold an active session at a time.
+// Create a new session for the given username.
+// Multi-session aware: does NOT delete existing sessions, allowing the same
+// account to be active on multiple devices simultaneously.
 export async function createPlatformSession(
   username: string,
   ipHint?: string | null,
   userId?: string | null,
+  activeCompanyId?: string | null,
 ): Promise<string> {
   const u = normUsername(username);
-  // Kill every existing session for this account before issuing a new one.
-  await db
-    .delete(platformSessionsTable)
-    .where(eq(platformSessionsTable.username, u));
-
   const sid = crypto.randomBytes(32).toString("hex");
   await db.insert(platformSessionsTable).values({
     sid,
     username: u,
     userId: userId ?? null,
+    activeCompanyId: activeCompanyId ?? null,
     expiresAt: new Date(Date.now() + PLATFORM_SESSION_TTL),
     ipHint: ipHint ?? null,
   });
@@ -449,6 +521,7 @@ export async function getPlatformSessionAccount(
     username: account.username,
     role: account.role,
     userId: row.userId ?? undefined,
+    activeCompanyId: row.activeCompanyId ?? undefined,
   };
 }
 
@@ -535,14 +608,18 @@ export function clearImpersonationStashCookie(res: Response): void {
   res.clearCookie(PLATFORM_IMPERSONATION_STASH_COOKIE, { path: "/" });
 }
 
-// --- One-time backfill: create platform_users rows for existing accounts ----
+// --- One-time backfill: create platform_companies + platform_users rows -----
 //
-// Every existing platform_accounts row (human-owned agency/client accounts)
-// needs a corresponding platform_users row and a membership linking them. This
-// runs once at startup, gated by a platform_meta flag, so it is safe to call
-// on every server restart without re-processing.
+// For every existing platform_accounts row we need:
+//  1. A platform_companies row (stable UUID workspace identity)
+//  2. A platform_users row (the human behind the account)
+//  3. A platform_memberships row linking user ↔ company
+//
+// This runs at startup, gated by a platform_meta flag. The flag is only set
+// after every account is successfully processed — a partial run leaves the
+// flag unset so the next restart retries the remaining rows.
 
-const USER_BACKFILL_FLAG = "platform_users_backfilled";
+const USER_BACKFILL_FLAG = "platform_users_v2_backfilled";
 
 export async function backfillPlatformUsers(): Promise<void> {
   try {
@@ -554,11 +631,24 @@ export async function backfillPlatformUsers(): Promise<void> {
     if (done?.value === "true") return;
 
     const accounts = await db.select().from(platformAccountsTable);
+    let allOk = true;
+
     for (const acc of accounts) {
-      // Use the email if present; fall back to a synthetic internal address so
-      // the users table's UNIQUE email constraint is always satisfied.
-      const email = acc.email?.trim().toLowerCase() || `${acc.username}@aio.internal`;
       try {
+        // 1. Ensure company row.
+        await ensurePlatformCompany({
+          slug: acc.username,
+          role: acc.role,
+          parentSlug: acc.parent ?? null,
+          maxSeats: acc.maxSeats ?? null,
+          email: acc.email ?? null,
+          website: acc.website ?? null,
+          status: acc.status,
+        });
+
+        // 2. Ensure user row + membership. Use the email if present; fall back
+        // to a synthetic internal address so the unique constraint is satisfied.
+        const email = acc.email?.trim().toLowerCase() || `${acc.username}@aio.internal`;
         await ensurePlatformUser({
           email,
           name: null,
@@ -566,21 +656,29 @@ export async function backfillPlatformUsers(): Promise<void> {
           googleId: null,
           companyUsername: acc.username,
           membershipRole: acc.role === "admin" ? "admin" : "owner",
+          companyRole: acc.role,
+          companyParentSlug: acc.parent ?? null,
+          companyStatus: acc.status,
         });
       } catch (err) {
-        // Best-effort: a conflict on a synthetic email (two accounts with the
-        // same internal placeholder) should not abort the entire backfill.
-        console.warn("[platform-auth] backfillPlatformUsers: skipped", acc.username, err);
+        console.warn("[platform-auth] backfillPlatformUsers: failed for", acc.username, err);
+        allOk = false;
       }
     }
 
-    await db
-      .insert(platformMetaTable)
-      .values({ key: USER_BACKFILL_FLAG, value: "true" })
-      .onConflictDoUpdate({
-        target: platformMetaTable.key,
-        set: { value: "true" },
-      });
+    // Only mark complete when every row succeeded. A partial run will be
+    // retried on the next server restart.
+    if (allOk) {
+      await db
+        .insert(platformMetaTable)
+        .values({ key: USER_BACKFILL_FLAG, value: "true" })
+        .onConflictDoUpdate({
+          target: platformMetaTable.key,
+          set: { value: "true" },
+        });
+    } else {
+      console.warn("[platform-auth] backfillPlatformUsers: completed with errors; will retry on next restart");
+    }
   } catch (err) {
     console.error("[platform-auth] backfillPlatformUsers failed (non-fatal)", err);
   }
