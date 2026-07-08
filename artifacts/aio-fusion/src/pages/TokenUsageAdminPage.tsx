@@ -12,14 +12,22 @@ export type TokenUsageRow = {
   callCount: number;
 };
 
+export type TokenUserInfo = {
+  userId: string;
+  userEmail: string | null;
+  userName: string | null;
+};
+
 export function TokenUsageAdminPage({
   rows,
+  usersByAccount,
   loading,
   error,
   onBack,
   onRefresh,
 }: {
   rows: TokenUsageRow[] | null;
+  usersByAccount?: Record<string, TokenUserInfo>;
   loading: boolean;
   error: string | null;
   onBack: () => void;
@@ -34,6 +42,18 @@ export function TokenUsageAdminPage({
     if (!monthTotals[key]) monthTotals[key] = { accountId: row.accountId, month: row.month, totalCost: 0, callCount: 0 };
     monthTotals[key].totalCost += parseFloat(row.totalCost);
     monthTotals[key].callCount += row.callCount;
+  }
+
+  function renderUserBadge(accountId: string) {
+    const info = usersByAccount?.[accountId.toLowerCase()];
+    if (!info) return null;
+    const label = [info.userName, info.userEmail].filter(Boolean).join(" · ");
+    if (!label) return null;
+    return (
+      <div className="text-[10px] font-mono mt-0.5 leading-tight" style={{ color: vars.g400 }} title="Account owner — based on membership record">
+        {label}
+      </div>
+    );
   }
 
   return (
@@ -84,7 +104,7 @@ export function TokenUsageAdminPage({
                 <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${vars.g200}` }}>
-                      {["Account", "Month", "Calls", "Est. cost (GBP)"].map((h) => (
+                      {["Account / User", "Month", "Calls", "Est. cost (GBP)"].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left font-semibold text-[11px] uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>{h}</th>
                       ))}
                     </tr>
@@ -94,7 +114,10 @@ export function TokenUsageAdminPage({
                       .sort((a, b) => b.month.localeCompare(a.month) || a.accountId.localeCompare(b.accountId))
                       .map((mt, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${vars.g200}` }}>
-                          <td className="px-4 py-2.5 font-medium" style={{ color: ink }}>{mt.accountId}</td>
+                          <td className="px-4 py-2.5" style={{ color: ink }}>
+                            <p className="font-medium">{mt.accountId}</p>
+                            {renderUserBadge(mt.accountId)}
+                          </td>
                           <td className="px-4 py-2.5" style={{ color: vars.g500 }}>{mt.month}</td>
                           <td className="px-4 py-2.5" style={{ color: vars.g500 }}>{mt.callCount.toLocaleString()}</td>
                           <td className="px-4 py-2.5 font-semibold" style={{ color: accent }}>£{mt.totalCost.toFixed(4)}</td>
@@ -113,7 +136,7 @@ export function TokenUsageAdminPage({
                 <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${vars.g200}` }}>
-                      {["Account", "Month", "Operation", "Model", "Calls", "Input tokens", "Output tokens", "Est. cost (GBP)"].map((h) => (
+                      {["Account / User", "Month", "Operation", "Model", "Calls", "Input tokens", "Output tokens", "Est. cost (GBP)"].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left font-semibold text-[11px] uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>{h}</th>
                       ))}
                     </tr>
@@ -121,7 +144,10 @@ export function TokenUsageAdminPage({
                   <tbody>
                     {rows.map((row, i) => (
                       <tr key={i} style={{ borderBottom: `1px solid ${vars.g200}`, background: i % 2 === 0 ? "white" : "transparent" }}>
-                        <td className="px-4 py-2.5 font-medium" style={{ color: ink }}>{row.accountId}</td>
+                        <td className="px-4 py-2.5" style={{ color: ink }}>
+                          <p className="font-medium">{row.accountId}</p>
+                          {renderUserBadge(row.accountId)}
+                        </td>
                         <td className="px-4 py-2.5" style={{ color: vars.g500 }}>{row.month}</td>
                         <td className="px-4 py-2.5" style={{ color: vars.g500 }}>{row.operation}</td>
                         <td className="px-4 py-2.5 font-mono text-[11px]" style={{ color: vars.g500 }}>{row.model}</td>

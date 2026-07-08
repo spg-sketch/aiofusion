@@ -110,7 +110,7 @@ import type {
   Outlet, Contact,
 } from "./types";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
-import { TokenUsageAdminPage, type TokenUsageRow } from "./pages/TokenUsageAdminPage";
+import { TokenUsageAdminPage, type TokenUsageRow, type TokenUserInfo } from "./pages/TokenUsageAdminPage";
 import type { Client } from "./lib/projectTypes";
 import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
@@ -289,6 +289,7 @@ function App() {
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
   const [tokenUsageRows, setTokenUsageRows] = useState<TokenUsageRow[] | null>(null);
+  const [tokenUsageUsersByAccount, setTokenUsageUsersByAccount] = useState<Record<string, TokenUserInfo> | undefined>(undefined);
   const [tokenUsageLoading, setTokenUsageLoading] = useState(false);
   const [tokenUsageError, setTokenUsageError] = useState<string | null>(null);
 
@@ -298,8 +299,9 @@ function App() {
     void fetch(`${apiBase()}/api/admin/token-usage`, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error("Failed to load token usage");
-        const data = await r.json() as { rows: TokenUsageRow[] };
+        const data = await r.json() as { rows: TokenUsageRow[]; usersByAccount?: Record<string, TokenUserInfo> };
         setTokenUsageRows(data.rows ?? []);
+        setTokenUsageUsersByAccount(data.usersByAccount ?? {});
       })
       .catch(() => setTokenUsageError("Could not load token usage data. Please try again."))
       .finally(() => setTokenUsageLoading(false));
@@ -657,6 +659,7 @@ function App() {
     return (
       <TokenUsageAdminPage
         rows={tokenUsageRows}
+        usersByAccount={tokenUsageUsersByAccount}
         loading={tokenUsageLoading}
         error={tokenUsageError}
         onBack={() => setView("platform-home")}

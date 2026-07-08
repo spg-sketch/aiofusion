@@ -298,7 +298,10 @@ function UsersAdminPage({
   // ── Audit log state ───────────────────────────────────────────────────────
   type AdminEvent = {
     id: number;
+    actorId: string;
     actorUsername: string;
+    actorName: string | null;
+    actorEmail: string | null;
     action: string;
     targetId: string | null;
     targetType: string | null;
@@ -877,6 +880,7 @@ function UsersAdminPage({
                     <table className="w-full text-left text-[12px]" style={{ borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ background: vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                          <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Human user</th>
                           <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Started</th>
                           <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>Expires</th>
                           <th className="px-3 py-2 font-bold uppercase tracking-[0.12em] text-[10px]" style={{ color: vars.g500 }}>IP</th>
@@ -886,6 +890,17 @@ function UsersAdminPage({
                       <tbody>
                         {accountSessions.map((s, i) => (
                           <tr key={s.sid} style={{ background: i % 2 === 0 ? "white" : vars.g100, borderBottom: `1px solid ${vars.g200}` }}>
+                            <td className="px-3 py-2 max-w-[180px]" style={{ color: ink }}>
+                              {s.userName || s.userEmail ? (
+                                <div>
+                                  {s.userName && <p className="text-[12px] font-semibold truncate">{s.userName}</p>}
+                                  {s.userEmail && <p className="text-[10px] font-mono truncate" style={{ color: vars.g500 }}>{s.userEmail}</p>}
+                                  {s.userId && <p className="text-[9px] font-mono truncate" style={{ color: vars.g400 }} title={s.userId}>{s.userId}</p>}
+                                </div>
+                              ) : (
+                                <span className="text-[11px] font-light" style={{ color: vars.g400 }}>Legacy session</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2 whitespace-nowrap font-mono" style={{ color: ink }}>
                               {new Date(s.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                               {" "}
@@ -1309,6 +1324,8 @@ function UsersAdminPage({
                   const detail = ev.metadata ? Object.entries(ev.metadata).map(([k, v]) => `${k}: ${String(v)}`).join(" ") : "";
                   return (
                     ev.actorUsername.toLowerCase().includes(needle) ||
+                    (ev.actorName?.toLowerCase() ?? "").includes(needle) ||
+                    (ev.actorEmail?.toLowerCase() ?? "").includes(needle) ||
                     ev.action.toLowerCase().includes(needle) ||
                     target.toLowerCase().includes(needle) ||
                     detail.toLowerCase().includes(needle)
@@ -1342,7 +1359,14 @@ function UsersAdminPage({
                       return (
                         <tr key={ev.id} style={{ background: rowBg, borderBottom: `1px solid ${vars.g200}` }}>
                           <td className="px-4 py-2.5 whitespace-nowrap font-mono" style={{ color: vars.g600 }}>{timeStr}</td>
-                          <td className="px-4 py-2.5 whitespace-nowrap font-semibold" style={{ color: ink }}>{ev.actorUsername}</td>
+                          <td className="px-4 py-2.5 max-w-[180px]" style={{ color: ink }}>
+                            <p className="font-semibold truncate">{ev.actorUsername}</p>
+                            {(ev.actorName || ev.actorEmail) && (
+                              <p className="text-[10px] font-mono truncate mt-0.5" style={{ color: vars.g400 }}>
+                                {[ev.actorName, ev.actorEmail].filter(Boolean).join(" · ")}
+                              </p>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: vars.navy }}>{actionLabel}</td>
                           <td className="px-4 py-2.5 whitespace-nowrap font-mono text-[11px]" style={{ color: vars.g500 }}>{target}</td>
                           <td className="px-4 py-2.5 max-w-xs truncate" style={{ color: vars.g500 }} title={detail || undefined}>{detail || "-"}</td>

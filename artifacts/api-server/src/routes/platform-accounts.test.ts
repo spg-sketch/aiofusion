@@ -87,6 +87,7 @@ vi.mock("@workspace/db", () => {
     platformAccountsTable: h.platformAccountsTable,
     platformMetaTable: h.platformMetaTable,
     platformSessionsTable: {},
+    platformUsersTable: {},
     adminEventsTable: {},
   };
 });

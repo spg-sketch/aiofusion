@@ -7,6 +7,7 @@ import {
   platformMembershipsTable,
   platformMetaTable,
   platformSessionsTable,
+  platformUsersTable,
   projectsTable,
   projectSnapshotsTable,
   archiveItemsTable,
@@ -422,7 +423,7 @@ router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, a
       .where(eq(platformAccountsTable.username, target));
 
     void logAdminEvent(
-      { username: req.account!.username },
+      { username: req.account!.username, id: req.account!.userId },
       "account_approve",
       target,
       "account",
@@ -454,7 +455,7 @@ router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, as
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, target));
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, `%:${target}`));
     void logAdminEvent(
-      { username: req.account!.username },
+      { username: req.account!.username, id: req.account!.userId },
       "account_reject",
       target,
       "account",
@@ -782,7 +783,7 @@ router.post(
       setImpersonationStashCookie(res, adminSid);
       setPlatformCookie(res, sid);
       void logAdminEvent(
-        { username: actor.username },
+        { username: actor.username, id: actor.userId },
         "impersonate_start",
         account.username,
         "account",
@@ -817,7 +818,7 @@ router.post("/platform/exit-impersonation", async (req: Request, res: Response) 
     setPlatformCookie(res, stashSid);
     clearImpersonationStashCookie(res);
     void logAdminEvent(
-      { username: adminAccount.username },
+      { username: adminAccount.username, id: adminAccount.userId },
       "impersonate_exit",
       null,
       "account",
@@ -1099,7 +1100,7 @@ router.post(
         .where(eq(platformAccountsTable.username, target));
       await deleteProfile(target);
       void logAdminEvent(
-        { username: actor.username },
+        { username: actor.username, id: actor.userId },
         "account_delete",
         target,
         "account",
@@ -1159,7 +1160,7 @@ router.post(
       // Hard-delete everything scoped to this account. Order does not matter
       // (no foreign keys tie these tables together), but we log the event
       // before removing the account row so the actor/target are still valid.
-      void logAdminEvent({ username: actor.username }, "account_self_delete", username, "account", {
+      void logAdminEvent({ username: actor.username, id: actor.userId }, "account_self_delete", username, "account", {
         role: account.role,
       });
       await db.delete(archiveItemsTable).where(eq(archiveItemsTable.owner, username));
@@ -1248,13 +1249,19 @@ function maskSid(sid: string): string {
   return "*".repeat(sid.length - 8) + sid.slice(-8);
 }
 
-function sessionToPublic(s: { sid: string; createdAt: Date; expiresAt: Date; ipHint: string | null }, currentSid: string) {
+function sessionToPublic(
+  s: { sid: string; createdAt: Date; expiresAt: Date; ipHint: string | null; userId?: string | null; userEmail?: string | null; userName?: string | null },
+  currentSid: string,
+) {
   return {
     sid: maskSid(s.sid),
     isCurrent: s.sid === currentSid,
     createdAt: s.createdAt.toISOString(),
     expiresAt: s.expiresAt.toISOString(),
     ipHint: s.ipHint ?? null,
+    userId: s.userId ?? null,
+    userEmail: s.userEmail ?? null,
+    userName: s.userName ?? null,
   };
 }
 
@@ -1423,7 +1430,7 @@ router.post(
       });
 
     void logAdminEvent(
-      { username: req.account!.username },
+      { username: req.account!.username, id: req.account!.userId },
       "platform_migrate",
       null,
       "platform",
@@ -1498,7 +1505,7 @@ router.post(
         .set({ role: newRole === "admin" ? "admin" : "owner" })
         .where(eq(platformMembershipsTable.companySlug, target));
       void logAdminEvent(
-        { username: actor.username },
+        { username: actor.username, id: actor.userId },
         "account_role_change",
         target,
         "account",
@@ -1565,7 +1572,7 @@ router.post(
         .set({ parentSlug: resolvedParent })
         .where(eq(platformCompaniesTable.slug, target));
       void logAdminEvent(
-        { username: actor.username },
+        { username: actor.username, id: actor.userId },
         "account_reparent",
         target,
         "account",
@@ -1607,9 +1614,14 @@ function buildAuditConditions(query: Request["query"]) {
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
+// Column set for admin events queries — includes human identity fields
+// resolved from platform_users via a LEFT JOIN on actorId.
 const AUDIT_COLS = {
   id: adminEventsTable.id,
+  actorId: adminEventsTable.actorId,
   actorUsername: adminEventsTable.actorUsername,
+  actorName: platformUsersTable.name,
+  actorEmail: platformUsersTable.email,
   action: adminEventsTable.action,
   targetId: adminEventsTable.targetId,
   targetType: adminEventsTable.targetType,
@@ -1632,6 +1644,7 @@ router.get(
       const rows = await db
         .select(AUDIT_COLS)
         .from(adminEventsTable)
+        .leftJoin(platformUsersTable, eq(adminEventsTable.actorId, platformUsersTable.id))
         .where(where)
         .orderBy(desc(adminEventsTable.createdAt))
         .limit(500);
@@ -1661,6 +1674,7 @@ router.get(
       const rows = await db
         .select(AUDIT_COLS)
         .from(adminEventsTable)
+        .leftJoin(platformUsersTable, eq(adminEventsTable.actorId, platformUsersTable.id))
         .where(where)
         .orderBy(desc(adminEventsTable.createdAt));
 
@@ -1671,7 +1685,7 @@ router.get(
         `attachment; filename="audit-log-${dateSlug}.csv"`,
       );
 
-      res.write("id,time,actor,action,target_type,target_id,detail\n");
+      res.write("id,time,actor_id,actor_name,actor_email,actor,action,target_type,target_id,detail\n");
       for (const row of rows) {
         const detail =
           row.metadata
@@ -1683,6 +1697,9 @@ router.get(
           [
             csvEscape(row.id),
             csvEscape(row.createdAt),
+            csvEscape(row.actorId ?? ""),
+            csvEscape(row.actorName ?? ""),
+            csvEscape(row.actorEmail ?? ""),
             csvEscape(row.actorUsername),
             csvEscape(row.action),
             csvEscape(row.targetType ?? ""),

@@ -438,7 +438,7 @@ router.post(
         return;
       }
       void logAdminEvent(
-        { username: req.account!.username },
+        { username: req.account!.username, id: req.account!.userId },
         "project_owner_reassign",
         id,
         "project",

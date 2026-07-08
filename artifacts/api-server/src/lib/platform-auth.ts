@@ -523,6 +523,9 @@ export type SessionInfo = {
   createdAt: Date;
   expiresAt: Date;
   ipHint: string | null;
+  userId?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
 };
 
 // Create a new session for the given username.
@@ -623,8 +626,12 @@ export async function listPlatformSessions(username: string): Promise<SessionInf
       createdAt: platformSessionsTable.createdAt,
       expiresAt: platformSessionsTable.expiresAt,
       ipHint: platformSessionsTable.ipHint,
+      userId: platformSessionsTable.userId,
+      userEmail: platformUsersTable.email,
+      userName: platformUsersTable.name,
     })
     .from(platformSessionsTable)
+    .leftJoin(platformUsersTable, eq(platformSessionsTable.userId, platformUsersTable.id))
     .where(eq(platformSessionsTable.username, u));
   return rows
     .filter((r) => r.expiresAt > now)

@@ -1362,7 +1362,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
           }
           // Admin forced the audit past the 21-day lock — log for accountability.
           void logAdminEvent(
-            { username: req.account!.username },
+            { username: req.account!.username, id: req.account!.userId },
             "forced_llm_audit",
             projectId,
             "project",

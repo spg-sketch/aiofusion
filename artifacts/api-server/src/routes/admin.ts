@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, auditLocksTable, projectsTable, tokenUsageTable } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable } from "@workspace/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername } from "../lib/platform-auth";
@@ -615,7 +615,39 @@ adminRouter.get(
           sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
         )
         .limit(1000);
-      res.json({ rows });
+      // Batch-resolve human user info for each unique account slug so the UI
+      // can show both the company username and the person behind it.
+      const slugs = [...new Set(rows.map((r) => r.accountId.toLowerCase()).filter(Boolean))];
+      const usersByAccount: Record<string, { userId: string; userEmail: string | null; userName: string | null }> = {};
+      if (slugs.length > 0) {
+        try {
+          const memberships = await db
+            .select({ companySlug: platformMembershipsTable.companySlug, userId: platformMembershipsTable.userId })
+            .from(platformMembershipsTable)
+            .where(inArray(platformMembershipsTable.companySlug, slugs));
+          const userIds = [...new Set(memberships.map((m) => m.userId).filter(Boolean))];
+          if (userIds.length > 0) {
+            const users = await db
+              .select({ id: platformUsersTable.id, email: platformUsersTable.email, name: platformUsersTable.name })
+              .from(platformUsersTable)
+              .where(inArray(platformUsersTable.id, userIds));
+            const usersById = new Map(users.map((u) => [u.id, u]));
+            for (const m of memberships) {
+              const user = usersById.get(m.userId);
+              if (user && !usersByAccount[m.companySlug]) {
+                usersByAccount[m.companySlug] = {
+                  userId: user.id,
+                  userEmail: user.email ?? null,
+                  userName: user.name ?? null,
+                };
+              }
+            }
+          }
+        } catch {
+          // Non-fatal: rows still return, just without human user enrichment.
+        }
+      }
+      res.json({ rows, usersByAccount });
     } catch (err) {
       logger.error({ err }, "admin token-usage: query failed");
       res.status(500).json({ error: "Could not load token usage data." });

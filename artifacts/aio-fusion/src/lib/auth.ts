@@ -576,6 +576,9 @@ export type SessionInfo = {
   createdAt: string;
   expiresAt: string;
   ipHint: string | null;
+  userId?: string | null;
+  userEmail?: string | null;
+  userName?: string | null;
 };
 
 // Fetch the calling user's own active sessions.
