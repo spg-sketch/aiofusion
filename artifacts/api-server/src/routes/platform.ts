@@ -507,7 +507,7 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
         return;
       }
       // Active account — create a session and redirect in
-      const sid = await createPlatformSession(existing.username, makeIpHint(req));
+      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip));
       setPlatformCookie(res, sid);
       res.redirect(`${origin}/?oauth_status=ok`);
       return;
