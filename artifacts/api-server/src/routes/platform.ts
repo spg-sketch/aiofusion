@@ -46,6 +46,7 @@ import {
   ensurePlatformUser,
   getUserByEmail,
   getUserByGoogleId,
+  getUserByCompanySlug,
   getPrimaryMembership,
   type Role,
   getCompanyBySlug,
@@ -187,6 +188,49 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       res.status(400).json({ error: "Enter your username (or email) and password." });
       return;
     }
+    // --- Primary credential lookup: platform_users (new source of truth) ----
+    // If the identifier is an email address, look up by email in platform_users.
+    // Otherwise treat the identifier as a company slug and resolve the user via
+    // platform_memberships. This makes platform_users the primary credential
+    // store, with platform_accounts as the fallback for unbackfilled accounts.
+    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+      ?? req.socket.remoteAddress;
+    const isEmail = identifier.includes("@");
+    const newUser = isEmail
+      ? await getUserByEmail(identifier)
+      : await getUserByCompanySlug(identifier);
+    if (newUser && newUser.passwordHash && verifyPassword(password, newUser.passwordHash)) {
+      // Credential verified via platform_users. Resolve company for status check.
+      const membership = await getPrimaryMembership(newUser.id);
+      const companySlug = membership?.companySlug ?? normUsername(identifier);
+      const acct = companySlug ? await getAccount(companySlug) : null;
+      if (acct) {
+        const [archivedNew] = await db
+          .select()
+          .from(platformMetaTable)
+          .where(eq(platformMetaTable.key, archiveKey(acct.username)))
+          .limit(1);
+        if (archivedNew?.value === "true") {
+          res.status(403).json({ error: "This account has been archived. Contact your administrator." });
+          return;
+        }
+        if (acct.status === "pending_approval") { res.status(403).json({ error: "pending_approval" }); return; }
+        if (acct.status === "suspended") { res.status(403).json({ error: "This account has been suspended. Contact your administrator." }); return; }
+        let activeCompanyId: string | undefined;
+        try {
+          const company = await getCompanyBySlug(acct.username);
+          activeCompanyId = company?.id;
+        } catch { /* non-fatal */ }
+        const sid = await createPlatformSession(acct.username, makeIpHint(rawIp), newUser.id, activeCompanyId);
+        setPlatformCookie(res, sid);
+        res.json({ account: { username: acct.username, role: acct.role } });
+        return;
+      }
+    }
+
+    // --- Legacy fallback: platform_accounts ----------------------------------
+    // Covers accounts not yet backfilled into platform_users (e.g. username-only
+    // accounts without an email address set).
     const account = await getAccountByIdentifier(identifier);
     if (!account || !verifyPassword(password, account.passwordHash)) {
       res.status(401).json({ error: "Incorrect username or password." });
@@ -211,8 +255,6 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       res.status(403).json({ error: "This account has been suspended. Contact your administrator." });
       return;
     }
-    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-      ?? req.socket.remoteAddress;
     // Ensure a platform_users row exists and is linked to this account, then
     // store the userId in the session so downstream can identify the human user.
     let userId: string | undefined;

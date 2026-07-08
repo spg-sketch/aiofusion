@@ -189,10 +189,15 @@ export async function ensurePlatformCompany(opts: {
     })
     .onConflictDoUpdate({
       target: platformCompaniesTable.slug,
-      // Always update role and status so the set is never empty.
+      // role + status always present so the set is never empty.
+      // parentSlug + maxSeats are included when explicitly provided (even null)
+      // so that backfill can correct hierarchy and seat-cap metadata on
+      // pre-created company rows.
       set: {
         role,
         status,
+        ...(opts.parentSlug !== undefined ? { parentSlug: opts.parentSlug } : {}),
+        ...(opts.maxSeats !== undefined ? { maxSeats: opts.maxSeats } : {}),
         ...(opts.email != null ? { email: opts.email } : {}),
         ...(opts.website != null ? { website: opts.website } : {}),
       },
@@ -469,6 +474,29 @@ export async function canManage(
     }
   }
   return descendants.has(target);
+}
+
+// Look up the owner user for a given company slug via platform_memberships.
+// Used by the login route to authenticate via platform_users when the
+// identifier is a username (not an email address).
+export async function getUserByCompanySlug(
+  slug: string,
+): Promise<typeof platformUsersTable.$inferSelect | null> {
+  const s = normUsername(slug);
+  if (!s) return null;
+  const [membership] = await db
+    .select({ userId: platformMembershipsTable.userId })
+    .from(platformMembershipsTable)
+    .where(eq(platformMembershipsTable.companySlug, s))
+    .orderBy(desc(platformMembershipsTable.createdAt))
+    .limit(1);
+  if (!membership) return null;
+  const [user] = await db
+    .select()
+    .from(platformUsersTable)
+    .where(eq(platformUsersTable.id, membership.userId))
+    .limit(1);
+  return user ?? null;
 }
 
 // --- User membership helpers ------------------------------------------------

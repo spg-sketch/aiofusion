@@ -69,9 +69,101 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
-import { db, platformUsersTable, platformCompaniesTable, platformMembershipsTable } from "@workspace/db";
+import { db, platformUsersTable, platformCompaniesTable, platformMembershipsTable, platformAccountsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { ensurePlatformUser, ensurePlatformCompany, getUserByEmail } from "./platform-auth";
+import { ensurePlatformUser, ensurePlatformCompany, getUserByEmail, backfillPlatformUsers } from "./platform-auth";
+
+// ── backfillPlatformUsers smoke test ─────────────────────────────────────────
+// Seeds platform_accounts with realistic rows (admin, agency with parent/seats,
+// client) then calls backfillPlatformUsers() and verifies that corresponding
+// platform_users, platform_companies, and platform_memberships rows exist with
+// correct role, status, parentSlug, and maxSeats fidelity.
+describe("backfillPlatformUsers — migration smoke test", () => {
+  it("creates users + companies + memberships for seeded platform_accounts", async () => {
+    // Seed test accounts (unique slugs to avoid conflicts with other tests).
+    await db.insert(platformAccountsTable).values([
+      {
+        username: "backfill-admin",
+        passwordHash: "hashed-pw-admin",
+        role: "admin",
+        status: "active",
+        email: "backfill-admin@example.com",
+        parent: null,
+        maxSeats: null,
+      },
+      {
+        username: "backfill-agency",
+        passwordHash: "hashed-pw-agency",
+        role: "agency",
+        status: "active",
+        email: "backfill-agency@example.com",
+        parent: null,
+        maxSeats: 10,
+      },
+      {
+        username: "backfill-client",
+        passwordHash: "hashed-pw-client",
+        role: "client",
+        status: "active",
+        email: "backfill-client@example.com",
+        parent: "backfill-agency",
+        maxSeats: null,
+      },
+    ]);
+
+    await backfillPlatformUsers();
+
+    // Admin — user + company + membership created.
+    const adminUser = await getUserByEmail("backfill-admin@example.com");
+    expect(adminUser).not.toBeNull();
+    expect(adminUser!.email).toBe("backfill-admin@example.com");
+
+    const [adminCompany] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "backfill-admin"))
+      .limit(1);
+    expect(adminCompany).toBeDefined();
+    expect(adminCompany!.role).toBe("admin");
+    expect(adminCompany!.status).toBe("active");
+
+    const [adminMembership] = await db
+      .select()
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, adminUser!.id))
+      .limit(1);
+    expect(adminMembership).toBeDefined();
+    expect(adminMembership!.companySlug).toBe("backfill-admin");
+
+    // Agency — maxSeats preserved in platform_companies.
+    const [agencyCompany] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "backfill-agency"))
+      .limit(1);
+    expect(agencyCompany).toBeDefined();
+    expect(agencyCompany!.role).toBe("agency");
+    expect(agencyCompany!.maxSeats).toBe(10);
+
+    // Client — parentSlug hierarchy preserved in platform_companies.
+    const [clientCompany] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "backfill-client"))
+      .limit(1);
+    expect(clientCompany).toBeDefined();
+    expect(clientCompany!.role).toBe("client");
+    expect(clientCompany!.parentSlug).toBe("backfill-agency");
+    expect(clientCompany!.status).toBe("active");
+
+    // Three distinct users created — no duplicates.
+    const clientUser = await getUserByEmail("backfill-client@example.com");
+    const agencyUser = await getUserByEmail("backfill-agency@example.com");
+    expect(clientUser).not.toBeNull();
+    expect(agencyUser).not.toBeNull();
+    expect(new Set([adminUser!.id, agencyUser!.id, clientUser!.id]).size).toBe(3);
+  });
+});
 
 describe("ensurePlatformCompany — company row creation", () => {
   it("creates a company row with the correct slug", async () => {
