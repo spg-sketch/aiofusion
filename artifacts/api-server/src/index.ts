@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { ensureDefaultAdmin } from "./lib/platform-auth";
+import { ensureDefaultAdmin, backfillPlatformUsers } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { pruneExpiredSessions } from "./lib/auth";
@@ -35,6 +35,12 @@ app.listen(port, (err) => {
   // no admin account exists yet.
   ensureDefaultAdmin().catch((err) => {
     logger.error({ err }, "Failed to ensure default admin account");
+  });
+
+  // Backfill platform_users rows for every existing platform_accounts row.
+  // Idempotent — gated by a platform_meta flag, safe to call on every restart.
+  backfillPlatformUsers().catch((err) => {
+    logger.error({ err }, "Failed to backfill platform users (non-fatal)");
   });
 
   ensureAuditLocksTable().catch((err) => {

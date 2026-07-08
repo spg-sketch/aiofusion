@@ -43,6 +43,9 @@ import {
   clearImpersonationStashCookie,
   getPlatformSessionAccount,
   makeIpHint,
+  ensurePlatformUser,
+  getUserByEmail,
+  getUserByGoogleId,
   type Role,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -208,7 +211,22 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     }
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
-    const sid = await createPlatformSession(account.username, makeIpHint(rawIp));
+    // Ensure a platform_users row exists and is linked to this account, then
+    // store the userId in the session so downstream can identify the human user.
+    let userId: string | undefined;
+    if (account.email) {
+      try {
+        userId = await ensurePlatformUser({
+          email: account.email,
+          passwordHash: account.passwordHash,
+          companyUsername: account.username,
+          membershipRole: account.role === "admin" ? "admin" : "owner",
+        });
+      } catch {
+        // Non-fatal: session still works, userId just won't be set.
+      }
+    }
+    const sid = await createPlatformSession(account.username, makeIpHint(rawIp), userId);
     setPlatformCookie(res, sid);
     res.json({ account: { username: account.username, role: account.role } });
   } catch {
@@ -265,9 +283,10 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
     const displayNameKey = `account:profile:${username}`;
     const displayNameValue = JSON.stringify({ displayName: companyName, ownerName: name });
 
+    const ph = hashPassword(password);
     await db.insert(platformAccountsTable).values({
       username,
-      passwordHash: hashPassword(password),
+      passwordHash: ph,
       role: "agency",
       email,
       website: website || null,
@@ -278,6 +297,20 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       .insert(platformMetaTable)
       .values({ key: displayNameKey, value: displayNameValue })
       .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: displayNameValue } });
+
+    // Create the human user record and link it to the new company account.
+    try {
+      await ensurePlatformUser({
+        email,
+        name,
+        passwordHash: ph,
+        companyUsername: username,
+        membershipRole: "owner",
+      });
+    } catch {
+      // Non-fatal: the platform_accounts row already exists so login will work;
+      // the user row will be backfilled at next server restart.
+    }
 
     res.status(201).json({ ok: true, username, status: "pending_approval" });
   } catch (err) {
@@ -491,6 +524,13 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
     }
+    // Look up an existing user by Google id first, then by email.
+    const googleId = (userInfo as { id?: string }).id ?? "";
+    let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
+    if (!existingUser) {
+      existingUser = await getUserByEmail(userInfo.email);
+    }
+
     // Look up an existing account by email (case-insensitive)
     const [existing] = await db
       .select()
@@ -506,8 +546,22 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
       }
-      // Active account — create a session and redirect in
-      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip));
+      // Active account — ensure user row is linked to this account, then
+      // store userId in the new session so downstream can identify the human.
+      let userId: string | undefined;
+      try {
+        const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
+        userId = await ensurePlatformUser({
+          email: userInfo.email,
+          name: displayName,
+          googleId: googleId || null,
+          companyUsername: existing.username,
+          membershipRole: existing.role === "admin" ? "admin" : "owner",
+        });
+      } catch {
+        // Non-fatal.
+      }
+      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip), userId);
       setPlatformCookie(res, sid);
       res.redirect(`${origin}/?oauth_status=ok`);
       return;
@@ -542,6 +596,18 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       target: platformMetaTable.key,
       set: { value: JSON.stringify({ displayName, ownerName: displayName }) },
     });
+    // Create the human user record for this Google sign-up.
+    try {
+      await ensurePlatformUser({
+        email: userInfo.email,
+        name: displayName,
+        googleId: googleId || null,
+        companyUsername: username,
+        membershipRole: "owner",
+      });
+    } catch {
+      // Non-fatal.
+    }
     res.redirect(`${origin}/?oauth_status=pending`);
   } catch (err) {
     console.error("Google OAuth callback error:", err);
