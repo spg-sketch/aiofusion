@@ -174,24 +174,27 @@ export async function ensurePlatformCompany(opts: {
   status?: string;
 }): Promise<string> {
   const slug = normUsername(opts.slug);
+  const role = opts.role ?? "agency";
+  const status = opts.status ?? "active";
   const [company] = await db
     .insert(platformCompaniesTable)
     .values({
       slug,
-      role: opts.role ?? "agency",
+      role,
       parentSlug: opts.parentSlug ?? null,
       maxSeats: opts.maxSeats ?? null,
       email: opts.email ?? null,
       website: opts.website ?? null,
-      status: opts.status ?? "active",
+      status,
     })
     .onConflictDoUpdate({
       target: platformCompaniesTable.slug,
+      // Always update role and status so the set is never empty.
       set: {
-        ...(opts.role != null ? { role: opts.role } : {}),
+        role,
+        status,
         ...(opts.email != null ? { email: opts.email } : {}),
         ...(opts.website != null ? { website: opts.website } : {}),
-        ...(opts.status != null ? { status: opts.status } : {}),
       },
     })
     .returning({ id: platformCompaniesTable.id });
@@ -254,7 +257,10 @@ export async function ensurePlatformUser(opts: {
 }): Promise<string> {
   const emailLower = opts.email.trim().toLowerCase();
 
-  // 1. Upsert user row.
+  // 1. Upsert user row. The conflict-update set must always have at least one
+  // field (drizzle throws "No values to set" on an empty set), so we always
+  // include a name update — falling back to the un-changed email value as a
+  // harmless no-op when all optional fields are absent.
   const [user] = await db
     .insert(platformUsersTable)
     .values({
@@ -266,7 +272,8 @@ export async function ensurePlatformUser(opts: {
     .onConflictDoUpdate({
       target: platformUsersTable.email,
       set: {
-        ...(opts.name != null ? { name: opts.name } : {}),
+        // Always update name (even to null) so the set is never empty.
+        name: opts.name ?? null,
         ...(opts.googleId != null ? { googleId: opts.googleId } : {}),
         ...(opts.passwordHash != null ? { passwordHash: opts.passwordHash } : {}),
       },

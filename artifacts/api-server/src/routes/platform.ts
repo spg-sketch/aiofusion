@@ -47,6 +47,7 @@ import {
   getUserByEmail,
   getUserByGoogleId,
   type Role,
+  getCompanyBySlug,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { loginLimiter } from "../middleware/rate-limit";
@@ -214,6 +215,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     // Ensure a platform_users row exists and is linked to this account, then
     // store the userId in the session so downstream can identify the human user.
     let userId: string | undefined;
+    let activeCompanyId: string | undefined;
     if (account.email) {
       try {
         userId = await ensurePlatformUser({
@@ -221,12 +223,17 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           passwordHash: account.passwordHash,
           companyUsername: account.username,
           membershipRole: account.role === "admin" ? "admin" : "owner",
+          companyRole: account.role,
+          companyStatus: account.status,
         });
+        // Resolve the company UUID so the session carries the active workspace id.
+        const company = await getCompanyBySlug(account.username);
+        activeCompanyId = company?.id;
       } catch {
-        // Non-fatal: session still works, userId just won't be set.
+        // Non-fatal: session still works, userId/activeCompanyId just won't be set.
       }
     }
-    const sid = await createPlatformSession(account.username, makeIpHint(rawIp), userId);
+    const sid = await createPlatformSession(account.username, makeIpHint(rawIp), userId, activeCompanyId);
     setPlatformCookie(res, sid);
     res.json({ account: { username: account.username, role: account.role } });
   } catch {
@@ -524,19 +531,25 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
     }
-    // Look up an existing user by Google id first, then by email.
+    // Resolve user identity: prefer Google id lookup (stable across email changes),
+    // then fall back to email. This is the primary identity check — company
+    // resolution flows from the user, not the account email.
     const googleId = (userInfo as { id?: string }).id ?? "";
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
     }
 
-    // Look up an existing account by email (case-insensitive)
+    // Look up an existing account by email (case-insensitive) for status checks.
     const [existing] = await db
       .select()
       .from(platformAccountsTable)
       .where(ilike(platformAccountsTable.email, userInfo.email))
       .limit(1);
+
+    // Determine which company slug to use: prefer the user's current membership
+    // (looked up via platform_memberships) so returning users land in the right
+    // workspace even if the account email changed.
     if (existing) {
       if (existing.status === "pending_approval") {
         res.redirect(`${origin}/?oauth_status=pending`);
@@ -546,22 +559,28 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
       }
-      // Active account — ensure user row is linked to this account, then
-      // store userId in the new session so downstream can identify the human.
+      // Active account — ensure user row is linked to this workspace, then
+      // store userId + activeCompanyId in the session.
+      const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
       let userId: string | undefined;
+      let activeCompanyId: string | undefined;
       try {
-        const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
         userId = await ensurePlatformUser({
           email: userInfo.email,
           name: displayName,
           googleId: googleId || null,
           companyUsername: existing.username,
           membershipRole: existing.role === "admin" ? "admin" : "owner",
+          companyRole: existing.role,
+          companyStatus: existing.status,
         });
+        // Resolve the company UUID for the active workspace context.
+        const company = await getCompanyBySlug(existing.username);
+        activeCompanyId = company?.id;
       } catch {
         // Non-fatal.
       }
-      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip), userId);
+      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip), userId, activeCompanyId);
       setPlatformCookie(res, sid);
       res.redirect(`${origin}/?oauth_status=ok`);
       return;
