@@ -46,6 +46,7 @@ import {
   ensurePlatformUser,
   getUserByEmail,
   getUserByGoogleId,
+  getPrimaryMembership,
   type Role,
   getCompanyBySlug,
 } from "../lib/platform-auth";
@@ -531,25 +532,67 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
     }
-    // Resolve user identity: prefer Google id lookup (stable across email changes),
-    // then fall back to email. This is the primary identity check — company
-    // resolution flows from the user, not the account email.
+    // --- User-first identity resolution ------------------------------------
+    // Step 1: resolve the human user by Google id (stable across email changes)
+    // then fall back to email lookup in platform_users.
     const googleId = (userInfo as { id?: string }).id ?? "";
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
     }
 
-    // Look up an existing account by email (case-insensitive) for status checks.
+    // Step 2: if an existing user is found, route them to their active workspace
+    // via platform_memberships — this is the new source of truth for
+    // user → company association. The platform_accounts row is checked only for
+    // status (active/suspended/pending) and is NOT used to pick the company.
+    if (existingUser) {
+      const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
+      const membership = await getPrimaryMembership(existingUser.id);
+      if (membership) {
+        const account = await getAccount(membership.companySlug);
+        if (account) {
+          if (account.status === "pending_approval") {
+            res.redirect(`${origin}/?oauth_status=pending`);
+            return;
+          }
+          if (account.status === "suspended") {
+            res.redirect(`${origin}/?oauth_status=suspended`);
+            return;
+          }
+          // Active — link googleId to user record then create session.
+          let userId: string | undefined;
+          let activeCompanyId: string | undefined;
+          try {
+            userId = await ensurePlatformUser({
+              email: userInfo.email,
+              name: displayName,
+              googleId: googleId || null,
+              companyUsername: account.username,
+              membershipRole: membership.role,
+              companyRole: account.role,
+              companyStatus: account.status,
+            });
+            const company = await getCompanyBySlug(account.username);
+            activeCompanyId = company?.id;
+          } catch {
+            // Non-fatal.
+            userId = existingUser.id;
+          }
+          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
+          setPlatformCookie(res, sid);
+          res.redirect(`${origin}/?oauth_status=ok`);
+          return;
+        }
+      }
+    }
+
+    // Step 3: no existing user or no membership — look up by email in
+    // platform_accounts as fallback (covers legacy accounts not yet backfilled).
     const [existing] = await db
       .select()
       .from(platformAccountsTable)
       .where(ilike(platformAccountsTable.email, userInfo.email))
       .limit(1);
-
-    // Determine which company slug to use: prefer the user's current membership
-    // (looked up via platform_memberships) so returning users land in the right
-    // workspace even if the account email changed.
     if (existing) {
       if (existing.status === "pending_approval") {
         res.redirect(`${origin}/?oauth_status=pending`);
@@ -559,8 +602,7 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
       }
-      // Active account — ensure user row is linked to this workspace, then
-      // store userId + activeCompanyId in the session.
+      // Active legacy account — ensure user/company rows, then create session.
       const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
       let userId: string | undefined;
       let activeCompanyId: string | undefined;
@@ -574,7 +616,6 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
           companyRole: existing.role,
           companyStatus: existing.status,
         });
-        // Resolve the company UUID for the active workspace context.
         const company = await getCompanyBySlug(existing.username);
         activeCompanyId = company?.id;
       } catch {

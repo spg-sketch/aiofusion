@@ -9,7 +9,7 @@ import {
   platformMembershipsTable,
   platformMetaTable,
 } from "@workspace/db";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, desc } from "drizzle-orm";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -471,6 +471,22 @@ export async function canManage(
   return descendants.has(target);
 }
 
+// --- User membership helpers ------------------------------------------------
+
+// Find the most-recently-created membership for a user. Used by Google OAuth
+// to route returning users to their workspace without re-querying by email.
+export async function getPrimaryMembership(
+  userId: string,
+): Promise<typeof platformMembershipsTable.$inferSelect | null> {
+  const [row] = await db
+    .select()
+    .from(platformMembershipsTable)
+    .where(eq(platformMembershipsTable.userId, userId))
+    .orderBy(desc(platformMembershipsTable.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 // --- Sessions ---------------------------------------------------------------
 
 // Session shape returned by the sessions list endpoints.
@@ -482,8 +498,9 @@ export type SessionInfo = {
 };
 
 // Create a new session for the given username.
-// Multi-session aware: does NOT delete existing sessions, allowing the same
-// account to be active on multiple devices simultaneously.
+// Single-session enforcement: all existing sessions for this account are
+// revoked before issuing the new one. This ensures a stolen session token is
+// invalidated on the next login, and prevents token accumulation over time.
 export async function createPlatformSession(
   username: string,
   ipHint?: string | null,
@@ -491,6 +508,11 @@ export async function createPlatformSession(
   activeCompanyId?: string | null,
 ): Promise<string> {
   const u = normUsername(username);
+  // Revoke all existing sessions for this account before issuing a new one.
+  await db
+    .delete(platformSessionsTable)
+    .where(eq(platformSessionsTable.username, u));
+
   const sid = crypto.randomBytes(32).toString("hex");
   await db.insert(platformSessionsTable).values({
     sid,
@@ -503,8 +525,11 @@ export async function createPlatformSession(
   return sid;
 }
 
-// Resolve a session id to its account, refreshing nothing (fixed TTL). Expired
-// or unknown sessions return null and are cleaned up.
+// Resolve a session id to its account. Uses platform_users + platform_companies
+// + platform_memberships as the primary source of truth when the session
+// carries userId/activeCompanyId; falls back to platform_accounts for legacy
+// sessions or when the new tables have no data for the account.
+// Expired or unknown sessions return null and are cleaned up.
 export async function getPlatformSessionAccount(
   sid: string,
 ): Promise<PlatformAccount | null> {
@@ -519,6 +544,27 @@ export async function getPlatformSessionAccount(
     await deletePlatformSession(sid);
     return null;
   }
+
+  // When the session was created by the new auth path, resolve company role
+  // from platform_companies (the new source of truth). This propagates any
+  // role/status changes made in the new tables without requiring a re-login.
+  if (row.activeCompanyId) {
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.id, row.activeCompanyId))
+      .limit(1);
+    if (company) {
+      return {
+        username: company.slug,
+        role: normalizeRole(company.role),
+        userId: row.userId ?? undefined,
+        activeCompanyId: company.id,
+      };
+    }
+  }
+
+  // Legacy fallback: resolve from platform_accounts (the original auth record).
   const account = await getAccount(row.username);
   if (!account) {
     await deletePlatformSession(sid);
