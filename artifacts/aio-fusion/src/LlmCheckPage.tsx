@@ -2437,7 +2437,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
           <button onClick={() => { saveAuditToHistory(); openReport(); }} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all border-2 hover:brightness-95" style={justSaved ? { borderColor: vars.green, color: vars.green, background: "rgba(61,155,107,0.1)" } : { borderColor: "white", background: "white", color: vars.navy }}>
-            {justSaved ? <CheckCircle2 size={14} /> : <Download size={14} />} {justSaved ? "Saved to history" : "Save this report"}
+            {justSaved ? <CheckCircle2 size={14} /> : <Download size={14} />} {justSaved ? "Saved" : "Save this report"}
           </button>
           <button onClick={() => { setResult(null); setError(""); }} className="px-4 py-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all hover:brightness-110" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>
             <Repeat size={14} /> Run New Audit
