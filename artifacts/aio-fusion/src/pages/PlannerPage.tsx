@@ -514,7 +514,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
           <table className="w-full text-[12px]">
             <thead style={{ background: vars.g50 }}>
               <tr>
-                <th className="px-3 py-3 text-left font-semibold sticky left-0 z-10" style={{ color: vars.g500, background: vars.g50, minWidth: 100 }}>WC date</th>
+                <th className="px-3 py-3 text-left font-semibold sticky left-0 z-10" style={{ color: vars.g500, background: vars.g50, minWidth: 100 }}>w/c date</th>
                 <th className="px-3 py-3 text-left font-semibold" style={{ color: vars.g500 }}>Content</th>
               </tr>
             </thead>
