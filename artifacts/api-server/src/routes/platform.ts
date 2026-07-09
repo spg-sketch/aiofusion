@@ -474,16 +474,18 @@ const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 const OAUTH_STATE_COOKIE = "aio_oauth_state";
 
-// Returns the host the API server is actually reachable at — used for the
-// OAuth callback URL which must match what Google has registered.
-function getApiHost(req: Request): string {
-  // REPLIT_DOMAINS is set in Replit deployments and contains the live domain(s).
+// Returns the canonical host for this deployment.
+// CANONICAL_DOMAIN (e.g. "www.aiofusion.ai") takes highest priority so the
+// OAuth callback URL and session cookie domain are always on the domain users
+// actually browse to. Falls back to REPLIT_DOMAINS, then the request host.
+function getCanonicalHost(req: Request): string {
+  const canonical = process.env.CANONICAL_DOMAIN?.trim();
+  if (canonical) return canonical;
   const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
     const first = replitDomains.split(",")[0]!.trim();
     if (first) return first;
   }
-  // Dev: use the forwarded host from the request.
   const host = req.get("x-forwarded-host") || req.get("host") || "";
   const hostname = host.split(":")[0];
   if (hostname) return hostname;
@@ -491,18 +493,16 @@ function getApiHost(req: Request): string {
 }
 
 function getGoogleCallbackUrl(req: Request): string {
-  return `https://${getApiHost(req)}/api/platform/auth/google/callback`;
+  return `https://${getCanonicalHost(req)}/api/platform/auth/google/callback`;
 }
 
-// Returns the frontend origin to redirect users to after OAuth completes.
-// In production this is the custom domain; in dev it follows the request host.
 function getFrontendOrigin(req: Request): string {
   if (process.env.NODE_ENV !== "production") {
     const host = req.get("x-forwarded-host") || req.get("host") || "";
     const hostname = host.split(":")[0];
     if (hostname) return `https://${hostname}`;
   }
-  return "https://www.aiofusion.ai";
+  return `https://${getCanonicalHost(req)}`;
 }
 
 router.get("/platform/auth/google", (req: Request, res: Response) => {

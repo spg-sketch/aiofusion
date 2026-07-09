@@ -64,6 +64,9 @@ timeoutMs = 20000
 
 [userenv.shared]
 
+[userenv.production]
+CANONICAL_DOMAIN = "www.aiofusion.ai"
+
 [nix]
 channel = "stable-25_05"
 
