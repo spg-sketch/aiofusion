@@ -476,7 +476,40 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
       })()}
 
       {view === "cards" && (
-      <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
+      <div>
+        {/* Date range selector */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+          <span className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "#ffffff", background: ink, padding: "4px 10px", borderRadius: 9999 }}>Date range:</span>
+          <label className="flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>From</span>
+            <input
+              type="date"
+              value={rangeStart}
+              onChange={(e) => setRangeStart(e.target.value)}
+              className="text-[13px] rounded-lg border px-2 py-1 outline-none focus:ring-2"
+              style={{ borderColor: vars.g200, color: ink, background: paper, fontFamily: "inherit" }}
+            />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>To</span>
+            <input
+              type="date"
+              value={rangeEnd}
+              onChange={(e) => setRangeEnd(e.target.value)}
+              className="text-[13px] rounded-lg border px-2 py-1 outline-none focus:ring-2"
+              style={{ borderColor: vars.g200, color: ink, background: paper, fontFamily: "inherit" }}
+            />
+          </label>
+          <button
+            onClick={resetRange}
+            className="text-[11px] font-semibold uppercase tracking-[0.12em] px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
+            style={{ color: accentPink, background: accentSoft, border: `1px solid ${accentPink}40` }}
+          >
+            Reset to default
+          </button>
+          <span className="text-[12px] font-light" style={{ color: vars.g500 }}>{calendarWeeks.length} week{calendarWeeks.length === 1 ? "" : "s"}</span>
+        </div>
+        <div className="bg-white border rounded-2xl overflow-hidden" style={{ borderColor: vars.g200 }}>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead style={{ background: vars.g50 }}>
@@ -486,7 +519,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               </tr>
             </thead>
             <tbody>
-              {weeks.map((w) => {
+              {calendarWeeks.map((w) => {
                 const wkProjects = projects.filter((p) => p.week === w);
                 const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p, cfg); return s + sc.visibility + sc.authority; }, 0);
                 const wcLabel = weekDateLabel(w);
@@ -539,6 +572,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
       )}
 
