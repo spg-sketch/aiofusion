@@ -661,4 +661,86 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     const result = await getPlatformSessionAccount("suspended-orphan-sid");
     expect(result).toBeNull();
   });
+
+  it("returns null for a new-path session whose company is suspended", async () => {
+    const companyId = "company-suspended-001";
+    mock.companiesById.set(companyId, {
+      id: companyId,
+      slug: "suspended-co",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "suspended",
+    });
+    mock.sessionRows.set("new-path-suspended-sid", {
+      sid: "new-path-suspended-sid",
+      username: "suspended-co",
+      userId: "user-susp-001",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("new-path-suspended-sid");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a new-path session whose company is pending_approval", async () => {
+    const companyId = "company-pending-001";
+    mock.companiesById.set(companyId, {
+      id: companyId,
+      slug: "pending-co",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "pending_approval",
+    });
+    mock.sessionRows.set("new-path-pending-sid", {
+      sid: "new-path-pending-sid",
+      username: "pending-co",
+      userId: "user-pend-001",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("new-path-pending-sid");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a new-path session when the legacy platform_accounts row is suspended (even if company row is active)", async () => {
+    const companyId = "company-active-legacy-susp-001";
+    mock.companiesById.set(companyId, {
+      id: companyId,
+      slug: "active-but-legacy-susp",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "active",
+    });
+    mock.fullAccountRows.set("active-but-legacy-susp", {
+      username: "active-but-legacy-susp",
+      passwordHash: "scrypt$salt$hash",
+      role: "agency",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "suspended",
+    });
+    mock.sessionRows.set("new-path-legacy-susp-sid", {
+      sid: "new-path-legacy-susp-sid",
+      username: "active-but-legacy-susp",
+      userId: "user-lsusp-001",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("new-path-legacy-susp-sid");
+    expect(result).toBeNull();
+  });
 });

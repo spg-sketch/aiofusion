@@ -586,6 +586,20 @@ export async function getPlatformSessionAccount(
       .where(eq(platformCompaniesTable.id, row.activeCompanyId))
       .limit(1);
     if (company) {
+      // Mirror the same status guard as the legacy path: suspended or
+      // pending_approval companies must not be granted access. Invalidate
+      // the session so the user is forced to re-authenticate after approval.
+      if (company.status === "suspended" || company.status === "pending_approval") {
+        await deletePlatformSession(sid);
+        return null;
+      }
+      // Also cross-check the legacy platform_accounts row — an admin may
+      // have suspended the account there without going through the new tables.
+      const legacyAccount = await getAccount(company.slug);
+      if (legacyAccount && legacyAccount.status === "suspended") {
+        await deletePlatformSession(sid);
+        return null;
+      }
       return {
         username: company.slug,
         role: normalizeRole(company.role),
