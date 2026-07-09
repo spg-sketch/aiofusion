@@ -540,4 +540,54 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     const result = await getPlatformSessionAccount("ghost-sid");
     expect(result).toBeNull();
   });
+
+  it("returns null for a legacy session whose platform_accounts row is suspended", async () => {
+    mock.fullAccountRows.set("suspendeduser", {
+      username: "suspendeduser",
+      passwordHash: "scrypt$salt$hash",
+      role: "agency",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "suspended",
+    });
+    mock.sessionRows.set("suspended-legacy-sid", {
+      sid: "suspended-legacy-sid",
+      username: "suspendeduser",
+      userId: null,
+      activeCompanyId: null,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("suspended-legacy-sid");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a new-path session whose platform_accounts fallback row is suspended (missing company)", async () => {
+    mock.fullAccountRows.set("suspendedagency", {
+      username: "suspendedagency",
+      passwordHash: "scrypt$salt$hash",
+      role: "agency",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "suspended",
+    });
+    mock.sessionRows.set("suspended-orphan-sid", {
+      sid: "suspended-orphan-sid",
+      username: "suspendedagency",
+      userId: "user-uuid-003",
+      activeCompanyId: "missing-company-uuid-2",
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    const result = await getPlatformSessionAccount("suspended-orphan-sid");
+    expect(result).toBeNull();
+  });
 });

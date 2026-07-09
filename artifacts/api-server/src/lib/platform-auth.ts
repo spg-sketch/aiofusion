@@ -597,7 +597,7 @@ export async function getPlatformSessionAccount(
 
   // Legacy fallback: resolve from platform_accounts (the original auth record).
   const account = await getAccount(row.username);
-  if (!account) {
+  if (!account || account.status === "suspended") {
     await deletePlatformSession(sid);
     return null;
   }
