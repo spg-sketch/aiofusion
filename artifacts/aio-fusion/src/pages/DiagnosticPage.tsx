@@ -665,8 +665,8 @@ Engine used:
         <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           {copiedKey === "seo" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "seo" ? "Copied" : "Copy SEO Improvements"}
         </button>
-        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
-          Run New Diagnostic
+        <button onClick={() => { setResult(null); setError(null); }} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:brightness-110" style={{ background: vars.navy }}>
+          <Repeat size={14} /> Run New Diagnostic
         </button>
         <div className="flex items-center gap-2 sm:ml-auto">
           <button onClick={() => saveDiagnostic()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
