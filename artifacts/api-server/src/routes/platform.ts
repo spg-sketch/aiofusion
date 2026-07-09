@@ -474,29 +474,35 @@ const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 const OAUTH_STATE_COOKIE = "aio_oauth_state";
 
-function getDeployedHost(req: Request): string {
+// Returns the host the API server is actually reachable at — used for the
+// OAuth callback URL which must match what Google has registered.
+function getApiHost(req: Request): string {
   // REPLIT_DOMAINS is set in Replit deployments and contains the live domain(s).
-  // Use the first entry as the canonical host.
   const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
     const first = replitDomains.split(",")[0]!.trim();
     if (first) return first;
   }
-  // Fall back to the forwarded host from the request (works in dev and behind
-  // any proxy that sets x-forwarded-host).
+  // Dev: use the forwarded host from the request.
   const host = req.get("x-forwarded-host") || req.get("host") || "";
   const hostname = host.split(":")[0];
   if (hostname) return hostname;
-  // Last resort — the custom domain target.
   return "www.aiofusion.ai";
 }
 
 function getGoogleCallbackUrl(req: Request): string {
-  return `https://${getDeployedHost(req)}/api/platform/auth/google/callback`;
+  return `https://${getApiHost(req)}/api/platform/auth/google/callback`;
 }
 
+// Returns the frontend origin to redirect users to after OAuth completes.
+// In production this is the custom domain; in dev it follows the request host.
 function getFrontendOrigin(req: Request): string {
-  return `https://${getDeployedHost(req)}`;
+  if (process.env.NODE_ENV !== "production") {
+    const host = req.get("x-forwarded-host") || req.get("host") || "";
+    const hostname = host.split(":")[0];
+    if (hostname) return `https://${hostname}`;
+  }
+  return "https://www.aiofusion.ai";
 }
 
 router.get("/platform/auth/google", (req: Request, res: Response) => {
