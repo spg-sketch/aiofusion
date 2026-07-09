@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
-  TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
+  TrendingUp, FileText, FileCheck2, Target, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
   MessagesSquare, Download, AlertTriangle, CheckCircle2, XCircle, Info, Globe, Tag, User, ChevronDown,
   Plus, Minus, MessageSquare, BookOpen, Scroll, Award, Radio, Mic2, PenLine, ClipboardList, ArrowUpRight,
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
@@ -659,8 +659,8 @@ Engine used:
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:brightness-110" style={{ background: vars.navy }}>
-          {copiedKey === "vibe" ? <CheckCircle2 size={14} /> : <Code2 size={14} />} {copiedKey === "vibe" ? "Copied" : "Vibe Code Prompt"}
+        <button onClick={() => copyToClipboard(buildVibeCodePrompt(result), "vibe")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
+          {copiedKey === "vibe" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "vibe" ? "Copied" : "Copy Vibe Code Prompt"}
         </button>
         <button onClick={() => copyToClipboard(buildSeoImprovementsText(result), "seo")} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: vars.navy, background: "white", color: vars.navy }}>
           {copiedKey === "seo" ? <CheckCircle2 size={14} color={vars.green} /> : <ClipboardList size={14} />} {copiedKey === "seo" ? "Copied" : "Copy SEO Improvements"}
