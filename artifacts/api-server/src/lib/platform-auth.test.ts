@@ -541,6 +541,77 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     expect(result).toBeNull();
   });
 
+  it("reflects a role change in platform_companies on the very next request (no re-login required)", async () => {
+    const companyId = "company-uuid-role-change";
+    const companyRow = {
+      id: companyId,
+      slug: "rolechange-agency",
+      role: "agency",
+      parentSlug: null,
+      maxSeats: null,
+      status: "active",
+    };
+    mock.companiesById.set(companyId, companyRow);
+    mock.sessionRows.set("role-change-new-sid", {
+      sid: "role-change-new-sid",
+      username: "rolechange-agency",
+      userId: "user-uuid-role-change",
+      activeCompanyId: companyId,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    // First call: should return the original role.
+    const before = await getPlatformSessionAccount("role-change-new-sid");
+    expect(before).not.toBeNull();
+    expect(before!.role).toBe("agency");
+
+    // Simulate an admin demoting this account mid-session by mutating the DB row.
+    companyRow.role = "client";
+
+    // Second call with the same session: must reflect the new role immediately.
+    const after = await getPlatformSessionAccount("role-change-new-sid");
+    expect(after).not.toBeNull();
+    expect(after!.role).toBe("client");
+  });
+
+  it("reflects a role change in platform_accounts on the very next request (legacy/fallback path)", async () => {
+    const accountRow = {
+      username: "legacyrolechange",
+      passwordHash: "scrypt$salt$hash",
+      role: "agency",
+      parent: null,
+      maxSeats: null,
+      email: null,
+      website: null,
+      status: "active",
+    };
+    mock.fullAccountRows.set("legacyrolechange", accountRow);
+    mock.sessionRows.set("legacy-role-change-sid", {
+      sid: "legacy-role-change-sid",
+      username: "legacyrolechange",
+      userId: null,
+      activeCompanyId: null,
+      expiresAt: FUTURE,
+      ipHint: null,
+      createdAt: new Date(),
+    });
+
+    // First call: should return the original role.
+    const before = await getPlatformSessionAccount("legacy-role-change-sid");
+    expect(before).not.toBeNull();
+    expect(before!.role).toBe("agency");
+
+    // Simulate an admin demoting this account mid-session by mutating the DB row.
+    accountRow.role = "client";
+
+    // Second call with the same session: must reflect the new role immediately.
+    const after = await getPlatformSessionAccount("legacy-role-change-sid");
+    expect(after).not.toBeNull();
+    expect(after!.role).toBe("client");
+  });
+
   it("returns null for a legacy session whose platform_accounts row is suspended", async () => {
     mock.fullAccountRows.set("suspendeduser", {
       username: "suspendeduser",
