@@ -380,11 +380,11 @@ function PlatformHomePage({
                   )}
                 </form>
                 {/* Continue with Google (sign-in) */}
-                <div className="mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+                <div className="mt-5 pt-5 flex justify-center" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
                   <a
                     href={`${apiBase()}/api/platform/auth/google`}
-                    className="flex items-center justify-center gap-3 w-full px-6 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md"
-                    style={{ background: "white", color: "#0a1628" }}
+                    className="inline-flex items-center justify-center gap-3 px-6 py-3 rounded-full text-[14px] font-medium transition-all hover:-translate-y-0.5 hover:shadow-md border"
+                    style={{ background: "white", color: "#3c4043", borderColor: "#dadce0", minWidth: 220 }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
