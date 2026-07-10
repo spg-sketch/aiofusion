@@ -278,6 +278,10 @@ export type PlannerProject = {
   status: PlannerStatus;
   releaseDate: string;
   notes: string;
+  headline?: string;
+  standfirst?: string;
+  bodyCopy?: string;
+  actionNotes?: string;
 };
 
 export function loadPlannerProjects(clientId?: string): PlannerProject[] {

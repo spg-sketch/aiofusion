@@ -407,6 +407,10 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       status: contentStatus === "Final" ? "Approved" : contentStatus === "Review" ? "Review" : "Drafting",
       releaseDate: pubDate,
       notes: actionNotes.trim() || fallbackNote,
+      headline: articleHeadline,
+      standfirst,
+      bodyCopy: transcript,
+      actionNotes: actionNotes.trim(),
     };
     savePlannerProjects([proj, ...projects]);
     alert(`"${proj.title}" pushed to the Comms Planner (w/c ${weekDateLabel(proj.week)}).`);

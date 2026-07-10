@@ -82,6 +82,13 @@ function OptimiserPage({
       setContentType(planner.contentType);
       if (planner.spokesperson) setSpokesperson(planner.spokesperson);
       if (planner.releaseDate) setPubDate(planner.releaseDate);
+      if (planner.headline !== undefined || planner.standfirst !== undefined || planner.bodyCopy !== undefined) {
+        const parts = splitArchiveBody(planner);
+        setArticleHeadline(parts.headline);
+        setStandfirst(parts.standfirst);
+        setBodyCopy(parts.bodyCopy);
+        setActionNotes(planner.actionNotes ?? "");
+      }
       return;
     }
     const arc = loadArchive().find((a) => a.id === archiveId);
