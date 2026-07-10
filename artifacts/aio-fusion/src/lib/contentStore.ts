@@ -13,6 +13,7 @@ export type ArchiveItem = {
   headline?: string;
   standfirst?: string;
   bodyCopy?: string;
+  actionNotes?: string;
   selectedMessages?: string[];
   mediaCats?: string[];
   pubDate?: string;
@@ -29,7 +30,9 @@ export function splitArchiveBody(arc: { body?: string; headline?: string; standf
     return {
       headline: stripEmDashes(arc.headline || ""),
       standfirst: stripEmDashes(arc.standfirst || ""),
-      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy || arc.body || "")),
+      // Use arc.bodyCopy when it is explicitly set (even if empty ""), only fall back to
+      // arc.body for legacy items that pre-date the explicit bodyCopy field.
+      bodyCopy: normaliseAddedData(stripEmDashes(arc.bodyCopy !== undefined ? arc.bodyCopy : (arc.body || ""))),
     };
   }
   const parts = (arc.body || "").split(/\n\n+/);

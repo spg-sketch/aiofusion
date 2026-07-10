@@ -127,6 +127,9 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: transcript,
+      actionNotes,
+      mediaCats: mediaTarget,
+      pubDate,
       createdAt: new Date().toISOString(),
       source: "creator",
     };

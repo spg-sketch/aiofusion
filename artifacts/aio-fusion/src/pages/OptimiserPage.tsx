@@ -88,28 +88,33 @@ function OptimiserPage({
     if (arc) {
       setProjectTitle(arc.title);
       setContentType(arc.contentType);
-      if (arc.spokesperson) setSpokesperson(arc.spokesperson);
+      setSpokesperson(arc.spokesperson || "");
       const parts = splitArchiveBody(arc);
       setArticleHeadline(parts.headline);
       setStandfirst(parts.standfirst);
       setBodyCopy(parts.bodyCopy);
-      if (Array.isArray(arc.selectedMessages)) setSelectedMessages(arc.selectedMessages);
-      if (Array.isArray(arc.mediaCats)) setMediaCats(arc.mediaCats);
-      if (typeof arc.pubDate === "string") setPubDate(arc.pubDate);
+      setActionNotes(typeof arc.actionNotes === "string" ? arc.actionNotes : "");
+      setSelectedMessages(Array.isArray(arc.selectedMessages) ? arc.selectedMessages : []);
+      setMediaCats(Array.isArray(arc.mediaCats) ? arc.mediaCats : []);
+      setPubDate(typeof arc.pubDate === "string" ? arc.pubDate : "");
     }
   }, []);
 
   const handleRetrieve = (a: ArchiveItem) => {
     setProjectTitle(a.title);
     setContentType(a.contentType);
-    if (a.spokesperson) setSpokesperson(a.spokesperson);
+    setSpokesperson(a.spokesperson || "");
     const parts = splitArchiveBody(a);
     setArticleHeadline(parts.headline);
     setStandfirst(parts.standfirst);
     setBodyCopy(parts.bodyCopy);
-    if (Array.isArray(a.selectedMessages)) setSelectedMessages(a.selectedMessages);
-    if (Array.isArray(a.mediaCats)) setMediaCats(a.mediaCats);
+    setActionNotes(typeof a.actionNotes === "string" ? a.actionNotes : "");
+    setSelectedMessages(Array.isArray(a.selectedMessages) ? a.selectedMessages : []);
+    setMediaCats(Array.isArray(a.mediaCats) ? a.mediaCats : []);
     setPubDate(typeof a.pubDate === "string" ? a.pubDate : "");
+    setOptimised(false);
+    setOptimiseSnapshot(null);
+    setChangeLog([]);
     setShowRetrieve(false);
   };
 
@@ -126,6 +131,7 @@ function OptimiserPage({
       headline: articleHeadline,
       standfirst: standfirst,
       bodyCopy: bodyCopy,
+      actionNotes,
       selectedMessages,
       mediaCats,
       pubDate,
