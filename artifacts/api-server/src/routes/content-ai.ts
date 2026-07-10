@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
@@ -7,8 +7,33 @@ import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetc
 import { db, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
 import { isNull } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
+import { checkFairUsage, detectAndLogSpike } from "../lib/fair-usage";
 
 const contentAiRouter = Router();
+
+// DB-backed per-account fair usage enforcement. Applied as a named route-level
+// middleware on each POST handler, AFTER the in-memory contentAiLimiter, so
+// the fast IP-based check fires first and this DB query is never reached on a
+// pure rate-limit block.
+async function fairUsageCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.account) { next(); return; } // per-route auth handles 401
+  const { allowed, callCount, limit } = await checkFairUsage(req.account.username);
+  if (!allowed) {
+    const now = new Date();
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
+    res.setHeader("Retry-After", secondsToMonthEnd);
+    res.status(429).json({
+      error: "Fair usage limit reached — contact us to discuss your plan.",
+      callCount,
+      limit,
+    });
+    return;
+  }
+  // Spike detection is fire-and-forget; never blocks the request.
+  void detectAndLogSpike(req.account.username);
+  next();
+}
 
 const MODEL = "claude-sonnet-4-6";
 const MAX_FIELD_CHARS = 24000;
@@ -218,6 +243,7 @@ function sseFail(res: Response, err: unknown, fallback: string): void {
 contentAiRouter.post(
   "/content/optimise",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -335,6 +361,7 @@ const CREATOR_FIELD_TASK: Record<string, string> = {
 contentAiRouter.post(
   "/content/creator-field",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -517,6 +544,7 @@ const GEO_STAGE_LABELS: Record<string, string> = {
 contentAiRouter.post(
   "/content/generate",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -810,6 +838,7 @@ function normaliseMediaList(raw: unknown): any[] {
 contentAiRouter.post(
   "/content/media-list",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -911,6 +940,7 @@ contentAiRouter.post(
 contentAiRouter.post(
   "/content/llm-queries",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -1064,6 +1094,7 @@ const COVERAGE_CONTENT_TYPES = [
 contentAiRouter.post(
   "/content/coverage-search",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
 
@@ -1131,7 +1162,7 @@ contentAiRouter.post(
 
       void logTokenUsage(
         req.account.username,
-        "coverage-search",
+        "content-coverage-search",
         MODEL,
         (message as { usage?: { input_tokens?: number } }).usage?.input_tokens ?? 0,
         (message as { usage?: { output_tokens?: number } }).usage?.output_tokens ?? 0,
@@ -1189,6 +1220,7 @@ contentAiRouter.post(
 contentAiRouter.post(
   "/events-search",
   contentAiLimiter,
+  fairUsageCheck,
   async (req: Request, res: Response) => {
     try {
       const body = req.body as Record<string, unknown>;
@@ -1240,7 +1272,7 @@ contentAiRouter.post(
         : "{}";
 
       const account = (req as Request & { account?: { username?: string } }).account;
-      void logTokenUsage(account?.username ?? "unknown", "events-search", MODEL, message.usage.input_tokens, message.usage.output_tokens);
+      void logTokenUsage(account?.username ?? "unknown", "content-events-search", MODEL, message.usage.input_tokens, message.usage.output_tokens);
 
       const parsed   = extractJson(raw);
       const rawItems = Array.isArray(parsed?.events) ? parsed.events as Record<string, unknown>[] : [];

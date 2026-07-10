@@ -30,6 +30,11 @@ const { auditLocks } = vi.hoisted(() => ({
 vi.mock("drizzle-orm", () => ({
   eq: (col: any, val: unknown) => ({ kind: "eq", col, val }),
   and: (...parts: unknown[]) => ({ kind: "and", parts }),
+  gte: (col: any, val: unknown) => ({ kind: "gte", col, val }),
+  lt: (col: any, val: unknown) => ({ kind: "lt", col, val }),
+  sql: Object.assign((strings: TemplateStringsArray, ...vals: unknown[]) => ({ kind: "sql", strings, vals }), {
+    raw: (s: string) => ({ kind: "sql-raw", s }),
+  }),
 }));
 
 vi.mock("@workspace/db", () => {

@@ -110,7 +110,7 @@ import type {
   Outlet, Contact,
 } from "./types";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
-import { TokenUsageAdminPage, type TokenUsageRow, type TokenUserInfo } from "./pages/TokenUsageAdminPage";
+import { TokenUsageAdminPage, type TokenUsageRow, type TokenDailyRow, type TokenUserInfo, type SpikeInfo } from "./pages/TokenUsageAdminPage";
 import type { Client } from "./lib/projectTypes";
 import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
@@ -289,7 +289,12 @@ function App() {
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
   const [tokenUsageRows, setTokenUsageRows] = useState<TokenUsageRow[] | null>(null);
+  const [tokenDailyRows, setTokenDailyRows] = useState<TokenDailyRow[] | null>(null);
   const [tokenUsageUsersByAccount, setTokenUsageUsersByAccount] = useState<Record<string, TokenUserInfo> | undefined>(undefined);
+  const [tokenStatusByAccount, setTokenStatusByAccount] = useState<Record<string, string> | undefined>(undefined);
+  const [tokenSpikeFlags, setTokenSpikeFlags] = useState<Record<string, SpikeInfo> | undefined>(undefined);
+  const [tokenThirtyDayCosts, setTokenThirtyDayCosts] = useState<Record<string, number> | undefined>(undefined);
+  const [tokenDefaultLimit, setTokenDefaultLimit] = useState<number | undefined>(undefined);
   const [tokenUsageLoading, setTokenUsageLoading] = useState(false);
   const [tokenUsageError, setTokenUsageError] = useState<string | null>(null);
 
@@ -299,9 +304,22 @@ function App() {
     void fetch(`${apiBase()}/api/admin/token-usage`, { credentials: "include" })
       .then(async (r) => {
         if (!r.ok) throw new Error("Failed to load token usage");
-        const data = await r.json() as { rows: TokenUsageRow[]; usersByAccount?: Record<string, TokenUserInfo> };
+        const data = await r.json() as {
+          rows: TokenUsageRow[];
+          dailyRows?: TokenDailyRow[];
+          usersByAccount?: Record<string, TokenUserInfo>;
+          statusByAccount?: Record<string, string>;
+          spikeFlags?: Record<string, SpikeInfo>;
+          thirtyDayCosts?: Record<string, number>;
+          defaultLimit?: number;
+        };
         setTokenUsageRows(data.rows ?? []);
+        setTokenDailyRows(data.dailyRows ?? []);
         setTokenUsageUsersByAccount(data.usersByAccount ?? {});
+        setTokenStatusByAccount(data.statusByAccount ?? {});
+        setTokenSpikeFlags(data.spikeFlags ?? {});
+        setTokenThirtyDayCosts(data.thirtyDayCosts ?? {});
+        setTokenDefaultLimit(data.defaultLimit);
       })
       .catch(() => setTokenUsageError("Could not load token usage data. Please try again."))
       .finally(() => setTokenUsageLoading(false));
@@ -659,7 +677,12 @@ function App() {
     return (
       <TokenUsageAdminPage
         rows={tokenUsageRows}
+        dailyRows={tokenDailyRows}
         usersByAccount={tokenUsageUsersByAccount}
+        statusByAccount={tokenStatusByAccount}
+        spikeFlags={tokenSpikeFlags}
+        thirtyDayCosts={tokenThirtyDayCosts}
+        defaultLimit={tokenDefaultLimit}
         loading={tokenUsageLoading}
         error={tokenUsageError}
         onBack={() => setView("platform-home")}

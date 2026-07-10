@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable } from "@workspace/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable } from "@workspace/db";
+import { and, eq, inArray, sql, gte } from "drizzle-orm";
+import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, DEFAULT_FAIR_USAGE_LIMIT } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername } from "../lib/platform-auth";
@@ -591,6 +592,7 @@ adminRouter.get(
       return;
     }
     try {
+      // Monthly breakdown (existing)
       const rows = await db
         .select({
           accountId: sql<string>`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
@@ -615,16 +617,54 @@ adminRouter.get(
           sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
         )
         .limit(1000);
-      // Batch-resolve human user info for each unique account slug so the UI
-      // can show both the company username and the person behind it.
+
+      // Daily breakdown for the last 90 days
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      const dailyRows = await db
+        .select({
+          accountId: sql<string>`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+          day: sql<string>`to_char(date_trunc('day', ${tokenUsageTable.createdAt}), 'YYYY-MM-DD')`,
+          totalCost: sql<string>`round(sum(${tokenUsageTable.costGbpEstimate}::numeric), 4)::text`,
+          callCount: sql<number>`count(*)::int`,
+        })
+        .from(tokenUsageTable)
+        .leftJoin(projectsTable, eq(tokenUsageTable.projectId, projectsTable.id))
+        .where(gte(tokenUsageTable.createdAt, ninetyDaysAgo))
+        .groupBy(
+          sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+          sql`date_trunc('day', ${tokenUsageTable.createdAt})`,
+        )
+        .orderBy(
+          sql`date_trunc('day', ${tokenUsageTable.createdAt}) desc`,
+          sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+        )
+        .limit(2000);
+
+      // Batch-resolve human user info and account status
       const slugs = [...new Set(rows.map((r) => r.accountId.toLowerCase()).filter(Boolean))];
       const usersByAccount: Record<string, { userId: string; userEmail: string | null; userName: string | null }> = {};
+      const statusByAccount: Record<string, string> = {};
+
+      const [spikeFlags, thirtyDayCosts] = await Promise.all([
+        computeSpikeFlagsForAccounts(slugs),
+        getThirtyDayCostByAccount(),
+      ]);
+
       if (slugs.length > 0) {
         try {
-          const memberships = await db
-            .select({ companySlug: platformMembershipsTable.companySlug, userId: platformMembershipsTable.userId })
-            .from(platformMembershipsTable)
-            .where(inArray(platformMembershipsTable.companySlug, slugs));
+          const [memberships, accountRows] = await Promise.all([
+            db
+              .select({ companySlug: platformMembershipsTable.companySlug, userId: platformMembershipsTable.userId })
+              .from(platformMembershipsTable)
+              .where(inArray(platformMembershipsTable.companySlug, slugs)),
+            db
+              .select({ username: platformAccountsTable.username, status: platformAccountsTable.status })
+              .from(platformAccountsTable)
+              .where(inArray(platformAccountsTable.username, slugs)),
+          ]);
+          for (const a of accountRows) {
+            statusByAccount[a.username] = a.status;
+          }
           const userIds = [...new Set(memberships.map((m) => m.userId).filter(Boolean))];
           if (userIds.length > 0) {
             const users = await db
@@ -644,13 +684,103 @@ adminRouter.get(
             }
           }
         } catch {
-          // Non-fatal: rows still return, just without human user enrichment.
+          // Non-fatal: rows still return, just without enrichment.
         }
       }
-      res.json({ rows, usersByAccount });
+
+      res.json({
+        rows,
+        dailyRows,
+        usersByAccount,
+        statusByAccount,
+        spikeFlags,
+        thirtyDayCosts,
+        defaultLimit: DEFAULT_FAIR_USAGE_LIMIT,
+      });
     } catch (err) {
       logger.error({ err }, "admin token-usage: query failed");
       res.status(500).json({ error: "Could not load token usage data." });
+    }
+  },
+);
+
+// Override a specific account's fair usage quota multiplier.
+// multiplier=2 doubles the limit; null resets to default (1×).
+adminRouter.patch(
+  "/admin/account/:slug/quota-override",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
+    if (!slug) { res.status(400).json({ error: "Account slug is required" }); return; }
+    const rawMultiplier = req.body?.multiplier;
+    if (rawMultiplier !== null && rawMultiplier !== undefined) {
+      const v = parseFloat(String(rawMultiplier));
+      if (!isFinite(v) || v <= 0) {
+        res.status(400).json({ error: "multiplier must be a positive number or null" });
+        return;
+      }
+    }
+
+    const key = `fairUsage:multiplier:${slug}`;
+    try {
+      if (rawMultiplier === null || rawMultiplier === undefined) {
+        await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+        logger.info({ slug, by: req.account.username }, "admin quota-override: reset to default");
+        res.json({ ok: true, slug, multiplier: null });
+      } else {
+        const multiplier = parseFloat(String(rawMultiplier));
+        await db
+          .insert(platformMetaTable)
+          .values({ key, value: String(multiplier) })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: String(multiplier) } });
+        logger.info({ slug, multiplier, by: req.account.username }, "admin quota-override: multiplier set");
+        res.json({ ok: true, slug, multiplier });
+      }
+    } catch (err) {
+      logger.error({ err, slug }, "admin quota-override: DB error");
+      res.status(500).json({ error: "Could not update quota override." });
+    }
+  },
+);
+
+// Block or unblock an account. Sets status to "suspended" or "active" on
+// both platform_accounts and platform_companies so all login paths are gated.
+adminRouter.patch(
+  "/admin/account/:slug/block",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
+    if (!slug) { res.status(400).json({ error: "Account slug is required" }); return; }
+    const action = req.body?.action;
+    if (action !== "block" && action !== "unblock") {
+      res.status(400).json({ error: "action must be 'block' or 'unblock'" });
+      return;
+    }
+    const newStatus = action === "block" ? "suspended" : "active";
+    try {
+      await Promise.all([
+        db
+          .update(platformAccountsTable)
+          .set({ status: newStatus })
+          .where(eq(platformAccountsTable.username, slug)),
+        db
+          .update(platformCompaniesTable)
+          .set({ status: newStatus })
+          .where(eq(platformCompaniesTable.slug, slug)),
+      ]);
+      logger.info({ slug, newStatus, by: req.account.username }, `admin block: account ${action}ed`);
+      res.json({ ok: true, slug, status: newStatus });
+    } catch (err) {
+      logger.error({ err, slug }, "admin block: DB error");
+      res.status(500).json({ error: `Could not ${action} account.` });
     }
   },
 );

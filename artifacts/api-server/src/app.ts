@@ -57,7 +57,7 @@ const corsOptionsDelegate: cors.CorsOptionsDelegate<Request> = (req, callback) =
   if (allowed) {
     callback(null, {
       origin: true,
-      methods: ["GET", "POST", "OPTIONS"],
+      methods: ["GET", "POST", "PATCH", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true,
     });
