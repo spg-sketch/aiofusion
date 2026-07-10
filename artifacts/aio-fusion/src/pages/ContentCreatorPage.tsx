@@ -825,7 +825,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             title="Open your email client with the current draft ready to send for review"
           >
-            <Send size={14} /> Share draft
+            <Send size={14} /> Share content
           </button>
         </div>
         {/* Row 2: destination actions */}
