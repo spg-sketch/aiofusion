@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { syncTechGeoForProject, pushServerTechGeo } from "./lib/auditSync";
+import { getWebsite } from "./IntakeForm";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
@@ -232,7 +233,7 @@ export default function SeoAuditPage({
   pendingTechGeoId?: string | null;
   onConsumePendingTechGeo?: () => void;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState<string>(getWebsite);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AuditResult | null>(null);
@@ -242,7 +243,7 @@ export default function SeoAuditPage({
   useEffect(() => {
     setSavedTechGeo(loadSavedTechGeo(activeClient.id));
     setResult(null);
-    setUrl("");
+    setUrl(getWebsite());
     setError("");
     setLoading(false);
     setJustSaved(false);
