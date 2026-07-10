@@ -354,18 +354,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
       >
         <Undo2 size={12} /> Reject
       </button>
-    ) : (
-      <button
-        type="button"
-        onClick={() => optimiseField(key)}
-        disabled={getFieldValue(key).trim().length === 0 || optimisingField !== null}
-        title="Optimise this copy: the LLM rewrites what you have written to be stronger and easier for AI models to cite, weaving in your key messages from Project Data. You can Reject to restore your original."
-        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ color: vars.teal, background: "rgba(40,150,185,0.08)" }}
-      >
-        {optimisingField === key ? <><Loader2 size={12} className="animate-spin" /> Optimising…</> : <><Sparkles size={12} /> Optimise this copy</>}
-      </button>
-    )
+    ) : null
   );
 
   const acceptAndArchive = () => {
@@ -604,7 +593,6 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
         <div className="flex items-center justify-between gap-3 flex-wrap -mb-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Content entry</p>
-            <span className="text-[12px] font-normal" style={{ color: vars.g600 }}>Use Optimise this copy on any field to weave in your key messages.</span>
           </div>
           <div className="flex items-center gap-2">
             <label htmlFor="editor-font-size" className="text-[11px] font-medium" style={{ color: vars.g500 }}>Font size</label>
