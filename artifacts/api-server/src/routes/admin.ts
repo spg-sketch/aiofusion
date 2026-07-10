@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable } from "@workspace/db";
 import { and, eq, inArray, sql, gte } from "drizzle-orm";
-import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, DEFAULT_FAIR_USAGE_LIMIT } from "../lib/fair-usage";
+import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { normUsername } from "../lib/platform-auth";
@@ -645,10 +645,12 @@ adminRouter.get(
       const usersByAccount: Record<string, { userId: string; userEmail: string | null; userName: string | null }> = {};
       const statusByAccount: Record<string, string> = {};
 
-      const [spikeFlags, thirtyDayCosts] = await Promise.all([
+      const [spikeFlags, thirtyDayCosts, currentMonthSpends] = await Promise.all([
         computeSpikeFlagsForAccounts(slugs),
         getThirtyDayCostByAccount(),
+        getCurrentMonthSpendByAccount(),
       ]);
+      const spendLimits = await getSpendLimitsByAccount(slugs);
 
       if (slugs.length > 0) {
         try {
@@ -695,7 +697,10 @@ adminRouter.get(
         statusByAccount,
         spikeFlags,
         thirtyDayCosts,
+        currentMonthSpends,
+        spendLimits,
         defaultLimit: DEFAULT_FAIR_USAGE_LIMIT,
+        defaultMonthlySpendLimitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP,
       });
     } catch (err) {
       logger.error({ err }, "admin token-usage: query failed");
@@ -743,6 +748,53 @@ adminRouter.patch(
     } catch (err) {
       logger.error({ err, slug }, "admin quota-override: DB error");
       res.status(500).json({ error: "Could not update quota override." });
+    }
+  },
+);
+
+// Set or clear a per-account monthly GBP spending cap.
+// limitGbp=50 sets a £50/month cap; limitGbp=null clears the override and
+// restores the system default; limitGbp=0 explicitly removes all limits.
+adminRouter.patch(
+  "/admin/account/:slug/spend-limit",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
+    if (!slug) { res.status(400).json({ error: "Account slug is required" }); return; }
+
+    const rawLimit = req.body?.limitGbp;
+    const key = `spendLimit:monthly:gbp:${slug}`;
+
+    try {
+      if (rawLimit === null || rawLimit === undefined) {
+        // null = restore system default (delete the override key)
+        await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+        logger.info({ slug, by: req.account.username }, "admin spend-limit: reset to default");
+        res.json({ ok: true, slug, limitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP });
+        return;
+      }
+
+      const v = parseFloat(String(rawLimit));
+      if (!isFinite(v) || v < 0) {
+        res.status(400).json({ error: "limitGbp must be a non-negative number or null" });
+        return;
+      }
+
+      // Store 0 as "explicitly unlimited"
+      await db
+        .insert(platformMetaTable)
+        .values({ key, value: v === 0 ? "0" : String(v) })
+        .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: v === 0 ? "0" : String(v) } });
+
+      logger.info({ slug, limitGbp: v, by: req.account.username }, "admin spend-limit: updated");
+      res.json({ ok: true, slug, limitGbp: v === 0 ? null : v });
+    } catch (err) {
+      logger.error({ err, slug }, "admin spend-limit: DB error");
+      res.status(500).json({ error: "Could not update spending limit." });
     }
   },
 );

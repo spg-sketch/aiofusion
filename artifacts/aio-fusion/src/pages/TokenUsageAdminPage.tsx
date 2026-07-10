@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { vars } from "../marketing/vars";
-import { ArrowLeft, AlertTriangle, Shield, ShieldOff, ChevronDown, ChevronUp, Sliders } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Shield, ShieldOff, ChevronDown, ChevronUp, Sliders, PoundSterling } from "lucide-react";
 import { apiBase } from "../lib/contentAi";
 
 export type TokenUsageRow = {
@@ -41,7 +41,10 @@ export function TokenUsageAdminPage({
   statusByAccount,
   spikeFlags,
   thirtyDayCosts,
+  currentMonthSpends,
+  spendLimits,
   defaultLimit,
+  defaultMonthlySpendLimitGbp,
   loading,
   error,
   onBack,
@@ -53,7 +56,10 @@ export function TokenUsageAdminPage({
   statusByAccount?: Record<string, string>;
   spikeFlags?: Record<string, SpikeInfo>;
   thirtyDayCosts?: Record<string, number>;
+  currentMonthSpends?: Record<string, number>;
+  spendLimits?: Record<string, number | null>;
   defaultLimit?: number;
+  defaultMonthlySpendLimitGbp?: number;
   loading: boolean;
   error: string | null;
   onBack: () => void;
@@ -73,8 +79,21 @@ export function TokenUsageAdminPage({
   const [quotaSaving, setQuotaSaving] = useState(false);
   const [quotaError, setQuotaError] = useState<string | null>(null);
 
+  // Spend limit modal state
+  const [spendLimitSlug, setSpendLimitSlug] = useState<string | null>(null);
+  const [spendLimitValue, setSpendLimitValue] = useState("");
+  const [spendLimitSaving, setSpendLimitSaving] = useState(false);
+  const [spendLimitError, setSpendLimitError] = useState<string | null>(null);
+  const [localSpendLimits, setLocalSpendLimits] = useState<Record<string, number | null>>({});
+
   function effectiveStatus(slug: string): string {
     return localStatus[slug] ?? statusByAccount?.[slug] ?? "active";
+  }
+
+  function effectiveSpendLimit(slug: string): number | null {
+    if (slug in localSpendLimits) return localSpendLimits[slug];
+    if (spendLimits && slug in spendLimits) return spendLimits[slug];
+    return defaultMonthlySpendLimitGbp ?? 50;
   }
 
   async function handleBlock(slug: string, action: "block" | "unblock") {
@@ -119,6 +138,41 @@ export function TokenUsageAdminPage({
       setQuotaError("Network error");
     } finally {
       setQuotaSaving(false);
+    }
+  }
+
+  async function handleSpendLimitSave(slug: string) {
+    setSpendLimitSaving(true);
+    setSpendLimitError(null);
+    const trimmed = spendLimitValue.trim();
+    let limitGbp: number | null;
+    if (trimmed === "") {
+      limitGbp = null; // reset to default
+    } else {
+      const v = parseFloat(trimmed);
+      if (!isFinite(v) || v < 0) {
+        setSpendLimitError("Enter a positive number, 0 for no limit, or leave blank to reset to default.");
+        setSpendLimitSaving(false);
+        return;
+      }
+      limitGbp = v;
+    }
+    try {
+      const res = await fetch(`${apiBase()}/api/admin/account/${encodeURIComponent(slug)}/spend-limit`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limitGbp }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setSpendLimitError(json.error ?? "Failed"); return; }
+      setLocalSpendLimits((prev) => ({ ...prev, [slug]: json.limitGbp }));
+      setSpendLimitSlug(null);
+      setSpendLimitValue("");
+    } catch {
+      setSpendLimitError("Network error");
+    } finally {
+      setSpendLimitSaving(false);
     }
   }
 
@@ -176,6 +230,43 @@ export function TokenUsageAdminPage({
     );
   }
 
+  function renderSpendLimitCell(slug: string) {
+    const limit = effectiveSpendLimit(slug);
+    const spent = currentMonthSpends?.[slug] ?? 0;
+    const unlimited = limit === null;
+    const pct = unlimited ? 0 : Math.min(100, (spent / limit) * 100);
+    const nearLimit = !unlimited && pct >= 80;
+    const overLimit = !unlimited && spent >= limit;
+
+    const barColor = overLimit ? "#EF4444" : nearLimit ? "#F59E0B" : "#22C55E";
+
+    return (
+      <div className="min-w-[140px]">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-[12px] font-semibold" style={{ color: overLimit ? "#EF4444" : ink }}>
+            £{spent.toFixed(2)}
+          </span>
+          <span className="text-[11px]" style={{ color: vars.g400 }}>
+            / {unlimited ? "no limit" : `£${limit.toFixed(0)}`}
+          </span>
+          {overLimit && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold" style={{ color: "#EF4444" }}>
+              <AlertTriangle size={9} /> Over
+            </span>
+          )}
+        </div>
+        {!unlimited && (
+          <div className="w-full rounded-full h-1.5" style={{ background: vars.g200 }}>
+            <div
+              className="h-1.5 rounded-full transition-all"
+              style={{ width: `${pct}%`, background: barColor }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderBlockButton(slug: string) {
     const status = effectiveStatus(slug);
     const isBlocking = blockingSlug === slug;
@@ -209,6 +300,26 @@ export function TokenUsageAdminPage({
     );
   }
 
+  function renderSpendLimitButton(slug: string) {
+    return (
+      <button
+        onClick={() => {
+          const current = effectiveSpendLimit(slug);
+          setSpendLimitSlug(slug);
+          setSpendLimitValue(current === null ? "0" : String(current));
+          setSpendLimitError(null);
+        }}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition-all hover:opacity-80"
+        style={{ background: "#F0FDF4", color: "#166534", borderColor: "#86EFAC" }}
+        title="Set this account's monthly GBP spending cap"
+      >
+        <PoundSterling size={11} /> Limit
+      </button>
+    );
+  }
+
+  const systemDefault = defaultMonthlySpendLimitGbp ?? 50;
+
   return (
     <div className="min-h-screen" style={{ background: vars.cream, fontFamily: "'Inter', sans-serif" }}>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
@@ -223,7 +334,7 @@ export function TokenUsageAdminPage({
         <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
           <div>
             <h1 className="text-[28px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Token Usage</h1>
-            <p className="text-[14px]" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days.</p>
+            <p className="text-[14px]" style={{ color: vars.g500 }}>Estimated Anthropic / OpenAI API cost by account. Spike badges flag accounts whose last-7-day content AI usage is 3× above the prior 7 days. Monthly spend caps block AI requests when exceeded.</p>
           </div>
           <button
             onClick={onRefresh}
@@ -289,6 +400,44 @@ export function TokenUsageAdminPage({
           </div>
         )}
 
+        {/* Spend limit modal */}
+        {spendLimitSlug && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Monthly spend limit — {spendLimitSlug}</h2>
+              <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+                Set the maximum GBP this account may spend on AI calls in a calendar month. When the limit is hit, all AI endpoints return a clear error until the next month. Enter <strong>0</strong> to remove the cap, or leave blank to restore the system default (£{systemDefault}/month).
+              </p>
+              <input
+                type="number"
+                min="0"
+                step="5"
+                value={spendLimitValue}
+                onChange={(e) => setSpendLimitValue(e.target.value)}
+                placeholder={`e.g. ${systemDefault} (blank = system default £${systemDefault})`}
+                className="w-full border rounded-lg px-3 py-2 text-[13px] mb-3"
+                style={{ borderColor: vars.g200, color: ink }}
+              />
+              {spendLimitError && <p className="text-[12px] mb-2" style={{ color: "#991B1B" }}>{spendLimitError}</p>}
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setSpendLimitSlug(null); setSpendLimitValue(""); setSpendLimitError(null); }}
+                  className="px-4 py-2 rounded-lg text-[12px] font-semibold border"
+                  style={{ borderColor: vars.g200, color: vars.g500 }}
+                >Cancel</button>
+                <button
+                  onClick={() => void handleSpendLimitSave(spendLimitSlug)}
+                  disabled={spendLimitSaving}
+                  className="px-4 py-2 rounded-lg text-[12px] font-semibold text-white disabled:opacity-50"
+                  style={{ background: "#166534" }}
+                >
+                  {spendLimitSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {rows !== null && rows.length > 0 && (
           <>
             {/* 30-day leaderboard sorted by cost */}
@@ -300,7 +449,7 @@ export function TokenUsageAdminPage({
                 <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${vars.g200}` }}>
-                      {["Account / User", "30-day cost", "Status", "Actions"].map((h) => (
+                      {["Account / User", "30-day cost", "This month vs limit", "Status", "Actions"].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-left font-semibold text-[11px] uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>{h}</th>
                       ))}
                     </tr>
@@ -319,6 +468,9 @@ export function TokenUsageAdminPage({
                           £{(thirtyDayCosts?.[slug] ?? 0).toFixed(4)}
                         </td>
                         <td className="px-4 py-2.5">
+                          {renderSpendLimitCell(slug)}
+                        </td>
+                        <td className="px-4 py-2.5">
                           <span
                             className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold"
                             style={effectiveStatus(slug) === "suspended"
@@ -330,9 +482,10 @@ export function TokenUsageAdminPage({
                           </span>
                         </td>
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {renderBlockButton(slug)}
                             {renderQuotaButton(slug)}
+                            {renderSpendLimitButton(slug)}
                             <button
                               onClick={() => setExpandedAccounts((prev) => {
                                 const next = new Set(prev);

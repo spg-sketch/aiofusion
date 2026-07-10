@@ -294,7 +294,10 @@ function App() {
   const [tokenStatusByAccount, setTokenStatusByAccount] = useState<Record<string, string> | undefined>(undefined);
   const [tokenSpikeFlags, setTokenSpikeFlags] = useState<Record<string, SpikeInfo> | undefined>(undefined);
   const [tokenThirtyDayCosts, setTokenThirtyDayCosts] = useState<Record<string, number> | undefined>(undefined);
+  const [tokenCurrentMonthSpends, setTokenCurrentMonthSpends] = useState<Record<string, number> | undefined>(undefined);
+  const [tokenSpendLimits, setTokenSpendLimits] = useState<Record<string, number | null> | undefined>(undefined);
   const [tokenDefaultLimit, setTokenDefaultLimit] = useState<number | undefined>(undefined);
+  const [tokenDefaultMonthlySpendLimitGbp, setTokenDefaultMonthlySpendLimitGbp] = useState<number | undefined>(undefined);
   const [tokenUsageLoading, setTokenUsageLoading] = useState(false);
   const [tokenUsageError, setTokenUsageError] = useState<string | null>(null);
 
@@ -311,7 +314,10 @@ function App() {
           statusByAccount?: Record<string, string>;
           spikeFlags?: Record<string, SpikeInfo>;
           thirtyDayCosts?: Record<string, number>;
+          currentMonthSpends?: Record<string, number>;
+          spendLimits?: Record<string, number | null>;
           defaultLimit?: number;
+          defaultMonthlySpendLimitGbp?: number;
         };
         setTokenUsageRows(data.rows ?? []);
         setTokenDailyRows(data.dailyRows ?? []);
@@ -319,7 +325,10 @@ function App() {
         setTokenStatusByAccount(data.statusByAccount ?? {});
         setTokenSpikeFlags(data.spikeFlags ?? {});
         setTokenThirtyDayCosts(data.thirtyDayCosts ?? {});
+        setTokenCurrentMonthSpends(data.currentMonthSpends ?? {});
+        setTokenSpendLimits(data.spendLimits ?? {});
         setTokenDefaultLimit(data.defaultLimit);
+        setTokenDefaultMonthlySpendLimitGbp(data.defaultMonthlySpendLimitGbp);
       })
       .catch(() => setTokenUsageError("Could not load token usage data. Please try again."))
       .finally(() => setTokenUsageLoading(false));
@@ -682,7 +691,10 @@ function App() {
         statusByAccount={tokenStatusByAccount}
         spikeFlags={tokenSpikeFlags}
         thirtyDayCosts={tokenThirtyDayCosts}
+        currentMonthSpends={tokenCurrentMonthSpends}
+        spendLimits={tokenSpendLimits}
         defaultLimit={tokenDefaultLimit}
+        defaultMonthlySpendLimitGbp={tokenDefaultMonthlySpendLimitGbp}
         loading={tokenUsageLoading}
         error={tokenUsageError}
         onBack={() => setView("platform-home")}

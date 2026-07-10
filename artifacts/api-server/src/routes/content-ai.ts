@@ -7,7 +7,7 @@ import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetc
 import { db, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
 import { isNull } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
-import { checkFairUsage, detectAndLogSpike } from "../lib/fair-usage";
+import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
 
 const contentAiRouter = Router();
 
@@ -17,6 +17,24 @@ const contentAiRouter = Router();
 // pure rate-limit block.
 async function fairUsageCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.account) { next(); return; } // per-route auth handles 401
+
+  // 1. Monthly GBP spending cap — checked first as it catches runaway cost bugs
+  //    that the call-count quota alone would not stop.
+  const { allowed: spendAllowed, spentGbp, limitGbp } = await checkMonthlySpendLimit(req.account.username);
+  if (!spendAllowed) {
+    const now = new Date();
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
+    res.setHeader("Retry-After", secondsToMonthEnd);
+    res.status(429).json({
+      error: "Monthly spending limit reached — contact us to discuss your plan.",
+      spentGbp: parseFloat(spentGbp.toFixed(4)),
+      limitGbp,
+    });
+    return;
+  }
+
+  // 2. Rolling 30-day call-count quota
   const { allowed, callCount, limit } = await checkFairUsage(req.account.username);
   if (!allowed) {
     const now = new Date();

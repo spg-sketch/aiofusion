@@ -5,9 +5,32 @@ import { aiAssistLimiter } from "../middleware/rate-limit";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
 import { stripEmDashes, deepStripEmDashes } from "../lib/text-sanitise";
 import { logTokenUsage } from "../lib/token-usage";
+import { checkMonthlySpendLimit } from "../lib/fair-usage";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import type { NextFunction } from "express";
 
 const aiAssistRouter = Router();
+
+// Shared spend-cap guard. Skips when there is no authenticated account (the
+// draft-field and optimise-field routes allow unauthenticated use; when there
+// IS an account we enforce the monthly cap to prevent runaway spend).
+async function spendLimitCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.account) { next(); return; }
+  const { allowed, spentGbp, limitGbp } = await checkMonthlySpendLimit(req.account.username);
+  if (!allowed) {
+    const now = new Date();
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+    const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
+    res.setHeader("Retry-After", secondsToMonthEnd);
+    res.status(429).json({
+      error: "Monthly spending limit reached — contact us to discuss your plan.",
+      spentGbp: parseFloat(spentGbp.toFixed(4)),
+      limitGbp,
+    });
+    return;
+  }
+  next();
+}
 
 function createAnthropicClient(): Anthropic | null {
   const baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
@@ -52,6 +75,7 @@ function extractJson(text: string): any | null {
 aiAssistRouter.post(
   "/ai-assist/draft-field",
   aiAssistLimiter,
+  spendLimitCheck,
   async (req: Request, res: Response): Promise<void> => {
     const { url, fieldId } = (req.body ?? {}) as { url?: string; fieldId?: string };
 
@@ -205,6 +229,7 @@ function hasOptimiseContent(fieldId: string, value: unknown): boolean {
 aiAssistRouter.post(
   "/ai-assist/optimise-field",
   aiAssistLimiter,
+  spendLimitCheck,
   async (req: Request, res: Response): Promise<void> => {
     const { fieldId, value, companyName, url } = (req.body ?? {}) as {
       fieldId?: string;
@@ -356,6 +381,7 @@ function extractJsonAssist(text: string): unknown {
 aiAssistRouter.post(
   "/ai-assist/generate-intake",
   requirePlatformAuth,
+  spendLimitCheck,
   async (req: Request, res: Response): Promise<void> => {
     const rawUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
     const companyHint = typeof req.body?.companyName === "string" ? req.body.companyName.trim().slice(0, 200) : "";
