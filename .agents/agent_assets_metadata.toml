@@ -137,3 +137,9 @@ id = "FB5Ea7PdAQCPA4EPi3e3W"
 uri = "file://AIO_Fusion_Style_Guide.md"
 type = "text"
 title = "AIO Fusion Style Guide & Brief"
+
+[[outputs]]
+id = "DVdFRa-GS8rTuzPyyUy2o"
+uri = "file://investor-faq.md"
+type = "text"
+title = "Investor Technical Due Diligence FAQ"
