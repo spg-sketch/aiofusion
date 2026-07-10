@@ -142,7 +142,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="lg:col-span-2">
-            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Enter key word</label>
+            <label className="text-[12px] font-semibold mb-1 block" style={{ color: vars.g500 }}>Enter keyword</label>
             <input type="text" placeholder="e.g. agentic, benchmarking, launch…" value={query} onChange={(e) => setQuery(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border text-[14px]" style={{ borderColor: vars.g200 }} />
           </div>
