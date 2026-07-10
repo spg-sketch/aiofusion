@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import InfoTip from "./InfoTip";
 import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
-import { getSpokespeople } from "./IntakeForm";
+import { getSpokespeople, getKeyMessages } from "./IntakeForm";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckPage";
 import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
@@ -356,18 +356,28 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     ? Math.round(livePlannerProjects.reduce((s, p) => s + scoreProject(p).authority, 0) / livePlannerProjects.length)
     : null;
 
+  const clientKeyMessages = useMemo(
+    () => getKeyMessages().filter(km => km.short !== "Primary message not yet set" && (km.short || km.long).trim()),
+    // re-read when the active client changes so we pick up the correct project's intake data
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeClient.id],
+  );
+
   const messageCoverage = useMemo(() => {
-    const buckets = [
-      { msg: "AI authority platform built by PR consultants", contains: ["authority", "platform"] },
-      { msg: "Generative engine optimisation expertise", contains: ["geo", "generative", "engine"] },
-      { msg: "Measurable AI citation outcomes", contains: ["citation", "measure", "benchmark"] },
-      { msg: "Tech + content fusion", contains: ["tech", "fusion", "content"] },
-    ];
-    return buckets.map(b => {
-      const matches = earnedRowsForCoverage.filter(r => b.contains.some(k => r.title.toLowerCase().includes(k)));
-      return { msg: b.msg, n: matches.length, articles: matches.filter(r => r.type === "Article (Trade Publication)").length, prs: matches.filter(r => r.type === "Press Release").length };
+    return clientKeyMessages.map(km => {
+      const label = km.short || km.long;
+      const keywords = label.toLowerCase().split(/\s+/).filter(w => w.length >= 4);
+      const matches = earnedRowsForCoverage.filter(r =>
+        keywords.length === 0 || keywords.some(k => r.title.toLowerCase().includes(k)),
+      );
+      return {
+        msg: label,
+        n: matches.length,
+        articles: matches.filter(r => r.type === "Article (Trade Publication)").length,
+        prs: matches.filter(r => r.type === "Press Release").length,
+      };
     });
-  }, [earnedRowsForCoverage]);
+  }, [clientKeyMessages, earnedRowsForCoverage]);
 
   const volByType = useMemo(() => {
     const tally = new Map<string, number>();
@@ -766,46 +776,58 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
 
           <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-4" style={{ color: vars.navy }}>Coverage per key message</h3>
-            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker.</p>
-            <div className="space-y-3">
-              {messageCoverage.map(k => (
-                <div key={k.msg}>
-                  <div className="flex items-center justify-between text-[12px] mb-1">
-                    <span style={{ color: vars.navy }}>{k.msg}</span>
-                    <span className="font-semibold" style={{ color: vars.accent }}>{k.n} pieces</span>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>Counts only PR / Article / Case Study / Whitepaper rows from the Earned Media Tracker. Key messages are pulled from Project Set-Up (sections 1.2 &amp; 1.3).</p>
+            {messageCoverage.length === 0 ? (
+              <p className="text-[13px] font-light italic" style={{ color: vars.g400 }}>No key messages set for this client. Add them in <strong>Project Set-Up → sections 1.2 &amp; 1.3</strong>.</p>
+            ) : (
+              <div className="space-y-3">
+                {messageCoverage.map(k => (
+                  <div key={k.msg}>
+                    <div className="flex items-center justify-between text-[12px] mb-1">
+                      <span style={{ color: vars.navy }}>{k.msg}</span>
+                      <span className="font-semibold" style={{ color: vars.accent }}>{k.n} pieces</span>
+                    </div>
+                    <div className="h-1.5 rounded-full" style={{ background: vars.g200 }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, k.n * 25)}%`, background: vars.accent }} />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full" style={{ background: vars.g200 }}>
-                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, k.n * 25)}%`, background: vars.accent }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
               <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Thought Leadership per key message</h3>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Articles only.</p>
-              <div className="space-y-2">
-                {messageCoverage.map(k => (
-                  <div key={k.msg} className="flex justify-between text-[12px]">
-                    <span style={{ color: vars.g600 }}>{k.msg}</span>
-                    <span className="font-semibold" style={{ color: vars.navy }}>{k.articles}</span>
-                  </div>
-                ))}
-              </div>
+              {messageCoverage.length === 0 ? (
+                <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>Add key messages in Project Set-Up (1.2 &amp; 1.3) to see this breakdown.</p>
+              ) : (
+                <div className="space-y-2">
+                  {messageCoverage.map(k => (
+                    <div key={k.msg} className="flex justify-between text-[12px]">
+                      <span style={{ color: vars.g600 }}>{k.msg}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{k.articles}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Releases per Key message</h3>
+              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Press Releases per key message</h3>
               <p className="text-[11px] font-light mb-3" style={{ color: vars.g500 }}>Press Release rows only.</p>
-              <div className="space-y-2">
-                {messageCoverage.map(k => (
-                  <div key={k.msg} className="flex justify-between text-[12px]">
-                    <span style={{ color: vars.g600 }}>{k.msg}</span>
-                    <span className="font-semibold" style={{ color: vars.navy }}>{k.prs}</span>
-                  </div>
-                ))}
-              </div>
+              {messageCoverage.length === 0 ? (
+                <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>Add key messages in Project Set-Up (1.2 &amp; 1.3) to see this breakdown.</p>
+              ) : (
+                <div className="space-y-2">
+                  {messageCoverage.map(k => (
+                    <div key={k.msg} className="flex justify-between text-[12px]">
+                      <span style={{ color: vars.g600 }}>{k.msg}</span>
+                      <span className="font-semibold" style={{ color: vars.navy }}>{k.prs}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
