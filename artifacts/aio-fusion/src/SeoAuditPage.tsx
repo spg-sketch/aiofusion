@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { syncTechGeoForProject, pushServerTechGeo, deleteServerTechGeo } from "./lib/auditSync";
 import { getWebsite } from "./IntakeForm";
+import { downloadWordDocument } from "./lib/apiHelpers";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
@@ -268,8 +269,95 @@ export default function SeoAuditPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingTechGeoId, savedTechGeo]);
 
+  function downloadAuditDoc(auditResult: AuditResult) {
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const sc = (s: string) => s === "pass" ? "#1F7244" : s === "warn" ? "#9A6C00" : "#C94A3E";
+    const sl = (s: string) => s === "pass" ? "PASS" : s === "warn" ? "WARN" : "FAIL";
+    const date = new Date(auditResult.fetchedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+
+    const scoreRow = (label: string, val: number) => {
+      const color = val >= 70 ? "#1F7244" : val >= 40 ? "#9A6C00" : "#C94A3E";
+      return `<tr><td style="padding:4pt 8pt;border:1pt solid #e2e8f0;">${esc(label)}</td><td style="padding:4pt 8pt;border:1pt solid #e2e8f0;font-weight:700;color:${color};">${val}/100</td></tr>`;
+    };
+
+    const findingRows = (findings: SeoFinding[]) =>
+      findings.map(f =>
+        `<tr>
+          <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;color:${sc(f.status)};font-weight:700;width:48pt;">${sl(f.status)}</td>
+          <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;font-weight:600;">${esc(f.label)}</td>
+          <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;">${esc(f.value)}${f.detail ? `<br/><span style="color:#64748b;font-size:10pt;">${esc(f.detail)}</span>` : ""}</td>
+        </tr>`
+      ).join("");
+
+    const section = (title: string, findings: SeoFinding[]) => {
+      if (!findings.length) return "";
+      return `<h2 style="font-size:13pt;font-weight:700;color:#0a1628;margin:16pt 0 6pt 0;border-bottom:1pt solid #e2e8f0;padding-bottom:3pt;">${esc(title)}</h2>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:12pt;">
+          <thead><tr style="background:#f1f5f9;">
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;width:48pt;">Status</th>
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;width:160pt;">Check</th>
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;">Finding</th>
+          </tr></thead>
+          <tbody>${findingRows(findings)}</tbody>
+        </table>`;
+    };
+
+    const priorityColor = (p: string) => p === "Critical" ? "#C94A3E" : p === "High" ? "#D4922A" : p === "Medium" ? "#1f748f" : "#475569";
+
+    const recsHtml = auditResult.recommendations.length
+      ? `<h2 style="font-size:13pt;font-weight:700;color:#0a1628;margin:16pt 0 6pt 0;border-bottom:1pt solid #e2e8f0;padding-bottom:3pt;">Prioritised Recommendations</h2>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:12pt;">
+          <thead><tr style="background:#f1f5f9;">
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;width:64pt;">Priority</th>
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;width:90pt;">Category</th>
+            <th style="padding:4pt 8pt;border:1pt solid #e2e8f0;text-align:left;">Action</th>
+          </tr></thead>
+          <tbody>${auditResult.recommendations.map(r =>
+            `<tr>
+              <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;font-weight:700;color:${priorityColor(r.priority)};">${esc(r.priority)}</td>
+              <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;color:#475569;">${esc(r.category)}</td>
+              <td style="padding:4pt 8pt;border:1pt solid #e2e8f0;">${esc(r.text)}</td>
+            </tr>`
+          ).join("")}</tbody>
+        </table>`
+      : "";
+
+    const inner =
+      `<h1 style="font-size:18pt;font-weight:700;color:#0a1628;margin:0 0 4pt 0;font-family:Georgia,serif;">Website Technical GEO Audit</h1>
+      <p style="font-size:11pt;color:#475569;margin:0 0 2pt 0;"><strong>URL:</strong> ${esc(auditResult.url)}</p>
+      <p style="font-size:11pt;color:#475569;margin:0 0 16pt 0;"><strong>Date:</strong> ${date}</p>
+
+      <h2 style="font-size:13pt;font-weight:700;color:#0a1628;margin:0 0 6pt 0;border-bottom:1pt solid #e2e8f0;padding-bottom:3pt;">Score Summary</h2>
+      <table style="border-collapse:collapse;margin-bottom:16pt;min-width:260pt;">
+        <tbody>
+          ${scoreRow("Overall", auditResult.scores.overall)}
+          ${scoreRow("Meta & Titles", auditResult.scores.meta)}
+          ${scoreRow("Headings", auditResult.scores.headings)}
+          ${scoreRow("Schema Markup", auditResult.scores.schema)}
+          ${scoreRow("Links", auditResult.scores.links)}
+          ${scoreRow("Images", auditResult.scores.images)}
+          ${scoreRow("AI Readiness", auditResult.scores.aiReadiness)}
+          ${scoreRow("Performance", auditResult.scores.performance)}
+        </tbody>
+      </table>
+
+      ${recsHtml}
+      ${section("Meta & Titles", auditResult.meta)}
+      ${section("Headings", auditResult.headings)}
+      ${section("Schema Markup", auditResult.schema)}
+      ${section("Links", auditResult.links.findings)}
+      ${section("Images", auditResult.images)}
+      ${section("AI Readiness", auditResult.aiReadiness)}
+      ${section("Performance", auditResult.performance)}`;
+
+    const slug = auditResult.url.replace(/^https?:\/\//, "").replace(/[^a-z0-9]/gi, "-").slice(0, 40);
+    downloadWordDocument(`tech-geo-audit-${slug}`, inner);
+  }
+
   function saveAudit(auditResult: AuditResult | null = result) {
     if (!auditResult) return;
+    // Always download regardless of whether this is a duplicate save
+    downloadAuditDoc(auditResult);
     if (savedTechGeo.some((s) => s.result.url === auditResult.url && s.result.fetchedAt === auditResult.fetchedAt)) {
       setJustSaved(true);
       return;
@@ -434,8 +522,8 @@ export default function SeoAuditPage({
         {result && !loading && (
           <div className="space-y-5">
             <div className="flex items-center gap-3 flex-wrap">
-              <button onClick={() => saveAudit()} disabled={justSaved} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95 disabled:cursor-default" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
-                {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Save size={14} />} {justSaved ? "Saved" : "Save audit"}
+              <button onClick={() => saveAudit()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium transition-all hover:brightness-95" style={{ background: "white", color: vars.navy, border: `1px solid ${vars.g200}` }}>
+                {justSaved ? <CheckCircle2 size={14} color={vars.green} /> : <Download size={14} />} {justSaved ? "Saved & downloaded" : "Save & download"}
               </button>
               <button onClick={() => { const s = document.createElement('style'); s.id = 'aio-print-fix'; s.textContent = '@media print { body, #root, [data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-auto { overflow: visible !important; max-height: none !important; height: auto !important; } }'; document.head.appendChild(s); window.print(); setTimeout(() => { const el = document.getElementById('aio-print-fix'); if (el) el.remove(); }, 2000); }} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12.5px] font-medium text-white" style={{ background: "#1f748f" }}>
                 <Download size={14} /> Print / PDF
