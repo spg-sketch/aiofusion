@@ -458,7 +458,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     trackerFilter.mediaTitle !== "All";
 
   const [manualForm, setManualForm] = useState<Omit<TrackerRow, "id">>({
-    date: "2026-04-15",
+    date: new Date().toISOString().slice(0, 10),
     title: "",
     type: CONTENT_TYPES[0],
     publication: "",
