@@ -271,8 +271,26 @@ function OptimiserPage({
   };
   const canResearch = RESEARCH_TYPES.includes(contentType);
   const intakeReady = !!intake;
-  const semanticPhrases: { phrase: string; relevance: number }[] = [];
-  const trackedChanges: { type: "addition" | "modification"; label: string; original: string; revised: string; annotation: string }[] = [];
+  // Derive tracked changes from the changeLog returned by the optimiser.
+  const trackedChanges: { type: "addition" | "modification"; label: string; original: string; revised: string; annotation: string }[] = changeLog.map((c) => ({
+    type: (c.kind === "embed" ? "addition" : "modification") as "addition" | "modification",
+    label: c.kind === "embed" ? "Key message embedded" : c.kind === "structure" ? "Structural improvement" : "Flagged for review",
+    original: "",
+    revised: c.text,
+    annotation: c.kind === "embed"
+      ? "A key message from your Project Set-Up was woven into the content."
+      : c.kind === "structure"
+      ? "A structural change was made to improve LLM citation readiness."
+      : "This item has been flagged for manual review before publishing.",
+  }));
+
+  // Semantic phrases: surface the embedded key messages as the most citable phrases.
+  const semanticPhrases: { phrase: string; relevance: number }[] = changeLog
+    .filter((c) => c.kind === "embed")
+    .map((c, i) => ({
+      phrase: c.text.length > 90 ? c.text.slice(0, 87) + "…" : c.text,
+      relevance: Math.max(0.55, 1 - i * 0.08),
+    }));
 
   const hasAnyContent = articleHeadline.trim().length > 0 || standfirst.trim().length > 0 || bodyCopy.trim().length > 0;
 
