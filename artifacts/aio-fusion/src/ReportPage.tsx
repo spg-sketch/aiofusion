@@ -505,13 +505,38 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.navy }}>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            style={{ background: vars.navy }}
+          >
             <Printer size={16} /> Print
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.navy }}>
+          <button
+            onClick={() => {
+              const shareData = {
+                title: `AIO Fusion – Authority & Activity Report · ${activeClient.name}`,
+                text: "Here is the AIO Fusion Measure & Report scorecard.",
+                url: window.location.href,
+              };
+              if (navigator.share && navigator.canShare?.(shareData)) {
+                void navigator.share(shareData);
+              } else {
+                void navigator.clipboard.writeText(window.location.href).then(() => {
+                  alert("Link copied to clipboard.");
+                });
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            style={{ background: vars.navy }}
+          >
             <Share2 size={16} /> Share
           </button>
-          <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95" style={{ background: vars.accent }}>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white whitespace-nowrap transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:shadow-md hover:brightness-110 active:scale-95"
+            style={{ background: vars.accent }}
+          >
             <Download size={16} /> Export PDF
           </button>
         </div>
