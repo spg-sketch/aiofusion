@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { syncTechGeoForProject, pushServerTechGeo } from "./lib/auditSync";
+import { syncTechGeoForProject, pushServerTechGeo, deleteServerTechGeo } from "./lib/auditSync";
 import { getWebsite } from "./IntakeForm";
 import InfoTip from "./InfoTip";
 import CountdownBanner from "./components/CountdownBanner";
@@ -24,6 +24,8 @@ import {
   Tag,
   Save,
   Download,
+  Trash2,
+  Clock,
 } from "lucide-react";
 
 type Client = { id: string; name: string };
@@ -290,6 +292,26 @@ export default function SeoAuditPage({
     window.dispatchEvent(new Event("aio:saved-audits-changed"));
   }
 
+  async function deleteAudit(id: string) {
+    const next = savedTechGeo.filter((s) => s.id !== id);
+    persistSavedTechGeo(activeClient.id, next);
+    setSavedTechGeo(next);
+    if (result && savedTechGeo.find((s) => s.id === id)?.result === result) {
+      setResult(null);
+      setJustSaved(false);
+    }
+    await deleteServerTechGeo(activeClient.id, id).catch(() => null);
+    window.dispatchEvent(new Event("aio:saved-audits-changed"));
+  }
+
+  function loadAudit(s: SavedTechGeo) {
+    setResult(s.result);
+    setUrl(s.result.url);
+    setJustSaved(true);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function runAudit() {
     if (!url.trim()) return;
     setLoading(true);
@@ -541,6 +563,50 @@ export default function SeoAuditPage({
               Get a full technical website analysis including meta tags, heading structure, schema markup,
               AI crawler readiness, Google PageSpeed scores, and prioritised GEO recommendations.
             </p>
+          </div>
+        )}
+
+        {savedTechGeo.length > 0 && (
+          <div className="mt-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock size={15} style={{ color: vars.g400 }} />
+              <h3 className="text-[13px] font-semibold uppercase tracking-wider" style={{ color: vars.g400 }}>Previous audits</h3>
+            </div>
+            <div className="space-y-2">
+              {savedTechGeo.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-3 rounded-xl border px-4 py-3"
+                  style={{ background: "white", borderColor: vars.g200 }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium truncate" style={{ color: vars.navy }}>{s.result.url}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: vars.g400 }}>
+                      {new Date(s.savedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      {" · "}Saved
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-bold flex-shrink-0" style={{ background: s.score >= 70 ? "#EFF7F2" : s.score >= 40 ? "#FFF8EC" : "#FEE2E2", color: s.score >= 70 ? vars.green : s.score >= 40 ? vars.amber : vars.red }}>
+                    {s.score}/100
+                  </div>
+                  <button
+                    onClick={() => loadAudit(s)}
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-semibold flex-shrink-0"
+                    style={{ background: vars.accent, color: "white" }}
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => void deleteAudit(s.id)}
+                    aria-label="Delete audit"
+                    className="p-1.5 rounded-lg flex-shrink-0 hover:opacity-70"
+                    style={{ color: vars.g400 }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
