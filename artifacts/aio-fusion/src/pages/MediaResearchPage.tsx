@@ -347,7 +347,7 @@ function MediaResearchPage() {
             </div>
           ) : (
             <select value={selectedId} onChange={(e) => { setSelectedId(e.target.value); setMediaList(null); setMediaError(""); }} className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: vars.g200 }}>
-              <option value="">- Choose a piece from Archive -</option>
+              <option value="">- Choose a piece from the Content Library -</option>
               {eligible.map((a) => <option key={a.id} value={a.id}>{a.title} ({a.contentType}{a.status ? ` · ${a.status}` : ""})</option>)}
             </select>
           );
