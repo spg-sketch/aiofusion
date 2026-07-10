@@ -5,6 +5,7 @@ import { getSpokespeople, getKeyMessages } from "./IntakeForm";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckPage";
 import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
+import { apiBase } from "./lib/contentAi";
 import {
   Download,
   Printer,
@@ -28,6 +29,7 @@ import {
   Calendar,
   Globe,
   PieChart,
+  Loader2,
 } from "lucide-react";
 
 const vars = {
@@ -438,6 +440,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const [aiSearch, setAiSearch] = useState({ from: rangeFrom, to: rangeTo, region: "UK", project: activeClient.name, spokesperson: "", contentTitle: "" });
   const [aiResults, setAiResults] = useState<Array<{ title: string; type: string; publication: string; reach: number; scores: Record<string, number>; link: string }>>([]);
   const [aiSearched, setAiSearched] = useState(false);
+  const [aiSearching, setAiSearching] = useState(false);
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
 
   // ---- Tracker spreadsheet search/filter state ----
   const trackerFilterDefaults = { from: "", to: "", type: "All", message: "", spokesperson: "All", category: "All", mediaTitle: "All" };
@@ -479,9 +483,38 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     score: 7,
   });
 
-  function runAiSearch() {
-    setAiSearched(true);
+  async function runAiSearch() {
+    if (aiSearching) return;
+    setAiSearching(true);
+    setAiSearched(false);
+    setAiSearchError(null);
     setAiResults([]);
+    try {
+      const resp = await fetch(`${apiBase()}/api/content/coverage-search`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName:  aiSearch.project || activeClient.name,
+          dateFrom:     aiSearch.from,
+          dateTo:       aiSearch.to,
+          region:       aiSearch.region,
+          spokesperson: aiSearch.spokesperson,
+          contentTitle: aiSearch.contentTitle,
+        }),
+      });
+      const data = await resp.json() as { items?: typeof aiResults; error?: string };
+      if (!resp.ok) {
+        setAiSearchError(data.error ?? "The search could not complete. Please try again.");
+      } else {
+        setAiResults(Array.isArray(data.items) ? data.items : []);
+        setAiSearched(true);
+      }
+    } catch {
+      setAiSearchError("Network error — please check your connection and try again.");
+    } finally {
+      setAiSearching(false);
+    }
   }
 
   function addAiResultToTracker(r: typeof aiResults[number]) {
@@ -1025,8 +1058,16 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={runAiSearch} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: vars.accent }}>
-                <Search size={14} /> Run AI Coverage Search
+              <button
+                onClick={() => void runAiSearch()}
+                disabled={aiSearching}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: vars.accent }}
+              >
+                {aiSearching
+                  ? <><Loader2 size={14} className="animate-spin" /> Searching…</>
+                  : <><Search size={14} /> Run AI Coverage Search</>
+                }
               </button>
               {aiSearched && aiResults.length > 0 && (
                 <>
@@ -1046,8 +1087,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 </>
               )}
             </div>
-            {aiSearched && aiResults.length === 0 && (
-              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No matches for the spokesperson or content title entered. Clear those fields for a broader sweep, or adjust the wording and try again.</p>
+            {aiSearchError && (
+              <p className="mt-4 text-[12px] font-light" style={{ color: vars.accent }}>{aiSearchError}</p>
+            )}
+            {aiSearched && aiResults.length === 0 && !aiSearchError && (
+              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No coverage found in Claude's training data for these search parameters. Try a broader search — remove the spokesperson or content title filters, or use a wider date range.</p>
             )}
 
             {aiSearched && (

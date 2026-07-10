@@ -1045,4 +1045,142 @@ contentAiRouter.post(
   },
 );
 
+// ── Coverage Search ──────────────────────────────────────────────────────────
+// Uses Claude to surface real earned media coverage the model knows about for
+// the given company. Returns an empty array when no confident results are found;
+// never fabricates coverage.
+const COVERAGE_CONTENT_TYPES = [
+  "Press Release",
+  "Article (Trade Publication)",
+  "Case Study",
+  "Whitepaper",
+  "Blog",
+  "Social",
+  "Conference",
+  "Award",
+  "Directory",
+] as const;
+
+contentAiRouter.post(
+  "/content/coverage-search",
+  contentAiLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const companyName  = asString(body.companyName,  200);
+    const dateFrom     = asString(body.dateFrom,       20);
+    const dateTo       = asString(body.dateTo,         20);
+    const region       = asString(body.region,        100);
+    const spokesperson = asString(body.spokesperson,  200);
+    const contentTitle = asString(body.contentTitle,  200);
+
+    if (!companyName.trim()) {
+      res.status(400).json({ error: "Company name is required." });
+      return;
+    }
+
+    const client = createAnthropicClient();
+    if (!client) {
+      res.status(503).json({ error: "AI is not configured. Please try again later." });
+      return;
+    }
+
+    const contextLines: string[] = [`Company: ${companyName.trim()}`];
+    if (dateFrom)             contextLines.push(`Coverage from: ${dateFrom}`);
+    if (dateTo)               contextLines.push(`Coverage to:   ${dateTo}`);
+    if (region.trim())        contextLines.push(`Region: ${region.trim()}`);
+    if (spokesperson.trim())  contextLines.push(`Spokesperson filter: ${spokesperson.trim()}`);
+    if (contentTitle.trim())  contextLines.push(`Content title hint: ${contentTitle.trim()}`);
+
+    const typesList = COVERAGE_CONTENT_TYPES.map(t => `"${t}"`).join(", ");
+
+    const prompt =
+      `You are a PR research assistant. Your task is to identify real, verifiable earned media coverage for the company below.\n\n` +
+      `${BRITISH_RULE}\n\n` +
+      `IMPORTANT RULES:\n` +
+      `- Only list coverage items you are genuinely confident exist based on your training data.\n` +
+      `- Do NOT invent, fabricate, or hallucinate any coverage. If you are uncertain, omit the item.\n` +
+      `- If spokesperson or content-title filters are supplied, return only items that match; if nothing matches, return an empty array.\n` +
+      `- Estimate audience reach (monthly unique visitors or circulation) as a realistic integer.\n` +
+      `- Score each item 1–10 for how strongly it establishes AI authority for the company (chatgpt and claude scores reflect how likely each model is to cite this piece).\n\n` +
+      `${contextLines.join("\n")}\n\n` +
+      `Return ONLY a top-level JSON array (zero or more items). Each item:\n` +
+      `{\n` +
+      `  "title": "<exact or near-exact article/press release title>",\n` +
+      `  "type": <one of ${typesList}>,\n` +
+      `  "publication": "<publication or platform name>",\n` +
+      `  "reach": <integer>,\n` +
+      `  "scores": { "chatgpt": <1-10>, "claude": <1-10> },\n` +
+      `  "link": "<URL if known, otherwise empty string>"\n` +
+      `}\n\n` +
+      `No commentary, no markdown — just the JSON array.`;
+
+    try {
+      const message = await Promise.race([
+        client.messages.create({
+          model: MODEL,
+          max_tokens: 2048,
+          temperature: 0,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), STREAM_TIMEOUT_MS),
+        ),
+      ]);
+
+      void logTokenUsage(
+        req.account.username,
+        "coverage-search",
+        MODEL,
+        (message as { usage?: { input_tokens?: number } }).usage?.input_tokens ?? 0,
+        (message as { usage?: { output_tokens?: number } }).usage?.output_tokens ?? 0,
+      );
+
+      const raw =
+        (message as { content?: { type?: string; text?: string }[] }).content?.[0]?.type === "text"
+          ? (message as { content: { type: string; text: string }[] }).content[0].text
+          : "[]";
+
+      // Extract JSON array from the response
+      let parsed: unknown = [];
+      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const candidate = (fenced ? fenced[1] : raw).trim();
+      const arrStart = candidate.indexOf("[");
+      const arrEnd   = candidate.lastIndexOf("]");
+      if (arrStart !== -1 && arrEnd > arrStart) {
+        const slice = candidate.slice(arrStart, arrEnd + 1);
+        try { parsed = JSON.parse(slice); }
+        catch { try { parsed = JSON.parse(sanitiseJsonControlChars(slice)); } catch { parsed = []; } }
+      }
+
+      if (!Array.isArray(parsed)) parsed = [];
+
+      const validTypes = new Set<string>(COVERAGE_CONTENT_TYPES);
+      const items = (parsed as Record<string, unknown>[])
+        .map(item => ({
+          title:       typeof item.title       === "string"  ? item.title.trim().slice(0, 300)       : "",
+          type:        typeof item.type        === "string" && validTypes.has(item.type) ? item.type : "Article (Trade Publication)",
+          publication: typeof item.publication === "string"  ? item.publication.trim().slice(0, 200) : "",
+          reach:       typeof item.reach       === "number" && item.reach >= 0 ? Math.round(item.reach) : 0,
+          scores: {
+            chatgpt: typeof (item.scores as Record<string,number>)?.chatgpt === "number"
+              ? Math.max(1, Math.min(10, Math.round((item.scores as Record<string,number>).chatgpt))) : 5,
+            claude:  typeof (item.scores as Record<string,number>)?.claude  === "number"
+              ? Math.max(1, Math.min(10, Math.round((item.scores as Record<string,number>).claude)))  : 5,
+          },
+          link: typeof item.link === "string" ? item.link.trim().slice(0, 500) : "",
+        }))
+        .filter(item => item.title.length > 0);
+
+      res.json({ items });
+    } catch (err) {
+      logger.error({ err }, "content-ai: coverage-search call failed");
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Coverage search could not complete. Please try again." });
+      }
+    }
+  },
+);
+
 export default contentAiRouter;
