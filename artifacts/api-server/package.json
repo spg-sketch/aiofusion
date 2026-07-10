@@ -27,6 +27,7 @@
     "openid-client": "^6.8.4",
     "pino": "^9",
     "pino-http": "^10",
+    "resend": "^6.17.2",
     "undici": "^8.5.0"
   },
   "devDependencies": {

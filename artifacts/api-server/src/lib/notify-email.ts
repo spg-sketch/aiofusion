@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { logger } from "./logger";
 
 const ALERT_RECIPIENTS = [
@@ -7,22 +7,14 @@ const ALERT_RECIPIENTS = [
   "spg@bluhalo.com",
 ];
 
-function createTransport(): nodemailer.Transporter | null {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+function getClient(): Resend | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  return new Resend(key);
 }
 
 function fromAddress(): string {
-  return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? "noreply@aiofusion.ai";
+  return process.env.RESEND_FROM ?? "AIO Fusion Alerts <alerts@aiofusion.ai>";
 }
 
 export async function sendSpikeAlert(opts: {
@@ -31,11 +23,12 @@ export async function sendSpikeAlert(opts: {
   prior7Cost: number;
   ratio: number;
 }): Promise<void> {
-  const transport = createTransport();
-  if (!transport) {
-    logger.warn({ slug: opts.slug }, "notify-email: SMTP not configured — spike alert not sent");
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — spike alert not sent");
     return;
   }
+
   const subject = `[AIO Fusion] Spend spike detected — ${opts.slug}`;
   const text = [
     `A content AI spend spike has been detected on account: ${opts.slug}`,
@@ -51,9 +44,9 @@ export async function sendSpikeAlert(opts: {
   ].join("\n");
 
   try {
-    await transport.sendMail({
+    await resend.emails.send({
       from: fromAddress(),
-      to: ALERT_RECIPIENTS.join(", "),
+      to: ALERT_RECIPIENTS,
       subject,
       text,
     });
@@ -68,11 +61,12 @@ export async function sendQuotaBreachAlert(opts: {
   callCount: number;
   limit: number;
 }): Promise<void> {
-  const transport = createTransport();
-  if (!transport) {
-    logger.warn({ slug: opts.slug }, "notify-email: SMTP not configured — quota breach alert not sent");
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — quota breach alert not sent");
     return;
   }
+
   const subject = `[AIO Fusion] Fair usage limit reached — ${opts.slug}`;
   const text = [
     `Account ${opts.slug} has reached their 30-day content AI fair usage limit.`,
@@ -88,14 +82,51 @@ export async function sendQuotaBreachAlert(opts: {
   ].join("\n");
 
   try {
-    await transport.sendMail({
+    await resend.emails.send({
       from: fromAddress(),
-      to: ALERT_RECIPIENTS.join(", "),
+      to: ALERT_RECIPIENTS,
       subject,
       text,
     });
     logger.info({ slug: opts.slug, callCount: opts.callCount }, "notify-email: quota breach alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send quota breach alert (non-fatal)");
+  }
+}
+
+export async function sendSpendCapAlert(opts: {
+  slug: string;
+  spendGbp: number;
+  limitGbp: number;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — spend cap alert not sent");
+    return;
+  }
+
+  const subject = `[AIO Fusion] Monthly spend cap reached — ${opts.slug}`;
+  const text = [
+    `Account ${opts.slug} has hit their monthly GBP spend cap.`,
+    ``,
+    `Current month spend: £${opts.spendGbp.toFixed(4)}`,
+    `Monthly cap:         £${opts.limitGbp.toFixed(2)}`,
+    ``,
+    `The account is now receiving 429 responses on all AI routes until the cap is raised`,
+    `or the calendar month resets.`,
+    ``,
+    `Admin token usage panel: https://aiofusion.ai`,
+  ].join("\n");
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: ALERT_RECIPIENTS,
+      subject,
+      text,
+    });
+    logger.info({ slug: opts.slug, spendGbp: opts.spendGbp }, "notify-email: spend cap alert sent");
+  } catch (err) {
+    logger.warn({ err, slug: opts.slug }, "notify-email: failed to send spend cap alert (non-fatal)");
   }
 }
