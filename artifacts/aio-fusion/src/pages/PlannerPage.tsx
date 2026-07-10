@@ -199,8 +199,22 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const paper = "#FBF6EC";
   const accentPink = "#C8497A";
   const accentSoft = "#FBE3ED";
+
+  useEffect(() => {
+    let el: HTMLElement | null = topScrollRef.current;
+    while (el) {
+      const oy = window.getComputedStyle(el).overflowY;
+      if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: 0 });
+        return;
+      }
+      el = el.parentElement;
+    }
+    window.scrollTo({ top: 0 });
+  }, []);
+
   return (
-    <div className="p-6 sm:p-8 max-w-[1400px] mx-auto">
+    <div ref={topScrollRef} className="p-6 sm:p-8 max-w-[1400px] mx-auto">
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <CalendarDays size={26} color="#ffffff" />

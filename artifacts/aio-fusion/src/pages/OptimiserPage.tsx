@@ -452,8 +452,22 @@ PERMITTED ENHANCEMENTS - apply all of the following:
 OUTPUT INSTRUCTIONS:
 - Provide the full rewritten and enhanced document.`;
 
+  const pageTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let el: HTMLElement | null = pageTopRef.current;
+    while (el) {
+      const oy = window.getComputedStyle(el).overflowY;
+      if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: 0 });
+        return;
+      }
+      el = el.parentElement;
+    }
+    window.scrollTo({ top: 0 });
+  }, []);
+
   return (
-      <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+      <div ref={pageTopRef} className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">

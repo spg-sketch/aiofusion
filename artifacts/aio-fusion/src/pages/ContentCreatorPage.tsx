@@ -476,8 +476,22 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
   const pitchColor = isOpt("pitch") ? optimisedColor : undefined;
   const actionNotesColor = isOpt("actionNotes") ? optimisedColor : undefined;
 
+  const pageTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let el: HTMLElement | null = pageTopRef.current;
+    while (el) {
+      const oy = window.getComputedStyle(el).overflowY;
+      if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: 0 });
+        return;
+      }
+      el = el.parentElement;
+    }
+    window.scrollTo({ top: 0 });
+  }, []);
+
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
+    <div ref={pageTopRef} className="px-4 sm:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
       <div className="mb-8 flex items-start justify-between flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-3 mb-3">
