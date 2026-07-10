@@ -575,7 +575,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
               <Sparkles size={14} color="#C8497A" /> Create a first draft with AI
             </p>
             <p className="text-[13px] font-normal mt-1" style={{ color: vars.g600 }}>
-              Fill in the fields below, then click <strong>Create Draft</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
+              Fill in the fields below, then click <strong>Create Content</strong> in the Content Actions bar at the bottom of the page. Writes a full {contentType.toLowerCase()} from your headline, brief and signed-off Project Data using {createPromptLabel}. You can then refine any field, or discard it.
             </p>
             {generated && draftSnapshot && (
               <div className="mt-3">
@@ -798,7 +798,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
             style={{ background: "#C8497A" }}
             title="Write a full draft from your headline, the brief and your Project Data"
           >
-            {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Draft</>}
+            {generating ? <><Loader2 size={14} className="animate-spin" /> Writing draft…</> : generated ? <><Sparkles size={14} /> Regenerate</> : <><Sparkles size={14} /> Create Content</>}
           </button>
           <button
             onClick={downloadDoc}
