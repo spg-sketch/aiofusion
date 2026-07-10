@@ -235,7 +235,7 @@ function SidebarContent({
           <button
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
             className={`group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all ${
-              currentPage === "dashboard" ? "" : "hover:bg-white/15"
+              currentPage === "dashboard" ? "" : "hover:bg-white/25"
             }`}
             style={{
               background: currentPage === "dashboard" ? "rgba(255,255,255,0.16)" : undefined,
@@ -244,7 +244,7 @@ function SidebarContent({
             }}
           >
             <span
-              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 group-hover:scale-110 group-hover:bg-white/[0.18]"
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200 group-hover:scale-110 group-hover:-translate-y-0.5 group-hover:bg-white/[0.55]"
               style={{
                 color: "#ffffff",
               }}
