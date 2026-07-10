@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { streamContent, buildProjectDataText, escapeHtml, safeHttpUrl, GenerationProgress, downloadWordDocument } from "../lib/contentAi";
+import { buildProjectDataText, escapeHtml, safeHttpUrl, downloadWordDocument, apiBase } from "../lib/contentAi";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { getKeyMessages, getProjectMediaCategories } from "../IntakeForm";
 import { Labelled, CategoryPickerModal } from "./shared";
@@ -80,16 +80,39 @@ function MarketingIntelligencePage() {
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [results, setResults] = useState<EventItem[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   const MARKETING_TYPES = ["Trade Conferences", "Conference Sponsorships", "Trade Speaker", "Trade Awards", "Networking"];
 
-  const search = () => {
+  const search = async () => {
     setSearching(true);
     setResults(null);
-    window.setTimeout(() => {
-      setResults([]);
+    setSearchError("");
+    try {
+      const resp = await fetch(`${apiBase()}/api/content/events-search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          marketingTypes: marketingType,
+          categories,
+          period,
+          region,
+          projectData: buildProjectDataText(),
+        }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        throw new Error((data as { error?: string } | null)?.error ?? "Search failed. Please try again.");
+      }
+      const data = await resp.json() as { events: EventItem[] };
+      setResults(Array.isArray(data.events) ? data.events : []);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : "Search could not complete. Please try again.");
+      setResults(null);
+    } finally {
       setSearching(false);
-    }, 700);
+    }
   };
   void EVENTS_RESEARCH_LLM_PROMPT_V2;
 
@@ -287,6 +310,14 @@ function MarketingIntelligencePage() {
           )}
         </div>
       </div>
+
+      {/* Error */}
+      {searchError && (
+        <div className="rounded-2xl border p-5 flex items-start gap-3" style={{ background: "rgba(200,73,122,0.06)", borderColor: "rgba(200,73,122,0.25)" }}>
+          <AlertTriangle size={16} style={{ color: "#C8497A", flexShrink: 0, marginTop: 2 }} />
+          <p className="text-[13px]" style={{ color: vars.navy }}>{searchError}</p>
+        </div>
+      )}
 
       {/* Results */}
       {results && (

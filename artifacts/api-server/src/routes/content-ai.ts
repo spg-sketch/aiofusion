@@ -1183,4 +1183,104 @@ contentAiRouter.post(
   },
 );
 
+// ---------------------------------------------------------------------------
+// POST /events-search — find awards, conferences and speaker opportunities
+// ---------------------------------------------------------------------------
+contentAiRouter.post(
+  "/events-search",
+  contentAiLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const marketingTypes = asStringArray(body.marketingTypes);
+      const categories    = asStringArray(body.categories);
+      const period        = asString(body.period, 10) || "6m";
+      const region        = asString(body.region, 10) || "UK";
+      const projectData   = asString(body.projectData, MAX_PROJECT_DATA_CHARS);
+
+      const client = createAnthropicClient();
+      if (!client) {
+        res.status(503).json({ error: "AI service is not configured. Please try again later." });
+        return;
+      }
+
+      const periodLabel = period === "12m" ? "next 12 months" : "next 6 months";
+      const regionLabel = region === "NA" ? "North America" : "United Kingdom";
+      const typesLabel  = marketingTypes.length ? marketingTypes.join(", ") : "Trade Conferences";
+      const catsLabel   = categories.length ? categories.join(", ") : "General business";
+
+      const prompt =
+        `You are a senior PR event-intelligence researcher specialising in ${regionLabel}.\n` +
+        `Find real, named marketing events matching the parameters below and return structured JSON.\n\n` +
+        `PARAMETERS:\n` +
+        `- Marketing types: ${typesLabel}\n` +
+        `- Business categories: ${catsLabel}\n` +
+        `- Period: ${periodLabel}\n` +
+        `- Region: ${regionLabel}\n\n` +
+        (projectData ? `PROJECT DATA (use to assess relevance and personalise results):\n"""\n${projectData}\n"""\n\n` : "") +
+        `RULES:\n` +
+        `- Return up to 8 real named events. Do NOT invent event names, URLs, emails or deadlines.\n` +
+        `- Events with confirmed dates within the next 12 months: confirmStatus "C".\n` +
+        `- Events held in the past 24 months but unconfirmed forward: confirmStatus "U".\n` +
+        `- authority: 0-100 reflecting LLM citation potential + audience quality for this client.\n` +
+        `- Each event needs 1-3 opportunities (Conference entry, Award entry, Speaker, or Sponsorship).\n` +
+        `- Flag the top 3 most immediately actionable opportunities (open entry windows / live deadlines) with actionable: true.\n\n` +
+        `Return JSON only, no commentary, exactly this shape:\n` +
+        `{"events": [{"rank": 1, "name": "...", "url": "https://...", "category": "...", "date": "Month YYYY or date range", "audience": "one sentence", "titleDescription": "one sentence on the event owner / format", "location": "city or virtual", "confirmStatus": "C"|"U", "authority": 0-100, "relevanceReason": "one sentence", "opportunities": [{"type": "Conference entry"|"Award entry"|"Speaker"|"Sponsorship", "cost": "...", "deadline": "...", "contactDetails": "optional", "notes": "optional", "actionable": true|false}]}]}`;
+
+      const message = await client.messages.create({
+        model: MODEL,
+        max_tokens: 4096,
+        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
+      });
+
+      const raw = message.content?.[0]?.type === "text"
+        ? (message.content[0] as { type: string; text: string }).text
+        : "{}";
+
+      const account = (req as Request & { account?: { username?: string } }).account;
+      void logTokenUsage(account?.username ?? "unknown", "events-search", MODEL, message.usage.input_tokens, message.usage.output_tokens);
+
+      const parsed   = extractJson(raw);
+      const rawItems = Array.isArray(parsed?.events) ? parsed.events as Record<string, unknown>[] : [];
+
+      const VALID_OP_TYPES = new Set(["Conference entry", "Award entry", "Speaker", "Sponsorship"]);
+
+      const events = rawItems
+        .map((e, i) => ({
+          rank:             typeof e.rank === "number" ? e.rank : i + 1,
+          name:             typeof e.name === "string" ? e.name.trim() : "",
+          url:              typeof e.url === "string"  ? e.url.trim()  : "",
+          category:         typeof e.category === "string" ? e.category.trim() : "",
+          date:             typeof e.date === "string" ? e.date.trim() : "",
+          audience:         typeof e.audience === "string" ? e.audience.trim() : "",
+          titleDescription: typeof e.titleDescription === "string" ? e.titleDescription.trim() : "",
+          location:         typeof e.location === "string" ? e.location.trim() : "",
+          confirmStatus:    (e.confirmStatus === "C" || e.confirmStatus === "U") ? e.confirmStatus : "U" as const,
+          authority:        typeof e.authority === "number" ? Math.max(0, Math.min(100, Math.round(e.authority))) : 50,
+          relevanceReason:  typeof e.relevanceReason === "string" ? e.relevanceReason.trim() : "",
+          opportunities: Array.isArray(e.opportunities)
+            ? (e.opportunities as Record<string, unknown>[]).map((o) => ({
+                type:           typeof o.type === "string" && VALID_OP_TYPES.has(o.type) ? o.type : "Conference entry",
+                cost:           typeof o.cost === "string" ? o.cost.trim() : "TBC",
+                deadline:       typeof o.deadline === "string" ? o.deadline.trim() : "TBC",
+                contactDetails: typeof o.contactDetails === "string" && o.contactDetails.trim() ? o.contactDetails.trim() : undefined,
+                notes:          typeof o.notes === "string" && o.notes.trim() ? o.notes.trim() : undefined,
+                actionable:     o.actionable === true,
+              }))
+            : [],
+        }))
+        .filter((e) => e.name.length > 0);
+
+      res.json({ events });
+    } catch (err) {
+      logger.error({ err }, "content-ai: events-search failed");
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Events search could not complete. Please try again." });
+      }
+    }
+  },
+);
+
 export default contentAiRouter;
