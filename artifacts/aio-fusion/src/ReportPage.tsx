@@ -260,6 +260,25 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   const earnedAuthorityScore = Math.min(100, Math.round(inRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)));
   const prCoverageCount = earnedRowsForCoverage.length;
 
+  // ── Date-range-aware trend: compare current period to the prior period of equal length ──
+  const priorRangeTo = rangeFrom;
+  const priorRangeFrom = useMemo(() => {
+    const fromMs = new Date(`${rangeFrom}T00:00:00`).getTime();
+    const toMs = new Date(`${rangeTo}T00:00:00`).getTime();
+    const duration = toMs - fromMs;
+    return new Date(fromMs - duration).toISOString().slice(0, 10);
+  }, [rangeFrom, rangeTo]);
+  const priorInRange = useMemo(
+    () => tracker.filter(r => r.date >= priorRangeFrom && r.date < priorRangeTo),
+    [tracker, priorRangeFrom, priorRangeTo],
+  );
+  const priorEarnedAuthorityScore = Math.min(100, Math.round(
+    priorInRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)
+  ));
+  const trackerTrendDelta: number | null = (inRange.length > 0 || priorInRange.length > 0)
+    ? earnedAuthorityScore - priorEarnedAuthorityScore
+    : null;
+
   // ── Category breakdown, straight from the latest Website Visibility audit ──
   const diagnosticCategories = latestDiagnostic?.result.categories ?? [];
   const categoryScores = diagnosticCategories.map((c) => ({
@@ -732,9 +751,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </div>
           </div>
 
+          {inRange.length === 0 && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-xl text-[13px] font-light" style={{ background: "#FBE3ED", color: "#8A3355" }}>
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>No Earned Media Tracker entries found in this date range. Add coverage in the Earned Media Tracker tab, or adjust the dates above.</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatTile label="Earned Media Authority Score" value={String(earnedAuthorityScore)} sub="weighted from tracker" color={vars.navy} icon={Sparkles} />
-            <StatTile label="Earned Media Authority Trend" value={earnedTrendDelta === null ? (latestAudit ? "New" : "–") : `${earnedTrendDelta >= 0 ? "+" : ""}${earnedTrendDelta}`} sub="vs prior period" color={earnedTrendDelta !== null && earnedTrendDelta < 0 ? vars.red : vars.green} icon={TrendingUp} />
+            <StatTile label="Earned Media Authority Trend" value={trackerTrendDelta === null ? "–" : `${trackerTrendDelta >= 0 ? "+" : ""}${trackerTrendDelta}`} sub="vs prior period of equal length" color={trackerTrendDelta !== null && trackerTrendDelta < 0 ? vars.red : vars.green} icon={TrendingUp} />
             <StatTile label="Audience Reach" value={`${(audienceReach / 1_000_000).toFixed(2)}M`} sub="period total" color={vars.navy} icon={Eye} />
             <StatTile label="Authority / piece" value={String(authorityPerPiece)} sub="avg score across rows" color={vars.accent} icon={BarChart3} />
           </div>
