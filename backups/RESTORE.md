@@ -31,6 +31,41 @@ backup — every dump is checked against the live database before it is kept.
    (`BACKUP_RETENTION`, default **14**). Pruning runs **only after a successful
    verify**, so one bad run can never delete all known-good backups.
 
+## Failure notifications (Slack / webhook)
+
+Set `BACKUP_NOTIFY_WEBHOOK` to a [Slack Incoming Webhook URL](https://api.slack.com/messaging/webhooks)
+(or any endpoint that accepts a JSON `POST` with a `text` field) to receive
+automatic alerts whenever a backup or dry-run restore finishes — successfully or
+not.
+
+| Event | Notification |
+|---|---|
+| Backup succeeds | ✅ summary: backup name, project row count, compressed size, sha256 |
+| Backup verification fails | ❌ failure reason + quarantine path |
+| Backup job crashes (unexpected error) | ❌ error detail |
+| `restore:verify` passes | ✅ summary: backup name, all table row counts |
+| `restore:verify` fails | ❌ failed table checks |
+| `restore:verify` crashes (unexpected error) | ❌ error detail |
+
+If `BACKUP_NOTIFY_WEBHOOK` is **not set**, all notification calls are silent
+no-ops — existing behaviour is fully preserved.
+
+A delivery failure (network error, non-2xx response) prints a `⚠️` console
+warning but **never** crashes the backup or restore job.
+
+### Setting up the webhook
+
+1. In your Slack workspace go to **Apps → Incoming Webhooks → Add new
+   configuration** and select the target channel.
+2. Copy the `https://hooks.slack.com/services/…` URL.
+3. Set it as an environment variable on the Replit Scheduled Deployment
+   (and optionally on the app itself for `restore:verify` runs):
+   ```
+   BACKUP_NOTIFY_WEBHOOK=https://hooks.slack.com/services/...
+   ```
+4. Any HTTP endpoint that accepts `{"text": "…"}` via `POST` works — it does
+   not have to be Slack.
+
 ## Schedule (automatic, no human action)
 
 Run as a **Replit Scheduled Deployment** (cron-style job that does not depend on

@@ -23,6 +23,20 @@ import path from "node:path";
 import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { getBackupBucket, getBackupLocation } from "./lib/object-storage.js";
+import { notifyFailure, notifySuccess } from "./lib/notify.js";
+
+/**
+ * Thrown when a verify-restore failure has already been notified inside the
+ * command function. The top-level catch uses this to skip sending a second
+ * (misleading "unexpected error") notification for the same event.
+ */
+class AlreadyNotifiedError extends Error {
+  readonly alreadyNotified = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "AlreadyNotifiedError";
+  }
+}
 
 async function listBackups(): Promise<
   { name: string; base: string; updated: string }[]
@@ -205,17 +219,30 @@ async function cmdVerifyRestore(): Promise<void> {
   for (const line of report) console.log(line);
 
   if (failures.length > 0) {
-    throw new Error(
+    const failureDetail =
       `[restore] ❌ Dry-run restore FAILED (${failures.length} issue(s)):\n` +
+      failures.map((f) => `  • ${f}`).join("\n");
+    await notifyFailure(
+      `AIO Fusion dry-run restore FAILED for ${path.basename(objectName)}\n` +
         failures.map((f) => `  • ${f}`).join("\n"),
+      { label: "restore notify" },
     );
+    // Use AlreadyNotifiedError so the top-level catch doesn't send a second
+    // (misleading "unexpected error") notification for the same failure.
+    throw new AlreadyNotifiedError(failureDetail);
   }
 
+  const backupName = path.basename(objectName);
+  const restoreSummary =
+    `AIO Fusion dry-run restore PASSED for ${backupName}\n` +
+    `  projects: ${manifest.projectsCount} row(s) confirmed\n` +
+    report.join("\n");
   console.log(
     `\n[restore] ✅ Dry-run restore PASSED: all core tables present and populated.\n` +
-      `  Backup: ${path.basename(objectName)}\n` +
+      `  Backup: ${backupName}\n` +
       `  projects: ${manifest.projectsCount} row(s) confirmed.`,
   );
+  await notifySuccess(restoreSummary, { label: "restore notify" });
 }
 
 async function main(): Promise<void> {
@@ -234,7 +261,19 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  const detail = err?.message || String(err);
   console.error(`[restore] ❌ ${err?.stack || err}`);
+  // Only notify for --verify-restore (scheduled), not --list/--download
+  // (interactive). Skip if the error was already notified inside the command
+  // function (AlreadyNotifiedError) to avoid duplicate alerts.
+  const alreadyNotified =
+    err instanceof AlreadyNotifiedError || err?.alreadyNotified === true;
+  if (process.argv.includes("--verify-restore") && !alreadyNotified) {
+    await notifyFailure(
+      `AIO Fusion restore:verify FAILED with an unexpected error\nError: ${detail}`,
+      { label: "restore notify" },
+    );
+  }
   process.exit(1);
 });

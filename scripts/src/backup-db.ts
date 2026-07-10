@@ -21,6 +21,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { getBackupBucket, getBackupLocation } from "./lib/object-storage.js";
+import { notifyFailure, notifySuccess } from "./lib/notify.js";
 
 // Keep the last N verified daily backups. One bad run can never overwrite all
 // known-good backups because pruning only runs after a successful verify and
@@ -167,12 +168,19 @@ async function main(): Promise<void> {
   if (verifyFailed.length > 0) {
     const failedPath = `${plainPath}.failed`;
     await rename(plainPath, failedPath);
+    const verifyMsg = verifyFailed.join("; ");
     console.error(
-      `[backup] ❌ VERIFICATION FAILED: ${verifyFailed.join("; ")}`,
+      `[backup] ❌ VERIFICATION FAILED: ${verifyMsg}`,
     );
     console.error(
       `[backup] Quarantined unverified dump at ${failedPath}. ` +
         `Existing good backups were NOT pruned. No good backup was produced.`,
+    );
+    await notifyFailure(
+      `AIO Fusion backup VERIFICATION FAILED for ${baseName}\n` +
+        `Reason: ${verifyMsg}\n` +
+        `Quarantined at ${failedPath}. Existing good backups were NOT pruned.`,
+      { label: "backup notify" },
     );
     process.exit(1);
   }
@@ -212,10 +220,15 @@ async function main(): Promise<void> {
   await bucket.file(`${prefix}/latest.json`).save(JSON.stringify(manifest, null, 2), {
     contentType: "application/json",
   });
+  const successSummary =
+    `AIO Fusion backup succeeded: ${baseName}.sql.gz\n` +
+    `  projects: ${dumpCount} row(s) | gzipped: ${(bytesGzipped / 1024).toFixed(1)} KB | plain: ${(bytesPlain / 1024).toFixed(1)} KB\n` +
+    `  sha256: ${sha256}`;
   console.log(
     `[backup] ✅ Verified backup uploaded: ${prefix}/${baseName}.sql.gz ` +
       `(${dumpCount} projects, ${bytesGzipped} bytes gzipped)`,
   );
+  await notifySuccess(successSummary, { label: "backup notify" });
 
   // 5. Retention: prune verified backups beyond the rolling window. This only
   //    runs after a successful verify, so a bad run never deletes good backups.
@@ -252,7 +265,12 @@ async function pruneOldBackups(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  const detail = err?.message || String(err);
   console.error(`[backup] ❌ Backup job failed: ${err?.stack || err}`);
+  await notifyFailure(
+    `AIO Fusion backup job FAILED with an unexpected error\nError: ${detail}`,
+    { label: "backup notify" },
+  );
   process.exit(1);
 });
