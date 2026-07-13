@@ -330,7 +330,7 @@ function MediaResearchPage() {
           <h1 className="text-3xl sm:text-4xl mb-2 leading-[1.1]" style={{ color: "#ffffff", fontFamily: "'Alice', Georgia, serif" }}>Media Research</h1>
         </div>
         <p className="text-[15px] font-light max-w-3xl" style={{ color: "rgba(255,255,255,0.85)" }}>
-          Pick a piece from your Archive and let AI recommend the publications and journalists most likely to run it. Coverage on the right trusted outlets is one of the strongest signals AI models use when deciding who to cite, so targeted outreach grows your authority directly. Recommendations come from the media categories you chose in Project Set-Up.
+          Pick a piece from your Content Library and let AI recommend the publications and journalists most likely to run it. Coverage on the right trusted outlets is one of the strongest signals AI models use when deciding who to cite, so targeted outreach grows your authority directly. Recommendations come from the media categories you chose in Project Set-Up.
         </p>
       </div>
 
@@ -342,7 +342,7 @@ function MediaResearchPage() {
           const eligible = archive.filter((a) => ELIGIBLE_TYPES.includes(a.contentType));
           return eligible.length === 0 ? (
             <div className="rounded-xl border border-dashed p-6 text-center" style={{ borderColor: vars.g300 }}>
-              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>No Press Releases, Articles, Case Studies, Whitepapers or Blog Posts in the Archive yet.</p>
+              <p className="text-[13px] font-light" style={{ color: vars.g500 }}>No Press Releases, Articles, Case Studies, Whitepapers or Blog Posts in the Content Library yet.</p>
               <p className="text-[12px] font-light mt-1" style={{ color: vars.g400 }}>Send a piece from the Optimiser or Creator to start. Both approved and draft items will appear here.</p>
             </div>
           ) : (
