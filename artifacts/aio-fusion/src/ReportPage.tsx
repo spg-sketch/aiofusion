@@ -453,7 +453,10 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   ];
 
   // ---- Earned Media Tracker form state ----
-  const [aiSearch, setAiSearch] = useState({ from: rangeFrom, to: rangeTo, region: "UK", project: activeClient.name, spokesperson: "", contentTitle: "" });
+  // Default dates are empty so the AI search isn't accidentally restricted to
+  // a date range that's beyond Claude's training-data cutoff. Users can
+  // optionally narrow by date, but blank = no date restriction.
+  const [aiSearch, setAiSearch] = useState({ from: "", to: "", region: "UK", project: activeClient.name, spokesperson: "", contentTitle: "" });
   const [aiResults, setAiResults] = useState<Array<{ title: string; type: string; publication: string; reach: number; scores: Record<string, number>; link: string }>>([]);
   const [aiSearched, setAiSearched] = useState(false);
   const [aiSearching, setAiSearching] = useState(false);

@@ -1137,8 +1137,11 @@ contentAiRouter.post(
     }
 
     const contextLines: string[] = [`Company: ${companyName.trim()}`];
-    if (dateFrom)             contextLines.push(`Coverage from: ${dateFrom}`);
-    if (dateTo)               contextLines.push(`Coverage to:   ${dateTo}`);
+    // Dates are advisory hints, not hard constraints — Claude's training data
+    // has a cutoff and cannot find coverage from future dates; treat the range
+    // as a preference, not a filter that excludes all results if unmatched.
+    if (dateFrom)             contextLines.push(`Preferred coverage period start (advisory): ${dateFrom}`);
+    if (dateTo)               contextLines.push(`Preferred coverage period end (advisory):   ${dateTo}`);
     if (region.trim())        contextLines.push(`Region: ${region.trim()}`);
     if (spokesperson.trim())  contextLines.push(`Spokesperson filter: ${spokesperson.trim()}`);
     if (contentTitle.trim())  contextLines.push(`Content title hint: ${contentTitle.trim()}`);
@@ -1152,6 +1155,7 @@ contentAiRouter.post(
       `- Only list coverage items you are genuinely confident exist based on your training data.\n` +
       `- Do NOT invent, fabricate, or hallucinate any coverage. If you are uncertain, omit the item.\n` +
       `- If spokesperson or content-title filters are supplied, return only items that match; if nothing matches, return an empty array.\n` +
+      `- Date ranges are advisory hints only. Your training data has a knowledge cutoff; do NOT restrict results to those dates — use them to prioritise relevance if possible, but always return the best real coverage you know about regardless of date.\n` +
       `- Estimate audience reach (monthly unique visitors or circulation) as a realistic integer.\n` +
       `- Score each item 1–10 for how strongly it establishes AI authority for the company (chatgpt and claude scores reflect how likely each model is to cite this piece).\n\n` +
       `${contextLines.join("\n")}\n\n` +
