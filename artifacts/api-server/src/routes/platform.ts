@@ -51,12 +51,14 @@ import {
   getUserByGoogleId,
   getUserByCompanySlug,
   getPrimaryMembership,
+  linkGoogleId,
   type Role,
   getCompanyBySlug,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
+import { sendNewSignupAlert, sendApprovalEmail } from "../lib/notify-email";
 
 const router: IRouter = Router();
 
@@ -163,7 +165,15 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     const adminAccount = await getPlatformSessionAccount(stashSid);
     if (adminAccount) impersonating = { by: adminAccount.username };
   }
-  res.json({ account: req.account ?? null, impersonating });
+  let googleLinked = false;
+  if (req.account?.email) {
+    try {
+      const u = await getUserByEmail(req.account.email);
+      googleLinked = !!(u?.googleId);
+    } catch { /* non-fatal */ }
+  }
+  const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
+  res.json({ account: accountWithGoogle, impersonating });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.
@@ -365,6 +375,13 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       // the user row will be backfilled at next server restart.
     }
 
+    void sendNewSignupAlert({
+      name,
+      email,
+      companyName,
+      username,
+      method: "password",
+    });
     res.status(201).json({ ok: true, username, status: "pending_approval" });
   } catch (err) {
     console.error("[signup]", err);
@@ -429,6 +446,20 @@ router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, a
       "account",
       { email: account.email },
     );
+
+    if (account.email) {
+      const metaRow = await db
+        .select()
+        .from(platformMetaTable)
+        .where(eq(platformMetaTable.key, `account:profile:${target}`))
+        .limit(1);
+      const profileMeta = metaRow[0]?.value ? (JSON.parse(metaRow[0].value) as { ownerName?: string }) : null;
+      void sendApprovalEmail({
+        toEmail: account.email,
+        toName: profileMeta?.ownerName ?? target,
+        loginUrl: "https://aiofusion.ai",
+      });
+    }
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to approve account." });
@@ -473,6 +504,7 @@ const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 const OAUTH_STATE_COOKIE = "aio_oauth_state";
+const OAUTH_LINK_COOKIE = "aio_oauth_link";
 
 // Returns the canonical host for this deployment.
 // CANONICAL_DOMAIN (e.g. "www.aiofusion.ai") takes highest priority so the
@@ -531,6 +563,32 @@ router.get("/platform/auth/google", (req: Request, res: Response) => {
   res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
+// Link Google to an existing logged-in account.
+router.get("/platform/auth/google/link", requirePlatformAuth, (req: Request, res: Response) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    res.status(503).json({ error: "Google Sign-In is not configured." });
+    return;
+  }
+  const state = crypto.randomBytes(16).toString("hex");
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/",
+  });
+  res.cookie(OAUTH_LINK_COOKIE, req.account!.username, {
+    httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/",
+  });
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: getGoogleCallbackUrl(req),
+    response_type: "code",
+    scope: "openid email profile",
+    state,
+    access_type: "online",
+    prompt: "select_account",
+  });
+  res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
+});
+
 router.get("/platform/auth/google/callback", async (req: Request, res: Response) => {
   const origin = getFrontendOrigin(req);
   try {
@@ -547,7 +605,9 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
     }
     // Verify CSRF state
     const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
+    const linkUsername = (req.cookies as Record<string, string>)?.[OAUTH_LINK_COOKIE] ?? "";
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+    res.clearCookie(OAUTH_LINK_COOKIE, { path: "/" });
     if (!state || state !== storedState) {
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=invalid_state`);
       return;
@@ -590,10 +650,39 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
     }
+    const googleId = (userInfo as { id?: string }).id ?? "";
+
+    // --- Google account link flow (logged-in user linking their account) ----
+    if (linkUsername) {
+      const linkAccount = await getAccount(linkUsername);
+      if (!linkAccount || !linkAccount.email) {
+        res.redirect(`${origin}/?link_google=error`);
+        return;
+      }
+      const linkUser = await getUserByEmail(linkAccount.email);
+      if (!linkUser) {
+        res.redirect(`${origin}/?link_google=error`);
+        return;
+      }
+      if (linkUser.googleId) {
+        res.redirect(`${origin}/?link_google=already_linked`);
+        return;
+      }
+      if (googleId) {
+        const existingGoogleUser = googleId ? await getUserByGoogleId(googleId) : null;
+        if (existingGoogleUser && existingGoogleUser.id !== linkUser.id) {
+          res.redirect(`${origin}/?link_google=google_taken`);
+          return;
+        }
+        await linkGoogleId(linkUser.id, googleId);
+      }
+      res.redirect(`${origin}/?link_google=ok`);
+      return;
+    }
+
     // --- User-first identity resolution ------------------------------------
     // Step 1: resolve the human user by Google id (stable across email changes)
     // then fall back to email lookup in platform_users.
-    const googleId = (userInfo as { id?: string }).id ?? "";
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
@@ -726,6 +815,13 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
     } catch {
       // Non-fatal.
     }
+    void sendNewSignupAlert({
+      name: displayName,
+      email: userInfo.email,
+      companyName: displayName,
+      username,
+      method: "google",
+    });
     res.redirect(`${origin}/?oauth_status=pending`);
   } catch (err) {
     console.error("Google OAuth callback error:", err);

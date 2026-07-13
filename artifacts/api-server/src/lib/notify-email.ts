@@ -17,6 +17,89 @@ function fromAddress(): string {
   return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
 }
 
+export async function sendNewSignupAlert(opts: {
+  name: string;
+  email: string;
+  companyName: string;
+  username: string;
+  method: "password" | "google";
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ username: opts.username }, "notify-email: RESEND_API_KEY not set — signup alert not sent");
+    return;
+  }
+
+  const subject = `[AIO Fusion] New account application — ${opts.companyName}`;
+  const text = [
+    `A new account application has been received.`,
+    ``,
+    `Name:         ${opts.name}`,
+    `Email:        ${opts.email}`,
+    `Company:      ${opts.companyName}`,
+    `Username:     ${opts.username}`,
+    `Sign-up via:  ${opts.method === "google" ? "Google OAuth" : "Email & password"}`,
+    ``,
+    `The account is currently pending approval. Log in to the admin panel to`,
+    `review and approve or reject the application.`,
+    ``,
+    `Admin panel: https://aiofusion.ai`,
+  ].join("\n");
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: ALERT_RECIPIENTS,
+      subject,
+      text,
+    });
+    logger.info({ username: opts.username, method: opts.method }, "notify-email: signup alert sent");
+  } catch (err) {
+    logger.warn({ err, username: opts.username }, "notify-email: failed to send signup alert (non-fatal)");
+  }
+}
+
+export async function sendApprovalEmail(opts: {
+  toEmail: string;
+  toName: string;
+  loginUrl: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — approval email not sent");
+    return;
+  }
+
+  const subject = `Your AIO Fusion account has been approved`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `Great news — your AIO Fusion account has been approved and is ready to use.`,
+    ``,
+    `Sign in here: ${opts.loginUrl}`,
+    ``,
+    `If you signed up with Google, use the "Continue with Google" button on the`,
+    `sign-in page. If you signed up with a password, use your email and password.`,
+    ``,
+    `Welcome aboard,`,
+    `The AIO Fusion team`,
+    ``,
+    `Questions? Reply to this email or contact info@aiofusion.ai`,
+  ].join("\n");
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: [opts.toEmail],
+      subject,
+      text,
+    });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: approval email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send approval email (non-fatal)");
+  }
+}
+
 export async function sendSpikeAlert(opts: {
   slug: string;
   last7Cost: number;

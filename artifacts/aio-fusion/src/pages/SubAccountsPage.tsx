@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache } from "../lib/auth";
+import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { pushProjectMeta } from "../lib/projectSync";
@@ -51,6 +52,16 @@ function SubAccountsPage({
   const [pwUser, setPwUser] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+
+  const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { account?: { googleLinked?: boolean } } | null) => {
+        if (data?.account) setGoogleLinked(data.account.googleLinked ?? false);
+      })
+      .catch(() => { /* non-fatal */ });
+  }, []);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +164,37 @@ function SubAccountsPage({
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients.
           </p>
+        </div>
+
+        {/* MY ACCOUNT */}
+        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>My account</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
+                <User size={16} />
+              </div>
+              <div>
+                <p className="text-[14px] font-bold" style={{ color: ink }}>{session.username}</p>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {googleLinked === true ? (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold" style={{ background: "#E6F4EA", color: "#1B7A3E" }}>
+                  <CheckCircle2 size={13} /> Google linked
+                </span>
+              ) : googleLinked === false ? (
+                <a
+                  href={`${apiBase()}/api/platform/auth/google/link`}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                  style={{ borderColor: vars.g300, color: ink }}
+                >
+                  <LinkIcon size={13} /> Link Google account
+                </a>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         {/* ADD CLIENT ACCOUNT */}

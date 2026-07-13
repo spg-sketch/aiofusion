@@ -66,9 +66,16 @@ function PlatformHomePage({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("oauth_status");
-    if (!status) return;
+    const linkGoogle = params.get("link_google");
+    if (!status && !linkGoogle) return;
     // Clean the OAuth params from the URL without a reload
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    if (linkGoogle) {
+      if (linkGoogle === "ok") {
+        setLoginError(null);
+      }
+      return;
+    }
     if (status === "pending") {
       setSignupDone(true);
       setShowSignup(false);
@@ -200,10 +207,10 @@ function PlatformHomePage({
                 <div>
                   <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Application received</h2>
                   <p className="text-[15px] font-light max-w-lg leading-[1.7]" style={{ color: "rgba(255,255,255,0.85)" }}>
-                    Thanks for signing up. Your account is now <strong style={{ color: "white" }}>pending approval</strong> — we'll review your application and be in touch shortly.
+                    Thanks for signing up. Your account is now <strong style={{ color: "white" }}>pending approval</strong> — we'll review your application and you'll receive an email once it's been approved.
                   </p>
                   <p className="text-[13px] mt-3 font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
-                    Once approved you can sign in with the email and password you just created.
+                    Keep an eye on your inbox — we'll email you as soon as your account is ready.
                   </p>
                 </div>
                 <button
