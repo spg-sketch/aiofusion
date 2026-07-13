@@ -14,7 +14,7 @@ function getClient(): Resend | null {
 }
 
 function fromAddress(): string {
-  return process.env.RESEND_FROM ?? "AIO Fusion Alerts <alerts@aiofusion.ai>";
+  return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
 }
 
 export async function sendSpikeAlert(opts: {

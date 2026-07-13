@@ -891,4 +891,61 @@ adminRouter.delete(
   },
 );
 
+// Smoke-test endpoint — sends one of each alert type to all recipients.
+// Calls Resend directly (no error-swallowing wrapper) so failures propagate as HTTP 500.
+// Admin only.
+adminRouter.post(
+  "/admin/test-email-alerts",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    const key = process.env.RESEND_API_KEY;
+    if (!key) {
+      res.status(500).json({ error: "RESEND_API_KEY is not set — cannot send test alerts." });
+      return;
+    }
+    const { Resend } = await import("resend");
+    const resend = new Resend(key);
+    const from = process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
+    const to = ["patrick@aiofusion.ai", "natalie@aiofusion.ai", "spg@bluhalo.com"];
+    try {
+      const results = await Promise.all([
+        resend.emails.send({
+          from,
+          to,
+          subject: "[AIO Fusion] TEST — Spend spike detected (smoke-test)",
+          text: "This is a smoke-test for the spend-spike alert. No action needed.",
+        }),
+        resend.emails.send({
+          from,
+          to,
+          subject: "[AIO Fusion] TEST — Fair usage limit reached (smoke-test)",
+          text: "This is a smoke-test for the quota-breach alert. No action needed.",
+        }),
+        resend.emails.send({
+          from,
+          to,
+          subject: "[AIO Fusion] TEST — Monthly spend cap reached (smoke-test)",
+          text: "This is a smoke-test for the spend-cap alert. No action needed.",
+        }),
+      ]);
+      const ids = results.map(r => r.data?.id ?? null);
+      const errors = results.map(r => r.error).filter(Boolean);
+      if (errors.length > 0) {
+        logger.error({ errors, by: req.account.username }, "admin test-email-alerts: Resend returned errors");
+        res.status(500).json({ error: "Resend returned errors", details: errors });
+        return;
+      }
+      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all three alerts sent");
+      res.json({ ok: true, message: "Spike, quota-breach, and spend-cap test alerts dispatched.", ids });
+    } catch (err) {
+      logger.error({ err }, "admin test-email-alerts: failed");
+      res.status(500).json({ error: "Failed to send test alerts", detail: String(err) });
+    }
+  },
+);
+
 export default adminRouter;
