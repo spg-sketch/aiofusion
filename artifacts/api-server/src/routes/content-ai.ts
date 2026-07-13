@@ -314,10 +314,11 @@ contentAiRouter.post(
       `- Preserve every fact, name, number, quote and claim the user provided. Do not invent statistics or facts.\n` +
       `- Do NOT write or invent spokesperson quotes. Only retain direct quotes that already appear verbatim in the submitted draft. If a point needs attributing to a spokesperson but no quote exists in the draft, write it in reported speech instead.\n` +
       `- Genuinely rewrite the copy: sharpen the headline, rework the standfirst, and restructure the body answer-first so the most quotable, newsworthy statement leads.\n` +
-      `- End the body copy with a short paragraph beginning "Optimisation pass:" that lists, in plain words, where each key message was woven in and any structural change made.\n` +
-      `- If a selected key message could not be placed naturally, do not force it; record it as a "flag" entry in the change log instead.\n\n` +
+      `- Do NOT add any editorial summary or "Optimisation pass:" paragraph to the body copy. The body copy must contain only publishable content.\n` +
+      `- If a selected key message could not be placed naturally, do not force it; record it as a "flag" entry in the changeLog instead.\n` +
+      `- The changeLog array MUST be populated. For every key message woven in add a "embed" entry, for every structural change add a "structure" entry, for anything flagged for review add a "flag" entry. Never return an empty changeLog array.\n\n` +
       `Return JSON only, no commentary, in exactly this shape:\n` +
-      `{"headline": "...", "standfirst": "...", "bodyCopy": "...", "changeLog": [{"kind": "embed"|"structure"|"flag", "text": "..."}]}\n` +
+      `{"headline": "...", "standfirst": "...", "bodyCopy": "...", "changeLog": [{"kind": "embed"|"structure"|"flag", "text": "brief plain-English description of this change"}]}\n` +
       `Leave a field as an empty string only if the user left it empty.`;
 
     initSse(res);
