@@ -357,6 +357,10 @@ router.post(
         status,
         releaseDate,
         notes,
+        headline,
+        standfirst,
+        bodyCopy,
+        actionNotes,
       } = req.body ?? {};
 
       if (!id || typeof id !== "string") {
@@ -388,6 +392,10 @@ router.post(
           status: status ?? "Planned",
           releaseDate: releaseDate ?? "",
           notes: notes ?? "",
+          headline: headline ?? null,
+          standfirst: standfirst ?? null,
+          bodyCopy: bodyCopy ?? null,
+          actionNotes: actionNotes ?? null,
         })
         .onConflictDoNothing()
         .returning();
@@ -437,6 +445,10 @@ router.put(
         status,
         releaseDate,
         notes,
+        headline,
+        standfirst,
+        bodyCopy,
+        actionNotes,
       } = req.body ?? {};
 
       const [updated] = await db
@@ -452,6 +464,10 @@ router.put(
           status: status ?? "Planned",
           releaseDate: releaseDate ?? "",
           notes: notes ?? "",
+          headline: headline ?? null,
+          standfirst: standfirst ?? null,
+          bodyCopy: bodyCopy ?? null,
+          actionNotes: actionNotes ?? null,
         })
         .where(eq(plannerItemsTable.id, id))
         .returning();

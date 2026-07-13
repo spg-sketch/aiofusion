@@ -4,6 +4,7 @@ import { ensureDefaultAdmin, backfillPlatformUsers } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
+import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
 import { pruneExpiredSessions } from "./lib/auth";
 import { db, platformAccountsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -54,6 +55,10 @@ app.listen(port, (err) => {
 
   ensurePlatformCompanyCascade().catch((err) => {
     logger.error({ err }, "Failed to ensure platform_companies cascade FK");
+  });
+
+  ensurePlannerContentColumns().catch((err) => {
+    logger.error({ err }, "Failed to ensure planner content columns");
   });
 
   pruneExpiredSessions().catch((err) => {

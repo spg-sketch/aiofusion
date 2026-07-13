@@ -53,6 +53,10 @@ export const plannerItemsTable = pgTable("planner_items", {
   status: varchar("status").notNull().default("Planned"),
   releaseDate: varchar("release_date").notNull().default(""),
   notes: text("notes").notNull().default(""),
+  headline: text("headline"),
+  standfirst: text("standfirst"),
+  bodyCopy: text("body_copy"),
+  actionNotes: text("action_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
