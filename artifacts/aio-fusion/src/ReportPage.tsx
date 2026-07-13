@@ -715,7 +715,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                     </div>
                   </div>
                   <span className="text-xs text-white/70 mt-2 font-medium">Total Authority Score</span>
-                  <span className="text-[10px] text-white/60 mt-0.5">Since {projectStartDate}</span>
+                  <span className="text-[10px] text-white/60 mt-0.5">Current snapshot · latest audit</span>
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <h2 className="text-lg sm:text-xl font-semibold text-white mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>
@@ -761,6 +761,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-white" style={{ borderColor: vars.g200, color: vars.g600 }}>
                 Reset to project start
               </button>
+              <p className="text-[10px] sm:col-span-full" style={{ color: "rgba(255,255,255,0.55)" }}>Date range filters your Earned Media Tracker stats below. The Authority Score circle reflects the latest audit run and does not change with date selection.</p>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
