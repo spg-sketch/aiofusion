@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import InfoTip from "./InfoTip";
 import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
 import { getSpokespeople, getKeyMessages } from "./IntakeForm";
@@ -250,18 +250,32 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   })();
 
+  // Track which project ID the current tracker snapshot belongs to.
+  // The save effect must ONLY depend on `tracker` — not on `activeClient.id` —
+  // so that when the user switches projects the old project's rows are never
+  // written to the new project's key before the load effect has had a chance
+  // to populate `tracker` with the new project's data.
+  const trackerProjectIdRef = useRef(activeClient.id);
   const [tracker, setTracker] = useState<TrackerRow[]>(() => loadTracker(activeClient.id));
-  useEffect(() => { setTracker(loadTracker(activeClient.id)); }, [activeClient.id]);
-  useEffect(() => saveTracker(tracker, activeClient.id), [tracker, activeClient.id]);
+  useEffect(() => {
+    trackerProjectIdRef.current = activeClient.id;
+    setTracker(loadTracker(activeClient.id));
+  }, [activeClient.id]);
+  useEffect(() => { saveTracker(tracker, trackerProjectIdRef.current); }, [tracker]);
 
   const inRange = useMemo(() => tracker.filter(r => r.date >= rangeFrom && r.date <= rangeTo), [tracker, rangeFrom, rangeTo]);
   const earnedRowsForCoverage = useMemo(() =>
     inRange.filter(r => ["Press Release", "Article (Trade Publication)", "Case Study", "Whitepaper"].includes(r.type)),
     [inRange]);
 
-  const audienceReach = inRange.reduce((s, r) => s + r.reach, 0);
-  const authorityPerPiece = inRange.length ? Math.round((inRange.reduce((s, r) => s + r.score, 0) / inRange.length) * 10) / 10 : 0;
-  const earnedAuthorityScore = Math.min(100, Math.round(inRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)));
+  // Guard against NaN/null scores that can result from AI-search items whose
+  // scores object was empty — JSON serialises NaN as null and null coerces to
+  // 0 but the guard makes the intent explicit and fixes existing bad rows.
+  const safeScore = (r: TrackerRow) => (typeof r.score === "number" && isFinite(r.score) ? r.score : 0);
+  const safeReach = (r: TrackerRow) => (typeof r.reach === "number" && isFinite(r.reach) ? r.reach : 0);
+  const audienceReach = inRange.reduce((s, r) => s + safeReach(r), 0);
+  const authorityPerPiece = inRange.length ? Math.round((inRange.reduce((s, r) => s + safeScore(r), 0) / inRange.length) * 10) / 10 : 0;
+  const earnedAuthorityScore = Math.min(100, Math.round(inRange.reduce((s, r) => s + safeScore(r) * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)));
   const prCoverageCount = earnedRowsForCoverage.length;
 
   // ── Date-range-aware trend: compare current period to the prior period of equal length ──
@@ -277,7 +291,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     [tracker, priorRangeFrom, priorRangeTo],
   );
   const priorEarnedAuthorityScore = Math.min(100, Math.round(
-    priorInRange.reduce((s, r) => s + r.score * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)
+    priorInRange.reduce((s, r) => s + safeScore(r) * (["Press Release", "Article (Trade Publication)"].includes(r.type) ? 2 : 1), 0)
   ));
   const trackerTrendDelta: number | null = (inRange.length > 0 || priorInRange.length > 0)
     ? earnedAuthorityScore - priorEarnedAuthorityScore
@@ -520,7 +534,10 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   }
 
   function addAiResultToTracker(r: typeof aiResults[number]) {
-    const avgScore = Math.round(Object.values(r.scores).reduce((a, b) => a + b, 0) / Object.values(r.scores).length);
+    const scoreVals = Object.values(r.scores).filter((v) => typeof v === "number" && isFinite(v));
+    const avgScore = scoreVals.length > 0
+      ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
+      : 5;
     const newRow: TrackerRow = {
       id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       date: new Date().toISOString().slice(0, 10),
