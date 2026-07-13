@@ -13,7 +13,7 @@ import { vars } from "../marketing/vars";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
 import { streamContent, buildProjectDataText, escapeHtml, safeHttpUrl, GenerationProgress, downloadWordDocument, apiBase } from "../lib/contentAi";
 import { loadArchive, useContentStore } from "../lib/contentStore";
-import { getKeyMessages, getProjectMediaCategories } from "../IntakeForm";
+import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from "../IntakeForm";
 import { getSession as getLocalSession } from "../lib/auth";
 import type { Contact, Outlet } from "./MediaDatabasePage";
 import { SearchableOutletPicker } from "./MediaDatabasePage";
@@ -186,6 +186,7 @@ function MediaResearchPage() {
           keyMessages: messages.map((m) => m.long || m.short).filter(Boolean),
           projectData: buildProjectDataText(),
           prompt: MEDIA_LIST_LLM_PROMPT_V2,
+          projectId: getActiveProjectId(),
         },
         setMediaChars,
       );

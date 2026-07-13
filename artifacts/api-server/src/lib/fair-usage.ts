@@ -3,7 +3,7 @@ import { and, gte, lt, sql, eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { sendSpikeAlert, sendQuotaBreachAlert } from "./notify-email";
 
-export const DEFAULT_FAIR_USAGE_LIMIT = 500;
+export const DEFAULT_FAIR_USAGE_LIMIT = 50;
 export const SPIKE_RATIO_THRESHOLD = 3;
 
 // Default monthly GBP cap per account. Can be overridden per-account by an
@@ -22,13 +22,12 @@ const quotaCooldown = new Map<string, number>();
 const spendLimitCooldown = new Map<string, number>();
 const SPEND_LIMIT_COOLDOWN_MS = 60 * 60 * 1000; // at most once per hour per account
 
-// Operations that count toward fair usage quota. Uses LIKE patterns so
-// llm-check-probe/scoring/entity all match 'llm-check%', and content-*
-// matches all content AI routes regardless of suffix.
+// Operations that count toward the per-project fair usage quota (50/project/month).
+// Audits (llm-check%) have their own 21-day lock and are NOT counted here.
+// LLM queries (section 1.6, llm-queries) also have a 21-day lock and are excluded.
+// Coverage-search is content-AI and counts toward the 50.
 const OPERATION_FILTER = sql`(
   ${tokenUsageTable.operation} LIKE 'content-%'
-  OR ${tokenUsageTable.operation} LIKE 'llm-check%'
-  OR ${tokenUsageTable.operation} = 'llm-queries'
 )`;
 
 async function getFairUsageMultiplier(accountId: string): Promise<number> {
@@ -71,23 +70,27 @@ export async function getMonthlySpendLimitGbp(accountId: string): Promise<number
   return DEFAULT_MONTHLY_SPEND_LIMIT_GBP;
 }
 
-export async function checkFairUsage(accountId: string): Promise<{
+export async function checkFairUsage(accountId: string, projectId?: string | null): Promise<{
   allowed: boolean;
   callCount: number;
   limit: number;
 }> {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    // When a projectId is supplied enforce the 50-action limit per project;
+    // fall back to per-account when no projectId is available (e.g. legacy calls).
+    const baseConditions = [
+      eq(tokenUsageTable.accountId, accountId),
+      gte(tokenUsageTable.createdAt, thirtyDaysAgo),
+      OPERATION_FILTER,
+    ];
+    const whereClause = projectId
+      ? and(...baseConditions, eq(tokenUsageTable.projectId, projectId))
+      : and(...baseConditions);
     const result = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(tokenUsageTable)
-      .where(
-        and(
-          eq(tokenUsageTable.accountId, accountId),
-          gte(tokenUsageTable.createdAt, thirtyDaysAgo),
-          OPERATION_FILTER,
-        ),
-      );
+      .where(whereClause);
 
     const callCount = result[0]?.count ?? 0;
     const multiplier = await getFairUsageMultiplier(accountId);
@@ -96,8 +99,8 @@ export async function checkFairUsage(accountId: string): Promise<{
 
     if (!allowed) {
       logger.warn(
-        { accountId, callCount, limit, multiplier },
-        "fair-usage: account over 30-day limit — returning 429",
+        { accountId, projectId, callCount, limit, multiplier },
+        "fair-usage: project over 30-day action limit — returning 429",
       );
       // Send breach email at most once per hour per account
       const lastSent = quotaCooldown.get(accountId) ?? 0;
@@ -109,7 +112,7 @@ export async function checkFairUsage(accountId: string): Promise<{
 
     return { allowed, callCount, limit };
   } catch (err) {
-    logger.warn({ err, accountId }, "fair-usage: checkFairUsage DB error — allowing through");
+    logger.warn({ err, accountId, projectId }, "fair-usage: checkFairUsage DB error — allowing through");
     return { allowed: true, callCount: 0, limit: DEFAULT_FAIR_USAGE_LIMIT };
   }
 }

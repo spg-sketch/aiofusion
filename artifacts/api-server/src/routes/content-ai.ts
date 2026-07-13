@@ -4,8 +4,8 @@ import { logger } from "../lib/logger";
 import { contentAiLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { fetchSiteContent, fetchSiteContentWithSubpages } from "../lib/safe-fetch";
-import { db, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
-import { isNull } from "drizzle-orm";
+import { db, mediaOutletsTable, mediaContactsTable, auditLocksTable } from "@workspace/db";
+import { isNull, eq, and, gte } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
 
@@ -17,6 +17,11 @@ const contentAiRouter = Router();
 // pure rate-limit block.
 async function fairUsageCheck(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.account) { next(); return; } // per-route auth handles 401
+
+  // Project ID from the request body — used to enforce 50 actions/project/month.
+  const projectId = typeof req.body?.projectId === "string" && req.body.projectId.trim()
+    ? req.body.projectId.trim().slice(0, 200)
+    : null;
 
   // 1. Monthly GBP spending cap — checked first as it catches runaway cost bugs
   //    that the call-count quota alone would not stop.
@@ -34,8 +39,8 @@ async function fairUsageCheck(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  // 2. Rolling 30-day call-count quota
-  const { allowed, callCount, limit } = await checkFairUsage(req.account.username);
+  // 2. Rolling 30-day call-count quota — enforced per project when projectId is present.
+  const { allowed, callCount, limit } = await checkFairUsage(req.account.username, projectId);
   if (!allowed) {
     const now = new Date();
     const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
@@ -324,8 +329,9 @@ contentAiRouter.post(
     initSse(res);
     try {
       const { text: raw, inputTokens, outputTokens } = await streamModelText(res, client, prompt, 16384);
+      const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
       if (req.account) {
-        void logTokenUsage(req.account.username, "content-optimise", MODEL, inputTokens, outputTokens);
+        void logTokenUsage(req.account.username, "content-optimise", MODEL, inputTokens, outputTokens, projectIdOpt);
       }
       const parsed = extractJson(raw);
       if (!parsed) {
@@ -438,7 +444,11 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const { text: raw } = await streamModelText(res, client, prompt);
+      const { text: raw, inputTokens: cFieldIn, outputTokens: cFieldOut } = await streamModelText(res, client, prompt);
+      const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
+      if (req.account) {
+        void logTokenUsage(req.account.username, "content-creator-field", MODEL, cFieldIn, cFieldOut, projectIdOpt);
+      }
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -690,8 +700,9 @@ contentAiRouter.post(
     initSse(res);
     try {
       const { text: raw, inputTokens, outputTokens } = await streamModelText(res, client, prompt, maxTokens);
+      const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
       if (req.account) {
-        void logTokenUsage(req.account.username, "content-generate", MODEL, inputTokens, outputTokens);
+        void logTokenUsage(req.account.username, "content-generate", MODEL, inputTokens, outputTokens, projectIdOpt);
       }
       const parsed = extractJson(raw);
       if (!parsed) {
@@ -931,7 +942,11 @@ contentAiRouter.post(
 
     initSse(res);
     try {
-      const { text: raw } = await streamModelText(res, client, prompt, MEDIA_LIST_MAX_TOKENS);
+      const { text: raw, inputTokens: mlIn, outputTokens: mlOut } = await streamModelText(res, client, prompt, MEDIA_LIST_MAX_TOKENS);
+      const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
+      if (req.account) {
+        void logTokenUsage(req.account.username, "content-media-list", MODEL, mlIn, mlOut, projectIdOpt);
+      }
       const parsed = extractJson(raw);
       if (!parsed) {
         sse(res, "error", { error: "The AI response could not be read. Please try again." });
@@ -976,6 +991,40 @@ contentAiRouter.post(
     if (!companyName.trim() && !descriptor.trim() && !websiteUrl.trim()) {
       res.status(400).json({ error: "Add your company name and descriptor in Project Set-Up before generating queries." });
       return;
+    }
+
+    // 21-day lock — mirrors the audit lock; admins can bypass with force=true.
+    const projectId = typeof body.projectId === "string" ? body.projectId.trim().slice(0, 200) : null;
+    if (projectId) {
+      try {
+        const existing = await db
+          .select()
+          .from(auditLocksTable)
+          .where(and(eq(auditLocksTable.projectId, projectId), eq(auditLocksTable.auditType, "llm-queries")))
+          .limit(1);
+        if (existing.length > 0) {
+          const lastRunAt = existing[0].lastRunAt;
+          const msPerDay = 86_400_000;
+          const nextAvailableAt = new Date(lastRunAt.getTime() + 21 * msPerDay);
+          if (nextAvailableAt > new Date()) {
+            const isAdmin = req.account?.role === "admin";
+            const force = body.force === true;
+            if (!force || !isAdmin) {
+              const retryAfterSecs = Math.max(1, Math.ceil((nextAvailableAt.getTime() - Date.now()) / 1000));
+              res.setHeader("Retry-After", retryAfterSecs);
+              res.status(429).json({
+                error: `LLM queries were last generated on ${lastRunAt.toLocaleDateString("en-GB")}. The next generation is available on ${nextAvailableAt.toLocaleDateString("en-GB")}.`,
+                locked: true,
+                lastRunAt: lastRunAt.toISOString(),
+                nextAvailableAt: nextAvailableAt.toISOString(),
+              });
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, projectId }, "llm-queries: lock check failed; proceeding without lock enforcement");
+      }
     }
 
     const client = createAnthropicClient();
@@ -1059,9 +1108,23 @@ contentAiRouter.post(
           setTimeout(() => reject(new Error("timeout")), STREAM_TIMEOUT_MS),
         ),
       ]);
+      const usedMsg = message as { usage?: { input_tokens?: number; output_tokens?: number } };
       if (req.account) {
-        const usedMsg = message as { usage?: { input_tokens?: number; output_tokens?: number } };
-        void logTokenUsage(req.account.username, "llm-queries", MODEL, usedMsg.usage?.input_tokens ?? 0, usedMsg.usage?.output_tokens ?? 0);
+        void logTokenUsage(req.account.username, "llm-queries", MODEL, usedMsg.usage?.input_tokens ?? 0, usedMsg.usage?.output_tokens ?? 0, projectId);
+      }
+      // Write (or refresh) the 21-day lock now that the call succeeded.
+      if (projectId) {
+        try {
+          await db
+            .insert(auditLocksTable)
+            .values({ projectId, auditType: "llm-queries", owner: req.account?.username ?? "", lastRunAt: new Date() })
+            .onConflictDoUpdate({
+              target: [auditLocksTable.projectId, auditLocksTable.auditType],
+              set: { lastRunAt: new Date(), owner: req.account?.username ?? "" },
+            });
+        } catch (err) {
+          logger.warn({ err, projectId }, "llm-queries: failed to write lock (non-fatal)");
+        }
       }
       const raw =
         (message as { content?: { type?: string; text?: string }[] }).content?.[0]?.type === "text"
@@ -1183,12 +1246,14 @@ contentAiRouter.post(
         ),
       ]);
 
+      const projectIdOpt = typeof req.body?.projectId === "string" ? req.body.projectId.trim().slice(0, 200) : null;
       void logTokenUsage(
         req.account.username,
         "content-coverage-search",
         MODEL,
         (message as { usage?: { input_tokens?: number } }).usage?.input_tokens ?? 0,
         (message as { usage?: { output_tokens?: number } }).usage?.output_tokens ?? 0,
+        projectIdOpt,
       );
 
       const raw =
@@ -1295,7 +1360,9 @@ contentAiRouter.post(
         : "{}";
 
       const account = (req as Request & { account?: { username?: string } }).account;
-      void logTokenUsage(account?.username ?? "unknown", "content-events-search", MODEL, message.usage.input_tokens, message.usage.output_tokens);
+      const projectIdOpt = typeof (req.body as Record<string, unknown>)?.projectId === "string"
+        ? ((req.body as Record<string, unknown>).projectId as string).trim().slice(0, 200) : null;
+      void logTokenUsage(account?.username ?? "unknown", "content-events-search", MODEL, message.usage.input_tokens, message.usage.output_tokens, projectIdOpt);
 
       const parsed   = extractJson(raw);
       const rawItems = Array.isArray(parsed?.events) ? parsed.events as Record<string, unknown>[] : [];

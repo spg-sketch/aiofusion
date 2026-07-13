@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycleHistory";
 import CountdownBanner from "./components/CountdownBanner";
 import { recordAuditDuration, getAuditDurationSeconds, getAuditSampleCount, getTypicalDurationHint } from "./lib/auditTiming";
-import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
+import { getPreferredKeywords, getBusinessSectors, getTargetSectors, getIcpProfile, getClientLocations, getClientPersona, getProjectAuthorityData, getCompetitors, getBuyerQuestions, getSpokespeople, getEvidenceUrls, getBoilerplate, getCompanyDescriptor, getLegalName, getConfirmedEntity, setConfirmedEntity, getLlmSearchQueries, getWebsite, setActiveProjectId, getActiveProjectId, type ConfirmedEntity } from "./IntakeForm";
 import { syncIntakeForProject } from "./lib/projectSync";
 import { syncAuditsForProject, pushServerAudit, deleteServerAudit } from "./lib/auditSync";
 import { getSession } from "./lib/auth";
@@ -748,6 +748,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           mediaCategories: getBusinessSectors().slice(0, 5).join(", "),
           competitors: getCompetitors().slice(0, 10).join(", "),
           websiteUrl: getWebsite(),
+          projectId: getActiveProjectId(),
         }),
       });
       if (!resp.ok) {

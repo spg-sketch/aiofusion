@@ -12,7 +12,7 @@ import {
 import { vars } from "../marketing/vars";
 import { buildProjectDataText, escapeHtml, safeHttpUrl, downloadWordDocument, apiBase } from "../lib/contentAi";
 import { TRADE_MEDIA_CATEGORIES } from "../tradeMediaCategories";
-import { getKeyMessages, getProjectMediaCategories } from "../IntakeForm";
+import { getKeyMessages, getProjectMediaCategories, getActiveProjectId } from "../IntakeForm";
 import { Labelled, CategoryPickerModal } from "./shared";
 type EventConfirmFlag = "C" | "U";
 type EventOpportunity = {
@@ -99,6 +99,7 @@ function MarketingIntelligencePage() {
           period,
           region,
           projectData: buildProjectDataText(),
+          projectId: getActiveProjectId(),
         }),
       });
       if (!resp.ok) {

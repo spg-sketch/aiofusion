@@ -520,6 +520,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
           region:       aiSearch.region,
           spokesperson: aiSearch.spokesperson,
           contentTitle: aiSearch.contentTitle,
+          projectId:    activeClient.id,
         }),
       });
       const data = await resp.json() as { items?: typeof aiResults; error?: string };

@@ -326,6 +326,7 @@ function OptimiserPage({
           bodyCopy,
           promptBrief: promptBriefShort,
           projectData: buildProjectDataText(),
+          projectId: getActiveProjectId(),
         },
         setOptimiseChars,
       );

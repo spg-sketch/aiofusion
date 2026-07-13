@@ -204,6 +204,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           pitch: headline,
           keyMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
           projectData: buildProjectDataText(),
+          projectId: getActiveProjectId(),
         },
         setCreatorChars,
       );
@@ -290,6 +291,7 @@ function ContentCreatorPage({ onNavigate }: { onNavigate: (p: string) => void })
           selectedMessages: projectMessages.map((m) => m.long || m.short).filter(Boolean),
           mediaCategories: mediaTarget,
           projectData: buildProjectDataText(),
+          projectId: getActiveProjectId(),
           targetQuery: targetQuery ? { text: targetQuery.text, category: targetQuery.category } : undefined,
           queryAuditData,
           confirmedCompany: confirmedEntity?.name || "",

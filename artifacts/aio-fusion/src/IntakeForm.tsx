@@ -1395,6 +1395,7 @@ export default function IntakePage() {
           mediaCategories: businessCategories.slice(0, 5).join(", "),
           competitors: getCompetitors().slice(0, 10).join(", "),
           websiteUrl: aiWebsite.trim(),
+          projectId: getActiveProjectId(),
         }),
       });
       if (!resp.ok) {
