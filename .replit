@@ -70,15 +70,3 @@ CANONICAL_DOMAIN = "www.aiofusion.ai"
 
 [nix]
 channel = "stable-25_05"
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 18664
-externalPort = 3000
