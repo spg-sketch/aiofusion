@@ -32,7 +32,7 @@ async function fairUsageCheck(req: Request, res: Response, next: NextFunction): 
     const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
     res.setHeader("Retry-After", secondsToMonthEnd);
     res.status(429).json({
-      error: "Monthly spending limit reached — contact us to discuss your plan.",
+      error: "Monthly spending limit reached — email info@aiofusion.ai to discuss your plan.",
       spentGbp: parseFloat(spentGbp.toFixed(4)),
       limitGbp,
     });
@@ -47,7 +47,7 @@ async function fairUsageCheck(req: Request, res: Response, next: NextFunction): 
     const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
     res.setHeader("Retry-After", secondsToMonthEnd);
     res.status(429).json({
-      error: "Fair usage limit reached — contact us to discuss your plan.",
+      error: "Fair usage limit reached — email info@aiofusion.ai to discuss your plan.",
       callCount,
       limit,
     });

@@ -460,7 +460,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 220 }}>{p.keyMessage || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600 }}>{p.spokesperson || ""}</td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, whiteSpace: "nowrap" }}>{p.releaseDate || ""}</td>
-                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.visibility + s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></td>
+                                <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer text-right font-bold hover:bg-slate-100 transition-colors text-[12px]" style={{ background: slotBg, borderColor: vars.navy, color: vars.teal }}>{Math.round(s!.authority)}<span style={{ color: vars.g500, fontWeight: 400 }}> pts</span></td>
                                 <td onClick={() => sendToOptimiser(p.id)} className="px-3 py-2 border cursor-pointer hover:bg-slate-100 transition-colors" style={{ background: slotBg, borderColor: vars.navy, color: vars.g600, maxWidth: 240 }}>{p.notes || ""}</td>
                               </>
                             ) : (
@@ -535,7 +535,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             <tbody>
               {calendarWeeks.map((w) => {
                 const wkProjects = projects.filter((p) => p.week === w);
-                const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p, cfg); return s + sc.visibility + sc.authority; }, 0);
+                const wkScore = wkProjects.reduce((s, p) => { const sc = scoreProject(p, cfg); return s + sc.authority; }, 0);
                 const wcLabel = weekDateLabel(w);
                 return (
                   <tr key={w} className="border-t" style={{ borderColor: vars.g100 }}>
@@ -563,7 +563,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                                   <p className="text-[11px] font-light mb-2" style={{ color: vars.g500 }}>{p.contentType}{p.spokesperson ? ` · ${p.spokesperson}` : ""}</p>
                                   <div className="flex items-center justify-between text-[11px] mb-2">
                                     <span style={{ color: vars.g400 }}>{p.channels.length} channel{p.channels.length === 1 ? "" : "s"}</span>
-                                    <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.visibility + s.authority)} pts</span>
+                                    <span className="font-bold" style={{ color: vars.accent }}>{Math.round(s.authority)} pts</span>
                                   </div>
                                 </button>
                                 <div className="flex items-center gap-1 pt-2 border-t" style={{ borderColor: vars.g100 }}>
