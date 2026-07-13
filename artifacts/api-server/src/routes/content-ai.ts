@@ -1237,7 +1237,7 @@ contentAiRouter.post(
 // POST /events-search — find awards, conferences and speaker opportunities
 // ---------------------------------------------------------------------------
 contentAiRouter.post(
-  "/events-search",
+  "/content/events-search",
   contentAiLimiter,
   fairUsageCheck,
   async (req: Request, res: Response) => {
