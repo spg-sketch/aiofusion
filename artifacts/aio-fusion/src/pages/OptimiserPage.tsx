@@ -769,8 +769,8 @@ OUTPUT INSTRUCTIONS:
             </button>
             <button
               onClick={() => setShowDownloadNotesModal(true)}
-              disabled={!hasAnyContent}
-              title={!hasAnyContent ? "Add content first before downloading Optimised Notes" : "Download the optimised piece with a change log"}
+              disabled={!optimised}
+              title={!optimised ? "Run the optimiser first to generate Optimised Notes" : "Download the optimised piece with a change log"}
               className="flex items-center justify-center gap-1.5 min-w-[170px] px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] border-2 transition-all duration-200 whitespace-nowrap hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-none"
               style={{ borderColor: vars.navy, color: vars.navy, background: "#ffffff" }}
             >
