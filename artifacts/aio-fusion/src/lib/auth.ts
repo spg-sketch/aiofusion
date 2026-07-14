@@ -384,6 +384,62 @@ export async function serverImpersonate(
   return { ok: true, session };
 }
 
+// Switch from an agency account (with masterOwner=true) into the admin session.
+// Uses the same stash-and-replace cookie pattern as impersonation, so the
+// existing ImpersonationBanner "Exit" flow restores the agency session.
+export async function serverSwitchToMaster(): Promise<
+  { ok: true; session: Session } | { ok: false; error: string }
+> {
+  const { ok, json } = await postJson("/api/platform/switch-to-master");
+  if (!ok || !json?.account) return { ok: false, error: json?.error || "Failed to switch to master." };
+  const session: Session = { username: json.account.username, role: json.account.role };
+  setSession(session);
+  await refreshAccountsCache();
+  return { ok: true, session };
+}
+
+// Admin-only: set or clear the masterOwner flag on an agency account.
+export async function serverSetMasterOwner(
+  username: string,
+  masterOwner: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch(
+      `${apiBase()}/api/platform/admin/accounts/${encodeURIComponent(username)}/master-owner`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ masterOwner }),
+      },
+    );
+    let json: any = null;
+    try { json = await resp.json(); } catch { /* no body */ }
+    if (!resp.ok) return { ok: false, error: json?.error || "Failed to update master-owner status." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to update master-owner status." };
+  }
+}
+
+// Admin-only: fetch the full set of usernames that currently have masterOwner=true.
+export async function serverGetMasterOwners(): Promise<
+  { ok: true; usernames: string[] } | { ok: false; error: string }
+> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/admin/master-owners`, { credentials: "include" });
+    if (!resp.ok) {
+      let json: any = null;
+      try { json = await resp.json(); } catch { /* no body */ }
+      return { ok: false, error: json?.error || "Failed to load master-owner list." };
+    }
+    const json = (await resp.json()) as { usernames: string[] };
+    return { ok: true, usernames: json.usernames ?? [] };
+  } catch {
+    return { ok: false, error: "Failed to load master-owner list." };
+  }
+}
+
 // Restore the admin's own session after a view-as session.
 export async function serverExitImpersonation(): Promise<
   { ok: true; session: Session } | { ok: false; error: string }

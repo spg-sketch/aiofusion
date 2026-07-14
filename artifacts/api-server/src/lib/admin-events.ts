@@ -18,7 +18,9 @@ export type AdminAction =
   | "impersonate_exit"
   | "account_reparent"
   | "account_approve"
-  | "account_reject";
+  | "account_reject"
+  | "master_owner_set"
+  | "switch_to_master";
 
 export async function logAdminEvent(
   actor: AdminActor,

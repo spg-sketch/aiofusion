@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -176,6 +176,32 @@ function UsersAdminPage({
       else next.add(key);
       return next;
     });
+  };
+
+  // ── Master-owner flags (admin only) ──────────────────────────────────
+  const [masterOwnerSet, setMasterOwnerSet] = useState<Set<string>>(new Set());
+  const [masterOwnerTogglingFor, setMasterOwnerTogglingFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (session.role !== "admin") return;
+    void serverGetMasterOwners().then((r) => {
+      if (r.ok) setMasterOwnerSet(new Set(r.usernames.map((u) => u.toLowerCase())));
+    });
+  }, [session.role]);
+
+  const handleToggleMasterOwner = (username: string, current: boolean) => {
+    setMasterOwnerTogglingFor(username);
+    void serverSetMasterOwner(username, !current)
+      .then((r) => {
+        if (r.ok) {
+          setMasterOwnerSet((prev) => {
+            const next = new Set(prev);
+            if (!current) next.add(username.toLowerCase());
+            else next.delete(username.toLowerCase());
+            return next;
+          });
+        }
+      })
+      .finally(() => setMasterOwnerTogglingFor(null));
   };
 
   // ── View account (support impersonation) ─────────────────────────────
@@ -369,6 +395,8 @@ function UsersAdminPage({
     account_role_change: "Changed account role",
     project_owner_reassign: "Reassigned project owner",
     platform_migrate: "Ran platform migration",
+    master_owner_set: "Set master-owner flag",
+    switch_to_master: "Switched to master",
   };
 
   const handleGenerate = (e: React.FormEvent) => {
@@ -530,6 +558,8 @@ function UsersAdminPage({
     const editingRole = roleUser === u.username;
     const editingSeatCap = seatCapUser === u.username;
     const viewingSessions = sessionsUser === u.username;
+    const isMasterOwner = masterOwnerSet.has(u.username.toLowerCase());
+    const isTogglingMasterOwner = masterOwnerTogglingFor === u.username;
     const hasDisplayName = !!(u.displayName && u.displayName.trim());
     const children = childrenByParent.get(u.username.toLowerCase()) || [];
     const hasChildren = children.length > 0;
@@ -589,7 +619,22 @@ function UsersAdminPage({
                 </div>
               </div>
             </div>
-            <div className="relative flex items-center gap-1.5 shrink-0">
+            <div className="relative flex items-center gap-1.5 shrink-0 flex-wrap">
+              {session.role === "admin" && (u.role === "agency" || u.role === "user") && (
+                <button
+                  onClick={() => handleToggleMasterOwner(u.username, isMasterOwner)}
+                  disabled={isTogglingMasterOwner}
+                  title={isMasterOwner ? "Revoke master-owner access" : "Grant master-owner access"}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-40 hover:brightness-95"
+                  style={isMasterOwner
+                    ? { color: "white", background: "#0a1628", border: `1.5px solid #0a1628` }
+                    : { color: vars.g500, background: "white", border: `1.5px solid ${vars.g200}` }
+                  }
+                >
+                  {isTogglingMasterOwner ? <Loader2 size={12} className="animate-spin" /> : <Shield size={12} />}
+                  {isMasterOwner ? "Master owner" : "Master owner"}
+                </button>
+              )}
               {!isMe && (
                 <button
                   onClick={() => handleViewAccount(u.username)}

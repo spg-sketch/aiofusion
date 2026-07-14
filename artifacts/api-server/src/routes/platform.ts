@@ -89,6 +89,40 @@ const profileKey = (username: string) => `${PROFILE_PREFIX}${normUsername(userna
 const ARCHIVE_PREFIX = "account:archived:";
 const archiveKey = (username: string) => `${ARCHIVE_PREFIX}${normUsername(username)}`;
 
+// Master-owner accounts can "Switch to Master" from their own Client Accounts
+// page without needing to log out and back in as admin. Flag stored as a
+// platform_meta row (same pattern as archived). Only admins may grant this.
+const MASTER_OWNER_PREFIX = "account:master-owner:";
+const masterOwnerKey = (username: string) => `${MASTER_OWNER_PREFIX}${normUsername(username)}`;
+
+async function getMasterOwnerSet(): Promise<Set<string>> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${MASTER_OWNER_PREFIX}%`));
+  return new Set(rows.map((r) => r.key.slice(MASTER_OWNER_PREFIX.length)));
+}
+
+async function isMasterOwner(username: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, masterOwnerKey(username)));
+  return rows.length > 0;
+}
+
+async function setMasterOwner(username: string, value: boolean): Promise<void> {
+  const key = masterOwnerKey(username);
+  if (value) {
+    await db
+      .insert(platformMetaTable)
+      .values({ key, value: "true" })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+  } else {
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+  }
+}
+
 async function getArchivedSet(): Promise<Set<string>> {
   const rows = await db
     .select()
@@ -166,6 +200,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     if (adminAccount) impersonating = { by: adminAccount.username };
   }
   let googleLinked = false;
+  let masterOwner = false;
   if (req.account) {
     try {
       const acc = await getAccount(normUsername(req.account.username));
@@ -174,9 +209,12 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         googleLinked = !!(u?.googleId);
       }
     } catch { /* non-fatal */ }
+    try {
+      masterOwner = await isMasterOwner(req.account.username);
+    } catch { /* non-fatal */ }
   }
   const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
-  res.json({ account: accountWithGoogle, impersonating });
+  res.json({ account: accountWithGoogle, impersonating, masterOwner });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.
@@ -946,6 +984,143 @@ router.post("/platform/exit-impersonation", async (req: Request, res: Response) 
     res.status(500).json({ error: "Failed to exit view-as session" });
   }
 });
+
+// GET /platform/admin/master-owners — admin only. Returns the set of usernames
+// that currently have masterOwner=true.
+router.get(
+  "/platform/admin/master-owners",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (req.account!.role !== "admin") {
+        res.status(403).json({ error: "Admin only." });
+        return;
+      }
+      const set = await getMasterOwnerSet();
+      res.json({ usernames: Array.from(set) });
+    } catch {
+      res.status(500).json({ error: "Failed to load master-owner list." });
+    }
+  },
+);
+
+// GET /platform/admin/accounts/:username/master-owner — admin only.
+router.get(
+  "/platform/admin/accounts/:username/master-owner",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (req.account!.role !== "admin") {
+        res.status(403).json({ error: "Admin only." });
+        return;
+      }
+      const target = normUsername(req.params.username);
+      if (!target) { res.status(400).json({ error: "Username required." }); return; }
+      const account = await getAccount(target);
+      if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+      res.json({ masterOwner: await isMasterOwner(target) });
+    } catch {
+      res.status(500).json({ error: "Failed to read master-owner flag." });
+    }
+  },
+);
+
+// POST /platform/admin/accounts/:username/master-owner — admin only.
+// Body: { masterOwner: boolean }
+router.post(
+  "/platform/admin/accounts/:username/master-owner",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      if (req.account!.role !== "admin") {
+        res.status(403).json({ error: "Admin only." });
+        return;
+      }
+      const target = normUsername(req.params.username);
+      if (!target) { res.status(400).json({ error: "Username required." }); return; }
+      const account = await getAccount(target);
+      if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+      // masterOwner only makes sense for agency / legacy-user accounts.
+      const targetRole = normalizeRole(account.role);
+      if (targetRole !== "agency" && targetRole !== "user") {
+        res.status(400).json({ error: "masterOwner can only be set on agency accounts." });
+        return;
+      }
+      const value = req.body?.masterOwner === true;
+      await setMasterOwner(target, value);
+      void logAdminEvent(
+        { username: req.account!.username, id: req.account!.userId },
+        "master_owner_set",
+        target,
+        "account",
+        { masterOwner: value },
+      );
+      res.json({ ok: true, masterOwner: value });
+    } catch {
+      res.status(500).json({ error: "Failed to update master-owner flag." });
+    }
+  },
+);
+
+// POST /platform/switch-to-master — for agency accounts with masterOwner=true.
+// Stashes the current (agency) session and issues a fresh admin session, using
+// the same stash-and-replace cookie pattern as impersonation so the banner's
+// "Exit" flow automatically restores the agency session.
+router.post(
+  "/platform/switch-to-master",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      // Only agency / legacy-user accounts may switch to master.
+      // Clients are explicitly out of scope; admins are already there.
+      if (actor.role !== "agency" && actor.role !== "user") {
+        res.status(403).json({ error: "Only agency accounts may switch to master." });
+        return;
+      }
+      if (getImpersonationStashId(req)) {
+        res.status(400).json({ error: "Exit the current view-as session first." });
+        return;
+      }
+      if (!(await isMasterOwner(actor.username))) {
+        res.status(403).json({ error: "Master-owner access not granted for this account." });
+        return;
+      }
+      const adminRows = await db
+        .select()
+        .from(platformAccountsTable)
+        .where(eq(platformAccountsTable.role, "admin"))
+        .limit(1);
+      if (adminRows.length === 0) {
+        res.status(500).json({ error: "No admin account found." });
+        return;
+      }
+      const adminRow = adminRows[0];
+      const agencySid = getPlatformSessionId(req);
+      if (!agencySid) {
+        res.status(401).json({ error: "Unauthorized: sign in required." });
+        return;
+      }
+      const rawIp =
+        (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+        ?? req.socket.remoteAddress;
+      const adminSid = await createPlatformSession(adminRow.username, makeIpHint(rawIp));
+      // Stash the agency session so the impersonation banner's "Exit" can restore it.
+      setImpersonationStashCookie(res, agencySid);
+      setPlatformCookie(res, adminSid);
+      void logAdminEvent(
+        { username: actor.username, id: actor.userId },
+        "switch_to_master",
+        adminRow.username,
+        "account",
+        { from: actor.username },
+      );
+      res.json({ account: { username: adminRow.username, role: normalizeRole(adminRow.role) } });
+    } catch {
+      res.status(500).json({ error: "Failed to switch to master." });
+    }
+  },
+);
 
 // --- Account management -----------------------------------------------------
 

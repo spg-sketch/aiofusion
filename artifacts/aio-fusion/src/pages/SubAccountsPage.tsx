@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate } from "../lib/auth";
+import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -56,14 +56,36 @@ function SubAccountsPage({
   const [enteringUsername, setEnteringUsername] = useState<string | null>(null);
   const [enterError, setEnterError] = useState<string | null>(null);
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
+  const [isMasterOwner, setIsMasterOwner] = useState<boolean>(false);
+  const [switchingToMaster, setSwitchingToMaster] = useState(false);
+  const [switchToMasterError, setSwitchToMasterError] = useState<string | null>(null);
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { account?: { googleLinked?: boolean } } | null) => {
+      .then((data: { account?: { googleLinked?: boolean } | null; masterOwner?: boolean } | null) => {
         if (data?.account) setGoogleLinked(data.account.googleLinked ?? false);
+        setIsMasterOwner(data?.masterOwner === true);
       })
       .catch(() => { /* non-fatal */ });
   }, []);
+
+  const handleSwitchToMaster = () => {
+    setSwitchToMasterError(null);
+    setSwitchingToMaster(true);
+    void serverSwitchToMaster()
+      .then((result) => {
+        if (!result.ok) {
+          setSwitchToMasterError(result.error);
+          setSwitchingToMaster(false);
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(() => {
+        setSwitchToMasterError("Failed to switch to master account.");
+        setSwitchingToMaster(false);
+      });
+  };
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,7 +221,7 @@ function SubAccountsPage({
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role}</span>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {googleLinked === true ? (
                 <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold" style={{ background: "#E6F4EA", color: "#1B7A3E" }}>
                   <CheckCircle2 size={13} /> Google linked
@@ -213,8 +235,22 @@ function SubAccountsPage({
                   <LinkIcon size={13} /> Link Google account
                 </a>
               ) : null}
+              {isMasterOwner && (
+                <button
+                  onClick={handleSwitchToMaster}
+                  disabled={switchingToMaster}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 disabled:opacity-60"
+                  style={{ background: ink, color: "#fff" }}
+                >
+                  {switchingToMaster ? <Loader2 size={13} className="animate-spin" /> : <Shield size={13} />}
+                  {switchingToMaster ? "Switching..." : "Switch to Master"}
+                </button>
+              )}
             </div>
           </div>
+          {switchToMasterError && (
+            <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
+          )}
         </div>
 
         {/* ADD CLIENT ACCOUNT */}
