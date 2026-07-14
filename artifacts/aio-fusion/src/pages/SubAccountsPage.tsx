@@ -79,7 +79,9 @@ function SubAccountsPage({
           setSwitchingToMaster(false);
           return;
         }
-        window.location.reload();
+        // Use a query param so App.tsx shows platform-home after the reload
+        // instead of the marketing landing page.
+        window.location.replace("/?aio_switched_master=1");
       })
       .catch(() => {
         setSwitchToMasterError("Failed to switch to master account.");

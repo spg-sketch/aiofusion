@@ -39,10 +39,10 @@ export function ImpersonationBanner() {
   const handleExit = async () => {
     setExiting(true);
     await serverExitImpersonation();
-    // A full reload is the simplest, safest way to reset every page's local
-    // state (project lists, cached session, open forms) back to the admin's
-    // own view after impersonation ends.
-    window.location.reload();
+    // Navigate to the platform-home view after the session is restored.
+    // Using a query param (instead of bare reload) so App.tsx knows to
+    // show platform-home rather than the marketing landing page.
+    window.location.replace("/?aio_exit_impersonation=1");
   };
 
   // When a master-owner agency account switches up to admin, the stashed

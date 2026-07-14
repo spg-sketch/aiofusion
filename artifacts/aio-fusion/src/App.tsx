@@ -489,11 +489,16 @@ function App() {
   useEffect(() => { removeDemoSeedData(); }, []);
 
   // Navigate to the platform-home view when returning from a Google OAuth
-  // redirect (e.g. /?oauth_status=ok). The session cookie is already set by
-  // the server; the existing /api/platform/me call will pick it up.
+  // redirect (e.g. /?oauth_status=ok), an impersonation exit, or a
+  // switch-to-master reload. The session cookie is already set by the server;
+  // the existing /api/platform/me call will pick it up.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.has("oauth_status")) {
+    if (
+      params.has("oauth_status") ||
+      params.has("aio_exit_impersonation") ||
+      params.has("aio_switched_master")
+    ) {
       setView("platform-home");
     }
   }, []);
