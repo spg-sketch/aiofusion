@@ -58,3 +58,8 @@ Thumbs.db
 # User-uploaded assets (screenshots, documents, CSVs) — these are workspace
 # uploads for reference only and must not be committed to the repo.
 /attached_assets/
+
+# Playwright runtime output — test results, traces, and screenshots are
+# transient and must not be committed.
+/test-results/
+/playwright-report/
