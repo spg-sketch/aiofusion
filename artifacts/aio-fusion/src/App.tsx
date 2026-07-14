@@ -514,6 +514,9 @@ function App() {
   viewRef.current = view;
   const pageRef = useRef(currentPage);
   pageRef.current = currentPage;
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
 
   useEffect(() => {
     const navState = { __aioNav: true, view, currentPage };
@@ -862,7 +865,7 @@ function App() {
         onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
       />
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
+      <main ref={mainRef} className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}

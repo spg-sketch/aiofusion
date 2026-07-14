@@ -759,7 +759,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: "#ffffff" }}>Date Range - To</label>
                 <input type="date" value={rangeTo} onChange={e => setRangeTo(e.target.value)} className="w-full rounded-lg border px-3 py-2 text-sm bg-white" style={{ borderColor: vars.g200 }} />
               </div>
-              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-medium border bg-white" style={{ borderColor: vars.g200, color: vars.g600 }}>
+              <button onClick={() => { setRangeFrom(projectStartDate); setRangeTo(todayIso); }} className="px-4 py-2 rounded-lg text-sm font-semibold self-end transition-opacity hover:opacity-80" style={{ background: "rgba(200,73,122,0.12)", color: "#C8497A", border: "1px solid rgba(200,73,122,0.35)" }}>
                 Reset to project start
               </button>
               <p className="text-[10px] sm:col-span-full" style={{ color: "rgba(255,255,255,0.55)" }}>Date range filters your Earned Media Tracker stats below. The Authority Score circle reflects the latest audit run and does not change with date selection.</p>

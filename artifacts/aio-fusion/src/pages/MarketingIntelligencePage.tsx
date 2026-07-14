@@ -331,8 +331,8 @@ function MarketingIntelligencePage() {
             </div>
           ) : (
           <>
-          <div className="rounded-2xl p-5" style={{ background: "rgba(224,120,86,0.08)", border: `1px solid rgba(224,120,86,0.25)` }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
+          <div className="rounded-2xl p-5" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
+            <p className="text-[13px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: vars.coral }}>Top 3 immediately actionable opportunities</p>
             {actionableOps.length === 0 ? (
               <p className="text-[12px] italic" style={{ color: vars.g500 }}>No live windows flagged at search time.</p>
             ) : (

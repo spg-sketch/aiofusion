@@ -421,7 +421,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   </div>
                 )}
                 <div ref={calendarScrollRef} className="overflow-x-auto">
-                <table className="w-full text-[11px] border-collapse">
+                <table className="text-[11px] border-collapse" style={{ minWidth: 900 }}>
                   <thead>
                     <tr>
                       {COLS.map((h) => (
