@@ -166,10 +166,13 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     if (adminAccount) impersonating = { by: adminAccount.username };
   }
   let googleLinked = false;
-  if (req.account?.email) {
+  if (req.account) {
     try {
-      const u = await getUserByEmail(req.account.email);
-      googleLinked = !!(u?.googleId);
+      const acc = await getAccount(normUsername(req.account.username));
+      if (acc?.email) {
+        const u = await getUserByEmail(acc.email);
+        googleLinked = !!(u?.googleId);
+      }
     } catch { /* non-fatal */ }
   }
   const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
@@ -857,8 +860,8 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const actor = req.account!;
-      if (actor.role !== "admin") {
-        res.status(403).json({ error: "Admin access required." });
+      if (actor.role !== "admin" && actor.role !== "agency") {
+        res.status(403).json({ error: "Admin or agency access required." });
         return;
       }
       // Already viewing as someone else: don't allow nesting, which would
@@ -879,6 +882,11 @@ router.post(
       const account = await getAccount(target);
       if (!account) {
         res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      // Agency accounts may only enter their own direct client sub-accounts.
+      if (actor.role === "agency" && account.parent !== normUsername(actor.username)) {
+        res.status(403).json({ error: "You can only enter your own client accounts." });
         return;
       }
       const adminSid = getPlatformSessionId(req);

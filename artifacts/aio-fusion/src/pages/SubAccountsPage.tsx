@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache } from "../lib/auth";
+import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -53,6 +53,8 @@ function SubAccountsPage({
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
 
+  const [enteringUsername, setEnteringUsername] = useState<string | null>(null);
+  const [enterError, setEnterError] = useState<string | null>(null);
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
@@ -78,6 +80,24 @@ function SubAccountsPage({
         setAddError(result.error);
       }
     })();
+  };
+
+  const handleEnterAccount = (username: string) => {
+    setEnterError(null);
+    setEnteringUsername(username);
+    void serverImpersonate(username)
+      .then((result) => {
+        if (!result.ok) {
+          setEnterError(result.error);
+          setEnteringUsername(null);
+          return;
+        }
+        window.location.reload();
+      })
+      .catch(() => {
+        setEnterError("Failed to enter this account.");
+        setEnteringUsername(null);
+      });
   };
 
   const handleArchive = (username: string, archive: boolean) => {
@@ -263,6 +283,14 @@ function SubAccountsPage({
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
+                          onClick={() => handleEnterAccount(u.username)}
+                          disabled={enteringUsername === u.username}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all text-white"
+                          style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
+                        >
+                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <LogIn size={12} />} Login as client
+                        </button>
+                        <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
                           style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
@@ -285,6 +313,9 @@ function SubAccountsPage({
                         </button>
                       </div>
                     </div>
+                    {enterError && enteringUsername === null && (
+                      <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
+                    )}
                     <div className="mt-3 sm:pl-[52px]">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>Their projects ({owned.length})</p>
                       {owned.length === 0 ? (

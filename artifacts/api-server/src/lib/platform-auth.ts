@@ -35,6 +35,8 @@ export interface PlatformAccount {
   userId?: string;
   /** UUID from platform_companies — present on new sessions, undefined on legacy sessions. */
   activeCompanyId?: string;
+  /** Email address, if stored on the account. May be undefined for legacy sessions. */
+  email?: string | null;
 }
 
 // Normalise an arbitrary stored/incoming role string to a known Role. The
