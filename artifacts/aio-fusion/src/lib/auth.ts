@@ -39,7 +39,7 @@ export type Session = {
 };
 
 // Present when an admin is currently "viewing as" this account for support.
-export type Impersonation = { by: string };
+export type Impersonation = { by: string; byRole?: string };
 
 const USERS_KEY = "aio.auth.users.v3";
 const SESSION_KEY = "aio.auth.session.v3";

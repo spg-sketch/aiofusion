@@ -193,11 +193,11 @@ async function deleteProfile(username: string): Promise<void> {
 
 // Who is signed in (or null). Drives the client's view of the current session.
 router.get("/platform/me", async (req: Request, res: Response) => {
-  let impersonating: { by: string } | null = null;
+  let impersonating: { by: string; byRole: string } | null = null;
   const stashSid = getImpersonationStashId(req);
   if (req.account && stashSid) {
     const adminAccount = await getPlatformSessionAccount(stashSid);
-    if (adminAccount) impersonating = { by: adminAccount.username };
+    if (adminAccount) impersonating = { by: adminAccount.username, byRole: adminAccount.role };
   }
   let googleLinked = false;
   let masterOwner = false;

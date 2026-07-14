@@ -32,6 +32,23 @@ export function ImpersonationBanner() {
     window.location.reload();
   };
 
+  // When a master-owner agency account switches up to admin, the stashed
+  // session belongs to their agency account (byRole !== "admin"). Show a
+  // distinct, clearer message so they know they're operating as master.
+  const isMasterSwitchUp = state.byRole && state.byRole !== "admin";
+
+  const bannerText = isMasterSwitchUp ? (
+    <span>
+      Signed in as <strong>master</strong> · Exit back to {state.by}
+    </span>
+  ) : (
+    <span>
+      Support mode - viewing as <strong>{getSession()?.username ?? "this account"}</strong>, signed in as {state.by}
+    </span>
+  );
+
+  const exitLabel = isMasterSwitchUp ? "Exit to my account" : "Exit view-as";
+
   return (
     <div
       style={{
@@ -52,9 +69,7 @@ export function ImpersonationBanner() {
       }}
     >
       <Eye size={14} color="#C8497A" />
-      <span>
-        Support mode - viewing as <strong>{getSession()?.username ?? "this account"}</strong>, signed in as {state.by}
-      </span>
+      {bannerText}
       <button
         onClick={handleExit}
         disabled={exiting}
@@ -74,7 +89,7 @@ export function ImpersonationBanner() {
         }}
       >
         <X size={12} />
-        {exiting ? "Exiting..." : "Exit view-as"}
+        {exiting ? "Exiting..." : exitLabel}
       </button>
     </div>
   );
