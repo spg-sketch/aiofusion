@@ -38,7 +38,16 @@ export function ImpersonationBanner() {
 
   const handleExit = async () => {
     setExiting(true);
-    await serverExitImpersonation();
+    const result = await serverExitImpersonation();
+    if (!result.ok) {
+      // The stash cookie (aio_admin_sid) expired while the view-as session was
+      // open. The server has already cleared both cookies, so there is no
+      // session to restore. Send the user to the login page with a notice
+      // explaining what happened rather than silently dropping them on the
+      // platform home with no session.
+      window.location.replace("/?aio_session_expired=1");
+      return;
+    }
     // Navigate to the platform-home view after the session is restored.
     // Using a query param (instead of bare reload) so App.tsx knows to
     // show platform-home rather than the marketing landing page.

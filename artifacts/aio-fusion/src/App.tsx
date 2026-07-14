@@ -488,10 +488,16 @@ function App() {
 
   useEffect(() => { removeDemoSeedData(); }, []);
 
+  // Shown on the login form when the admin stash cookie expires mid view-as
+  // session and the user is redirected back to sign in.
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
+
   // Navigate to the platform-home view when returning from a Google OAuth
   // redirect (e.g. /?oauth_status=ok), an impersonation exit, or a
   // switch-to-master reload. The session cookie is already set by the server;
   // the existing /api/platform/me call will pick it up.
+  // Also handles the stash-cookie-expired case: no session to restore, so we
+  // land on the login form with an explanatory notice.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (
@@ -499,6 +505,12 @@ function App() {
       params.has("aio_exit_impersonation") ||
       params.has("aio_switched_master")
     ) {
+      setView("platform-home");
+    }
+    if (params.has("aio_session_expired")) {
+      setSessionExpiredNotice(
+        "Your admin session expired while in view-as mode. Please sign in again.",
+      );
       setView("platform-home");
     }
   }, []);
@@ -666,6 +678,7 @@ function App() {
         <PlatformHomePage
           session={session}
           onLoginSuccess={(s) => {
+            setSessionExpiredNotice(undefined);
             setSessionState(s);
             void initContentStore().then(() => resyncProjects());
           }}
@@ -678,6 +691,7 @@ function App() {
           onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
           onGuidance={() => setView("guidance")}
           onBackToLanding={() => goHome()}
+          initialNotice={sessionExpiredNotice}
         />
         {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
       </>

@@ -25,6 +25,7 @@ function PlatformHomePage({
   onManageUsers,
   onManageSubAccounts,
   onTokenUsage,
+  initialNotice,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -37,10 +38,11 @@ function PlatformHomePage({
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
   onTokenUsage: () => void;
+  initialNotice?: string;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(initialNotice ?? null);
   const [showSessions, setShowSessions] = useState(false);
   const [mySessions, setMySessions] = useState<SessionInfo[] | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
