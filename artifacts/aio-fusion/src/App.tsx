@@ -853,7 +853,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc" }}>
+    <div className="flex w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc", marginTop: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}>
       <Sidebar
         currentPage={currentPage}
         onNavigate={setCurrentPage}

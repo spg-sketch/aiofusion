@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, X } from "lucide-react";
 import { getImpersonationState, getSession, serverExitImpersonation, type Impersonation } from "../lib/auth";
 
@@ -9,6 +9,19 @@ import { getImpersonationState, getSession, serverExitImpersonation, type Impers
 export function ImpersonationBanner() {
   const [state, setState] = useState<Impersonation | null>(null);
   const [exiting, setExiting] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  // Publish the banner's rendered height as a CSS variable so the app shell
+  // can shrink/shift to avoid content being hidden underneath.
+  useEffect(() => {
+    const el = bannerRef.current;
+    const h = (state && el) ? el.offsetHeight : 0;
+    document.documentElement.style.setProperty("--banner-h", `${h}px`);
+  }, [state]);
+
+  useEffect(() => {
+    return () => document.documentElement.style.setProperty("--banner-h", "0px");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +64,7 @@ export function ImpersonationBanner() {
 
   return (
     <div
+      ref={bannerRef}
       style={{
         position: "fixed",
         top: 0,
