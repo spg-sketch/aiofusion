@@ -64,6 +64,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
     },
   ];
 
+  /* ── WITH AGENTS / AGENTIC LAYER ── hidden for launch, restore when ready ──
   const AGENTIC_PLAN = {
     key: "agentic",
     name: "With Agents",
@@ -89,6 +90,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       "Authority-building content engine",
     ],
   };
+  ── end WITH AGENTS ── */
 
   const TABLE_ROWS: PlanFeature[] = [
     { label: "Brands / projects", inhouse: "1", agency: "3 included (+£500/yr each)", agentic: "3 included (+£500/yr each)" },
@@ -116,8 +118,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
 
   const FAQS = [
     { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Archive. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
-    { q: "What does With Agents add?", a: "With Agents introduces an autonomous agentic layer that runs your PR and marketing programme using trained specialist agents, all governed by human approval gates. It adds always-on monitoring, AI-assisted draft content, GEO fixes, a Journalist and Media AI Authority Score, the full AI Media Database, Release Gateway integrations and a tactical media relations capability. Launching Q2 2027." },
-    { q: "How does the With Agents upgrade offer work?", a: "Standard clients who upgrade to With Agents when it launches in Q2 2027 receive 50% off their subscription for the first six months. We will contact all active Standard clients ahead of launch with the details." },
     { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through Claude and ChatGPT simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
     { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 projects. You can add further projects at £500/yr each. For example, 10 projects would total £9,500/yr." },
     { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },
@@ -235,54 +235,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             ))}
           </div>
 
-          {/* With Agents group label */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: agenticGold }}>With Agents</span>
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
-          </div>
-
-          {/* Agentic card */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${agenticGold}55`, background: "#FDFAF4" }}>
-            <div className="flex items-center gap-3 px-7 py-3" style={{ background: `${agenticGold}15`, borderBottom: `1px solid ${agenticGold}30` }}>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: agenticGold }}>Launching {AGENTIC_PLAN.launch}</span>
-              <span className="text-[10px] font-light" style={{ color: agenticGold }}>·</span>
-              <span className="text-[11px] font-light" style={{ color: agenticGold }}>{AGENTIC_PLAN.upgradeOffer}</span>
-            </div>
-            <div className="p-7 sm:flex sm:gap-10">
-              <div className="sm:w-64 flex-shrink-0 mb-6 sm:mb-0">
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: agenticGold }}>{AGENTIC_PLAN.name}</span>
-                <h2 className="text-[26px] mt-0.5 mb-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{AGENTIC_PLAN.sub}</h2>
-                <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{AGENTIC_PLAN.tagline}</p>
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>From £</span>
-                    <span className="text-[48px] font-bold leading-none" style={{ color: ink }}>{(AGENTIC_PLAN.annualFrom / 12).toFixed(0)}</span>
-                    <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
-                  </div>
-                  <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>From £{AGENTIC_PLAN.annualFrom.toLocaleString()}/yr billed annually</p>
-                </div>
-                <button onClick={() => onNavigate("contact")} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: agenticGold, color: "white" }}>
-                  {AGENTIC_PLAN.cta}
-                </button>
-                <p className="text-[11px] mt-5 leading-relaxed" style={{ color: vars.g400 }}>{AGENTIC_PLAN.competitorNote}</p>
-              </div>
-              <ul className="space-y-3 flex-1">
-                {AGENTIC_PLAN.includes.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-[13px]">
-                    {i === 0 && item.includes("Everything") ? (
-                      <span className="text-[12px] font-semibold italic" style={{ color: vars.g400 }}>{item}</span>
-                    ) : (
-                      <>
-                        <Check size={14} color={agenticGold} strokeWidth={2.5} className="flex-shrink-0 mt-0.5" />
-                        <span className="font-light leading-snug" style={{ color: ink }}>{item}</span>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -294,7 +246,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything included, at a glance</h2>
           </div>
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
-            <div className="grid grid-cols-4" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
+            <div className="grid grid-cols-3" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
               <div className="p-4" />
               <div className="p-4 text-center">
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: teal }}>Standard</p>
@@ -304,17 +256,12 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Standard</p>
                 <p className="text-[12px] font-semibold mt-0.5" style={{ color: ink }}>Agency</p>
               </div>
-              <div className="p-4 text-center">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: agenticGold }}>With Agents</p>
-                <p className="text-[10px] font-medium mt-0.5" style={{ color: agenticGold }}>Q2 2027</p>
-              </div>
             </div>
-            {TABLE_ROWS.map((row, i) => (
-              <div key={row.label} className="grid grid-cols-4 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
+            {TABLE_ROWS.filter(row => row.inhouse !== false || row.agency !== false).map((row, i) => (
+              <div key={row.label} className="grid grid-cols-3 border-b last:border-b-0" style={{ borderColor: vars.g100, background: i % 2 === 0 ? "white" : vars.g50 }}>
                 <div className="p-4 text-[13px] font-light" style={{ color: ink }}>{row.label}</div>
                 <div className="p-4"><Cell v={row.inhouse} /></div>
                 <div className="p-4"><Cell v={row.agency} /></div>
-                <div className="p-4"><Cell v={row.agentic} agentic /></div>
               </div>
             ))}
           </div>
