@@ -196,9 +196,10 @@ function hydrateServerProject(sp: ServerProject, fallbackName = ""): StoredProje
   };
 }
 
-async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null> {
+async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: string[] } | null | "unauthorized"> {
   try {
     const resp = await fetch(`${apiBase()}/api/store/projects`, { credentials: "include" });
+    if (resp.status === 401) return "unauthorized";
     if (!resp.ok) return null;
     const json = (await resp.json()) as { projects?: ServerProject[]; deletedIds?: string[] };
     return { projects: json.projects ?? [], deletedIds: json.deletedIds ?? [] };
@@ -296,9 +297,10 @@ async function fetchRemoteIntake(id: string): Promise<{ intake: unknown; updated
 // project that was deleted elsewhere, and return the merged result so the hub
 // can re-render. localStorage is updated as the local cache.
 export async function syncProjectsOnLoad(): Promise<
-  { projects: StoredProject[]; logos: Record<string, string> } | null
+  { projects: StoredProject[]; logos: Record<string, string> } | null | "unauthorized"
 > {
   const server = await pullProjects();
+  if (server === "unauthorized") return "unauthorized"; // session expired
   if (!server) return null; // offline or API unavailable - keep local only
 
   const localProjects = readJson<StoredProject[]>(PROJECTS_KEY, []);

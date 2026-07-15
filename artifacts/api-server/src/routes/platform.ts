@@ -214,6 +214,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     } catch { /* non-fatal */ }
   }
   const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
+  res.setHeader("Cache-Control", "no-store");
   res.json({ account: accountWithGoogle, impersonating, masterOwner });
 });
 

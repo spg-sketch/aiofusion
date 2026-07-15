@@ -525,7 +525,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       });
       const data = await resp.json() as { items?: typeof aiResults; error?: string };
       if (!resp.ok) {
-        setAiSearchError(data.error ?? "The search could not complete. Please try again.");
+        if (resp.status === 401) {
+          setAiSearchError("Your session has expired — please log out and log back in to continue.");
+        } else {
+          setAiSearchError(data.error ?? "The search could not complete. Please try again.");
+        }
       } else {
         setAiResults(Array.isArray(data.items) ? data.items : []);
         setAiSearched(true);

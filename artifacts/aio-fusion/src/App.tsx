@@ -339,6 +339,14 @@ function App() {
   // another device shows up without a manual page reload.
   const resyncProjects = useCallback(async () => {
     const result = await syncProjectsOnLoad();
+    if (result === "unauthorized") {
+      // Server session has expired mid-use. Re-check with /api/platform/me;
+      // if it confirms the session is gone, clear local state and redirect
+      // to the login screen so the user can re-authenticate.
+      const s = await bootstrapAuth();
+      setSessionState(s);
+      return;
+    }
     if (result) {
       // Claim any ownerless project the sync just pulled down (e.g. a legacy
       // NULL-owned row) before showing the list, so it is attributed to the
