@@ -117,9 +117,6 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
                 With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={onLogin} className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 shadow-lg" style={{ background: accent, color: "white", boxShadow: "0 12px 28px rgba(200,73,122,0.32)" }}>
-                  <LogIn size={15} /> See the Platform
-                </button>
                 <a href="#features" className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5" style={{ color: ink, border: `1.5px solid ${ink}30` }}>
                   Explore Features <ArrowRight size={14} />
                 </a>
@@ -337,9 +334,6 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <a href="mailto:info@aiofusion.ai" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
                 <span className="flex items-center gap-2"><Mail size={16} /> Talk to Us</span> <ArrowRight size={14} />
               </a>
-              <button onClick={onLogin} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
-                <span className="flex items-center gap-2"><LogIn size={16} /> See the Platform</span> <ArrowRight size={14} />
-              </button>
             </div>
           </div>
         </div>
