@@ -16,6 +16,7 @@
     "tsx": "catalog:"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.21.0"
+    "@google-cloud/storage": "^7.21.0",
+    "resend": "catalog:"
   }
 }

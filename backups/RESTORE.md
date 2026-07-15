@@ -31,12 +31,12 @@ backup — every dump is checked against the live database before it is kept.
    (`BACKUP_RETENTION`, default **14**). Pruning runs **only after a successful
    verify**, so one bad run can never delete all known-good backups.
 
-## Failure notifications (Slack / webhook)
+## Failure notifications (email via Resend)
 
-Set `BACKUP_NOTIFY_WEBHOOK` to a [Slack Incoming Webhook URL](https://api.slack.com/messaging/webhooks)
-(or any endpoint that accepts a JSON `POST` with a `text` field) to receive
-automatic alerts whenever a backup or dry-run restore finishes — successfully or
-not.
+Backup and restore alerts are sent as plain-text emails via Resend — the same
+`RESEND_API_KEY` and `RESEND_FROM` used by the API server for all other
+operational alerts (spend spikes, quota breaches, sign-ups, approvals). No
+separate secret is needed.
 
 | Event | Notification |
 |---|---|
@@ -47,24 +47,25 @@ not.
 | `restore:verify` fails | ❌ failed table checks |
 | `restore:verify` crashes (unexpected error) | ❌ error detail |
 
-If `BACKUP_NOTIFY_WEBHOOK` is **not set**, all notification calls are silent
-no-ops — existing behaviour is fully preserved.
+If `RESEND_API_KEY` is **not set**, all notification calls log a `⚠️` console
+warning and continue — the backup job is never interrupted by a missing key.
 
-A delivery failure (network error, non-2xx response) prints a `⚠️` console
-warning but **never** crashes the backup or restore job.
+A delivery failure (Resend API error or network issue) also prints a `⚠️`
+console warning but **never** crashes the backup or restore job.
 
-### Setting up the webhook
+### Required environment variables
 
-1. In your Slack workspace go to **Apps → Incoming Webhooks → Add new
-   configuration** and select the target channel.
-2. Copy the `https://hooks.slack.com/services/…` URL.
-3. Set it as an environment variable on the Replit Scheduled Deployment
-   (and optionally on the app itself for `restore:verify` runs):
-   ```
-   BACKUP_NOTIFY_WEBHOOK=https://hooks.slack.com/services/...
-   ```
-4. Any HTTP endpoint that accepts `{"text": "…"}` via `POST` works — it does
-   not have to be Slack.
+Ensure the Scheduled Deployment has these env vars (they are shared with the
+app deployment automatically when published in the same Replit project):
+
+```
+RESEND_API_KEY=re_...          # Resend API key (same as the app)
+RESEND_FROM=AIO Fusion Alerts <info@aiofusion.ai>   # optional — this is the default
+```
+
+You can smoke-test the backup alert from the admin panel: **Admin →
+Test email alerts** sends one of each alert type including a backup failure
+test, so you can confirm delivery before the next scheduled run.
 
 ## Schedule (automatic, no human action)
 

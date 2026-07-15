@@ -931,6 +931,12 @@ adminRouter.post(
           subject: "[AIO Fusion] TEST — Monthly spend cap reached (smoke-test)",
           text: "This is a smoke-test for the spend-cap alert. No action needed.",
         }),
+        resend.emails.send({
+          from,
+          to,
+          subject: "[AIO Fusion] TEST — Backup job FAILED (smoke-test)",
+          text: "This is a smoke-test for the backup failure alert. No action needed.",
+        }),
       ]);
       const ids = results.map(r => r.data?.id ?? null);
       const errors = results.map(r => r.error).filter(Boolean);
@@ -939,8 +945,8 @@ adminRouter.post(
         res.status(500).json({ error: "Resend returned errors", details: errors });
         return;
       }
-      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all three alerts sent");
-      res.json({ ok: true, message: "Spike, quota-breach, and spend-cap test alerts dispatched.", ids });
+      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all four alerts sent");
+      res.json({ ok: true, message: "Spike, quota-breach, spend-cap, and backup-failure test alerts dispatched.", ids });
     } catch (err) {
       logger.error({ err }, "admin test-email-alerts: failed");
       res.status(500).json({ error: "Failed to send test alerts", detail: String(err) });
