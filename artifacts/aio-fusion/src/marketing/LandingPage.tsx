@@ -195,9 +195,6 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
                 <div className="aspect-[16/10] overflow-hidden relative" style={{ background: s.accent }}>
                   <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
                   <div className="absolute top-3 left-3 w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold" style={{ background: "white", color: s.accent }}>{s.n}</div>
-                  {s.soon && (
-                    <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "white", color: accent }}>Coming soon</span>
-                  )}
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                   <h3 className="text-[19px] mb-2 leading-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{s.title}</h3>
