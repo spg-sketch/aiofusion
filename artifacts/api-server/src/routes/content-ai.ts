@@ -8,6 +8,7 @@ import { db, mediaOutletsTable, mediaContactsTable, auditLocksTable } from "@wor
 import { isNull, eq, and, gte } from "drizzle-orm";
 import { logTokenUsage } from "../lib/token-usage";
 import { checkFairUsage, checkMonthlySpendLimit, detectAndLogSpike } from "../lib/fair-usage";
+import { features } from "../lib/features";
 
 const contentAiRouter = Router();
 
@@ -1178,6 +1179,7 @@ contentAiRouter.post(
   contentAiLimiter,
   fairUsageCheck,
   async (req: Request, res: Response): Promise<void> => {
+    if (!features.aiCoverageSearch) { res.sendStatus(404); return; }
     if (!req.account) { res.status(401).json({ error: "Authentication required" }); return; }
 
     const body = (req.body ?? {}) as Record<string, unknown>;

@@ -6,6 +6,7 @@ import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckP
 import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
 import { apiBase } from "./lib/contentAi";
+import { FEATURES } from "./lib/features";
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import {
@@ -1048,8 +1049,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </ul>
           </div>
 
-          {/* AI Coverage Search — hidden pending Brave Search API integration (re-enable when BRAVE_API_KEY is wired) */}
-          {false && <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+          {/* AI Coverage Search — guarded by VITE_FEATURE_AI_COVERAGE_SEARCH env var (see src/lib/features.ts) */}
+          {FEATURES.aiCoverageSearch && <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Search size={16} color={vars.accent} />
               <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>AI Coverage Search</h3>
