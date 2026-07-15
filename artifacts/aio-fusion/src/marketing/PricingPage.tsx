@@ -268,7 +268,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* FAQ — hidden for launch, restore when ready
       <section className="py-16 px-4 sm:px-8" style={{ background: paper }}>
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
@@ -292,6 +292,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
           </div>
         </div>
       </section>
+      end FAQ */}
 
       {/* CTA */}
       <section className="py-16 px-4 sm:px-8 text-center" style={{ background: ink }}>
