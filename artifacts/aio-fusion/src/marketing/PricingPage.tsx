@@ -300,7 +300,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Book a Demo</button>
-          <button onClick={onLogin} className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
         </div>
       </section>
 
