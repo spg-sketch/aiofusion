@@ -106,7 +106,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
       week: wk,
       status: item.status === "Final" ? "Approved" : "Review",
       releaseDate,
-      notes: `Pushed from Archive · ${item.status} · ${new Date(item.createdAt).toLocaleDateString()}`,
+      notes: `Pushed from Content Library · ${item.status} · ${new Date(item.createdAt).toLocaleDateString()}`,
     };
     savePlannerProjects([proj, ...projects]);
     alert(`"${proj.title}" added to the Comms Planner (w/c ${weekDateLabel(wk)}).`);
@@ -233,7 +233,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
                   <button onClick={(e) => { e.stopPropagation(); sendToTool(item.id); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(31,116,143,0.08)", color: vars.teal }}>
                     {item.source === "creator" ? "Open in Creator" : "Open in Optimiser"}
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); pushArchiveToPlanner(item); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this archive item">
+                  <button onClick={(e) => { e.stopPropagation(); pushArchiveToPlanner(item); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ background: "rgba(91,168,181,0.12)", color: vars.teal }} title="Add a planner row populated from this content library item">
                     Push to Comms Planner
                   </button>
                   <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg hover:brightness-95 transition-all" style={{ color: vars.red, background: "rgba(201,74,62,0.06)" }}>Delete</button>

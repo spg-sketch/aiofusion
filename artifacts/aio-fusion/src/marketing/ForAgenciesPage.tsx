@@ -21,7 +21,7 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
           { title: "Dual-engine AI analysis", desc: "Every diagnostic runs through both Claude and ChatGPT for robust, balanced scoring. Expand LLM references for maximum AI intelligence." },
           { title: "Integrated comms planner", desc: "Plan your PR and marketing activity and score its likely impact on AI authority, manage each piece of content from draft to approved." },
           { title: "Marketing Intelligence", desc: "Research media contacts and future events and awards tailored to each client project, score activity for AI and audience reach." },
-          { title: "Report and Archive", desc: "Combine AI authority scores across earned and owned media with PR reporting and access all your client content in one dedicated, searchable archive." },
+          { title: "Report and Content Library", desc: "Combine AI authority scores across earned and owned media with PR reporting and access all your client content in one dedicated, searchable content library." },
         ].map((it) => (
           <div key={it.title} className="p-4 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.08)" }}>
             <div className="flex items-start gap-3">

@@ -296,10 +296,10 @@ function DashboardPage({
       {/* Content Activity stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
         {[
-          { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Archive for this project.", nav: "archive", cta: "Open Content Library" },
+          { label: "Total Articles", value: allArchiveItems.length, icon: FileText, color: vars.accent, tip: "All content items saved in the Content Library for this project.", nav: "archive", cta: "Open Content Library" },
           { label: "In Planner", value: livePlannerProjects.length, icon: Calendar, color: vars.teal, tip: "Items in the Comms Planner across all statuses.", nav: "planner", cta: "Open Comms Planner" },
-          { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Archive items currently in draft - not yet finalised.", nav: "archive", cta: "Open Content Library" },
-          { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Archive items marked Final - approved and ready to send.", nav: "archive", cta: "Open Content Library" },
+          { label: "In Draft", value: archiveDraft, icon: FileEdit, color: vars.amber, tip: "Content Library items currently in draft - not yet finalised.", nav: "archive", cta: "Open Content Library" },
+          { label: "Final / Ready", value: archiveFinal, icon: CheckCircle2, color: vars.green, tip: "Content Library items marked Final - approved and ready to send.", nav: "archive", cta: "Open Content Library" },
         ].map((s) => (
           <div key={s.label} className="group flex flex-col min-h-[220px] rounded-2xl border p-4 sm:p-6 transition-all duration-300 bg-[#FBF1F0] hover:-translate-y-2 hover:shadow-xl hover:ring-[3px] hover:ring-[#C8497A] hover:bg-[#F3D7D5]" style={{ borderColor: "#e2e8f0" }}>
             <h3 className="text-[13px] font-bold uppercase tracking-[0.15em] mb-4 flex items-center" style={{ color: vars.navy }}>

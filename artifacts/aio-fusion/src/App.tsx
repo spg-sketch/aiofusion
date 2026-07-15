@@ -783,7 +783,7 @@ function App() {
             { title: "Marketing Intelligence", desc: "Researches and scores marketing activity such as conferences and awards by AI authority impact." },
             { title: "Release Gateway", desc: "Reviews, approves and releases content through a controlled workflow." },
             { title: "Measure & Report", desc: "Tracks AI authority and PR impact over time across messages, spokespeople and earned media." },
-            { title: "Archive", desc: "Stores and curates all PR and marketing content over time in a searchable library." },
+            { title: "Content Library", desc: "Stores and curates all PR and marketing content over time in a searchable library." },
             { title: "Website Content GEO", desc: "Optimises on-site content to lift visibility with AI models." },
             { title: "Website Technical GEO", desc: "Back-end and schema guidance to maximise a site's AI effectiveness." },
           ].map((item) => (

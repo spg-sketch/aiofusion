@@ -37,7 +37,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         "Marketing Intelligence - awards and conferences",
         "Website Content GEO and Technical GEO",
         "Measure and Report - PR impact and AI authority",
-        "Archive - long-term content curation",
+        "Content Library - long-term content curation",
         "Email support",
       ],
     },
@@ -103,7 +103,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
     { label: "Website Content GEO", inhouse: true, agency: true, agentic: true },
     { label: "Website Technical GEO", inhouse: true, agency: true, agentic: true },
     { label: "Measure and Report", inhouse: true, agency: true, agentic: true },
-    { label: "Archive", inhouse: true, agency: true, agentic: true },
+    { label: "Content Library", inhouse: true, agency: true, agentic: true },
     { label: "Multi-client architecture", inhouse: false, agency: true, agentic: true },
     { label: "Client sub-accounts", inhouse: false, agency: true, agentic: true },
     { label: "Autonomous agent orchestration", inhouse: false, agency: false, agentic: true },
@@ -117,7 +117,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ];
 
   const FAQS = [
-    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Archive. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
+    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Content Library. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
     { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through Claude and ChatGPT simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
     { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 projects. You can add further projects at £500/yr each. For example, 10 projects would total £9,500/yr." },
     { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },

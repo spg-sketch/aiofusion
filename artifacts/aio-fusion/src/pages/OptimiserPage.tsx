@@ -146,7 +146,7 @@ function OptimiserPage({
       source: "optimiser",
     };
     saveArchive([item, ...items]);
-    alert(`Saved "${item.title}" to Archive as ${status}.`);
+    alert(`Saved "${item.title}" to Content Library as ${status}.`);
   };
   const pushToPlanner = () => {
     if (!projectTitle.trim()) {
@@ -510,7 +510,7 @@ OUTPUT INSTRUCTIONS:
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
               <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
                 Project name
-                <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· A working title for this content item - appears on the Comms Planner, Archive card and Earned Media Tracker</span>
+                <span className="text-[12px] font-normal ml-2" style={{ color: vars.g600 }}>· A working title for this content item - appears on the Comms Planner, Content Library card and Earned Media Tracker</span>
               </label>
               <label className="block text-[12px] font-semibold mb-1" style={{ color: vars.navy }}>
                 Content Type

@@ -226,7 +226,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               { icon: Search, title: "Media Research", desc: "Fuel media relations with AI recommended journalist contacts.", accent: vars.accent },
               { icon: Lightbulb, title: "Marketing Intelligence", desc: "Research and score potential marketing activities such as conferences and awards.", accent: accent },
               { icon: LineChart, title: "Measure & Report", desc: "Measure and report your PR and marketing impact and business AI authority growth.", accent: vars.teal },
-              { icon: Archive, title: "Archive", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
+              { icon: Archive, title: "Content Library", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
               { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
               { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
               { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations.", accent: vars.amber, soon: true },
