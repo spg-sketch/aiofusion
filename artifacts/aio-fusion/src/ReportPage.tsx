@@ -607,15 +607,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   }
 
   function downloadTrackerCsv() {
-    const cols = ["Date", "Title", "Type", "Publication", "Category", "Spokesperson", "Reach", "Score", "Link"];
+    const cols = ["Date", "Title", "URL", "Type", "Publication", "Media Category", "Spokesperson", "Reach", "Avg LLM Score", "Notes"];
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = [cols.map(esc).join(",")];
     for (const r of filteredTracker) {
-      rows.push([r.date, r.title, r.type, r.publication, r.category, r.spokesperson, r.reach, r.score, r.link].map(esc).join(","));
+      rows.push([r.date, r.title, r.link, r.type, r.publication, r.category, r.spokesperson, r.reach, r.score, ""].map(esc).join(","));
     }
     const blob = new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    const suffix = hasActiveTrackerFilters ? "-filtered" : "";
-    saveAs(blob, `earned-media-tracker-${activeClient.name.replace(/\s+/g, "-").toLowerCase()}${suffix}.csv`);
+    const date = new Date().toISOString().slice(0, 10);
+    const slug = activeClient.name.replace(/\s+/g, "-").toLowerCase();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `earned-media-tracker-${slug}-${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function downloadTrackerDocx() {
