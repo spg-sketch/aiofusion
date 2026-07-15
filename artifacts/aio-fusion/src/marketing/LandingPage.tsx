@@ -60,6 +60,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
           </button>
           <div className="hidden lg:flex items-center gap-7">
             {[
+              { l: "Home", v: "landing" },
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
@@ -81,6 +82,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         {menuOpen && (
           <div className="lg:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
             {[
+              { l: "Home", v: "landing" },
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
