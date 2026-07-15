@@ -567,8 +567,10 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       alert("Please add a Content Title before saving.");
       return;
     }
-    if (manualForm.link && !isValidUrl(manualForm.link)) {
+    const linkInvalid = !!manualForm.link && !isValidUrl(manualForm.link);
+    if (linkInvalid) {
       setUrlError("URL must start with http:// or https://");
+      // warn only — do not return; spec says don't block save
     } else {
       setUrlError(null);
     }
@@ -578,7 +580,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     const row: TrackerRow = { ...manualForm, id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     setTracker(prev => [row, ...prev]);
     setManualForm(f => ({ ...f, title: "", publication: "", link: "", reach: 0 }));
-    setUrlError(null);
+    // Only clear the error after reset when the URL was valid — if invalid,
+    // keep the warning visible so the user sees it (React batching means we
+    // must not call setUrlError(null) in the same synchronous block as the
+    // setUrlError("…") above, or the error is silently cancelled).
+    if (!linkInvalid) setUrlError(null);
   }
 
   function removeRow(id: string) {
@@ -1297,7 +1303,11 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Link</label>
                 <input
                   value={manualForm.link}
-                  onChange={e => { setManualForm({ ...manualForm, link: e.target.value }); setUrlError(null); }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setManualForm({ ...manualForm, link: v });
+                    setUrlError(v && !isValidUrl(v) ? "URL must start with http:// or https://" : null);
+                  }}
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   style={{ borderColor: urlError ? vars.red : vars.g200 }}
                   placeholder="https://"
