@@ -151,8 +151,8 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             {navLinks.map((it) => (
               <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: it.v === "pricing" ? accent : ink }}>{it.l}</button>
             ))}
-            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
-              {isAuthed ? <><User size={14} /> My Account</> : <>Platform Login</>}
+            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
+              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
             </button>
           </div>
           <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ color: ink }}>{menuOpen ? <X size={24} /> : <Menu size={24} />}</button>
@@ -162,7 +162,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             {navLinks.map((it) => (
               <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
             ))}
-            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: ink, color: paper }}>{isAuthed ? "My Account" : "Platform Login"}</button>
+            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
           </div>
         )}
       </nav>
@@ -300,7 +300,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Book a Demo</button>
-          <button onClick={onLogin} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-white/10" style={{ border: "1.5px solid rgba(251,246,236,0.35)", color: "#FBF6EC" }}>{isAuthed ? "My Account" : "Platform Login"}</button>
+          <button onClick={onLogin} className="flex items-center gap-2 px-8 py-3.5 rounded-lg text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
         </div>
       </section>
 

@@ -70,8 +70,8 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
             ].map((it) => (
               <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: ink }}>{it.l}</button>
             ))}
-            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
-              {isAuthed ? <><User size={14} /> My Account</> : <>Platform Login</>}
+            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
+              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
             </button>
           </div>
           <button className="lg:hidden" style={{ color: ink }} onClick={() => setMenuOpen(!menuOpen)}>
@@ -91,7 +91,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
             ].map((it) => (
               <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
             ))}
-            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : "Platform Login"}</button>
+            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
           </div>
         )}
       </nav>
