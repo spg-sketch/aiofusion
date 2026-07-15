@@ -14,7 +14,7 @@ function Section({ title, children }: { title: string; children: any }) {
 export default function TermsConditionsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Terms &amp; Conditions" {...props}>
-      <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 6 July 2026</p>
+      <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 10 July 2026</p>
 
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         These terms govern your use of the AIO Fusion website and platform (together, the "Service"), provided by
@@ -55,7 +55,24 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </ul>
       </Section>
 
-      <Section title="5. AI-generated content and accuracy">
+      <Section title="5. Fair usage policy">
+        <p>
+          The Service is subject to fair usage limits. AIO Fusion determines what constitutes fair use at its sole
+          discretion, taking into account the nature, volume and frequency of usage relative to what would be expected
+          of a typical user on the same plan. Accounts found to be overusing, abusing, or taking unfair advantage of
+          the Service may be suspended or terminated without prior notice.
+        </p>
+      </Section>
+
+      <Section title="6. Human users only">
+        <p>
+          The Service is intended for use by human individuals only. Access by automated agents, bots, scrapers,
+          AI assistants, scripts, or any other non-human means is strictly prohibited. AIO Fusion reserves the right
+          to block or terminate any access it reasonably suspects to be non-human, without prior notice.
+        </p>
+      </Section>
+
+      <Section title="7. AI-generated content and accuracy">
         <p>
           Audit scores, assessments, and content produced by the Service are generated with the assistance of
           third-party AI models. While we design our prompts and scoring methodology to be grounded and
@@ -65,7 +82,7 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="6. Your content">
+      <Section title="8. Your content">
         <p>
           You retain ownership of the project, campaign and content data you enter into the platform. By using the
           Service, you grant us a licence to process that content solely to provide the Service to you (including
@@ -74,7 +91,7 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="7. Fees and payment">
+      <Section title="9. Fees and payment">
         <p>
           Where a paid plan applies, fees are as set out on our{" "}
           <button onClick={() => props.onNavigate("pricing")} className="hover:underline" style={{ color: vars.accent }}>Pricing</button> page or in your order/agreement with us. Fees are
@@ -82,7 +99,7 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="8. Availability and changes to the Service">
+      <Section title="10. Availability and changes to the Service">
         <p>
           We aim to keep the Service available and reliable, but we do not guarantee uninterrupted access. We may
           update, add to, or remove features from the Service from time to time, and we'll aim to give reasonable
@@ -90,7 +107,7 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="9. Termination">
+      <Section title="11. Termination">
         <p>
           You may stop using the Service and close your account at any time. We may suspend or terminate access if
           you materially breach these terms, or where required to protect the security or integrity of the
@@ -98,7 +115,7 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="10. Limitation of liability">
+      <Section title="12. Limitation of liability">
         <p>
           To the fullest extent permitted by law, AIO Fusion is not liable for any indirect, incidental, or
           consequential loss arising from your use of the Service, including loss of profits, business, or data.
@@ -107,21 +124,21 @@ export default function TermsConditionsPage(props: { onLogin: () => void; onBack
         </p>
       </Section>
 
-      <Section title="11. Governing law">
+      <Section title="13. Governing law">
         <p>
           These terms are governed by the laws of England and Wales, and any disputes will be subject to the
           exclusive jurisdiction of the courts of England and Wales.
         </p>
       </Section>
 
-      <Section title="12. Changes to these terms">
+      <Section title="14. Changes to these terms">
         <p>
           We may update these terms from time to time. If we make material changes, we'll update the "Last
           updated" date above and, where appropriate, notify you directly.
         </p>
       </Section>
 
-      <Section title="13. Contact us">
+      <Section title="15. Contact us">
         <p>
           Questions about these terms can be sent to <a href="mailto:info@aiofusion.ai" className="hover:underline" style={{ color: vars.accent }}>info@aiofusion.ai</a>, or by post to
           AIO Fusion Ltd, Amelia House, Crescent Road, Worthing, West Sussex, United Kingdom, BN11 1RL.
