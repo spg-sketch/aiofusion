@@ -486,6 +486,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     reach: 0,
     score: 7,
   });
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   async function runAiSearch() {
     if (aiSearching) return;
@@ -526,7 +528,21 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     }
   }
 
+  function isValidUrl(url: string): boolean {
+    if (!url.trim()) return true;
+    try { const u = new URL(url); return u.protocol === "http:" || u.protocol === "https:"; }
+    catch { return false; }
+  }
+
+  function isDuplicateUrl(url: string): boolean {
+    if (!url.trim()) return false;
+    return tracker.some(r => r.link.trim().toLowerCase() === url.trim().toLowerCase());
+  }
+
   function addAiResultToTracker(r: typeof aiResults[number]) {
+    if (r.link && isDuplicateUrl(r.link)) {
+      if (!window.confirm(`"${r.title}" appears to already be in your tracker (same URL). Add it anyway?`)) return;
+    }
     const scoreVals = Object.values(r.scores).filter((v) => typeof v === "number" && isFinite(v));
     const avgScore = scoreVals.length > 0
       ? Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length)
@@ -551,24 +567,55 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       alert("Please add a Content Title before saving.");
       return;
     }
+    if (manualForm.link && !isValidUrl(manualForm.link)) {
+      setUrlError("URL must start with http:// or https://");
+    } else {
+      setUrlError(null);
+    }
+    if (manualForm.link && isDuplicateUrl(manualForm.link)) {
+      if (!window.confirm("This URL is already in your tracker. Add it anyway?")) return;
+    }
     const row: TrackerRow = { ...manualForm, id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     setTracker(prev => [row, ...prev]);
     setManualForm(f => ({ ...f, title: "", publication: "", link: "", reach: 0 }));
+    setUrlError(null);
   }
 
   function removeRow(id: string) {
     setTracker(prev => prev.filter(r => r.id !== id));
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+  }
+
+  function toggleRow(id: string) {
+    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  }
+
+  function toggleAllFiltered(filtered: TrackerRow[]) {
+    const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) { filtered.forEach(r => next.delete(r.id)); }
+      else { filtered.forEach(r => next.add(r.id)); }
+      return next;
+    });
+  }
+
+  function deleteSelected() {
+    if (!window.confirm(`Delete ${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setTracker(prev => prev.filter(r => !selectedIds.has(r.id)));
+    setSelectedIds(new Set());
   }
 
   function downloadTrackerCsv() {
     const cols = ["Date", "Title", "Type", "Publication", "Category", "Spokesperson", "Reach", "Score", "Link"];
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const rows = [cols.map(esc).join(",")];
-    for (const r of tracker) {
+    for (const r of filteredTracker) {
       rows.push([r.date, r.title, r.type, r.publication, r.category, r.spokesperson, r.reach, r.score, r.link].map(esc).join(","));
     }
     const blob = new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    saveAs(blob, `earned-media-tracker-${activeClient.name.replace(/\s+/g, "-").toLowerCase()}.csv`);
+    const suffix = hasActiveTrackerFilters ? "-filtered" : "";
+    saveAs(blob, `earned-media-tracker-${activeClient.name.replace(/\s+/g, "-").toLowerCase()}${suffix}.csv`);
   }
 
   async function downloadTrackerDocx() {
@@ -754,7 +801,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <p className="text-[10px] sm:col-span-full" style={{ color: "rgba(255,255,255,0.55)" }}>Date range filters your Earned Media Tracker stats below. The Authority Score circle reflects the latest audit run and does not change with date selection.</p>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
               <StatTile
                 label="Total Authority Trend"
                 value={authorityTrendDelta === null ? "New" : `${authorityTrendDelta >= 0 ? "+" : ""}${authorityTrendDelta}`}
@@ -784,6 +831,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 icon={Sparkles}
               />
               <StatTile label="PR Coverage" value={String(prCoverageCount)} sub="PR / Article / Case Study / Whitepaper" color={vars.accent} icon={FileText} />
+              <StatTile label="Total Reach" value={audienceReach.toLocaleString()} sub="sum of all tracker items in range" color={vars.navy} icon={Eye} />
             </div>
 
             <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Authority trend</h3>
@@ -1241,7 +1289,14 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               </div>
               <div className="md:col-span-2">
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Link</label>
-                <input value={manualForm.link} onChange={e => setManualForm({ ...manualForm, link: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm" style={{ borderColor: vars.g200 }} placeholder="https://" />
+                <input
+                  value={manualForm.link}
+                  onChange={e => { setManualForm({ ...manualForm, link: e.target.value }); setUrlError(null); }}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: urlError ? vars.red : vars.g200 }}
+                  placeholder="https://"
+                />
+                {urlError && <p className="text-[11px] mt-1" style={{ color: vars.red }}>{urlError}</p>}
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-[0.15em] block mb-1" style={{ color: vars.g500 }}>Reach</label>
@@ -1333,6 +1388,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
               <h3 className="text-base font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Earned Media Tracker spreadsheet</h3>
               <div className="flex items-center gap-2 flex-wrap">
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={deleteSelected}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white"
+                    style={{ background: vars.red }}
+                  >
+                    <Trash2 size={12} /> Delete {selectedIds.size} selected
+                  </button>
+                )}
                 {tracker.length > 0 && (
                   <>
                     <button
@@ -1362,6 +1426,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr style={{ background: vars.g50 }}>
+                    <th className="px-3 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        checked={filteredTracker.length > 0 && filteredTracker.every(r => selectedIds.has(r.id))}
+                        onChange={() => toggleAllFiltered(filteredTracker)}
+                        aria-label="Select all visible rows"
+                        className="cursor-pointer"
+                      />
+                    </th>
                     {["Date", "Title", "Type", "Publication", "Category", "Spokesperson", "Reach", "Score", ""].map(h => (
                       <th key={h} className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
                     ))}
@@ -1369,12 +1442,15 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 </thead>
                 <tbody>
                   {filteredTracker.length === 0 && (
-                    <tr><td colSpan={9} className="px-3 py-6 text-center text-[13px] font-light" style={{ color: vars.g500 }}>
+                    <tr><td colSpan={10} className="px-3 py-6 text-center text-[13px] font-light" style={{ color: vars.g500 }}>
                       No rows match the current filters. Try clearing one or more fields above.
                     </td></tr>
                   )}
                   {filteredTracker.map(r => (
-                    <tr key={r.id} className="border-t" style={{ borderColor: vars.g200 }}>
+                    <tr key={r.id} className="border-t" style={{ borderColor: vars.g200, background: selectedIds.has(r.id) ? "rgba(200,73,122,0.04)" : undefined }}>
+                      <td className="px-3 py-2 w-8">
+                        <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleRow(r.id)} aria-label={`Select ${r.title}`} className="cursor-pointer" />
+                      </td>
                       <td className="px-3 py-2" style={{ color: vars.g600 }}>{r.date}</td>
                       <td className="px-3 py-2" style={{ color: vars.navy }}>
                         {r.link ? <a href={r.link} target="_blank" rel="noreferrer" className="underline">{r.title}</a> : r.title}
