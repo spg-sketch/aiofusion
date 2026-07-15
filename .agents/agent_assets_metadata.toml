@@ -78,6 +78,42 @@ uri = "file://artifacts/aio-fusion/src/assets/blog-tile-3.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "wpd29QEDydSSjGHDGeF2H"
+uri = "file://artifacts/aio-fusion/src/assets/article-1-pr-ai.png"
+type = "image"
+title = "pr professional ai collaboration"
+
+[[generated]]
+id = "STPteBGcGa6ZE8kXYw5qu"
+uri = "file://artifacts/aio-fusion/src/assets/article-2-thought-leadership.png"
+type = "image"
+title = "thought leadership ai visibility beacon"
+
+[[generated]]
+id = "cBBFI1QO5qvoYHlav95Oo"
+uri = "file://artifacts/aio-fusion/src/assets/article-3-b2b-authority.png"
+type = "image"
+title = "B2B AI authority competition chess"
+
+[[generated]]
+id = "y5iEJPM0k8EGt_eVEifSU"
+uri = "file://artifacts/aio-fusion/src/assets/article-4-agentic-media.png"
+type = "image"
+title = "agentic AI media relations journalists"
+
+[[generated]]
+id = "RFlclEgtw1PKg2xeCLdx8"
+uri = "file://artifacts/aio-fusion/src/assets/article-5-b2b-visibility.png"
+type = "image"
+title = "B2B visibility rules reordering blueprint"
+
+[[generated]]
+id = "9OFBwGwGDrzfMTTUzKgu_"
+uri = "file://artifacts/aio-fusion/src/assets/article-6-pr-attribution.png"
+type = "image"
+title = "PR sales attribution proof AI"
+
 [[outputs]]
 id = "epTCa_t7Z4honvy8uHpVo"
 uri = "file://attached_assets/Meeting-Notes-Patrick-Spencer-Mar27-Clean.md"
