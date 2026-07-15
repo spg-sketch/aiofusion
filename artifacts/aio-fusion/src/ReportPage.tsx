@@ -7,8 +7,6 @@ import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStor
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
 import { apiBase } from "./lib/contentAi";
 import { FEATURES } from "./lib/features";
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } from "docx";
-import { saveAs } from "file-saver";
 import {
   Download,
   Printer,
@@ -630,46 +628,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     URL.revokeObjectURL(url);
   }
 
-  async function downloadTrackerDocx() {
-    const COLS = ["Date", "Title", "Type", "Publication", "Category", "Spokesperson", "Reach", "Score", "Link"];
-    const pct = (n: number) => Math.round((n / 9) * 100 * 100) / 100;
-
-    const headerCells = COLS.map(h =>
-      new TableCell({
-        width: { size: pct(1), type: WidthType.PERCENTAGE },
-        children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 18 })], alignment: AlignmentType.LEFT })],
-      }),
-    );
-
-    const dataRows = tracker.map(r =>
-      new TableRow({
-        children: [r.date, r.title, r.type, r.publication, r.category, r.spokesperson, String(r.reach.toLocaleString()), `${r.score}/10`, r.link].map(
-          cell =>
-            new TableCell({
-              width: { size: pct(1), type: WidthType.PERCENTAGE },
-              children: [new Paragraph({ children: [new TextRun({ text: cell, size: 18 })] })],
-            }),
-        ),
-      }),
-    );
-
-    const doc = new Document({
-      sections: [{
-        children: [
-          new Paragraph({ text: "Earned Media Tracker", heading: HeadingLevel.HEADING_1 }),
-          new Paragraph({ text: `Client: ${activeClient.name}`, children: [new TextRun({ text: `Client: ${activeClient.name}`, size: 20, bold: false })] }),
-          new Paragraph({ text: "" }),
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: [new TableRow({ children: headerCells, tableHeader: true }), ...dataRows],
-          }),
-        ],
-      }],
-    });
-
-    const buffer = await Packer.toBlob(doc);
-    saveAs(buffer, `earned-media-tracker-${activeClient.name.replace(/\s+/g, "-").toLowerCase()}.docx`);
-  }
 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
@@ -1422,14 +1380,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                       style={{ borderColor: vars.g200, color: vars.g600 }}
                     >
                       <Download size={12} /> Excel (.csv)
-                    </button>
-                    <button
-                      onClick={() => void downloadTrackerDocx()}
-                      title="Download as Word document"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold"
-                      style={{ borderColor: vars.g200, color: vars.g600 }}
-                    >
-                      <Download size={12} /> Word (.docx)
                     </button>
                   </>
                 )}
