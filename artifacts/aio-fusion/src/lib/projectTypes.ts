@@ -12,4 +12,5 @@ export type Client = {
   recentActivity: string;
   logo?: string;
   owner?: string;
+  createdAt?: string;
 };

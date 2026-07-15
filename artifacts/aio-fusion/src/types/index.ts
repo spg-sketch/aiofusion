@@ -15,6 +15,7 @@ export type Client = {
   logo?: string;
   owner?: string;
   deletedAt?: string | null;
+  createdAt?: string;
 };
 
 export type GenerateStep = "idle" | "scraping" | "generating" | "saving" | "scoring" | "done" | "error";

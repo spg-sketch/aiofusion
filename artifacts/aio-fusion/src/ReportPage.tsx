@@ -65,6 +65,7 @@ type Client = {
   activePlans: number;
   lastActive: string;
   recentActivity: string;
+  createdAt?: string;
 };
 
 const CONTENT_TYPES = [
@@ -195,8 +196,17 @@ function CalloutBrief({ title, children }: { title: string; children: React.Reac
 
 export default function ReportPage({ activeClient, onNavigate }: { activeClient: Client; onNavigate?: (page: string) => void }) {
   const [activeTab, setActiveTab] = useState<"summary" | "prmkt" | "tracker" | "geo">("summary");
-  const projectStartDate = "2026-01-08";
   const todayIso = new Date().toISOString().slice(0, 10);
+  // Derive the project start date from the stored createdAt field. For projects
+  // created before this field was added, fall back to extracting the epoch
+  // timestamp embedded in the project ID (format: proj-<ms>-<random>), then
+  // today's date as a last resort so the label is never a hardcoded fiction.
+  const projectStartDate = (() => {
+    if (activeClient.createdAt) return activeClient.createdAt.slice(0, 10);
+    const ts = parseInt((activeClient.id || "").split("-")[1]);
+    if (!isNaN(ts) && ts > 0) return new Date(ts).toISOString().slice(0, 10);
+    return todayIso;
+  })();
 
   // ── Live audit data — loaded from localStorage, then synced from server ──
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
@@ -526,8 +536,8 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       title: r.title,
       type: r.type === "Article" ? "Article (Trade Publication)" : r.type,
       publication: r.publication,
-      category: "Marketing & PR",
-      spokesperson: aiSearch.project,
+      category: "",
+      spokesperson: "",
       link: r.link,
       reach: r.reach,
       score: avgScore,
@@ -973,6 +983,39 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.navy }}>Social Impact</h3>
+            <p className="text-[12px] font-light mb-4" style={{ color: vars.g500 }}>
+              LinkedIn metrics (shares, engagement rate, DMs and profile views) are not collected automatically. Enter figures directly from your LinkedIn Analytics dashboard to track spokesperson social performance.
+            </p>
+            {volBySpokesperson.length === 0 ? (
+              <p className="text-[13px] font-light italic" style={{ color: vars.g400 }}>No spokesperson data yet. Add earned media rows with a spokesperson name in the Earned Media Tracker tab.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[540px] text-sm">
+                  <thead>
+                    <tr style={{ background: vars.g50 }}>
+                      {["Spokesperson", "LinkedIn Shares", "Engagement Rate", "DMs", "Profile Views"].map(h => (
+                        <th key={h} className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style={{ color: vars.g500 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {volBySpokesperson.map(([name]) => (
+                      <tr key={name} className="border-t" style={{ borderColor: vars.g200 }}>
+                        <td className="px-3 py-2.5 font-medium" style={{ color: vars.navy }}>{name}</td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5" style={{ background: vars.navy, color: "white" }}>

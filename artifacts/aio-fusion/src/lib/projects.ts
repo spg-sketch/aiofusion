@@ -109,6 +109,7 @@ export function createStoredProject(name: string): Client {
     activePlans: 0,
     lastActive: "Just now",
     recentActivity: "Project created",
+    createdAt: new Date().toISOString(),
     ...(owner ? { owner } : {}),
   };
   saveStoredProjects([project, ...projects]);
