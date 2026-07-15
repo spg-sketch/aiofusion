@@ -30,7 +30,10 @@ import blogTile2 from "../assets/blog-tile-2.png";
 import blogTile3 from "../assets/blog-tile-3.png";
 import heroBgImg from "../assets/hero-bg.png";
 
-const llmEngines = ["ChatGPT", "Claude"];
+const llmEngines = [
+  { name: "ChatGPT", logo: null },
+  { name: "Claude", logo: `${import.meta.env.BASE_URL}images/logo-claude.png` },
+];
 
 export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -232,8 +235,10 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
-            {llmEngines.map((name) => (
-              <span key={name} className="px-3 py-1 rounded-full text-[12px] font-semibold border" style={{ color: ink, borderColor: vars.g300, background: "white" }}>{name}</span>
+            {llmEngines.map((engine) => (
+              engine.logo
+                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-7 object-contain" />
+                : <span key={engine.name} className="px-3 py-1 rounded-full text-[12px] font-semibold border" style={{ color: ink, borderColor: vars.g300, background: "white" }}>{engine.name}</span>
             ))}
           </div>
         </div>
