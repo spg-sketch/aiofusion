@@ -9,7 +9,7 @@ export default function AboutPage(props: { onLogin: () => void; onBack: () => vo
         AIO Fusion was created by experts from the PR, business marketing and tech development worlds to help in-house teams answer the communications challenges of the AI age.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-        It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT and Claude.
+        It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all. Our platform offers in-house teams a rapid, cost-effective route to achieving business visibility for AI and human audiences.

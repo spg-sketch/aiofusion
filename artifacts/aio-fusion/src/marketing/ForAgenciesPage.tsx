@@ -40,7 +40,7 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
         <p className="text-[13px] font-semibold uppercase tracking-[0.2em] mb-3" style={{ color: "#C8497A" }}>An AIO platform built by comms professionals</p>
         <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
         <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. Our platform is designed with you in mind, to help you maximise the potential of your expertise and deliver measurable results that answer the communications challenges of the AI age.</p>
-        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading LLM agents such as ChatGPT and Claude.</p>
+        <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.</p>
         <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
       <div className="flex flex-wrap gap-3">

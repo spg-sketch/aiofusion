@@ -25,7 +25,6 @@ import step2Img from "../assets/photos/photo-strategy.jpg";
 import step3Img from "../assets/photos/photo-plan.jpg";
 import step4Img from "../assets/photos/photo-optimise.jpg";
 import step5Img from "../assets/photos/photo-measure.jpg";
-import step6Img from "../assets/photos/photo-agentic.jpg";
 import blogTile1 from "../assets/blog-tile-1.png";
 import blogTile2 from "../assets/blog-tile-2.png";
 import blogTile3 from "../assets/blog-tile-3.png";
@@ -186,12 +185,11 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { n: "01", img: step1Img, title: "Diagnose your AI visibility", body: "AIO Fusion diagnoses your business or brand visibility with LLM agents such as ChatGPT and Claude.", accent: vars.teal },
+              { n: "01", img: step1Img, title: "Diagnose your AI visibility", body: "AIO Fusion diagnoses your business or brand visibility with AI models such as ChatGPT and Claude.", accent: vars.teal },
               { n: "02", img: step2Img, title: "Build a GEO strategy", body: "Create a GEO strategy combining optimised content and technical AIO steps for your website and all your future PR and marketing output.", accent: accent },
               { n: "03", img: step3Img, title: "Plan and predict impact", body: "Optimise and predict the impact of your forward marketing and PR plan for AI authority and search.", accent: vars.gold },
               { n: "04", img: step4Img, title: "Optimise content output", body: "Optimise your on-going PR and marketing content output using a tailored AI authority editor.", accent: vars.green },
               { n: "05", img: step5Img, title: "Measure, report and predict", body: "Measure, report and predict marketing performance and AI visibility, tracking business messages, spokespeople and earned media.", accent: vars.accent },
-              { n: "06", img: step6Img, title: "Always-on agentic media relations", body: "Coming soon - AIO Fusion will enable always-on agentic PR management and media relations.", accent: vars.amber, soon: true },
             ].map((s) => (
               <div key={s.n} className="rounded-2xl overflow-hidden bg-white flex flex-col transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
                 <div className="aspect-[16/10] overflow-hidden relative" style={{ background: s.accent }}>
@@ -231,7 +229,6 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               { icon: Archive, title: "Content Library", desc: "Store and curate all your PR and marketing content over time.", accent: vars.gold },
               { icon: Globe, title: "Website Content GEO", desc: "Enhance your website content visibility for AI uplift.", accent: vars.green },
               { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
-              { icon: Bot, title: "Agentic Media Relations", desc: "Always on agentic PR management and media relations.", accent: vars.amber, soon: true },
               { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
             ].map((tool) => (
               <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${tool.accent}25` }}>
@@ -355,7 +352,6 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <button onClick={() => onNavigate("trust-security")} className="hover:opacity-60">Trust &amp; Security</button>
               <button onClick={() => onNavigate("privacy-policy")} className="hover:opacity-60">Privacy Policy</button>
               <button onClick={() => onNavigate("terms-conditions")} className="hover:opacity-60">Terms &amp; Conditions</button>
-              <button onClick={() => onNavigate("for-agents")} className="hover:opacity-60 opacity-70">For AI agents</button>
             </div>
             <p className="text-[11px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion 2026</p>
           </div>
