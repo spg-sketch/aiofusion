@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import InfoTip from "./InfoTip";
 import { effectiveProjectId, loadPlannerProjects, scoreProject } from "./lib/contentStore";
-import { getSpokespeople, getKeyMessages } from "./IntakeForm";
+import { getKeyMessages } from "./IntakeForm";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "./LlmCheckPage";
 import { loadSavedDiagnostics, type SavedDiagnostic } from "./lib/diagnosticStore";
 import { syncAuditsForProject, syncDiagnosticsForProject } from "./lib/auditSync";
@@ -415,32 +415,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return Array.from(tally.entries()).sort((a, b) => b[1] - a[1]);
   }, [inRange]);
 
-  const projectSpokespeople = useMemo(() => getSpokespeople(), []);
-  const socialImpactPeople = useMemo(() => ["Company LinkedIn", ...projectSpokespeople.map(s => s.name).filter(Boolean)], [projectSpokespeople]);
-
-  const socialImpactBySpokesperson: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = useMemo(() => {
-    const map: Record<string, { shares: string; engagement: string; dms: string; profileViews: string }> = {
-      "Company LinkedIn": { shares: "1,820", engagement: "4.2%", dms: "37", profileViews: "612" },
-    };
-    projectSpokespeople.forEach((s) => {
-      if (!s.name) return;
-      let seed = 0;
-      for (let i = 0; i < s.name.length; i++) seed = (seed * 31 + s.name.charCodeAt(i)) % 10_000;
-      map[s.name] = {
-        shares: String(300 + (seed % 900)),
-        engagement: `${(2 + (seed % 300) / 100).toFixed(1)}%`,
-        dms: String(5 + (seed % 40)),
-        profileViews: String(150 + (seed % 500)),
-      };
-    });
-    return map;
-  }, [projectSpokespeople]);
-
-  const [socialImpactPerson, setSocialImpactPerson] = useState<string>("Company LinkedIn");
-  useEffect(() => {
-    if (!socialImpactPeople.includes(socialImpactPerson)) setSocialImpactPerson("Company LinkedIn");
-  }, [socialImpactPeople, socialImpactPerson]);
-  const socialImpactStats = socialImpactBySpokesperson[socialImpactPerson] || socialImpactBySpokesperson["Company LinkedIn"];
 
   const prRows = useMemo(() => inRange.filter(r => r.type === "Press Release"), [inRange]);
   const prAvgScore = prRows.length ? Math.round((prRows.reduce((s, r) => s + r.score, 0) / prRows.length) * 10) / 10 : 0;
@@ -998,28 +972,6 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold uppercase tracking-[0.12em] mb-3" style={{ color: vars.navy }}>Social impact</h3>
-              <select
-                value={socialImpactPerson}
-                onChange={(e) => setSocialImpactPerson(e.target.value)}
-                className="text-xs border rounded-lg px-2 py-1.5 font-semibold"
-                style={{ borderColor: vars.navy, background: vars.navy, color: "#ffffff" }}
-              >
-                {socialImpactPeople.map((p) => (
-                  <option key={p} style={{ color: "#ffffff", background: vars.navy }}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatTile label="LinkedIn shares" value={socialImpactStats.shares} color={vars.navy} icon={Share2} />
-              <StatTile label="LinkedIn engagement" value={socialImpactStats.engagement} color={vars.navy} icon={TrendingUp} />
-              <StatTile label="Inbound DMs" value={socialImpactStats.dms} color={vars.navy} icon={FileText} />
-              <StatTile label="Profile views (week)" value={socialImpactStats.profileViews} color={vars.navy} icon={Eye} />
             </div>
           </div>
 
