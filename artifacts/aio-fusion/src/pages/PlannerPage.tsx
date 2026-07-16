@@ -673,7 +673,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
             <div className="flex-1 overflow-y-auto p-4">
               {archive.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-[13px] font-light" style={{ color: vars.g500 }}>{!contentVersion ? "Loading content…" : "The Archive is empty. Save a piece from the Optimiser or Creator first."}</p>
+                  <p className="text-[13px] font-light" style={{ color: vars.g500 }}>{!contentVersion ? "Loading content…" : "The content library is empty. Save a piece from the Optimiser or Creator first."}</p>
                 </div>
               ) : (
                 <div className="space-y-2">

@@ -988,7 +988,7 @@ OUTPUT INSTRUCTIONS:
               </div>
               <div className="flex-1 overflow-y-auto p-4">
                 {filteredArchive.length === 0 ? (
-                  <p className="text-[13px] font-light text-center py-8" style={{ color: vars.g500 }}>{!contentVersion ? "Loading content…" : archiveAll.length === 0 ? "Archive is empty." : "No matches."}</p>
+                  <p className="text-[13px] font-light text-center py-8" style={{ color: vars.g500 }}>{!contentVersion ? "Loading content…" : archiveAll.length === 0 ? "Content library is empty." : "No matches."}</p>
                 ) : (
                   <div className="space-y-2">
                     {filteredArchive.map((a) => (
