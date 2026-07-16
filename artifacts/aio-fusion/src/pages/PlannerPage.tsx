@@ -146,6 +146,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [calendarScrollWidth, setCalendarScrollWidth] = useState(0);
   useEffect(() => {
     const el = calendarScrollRef.current;
+    const topEl = topScrollRef.current;
     if (!el || view !== "spreadsheet") {
       setCalendarScrollState({ canLeft: false, canRight: false });
       return;
@@ -157,28 +158,30 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
         canRight: el.scrollLeft < el.scrollWidth - el.clientWidth - 4,
       });
       setCalendarScrollWidth(el.scrollWidth);
-      if (topScrollRef.current && !syncing) {
+      if (topEl && !syncing) {
         syncing = true;
-        topScrollRef.current.scrollLeft = el.scrollLeft;
+        topEl.scrollLeft = el.scrollLeft;
         syncing = false;
       }
     };
     const onTopScroll = () => {
-      if (topScrollRef.current && !syncing) {
+      if (!syncing) {
         syncing = true;
-        el.scrollLeft = topScrollRef.current.scrollLeft;
+        el.scrollLeft = topEl!.scrollLeft;
         syncing = false;
       }
     };
-    update();
+    // Use rAF so layout is fully computed before we measure scrollWidth
+    const raf = requestAnimationFrame(update);
     el.addEventListener("scroll", update, { passive: true });
-    topScrollRef.current?.addEventListener("scroll", onTopScroll, { passive: true });
+    topEl?.addEventListener("scroll", onTopScroll, { passive: true });
     window.addEventListener("resize", update);
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener("scroll", update);
-      topScrollRef.current?.removeEventListener("scroll", onTopScroll);
+      topEl?.removeEventListener("scroll", onTopScroll);
       window.removeEventListener("resize", update);
       ro.disconnect();
     };
@@ -377,8 +380,8 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
                 </button>
                 <div
                   ref={topScrollRef}
-                  className="overflow-x-auto flex-1"
-                  style={{ height: 16 }}
+                  className="calendar-top-scroll overflow-x-auto flex-1"
+                  style={{ height: 20 }}
                 >
                   <div style={{ width: calendarScrollWidth || "100%", height: 1 }} />
                 </div>

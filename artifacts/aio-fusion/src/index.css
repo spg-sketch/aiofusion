@@ -96,6 +96,27 @@
   color: #475569;
 }
 
+/* Calendar top scroll bar — force visible scrollbar thumb on all platforms
+   (macOS overlay scrollbars hide it by default, making the bar appear non-interactive) */
+.calendar-top-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+.calendar-top-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.calendar-top-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+.calendar-top-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+.calendar-top-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Marketing top-nav hover - clear visual feedback */
 .marketing-nav-link {
   position: relative;
