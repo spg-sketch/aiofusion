@@ -397,6 +397,8 @@ router.get(
 
 // ── PATCH /api/support/tickets/:id ────────────────────────────────────────
 // Admin-only: update status, admin notes, or mark user seen.
+// Guard: closing a ticket whose last message was sent by the user returns 409
+// unless the request includes { force: true } to override.
 router.patch(
   "/support/tickets/:id",
   requirePlatformAuth,
@@ -411,7 +413,26 @@ router.patch(
       return;
     }
     try {
-      const { status, adminNotes, hasAdminReply, userSeenReply, emailFailed } = req.body ?? {};
+      const { status, adminNotes, hasAdminReply, userSeenReply, emailFailed, force } = req.body ?? {};
+
+      // Guard: if closing, check whether the last message was from the user
+      if (status === "closed" && force !== true) {
+        const lastMessages = await db
+          .select({ authorType: supportTicketMessagesTable.authorType })
+          .from(supportTicketMessagesTable)
+          .where(eq(supportTicketMessagesTable.ticketId, id))
+          .orderBy(desc(supportTicketMessagesTable.createdAt));
+        const lastMessage = lastMessages[0];
+        if (lastMessage?.authorType === "user") {
+          res.status(409).json({
+            error: "unanswered_user_message",
+            message:
+              "The user's last message has not been answered. Close the ticket anyway?",
+          });
+          return;
+        }
+      }
+
       const set: Record<string, unknown> = {};
       if (status !== undefined) set.status = String(status);
       if (adminNotes !== undefined) set.adminNotes = String(adminNotes);

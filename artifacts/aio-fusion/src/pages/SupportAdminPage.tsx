@@ -141,6 +141,7 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
   const [savingNotes, setSavingNotes] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [saveFaqMode, setSaveFaqMode] = useState(false);
+  const [closeWarning, setCloseWarning] = useState<string | null>(null);
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
@@ -170,6 +171,7 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
     setAdminNotes(ticket.adminNotes ?? "");
     setReplyText("");
     setSaveFaqMode(false);
+    setCloseWarning(null);
     try {
       const r = await fetch(`${apiBase()}/api/support/tickets/${ticket.id}/messages`, { credentials: "include" });
       const data = (await r.json()) as { messages: TicketMessage[] };
@@ -179,16 +181,22 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
     }
   };
 
-  const updateStatus = async (status: string) => {
+  const updateStatus = async (status: string, force = false) => {
     if (!selectedTicket) return;
     setUpdatingStatus(true);
+    setCloseWarning(null);
     try {
       const r = await fetch(`${apiBase()}/api/support/tickets/${selectedTicket.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(force ? { force: true } : {}) }),
       });
+      if (r.status === 409) {
+        const data = (await r.json()) as { error: string; message: string };
+        setCloseWarning(data.message ?? "This ticket has an unanswered user message. Close anyway?");
+        return;
+      }
       const data = (await r.json()) as { ticket: Ticket };
       setSelectedTicket(data.ticket);
       setTickets((prev) => prev.map((t) => t.id === data.ticket.id ? data.ticket : t));
@@ -391,6 +399,34 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
                 </select>
                 <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
               </div>
+
+              {/* Warning: unanswered user message when trying to close */}
+              {closeWarning && (
+                <div className="mt-3 rounded-lg p-3 text-[12px] leading-snug" style={{ background: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e" }}>
+                  <p className="font-semibold mb-2 flex items-center gap-1.5">
+                    <AlertCircle size={13} /> Unanswered message
+                  </p>
+                  <p className="mb-3">{closeWarning}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => void updateStatus("closed", true)}
+                      disabled={updatingStatus}
+                      className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold text-white disabled:opacity-40 hover:brightness-110"
+                      style={{ background: "#b45309" }}
+                    >
+                      Close anyway
+                    </button>
+                    <button
+                      onClick={() => setCloseWarning(null)}
+                      className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold border hover:bg-gray-50"
+                      style={{ borderColor: "#fcd34d", color: "#92400e" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {!saveFaqMode && selectedTicket.status === "resolved" && (
                 <button
                   onClick={() => setSaveFaqMode(true)}

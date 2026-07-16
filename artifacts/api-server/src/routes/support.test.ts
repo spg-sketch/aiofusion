@@ -295,6 +295,8 @@ vi.mock("@workspace/db", () => {
     supportFaqTable: h.supportFaqTable,
     supportTicketsTable: h.supportTicketsTable,
     supportTicketMessagesTable: h.supportTicketMessagesTable,
+    platformMetaTable: { __table: "platform_meta", key: { __col: "key" }, value: { __col: "value" } },
+    platformAccountsTable: { __table: "platform_accounts", username: { __col: "username" }, email: { __col: "email" } },
   };
 });
 
@@ -742,6 +744,72 @@ describe("PATCH /api/support/tickets/:id", () => {
     } finally {
       await close(s2);
     }
+  });
+
+  it("closing a ticket with an unanswered user message returns 409", async () => {
+    // Seed a user message as the only (last) message on the ticket
+    h.state.messages.push({
+      id: h.state.nextMessageId(),
+      ticketId: 1,
+      authorType: "user",
+      authorUsername: "user1",
+      body: "Any update on this?",
+      createdAt: new Date(),
+    });
+
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      status: "closed",
+    });
+    expect(status).toBe(409);
+    expect(json.error).toBe("unanswered_user_message");
+    expect(typeof json.message).toBe("string");
+    // Ticket status must NOT have been changed
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.status).toBe("open");
+  });
+
+  it("closing a ticket with no messages is allowed (no thread yet)", async () => {
+    // No messages seeded — ticket can be closed freely
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      status: "closed",
+    });
+    expect(status).toBe(200);
+    expect(json.ticket.status).toBe("closed");
+  });
+
+  it("closing a ticket whose last message is from admin is allowed", async () => {
+    h.state.messages.push({
+      id: h.state.nextMessageId(),
+      ticketId: 1,
+      authorType: "admin",
+      authorUsername: "admin",
+      body: "Issue resolved — closing now.",
+      createdAt: new Date(),
+    });
+
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      status: "closed",
+    });
+    expect(status).toBe(200);
+    expect(json.ticket.status).toBe("closed");
+  });
+
+  it("force=true bypasses the unanswered-message guard and closes the ticket", async () => {
+    h.state.messages.push({
+      id: h.state.nextMessageId(),
+      ticketId: 1,
+      authorType: "user",
+      authorUsername: "user1",
+      body: "Still waiting for help.",
+      createdAt: new Date(),
+    });
+
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      status: "closed",
+      force: true,
+    });
+    expect(status).toBe(200);
+    expect(json.ticket.status).toBe("closed");
   });
 });
 
