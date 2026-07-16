@@ -47,9 +47,9 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
         <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
           <Calendar size={16} /> Book a Demo
         </button>
-        <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold transition-all hover:bg-white" style={{ color: "#102B36", border: "1.5px solid #102B36" }}>
+        <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold transition-all hover:bg-white" style={{ color: "#102B36", border: "1.5px solid #102B36" }}>
           <Mail size={16} /> Talk to Us
-        </a>
+        </button>
       </div>
     </MarketingPage>
   );

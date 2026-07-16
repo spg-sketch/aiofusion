@@ -313,7 +313,7 @@ function SectionCard({
                style={{ color: RASPBERRY }}>
               {eyebrow}
             </p>
-            <h2 className="text-[22px] font-semibold leading-tight mb-2"
+            <h2 className="text-[28px] font-semibold leading-tight mb-2"
                 style={{ fontFamily: "'Alice', Georgia, serif", color: NAVY }}>
               {title}
             </h2>

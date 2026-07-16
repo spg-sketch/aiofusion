@@ -23,9 +23,9 @@ export default function AboutPage(props: { onLogin: () => void; onBack: () => vo
         Our ambition is to make the fusion of human expertise and a pioneering AI communications technology available to in-house PR and marketing teams as well as PR agencies and consultants - enabling you to leverage the power of answer engines with a single automated platform.
       </p>
 
-      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
+      <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: vars.accent }}>
         <Mail size={16} /> Get in Touch
-      </a>
+      </button>
     </MarketingPage>
   );
 }

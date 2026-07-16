@@ -1,4 +1,4 @@
-import { Globe, Mail, Check } from "lucide-react";
+import { Globe, Mail, Check, Calendar } from "lucide-react";
 import MarketingPage from "./MarketingPage";
 
 export default function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
@@ -31,9 +31,9 @@ export default function ForInhousePage(props: { onLogin: () => void; onBack: () 
           </div>
         ))}
       </div>
-      <a href="mailto:info@aiofusion.ai" className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
-        <Mail size={16} /> Book a Demo
-      </a>
+      <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
+        <Calendar size={16} /> Book a Demo
+      </button>
     </MarketingPage>
   );
 }

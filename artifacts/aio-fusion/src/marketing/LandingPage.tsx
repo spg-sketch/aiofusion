@@ -316,12 +316,12 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <p className="text-[15px] leading-relaxed font-light text-white/85 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
-              <a href="mailto:info@aiofusion.ai?subject=Book%20a%20Demo%20-%20AIO%20Fusion" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: accent }}>
+              <button onClick={() => onNavigate("contact")} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: accent }}>
                 <span className="flex items-center gap-2"><Calendar size={16} /> Book a Demo</span> <ArrowRight size={14} />
-              </a>
-              <a href="mailto:info@aiofusion.ai" className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
+              </button>
+              <button onClick={() => onNavigate("contact")} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
                 <span className="flex items-center gap-2"><Mail size={16} /> Talk to Us</span> <ArrowRight size={14} />
-              </a>
+              </button>
             </div>
           </div>
         </div>
