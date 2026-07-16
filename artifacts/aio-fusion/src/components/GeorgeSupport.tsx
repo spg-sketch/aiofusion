@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, MessageCircle, Send, CheckCircle2, AlertCircle, Loader2, ChevronDown, Paperclip } from "lucide-react";
+import { X, MessageCircle, Send, CheckCircle2, AlertCircle, Loader2, ChevronDown, Paperclip, ArrowLeft, Clock, InboxIcon } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/contentAi";
 
@@ -16,6 +16,25 @@ type Ticket = {
   status: string;
 };
 
+type TicketFull = {
+  id: number;
+  subject: string;
+  status: string;
+  category: string;
+  createdAt: string;
+  hasAdminReply: boolean;
+  userSeenReply: boolean;
+};
+
+type TicketMessage = {
+  id: number;
+  ticketId: number;
+  authorType: "user" | "admin";
+  authorUsername: string;
+  body: string;
+  createdAt: string;
+};
+
 type ChatStep =
   | { type: "greeting" }
   | { type: "waiting_question" }
@@ -24,7 +43,11 @@ type ChatStep =
   | { type: "no_match" }
   | { type: "ticket_form" }
   | { type: "ticket_success"; ticket: Ticket }
-  | { type: "ask_another" };
+  | { type: "ask_another" }
+  | { type: "my_tickets_loading" }
+  | { type: "my_tickets"; tickets: TicketFull[] }
+  | { type: "ticket_detail_loading"; ticketId: number }
+  | { type: "ticket_detail"; ticket: TicketFull; messages: TicketMessage[] };
 
 const CATEGORIES = [
   "General",
@@ -67,6 +90,7 @@ export function GeorgeSupport({
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   // Check for pending ticket updates on open
   useEffect(() => {
@@ -99,6 +123,13 @@ export function GeorgeSupport({
   useEffect(() => {
     if (step.type === "waiting_question") {
       setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [step.type]);
+
+  // Scroll thread to bottom when detail view loads
+  useEffect(() => {
+    if (step.type === "ticket_detail") {
+      setTimeout(() => threadEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     }
   }, [step.type]);
 
@@ -156,6 +187,50 @@ export function GeorgeSupport({
     }
   }
 
+  async function handleViewMyTickets() {
+    setStep({ type: "my_tickets_loading" });
+    try {
+      const r = await fetch(`${apiBase()}/api/support/tickets?mine=true`, {
+        credentials: "include",
+      });
+      const data = (await r.json()) as { tickets?: TicketFull[] };
+      setStep({ type: "my_tickets", tickets: data.tickets ?? [] });
+    } catch {
+      setStep({ type: "my_tickets", tickets: [] });
+    }
+  }
+
+  async function handleViewTicket(ticket: TicketFull) {
+    setStep({ type: "ticket_detail_loading", ticketId: ticket.id });
+    try {
+      const r = await fetch(`${apiBase()}/api/support/tickets/${ticket.id}/messages`, {
+        credentials: "include",
+      });
+      const data = (await r.json()) as { messages?: TicketMessage[] };
+      setStep({ type: "ticket_detail", ticket, messages: data.messages ?? [] });
+
+      // Mark as seen if there's an unread admin reply
+      if (ticket.hasAdminReply && !ticket.userSeenReply) {
+        void fetch(`${apiBase()}/api/support/tickets/${ticket.id}/seen`, {
+          method: "POST",
+          credentials: "include",
+        }).then(() => {
+          // Refresh the update badge
+          return fetch(`${apiBase()}/api/support/tickets?mine=true&hasUpdate=true`, {
+            credentials: "include",
+          });
+        }).then((r) => r.json())
+          .then((d: { tickets?: unknown[] }) => {
+            setHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
+          })
+          .catch(() => {});
+      }
+    } catch {
+      // Fall back to showing ticket with no messages
+      setStep({ type: "ticket_detail", ticket, messages: [] });
+    }
+  }
+
   if (!open) return null;
 
   const accent = vars.accent ?? "#C8497A";
@@ -189,6 +264,22 @@ export function GeorgeSupport({
           className="flex items-center gap-3 px-5 py-4 flex-shrink-0"
           style={{ background: navy, color: "white" }}
         >
+          {/* Back button for sub-views */}
+          {(step.type === "my_tickets" || step.type === "my_tickets_loading" || step.type === "ticket_detail" || step.type === "ticket_detail_loading") && (
+            <button
+              onClick={() => {
+                if (step.type === "ticket_detail" || step.type === "ticket_detail_loading") {
+                  void handleViewMyTickets();
+                } else {
+                  setStep({ type: "greeting" });
+                }
+              }}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+              title="Back"
+            >
+              <ArrowLeft size={15} />
+            </button>
+          )}
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0"
             style={{ background: accent }}
@@ -196,10 +287,16 @@ export function GeorgeSupport({
             G
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-semibold">George</p>
+            <p className="text-[14px] font-semibold">
+              {step.type === "my_tickets" || step.type === "my_tickets_loading"
+                ? "My Tickets"
+                : step.type === "ticket_detail" || step.type === "ticket_detail_loading"
+                ? "Ticket Thread"
+                : "George"}
+            </p>
             <p className="text-[11px] opacity-70">GEO Support Assistant</p>
           </div>
-          {hasUpdate && (
+          {hasUpdate && step.type !== "ticket_detail" && (
             <div
               className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
               style={{ background: accent, color: "white" }}
@@ -217,161 +314,336 @@ export function GeorgeSupport({
 
         {/* Chat body */}
         <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
-          {/* George greeting bubble */}
-          <GeorgeBubble>
-            <p className="text-[14px] leading-relaxed" style={{ color: navy }}>
-              Hi{userName ? ` ${userName}` : ""}! I'm <strong>George</strong> — your GEO support assistant.{" "}
-              What can I help you with today?
-            </p>
-          </GeorgeBubble>
 
-          {(step.type === "waiting_question" || step.type === "searching") && (
-            <GeorgeBubble>
-              <p className="text-[13px]" style={{ color: navy }}>
-                Type your question below and I'll search our knowledge base for an answer.
-              </p>
-            </GeorgeBubble>
-          )}
-
-          {step.type === "searching" && (
+          {/* ── My Tickets loading ── */}
+          {step.type === "my_tickets_loading" && (
             <GeorgeBubble>
               <div className="flex items-center gap-2">
                 <Loader2 size={14} className="animate-spin" style={{ color: teal }} />
-                <span className="text-[13px]" style={{ color: vars.g500 }}>Searching the FAQ…</span>
+                <span className="text-[13px]" style={{ color: vars.g500 }}>Loading your tickets…</span>
               </div>
             </GeorgeBubble>
           )}
 
-          {step.type === "faq_result" && (
+          {/* ── My Tickets list ── */}
+          {step.type === "my_tickets" && (
             <>
+              {step.tickets.length === 0 ? (
+                <GeorgeBubble>
+                  <div className="flex flex-col items-center gap-2 py-2 text-center">
+                    <InboxIcon size={28} style={{ color: vars.g300 ?? "#d1d5db" }} />
+                    <p className="text-[13px]" style={{ color: navy }}>You haven't submitted any tickets yet.</p>
+                    <button
+                      onClick={() => setStep({ type: "ticket_form" })}
+                      className="mt-1 px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: teal }}
+                    >
+                      Submit a ticket
+                    </button>
+                  </div>
+                </GeorgeBubble>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {step.tickets.map((ticket) => (
+                    <button
+                      key={ticket.id}
+                      onClick={() => void handleViewTicket(ticket)}
+                      className="w-full text-left rounded-2xl px-4 py-3 transition-all hover:brightness-95 active:scale-[0.99]"
+                      style={{ background: "#f0f9fb", border: "1px solid #d0edf3" }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            {ticket.hasAdminReply && !ticket.userSeenReply && (
+                              <span
+                                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ background: accent }}
+                                title="New reply"
+                              />
+                            )}
+                            <p className="text-[13px] font-semibold truncate" style={{ color: navy }}>
+                              {ticket.subject}
+                            </p>
+                          </div>
+                          <p className="text-[11px]" style={{ color: vars.g500 }}>
+                            #{ticket.id} · {ticket.category}
+                          </p>
+                        </div>
+                        <TicketStatusBadge status={ticket.status} accent={accent} teal={teal} />
+                      </div>
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <Clock size={10} style={{ color: vars.g400 }} />
+                        <span className="text-[10px]" style={{ color: vars.g400 }}>
+                          {formatDate(ticket.createdAt)}
+                        </span>
+                        {ticket.hasAdminReply && !ticket.userSeenReply && (
+                          <span
+                            className="ml-1 text-[10px] font-semibold"
+                            style={{ color: accent }}
+                          >
+                            · New reply
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setStep({ type: "ticket_form" })}
+                    className="w-full py-2.5 rounded-xl text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                    style={{ borderColor: vars.g200, color: navy }}
+                  >
+                    + Submit a new ticket
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Ticket detail loading ── */}
+          {step.type === "ticket_detail_loading" && (
+            <GeorgeBubble>
+              <div className="flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" style={{ color: teal }} />
+                <span className="text-[13px]" style={{ color: vars.g500 }}>Loading thread…</span>
+              </div>
+            </GeorgeBubble>
+          )}
+
+          {/* ── Ticket detail thread ── */}
+          {step.type === "ticket_detail" && (
+            <>
+              {/* Ticket meta */}
+              <div
+                className="rounded-xl px-4 py-3"
+                style={{ background: "#f8f8fa", border: `1px solid ${vars.g200}` }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold" style={{ color: navy }}>
+                      {step.ticket.subject}
+                    </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: vars.g500 }}>
+                      #{step.ticket.id} · {step.ticket.category} · {formatDate(step.ticket.createdAt)}
+                    </p>
+                  </div>
+                  <TicketStatusBadge status={step.ticket.status} accent={accent} teal={teal} />
+                </div>
+              </div>
+
+              {/* Messages */}
+              {step.messages.length === 0 ? (
+                <GeorgeBubble>
+                  <p className="text-[13px]" style={{ color: vars.g500 }}>
+                    No messages yet — we'll be in touch soon.
+                  </p>
+                </GeorgeBubble>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {step.messages.map((msg) => (
+                    <MessageBubble key={msg.id} message={msg} navy={navy} accent={accent} teal={teal} />
+                  ))}
+                </div>
+              )}
+              <div ref={threadEndRef} />
+            </>
+          )}
+
+          {/* ── Standard chat flow ── */}
+          {(step.type === "greeting" || step.type === "waiting_question" || step.type === "searching" ||
+            step.type === "faq_result" || step.type === "no_match" || step.type === "ticket_form" ||
+            step.type === "ticket_success" || step.type === "ask_another") && (
+            <>
+              {/* George greeting bubble */}
               <GeorgeBubble>
-                <p className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color: vars.g400 }}>
-                  {step.entry.category}
-                </p>
-                <p className="text-[14px] font-semibold mb-2" style={{ color: navy }}>
-                  {step.entry.question}
-                </p>
-                <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: vars.g600 ?? navy }}>
-                  {step.entry.answer}
+                <p className="text-[14px] leading-relaxed" style={{ color: navy }}>
+                  Hi{userName ? ` ${userName}` : ""}! I'm <strong>George</strong> — your GEO support assistant.{" "}
+                  What can I help you with today?
                 </p>
               </GeorgeBubble>
 
-              {helpfulVote === null && (
+              {/* My tickets CTA on greeting — prominent if there's a new reply */}
+              {step.type === "greeting" && (
+                <div className="flex gap-2">
+                  {hasUpdate ? (
+                    <button
+                      onClick={() => void handleViewMyTickets()}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      <MessageCircle size={13} />
+                      View new reply
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => void handleViewMyTickets()}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                      style={{ borderColor: vars.g200, color: navy }}
+                    >
+                      <InboxIcon size={13} />
+                      My tickets
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {(step.type === "waiting_question" || step.type === "searching") && (
                 <GeorgeBubble>
-                  <p className="text-[13px] mb-3" style={{ color: navy }}>Was this helpful?</p>
+                  <p className="text-[13px]" style={{ color: navy }}>
+                    Type your question below and I'll search our knowledge base for an answer.
+                  </p>
+                </GeorgeBubble>
+              )}
+
+              {step.type === "searching" && (
+                <GeorgeBubble>
+                  <div className="flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin" style={{ color: teal }} />
+                    <span className="text-[13px]" style={{ color: vars.g500 }}>Searching the FAQ…</span>
+                  </div>
+                </GeorgeBubble>
+              )}
+
+              {step.type === "faq_result" && (
+                <>
+                  <GeorgeBubble>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color: vars.g400 }}>
+                      {step.entry.category}
+                    </p>
+                    <p className="text-[14px] font-semibold mb-2" style={{ color: navy }}>
+                      {step.entry.question}
+                    </p>
+                    <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: vars.g600 ?? navy }}>
+                      {step.entry.answer}
+                    </p>
+                  </GeorgeBubble>
+
+                  {helpfulVote === null && (
+                    <GeorgeBubble>
+                      <p className="text-[13px] mb-3" style={{ color: navy }}>Was this helpful?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setHelpfulVote("yes"); setStep({ type: "ask_another" }); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                          style={{ borderColor: vars.g200, color: navy }}
+                        >
+                          <CheckCircle2 size={13} style={{ color: "#22c55e" }} /> Yes, thanks!
+                        </button>
+                        <button
+                          onClick={() => { setHelpfulVote("no"); setStep({ type: "ticket_form" }); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                          style={{ borderColor: vars.g200, color: navy }}
+                        >
+                          <AlertCircle size={13} style={{ color: accent }} /> Not quite
+                        </button>
+                      </div>
+                    </GeorgeBubble>
+                  )}
+                </>
+              )}
+
+              {step.type === "ask_another" && (
+                <GeorgeBubble>
+                  <p className="text-[13px] mb-3" style={{ color: navy }}>
+                    Great! Is there anything else I can help with?
+                  </p>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => { setHelpfulVote("yes"); setStep({ type: "ask_another" }); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                      onClick={() => { setQuestion(""); setStep({ type: "waiting_question" }); }}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
                       style={{ borderColor: vars.g200, color: navy }}
                     >
-                      <CheckCircle2 size={13} style={{ color: "#22c55e" }} /> Yes, thanks!
+                      Ask another question
                     </button>
                     <button
-                      onClick={() => { setHelpfulVote("no"); setStep({ type: "ticket_form" }); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                      onClick={onClose}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: teal }}
+                    >
+                      All done
+                    </button>
+                  </div>
+                </GeorgeBubble>
+              )}
+
+              {step.type === "no_match" && (
+                <GeorgeBubble>
+                  <p className="text-[13px] leading-relaxed" style={{ color: navy }}>
+                    I don't have an answer for that in my knowledge base yet. Let me connect you with the support team — they'll get back to you shortly.
+                  </p>
+                </GeorgeBubble>
+              )}
+
+              {(step.type === "no_match" || (step.type === "faq_result" && helpfulVote === "no")) && (
+                <TicketForm
+                  category={ticketCategory}
+                  subject={ticketSubject}
+                  description={ticketDescription}
+                  attachment={ticketAttachment}
+                  error={ticketError}
+                  submitting={submitting}
+                  fileRef={fileRef}
+                  onCategory={setTicketCategory}
+                  onSubject={setTicketSubject}
+                  onDescription={setTicketDescription}
+                  onAttachment={setTicketAttachment}
+                  onSubmit={handleSubmitTicket}
+                  navy={navy}
+                  accent={accent}
+                  teal={teal}
+                />
+              )}
+
+              {step.type === "ticket_form" && (
+                <TicketForm
+                  category={ticketCategory}
+                  subject={ticketSubject}
+                  description={ticketDescription}
+                  attachment={ticketAttachment}
+                  error={ticketError}
+                  submitting={submitting}
+                  fileRef={fileRef}
+                  onCategory={setTicketCategory}
+                  onSubject={setTicketSubject}
+                  onDescription={setTicketDescription}
+                  onAttachment={setTicketAttachment}
+                  onSubmit={handleSubmitTicket}
+                  navy={navy}
+                  accent={accent}
+                  teal={teal}
+                />
+              )}
+
+              {step.type === "ticket_success" && (
+                <GeorgeBubble>
+                  <div className="flex items-start gap-2 mb-2">
+                    <CheckCircle2 size={18} style={{ color: "#22c55e" }} className="flex-shrink-0 mt-0.5" />
+                    <p className="text-[14px] font-semibold" style={{ color: navy }}>
+                      Ticket #{step.ticket.id} submitted!
+                    </p>
+                  </div>
+                  <p className="text-[13px] leading-relaxed" style={{ color: vars.g500 }}>
+                    We've received your request and will get back to you by email. Reference number:{" "}
+                    <strong style={{ color: navy }}>#{step.ticket.id}</strong>.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => void handleViewMyTickets()}
+                      className="px-4 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
                       style={{ borderColor: vars.g200, color: navy }}
                     >
-                      <AlertCircle size={13} style={{ color: accent }} /> Not quite
+                      View my tickets
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: teal }}
+                    >
+                      Close
                     </button>
                   </div>
                 </GeorgeBubble>
               )}
             </>
-          )}
-
-          {step.type === "ask_another" && (
-            <GeorgeBubble>
-              <p className="text-[13px] mb-3" style={{ color: navy }}>
-                Great! Is there anything else I can help with?
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setQuestion(""); setStep({ type: "waiting_question" }); }}
-                  className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
-                  style={{ borderColor: vars.g200, color: navy }}
-                >
-                  Ask another question
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
-                  style={{ background: teal }}
-                >
-                  All done
-                </button>
-              </div>
-            </GeorgeBubble>
-          )}
-
-          {step.type === "no_match" && (
-            <GeorgeBubble>
-              <p className="text-[13px] leading-relaxed" style={{ color: navy }}>
-                I don't have an answer for that in my knowledge base yet. Let me connect you with the support team — they'll get back to you shortly.
-              </p>
-            </GeorgeBubble>
-          )}
-
-          {(step.type === "no_match" || (step.type === "faq_result" && helpfulVote === "no")) && (
-            <TicketForm
-              category={ticketCategory}
-              subject={ticketSubject}
-              description={ticketDescription}
-              attachment={ticketAttachment}
-              error={ticketError}
-              submitting={submitting}
-              fileRef={fileRef}
-              onCategory={setTicketCategory}
-              onSubject={setTicketSubject}
-              onDescription={setTicketDescription}
-              onAttachment={setTicketAttachment}
-              onSubmit={handleSubmitTicket}
-              navy={navy}
-              accent={accent}
-              teal={teal}
-            />
-          )}
-
-          {step.type === "ticket_form" && (
-            <TicketForm
-              category={ticketCategory}
-              subject={ticketSubject}
-              description={ticketDescription}
-              attachment={ticketAttachment}
-              error={ticketError}
-              submitting={submitting}
-              fileRef={fileRef}
-              onCategory={setTicketCategory}
-              onSubject={setTicketSubject}
-              onDescription={setTicketDescription}
-              onAttachment={setTicketAttachment}
-              onSubmit={handleSubmitTicket}
-              navy={navy}
-              accent={accent}
-              teal={teal}
-            />
-          )}
-
-          {step.type === "ticket_success" && (
-            <GeorgeBubble>
-              <div className="flex items-start gap-2 mb-2">
-                <CheckCircle2 size={18} style={{ color: "#22c55e" }} className="flex-shrink-0 mt-0.5" />
-                <p className="text-[14px] font-semibold" style={{ color: navy }}>
-                  Ticket #{step.ticket.id} submitted!
-                </p>
-              </div>
-              <p className="text-[13px] leading-relaxed" style={{ color: vars.g500 }}>
-                We've received your request and will get back to you by email. Reference number:{" "}
-                <strong style={{ color: navy }}>#{step.ticket.id}</strong>.
-              </p>
-              <button
-                onClick={onClose}
-                className="mt-3 px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
-                style={{ background: teal }}
-              >
-                Close
-              </button>
-            </GeorgeBubble>
           )}
         </div>
 
@@ -423,6 +695,83 @@ function GeorgeBubble({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+function MessageBubble({
+  message,
+  navy,
+  accent,
+  teal,
+}: {
+  message: TicketMessage;
+  navy: string;
+  accent: string;
+  teal: string;
+}) {
+  const isAdmin = message.authorType === "admin";
+  return (
+    <div className={`flex flex-col gap-1 ${isAdmin ? "" : "items-end"}`}>
+      <div
+        className="max-w-[85%] rounded-2xl px-4 py-3"
+        style={
+          isAdmin
+            ? { background: "#f0f9fb", border: "1px solid #d0edf3" }
+            : { background: navy, color: "white" }
+        }
+      >
+        <p
+          className="text-[11px] font-semibold mb-1"
+          style={{ color: isAdmin ? teal : "rgba(255,255,255,0.65)" }}
+        >
+          {isAdmin ? "Support Team" : "You"}
+        </p>
+        <p
+          className="text-[13px] leading-relaxed whitespace-pre-wrap"
+          style={{ color: isAdmin ? navy : "white" }}
+        >
+          {message.body}
+        </p>
+      </div>
+      <p className="text-[10px] px-1" style={{ color: vars.g400 }}>
+        {formatDate(message.createdAt)}
+      </p>
+    </div>
+  );
+}
+
+function TicketStatusBadge({
+  status,
+  accent,
+  teal,
+}: {
+  status: string;
+  accent: string;
+  teal: string;
+}) {
+  const cfg: Record<string, { label: string; bg: string; color: string }> = {
+    open: { label: "Open", bg: "#f0fdf4", color: "#16a34a" },
+    in_progress: { label: "In progress", bg: "#eff6ff", color: teal },
+    closed: { label: "Closed", bg: "#f3f4f6", color: "#6b7280" },
+    resolved: { label: "Resolved", bg: "#f3f4f6", color: "#6b7280" },
+  };
+  const c = cfg[status] ?? { label: status, bg: "#f3f4f6", color: "#6b7280" };
+  return (
+    <span
+      className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{ background: c.bg, color: c.color }}
+    >
+      {c.label}
+    </span>
+  );
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return iso;
+  }
 }
 
 function TicketForm({

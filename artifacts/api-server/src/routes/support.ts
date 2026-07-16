@@ -444,6 +444,44 @@ router.get(
   },
 );
 
+// ── POST /api/support/tickets/:id/seen ───────────────────────────────────
+// User-accessible: mark the ticket's admin reply as seen (clears badge).
+router.post(
+  "/support/tickets/:id/seen",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "Invalid ticket id." });
+      return;
+    }
+    try {
+      const account = req.account!;
+      const [ticket] = await db
+        .select({ accountUsername: supportTicketsTable.accountUsername })
+        .from(supportTicketsTable)
+        .where(eq(supportTicketsTable.id, id))
+        .limit(1);
+      if (!ticket) {
+        res.status(404).json({ error: "Ticket not found." });
+        return;
+      }
+      if (!isAdmin(req) && ticket.accountUsername !== account.username) {
+        res.status(403).json({ error: "Access denied." });
+        return;
+      }
+      await db
+        .update(supportTicketsTable)
+        .set({ userSeenReply: true })
+        .where(eq(supportTicketsTable.id, id));
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("[support] POST /tickets/:id/seen", err);
+      res.status(500).json({ error: "Failed to mark ticket as seen" });
+    }
+  },
+);
+
 // ── POST /api/support/tickets/:id/messages ────────────────────────────────
 // Add a reply to a ticket thread.
 router.post(
