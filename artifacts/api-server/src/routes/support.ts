@@ -5,6 +5,7 @@ import {
   supportTicketsTable,
   supportTicketMessagesTable,
   platformMetaTable,
+  platformAccountsTable,
 } from "@workspace/db";
 import {
   and,
@@ -18,7 +19,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { sendSupportTicketAlert, sendSupportTicketAck } from "../lib/notify-email";
+import { sendSupportTicketAlert, sendSupportTicketAck, sendSupportTicketReplyNotification } from "../lib/notify-email";
 
 const PROFILE_PREFIX = "account:profile:";
 
@@ -501,7 +502,10 @@ router.post(
       }
       const account = req.account!;
       const [ticket] = await db
-        .select({ accountUsername: supportTicketsTable.accountUsername })
+        .select({
+          accountUsername: supportTicketsTable.accountUsername,
+          subject: supportTicketsTable.subject,
+        })
         .from(supportTicketsTable)
         .where(eq(supportTicketsTable.id, id))
         .limit(1);
@@ -531,6 +535,39 @@ router.post(
           .where(eq(supportTicketsTable.id, id));
       }
       res.status(201).json({ message });
+
+      // Send reply notification email to the ticket owner when an admin replies.
+      if (isAdminUser) {
+        try {
+          const [ownerAccount] = await db
+            .select({ email: platformAccountsTable.email, username: platformAccountsTable.username })
+            .from(platformAccountsTable)
+            .where(eq(platformAccountsTable.username, ticket.accountUsername))
+            .limit(1);
+          if (ownerAccount?.email) {
+            const displayName = await getDisplayName(ticket.accountUsername).catch(() => undefined);
+            const notifyOk = await sendSupportTicketReplyNotification({
+              toEmail: ownerAccount.email,
+              toName: ownerAccount.username,
+              displayName,
+              ticketId: id,
+              subject: ticket.subject,
+              replyBody: body.trim(),
+            });
+            if (!notifyOk) {
+              await db
+                .update(supportTicketsTable)
+                .set({ emailFailed: true })
+                .where(eq(supportTicketsTable.id, id))
+                .catch((err) => {
+                  console.error("[support] Failed to set emailFailed flag on ticket after reply notification failure", id, err);
+                });
+            }
+          }
+        } catch (err) {
+          console.error("[support] POST /tickets/:id/messages — reply notification error (non-fatal)", err);
+        }
+      }
     } catch (err) {
       console.error("[support] POST /tickets/:id/messages", err);
       res.status(500).json({ error: "Failed to add message" });

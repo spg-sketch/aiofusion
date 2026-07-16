@@ -567,6 +567,75 @@ export async function sendSupportTicketAck(opts: {
   }
 }
 
+export async function sendSupportTicketReplyNotification(opts: {
+  toEmail: string;
+  toName: string;
+  displayName?: string;
+  ticketId: number;
+  subject: string;
+  replyBody: string;
+}): Promise<boolean> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket reply notification not sent");
+    return false;
+  }
+
+  const greeting = opts.displayName || opts.toName;
+
+  const emailSubject = `Re: Your support request [#${opts.ticketId}] — ${opts.subject}`;
+  const text = [
+    `Hi ${greeting},`,
+    ``,
+    `A member of the AIO Fusion support team has replied to your ticket.`,
+    ``,
+    `Ticket reference: #${opts.ticketId}`,
+    `Subject: ${opts.subject}`,
+    ``,
+    `Reply:`,
+    opts.replyBody,
+    ``,
+    `You can reply directly to this email or log in to view the full thread.`,
+    ``,
+    `Warm regards,`,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Support Reply",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(greeting)},</p>
+      <p style="margin: 0 0 16px 0;">
+        A member of the AIO Fusion support team has replied to your ticket.
+      </p>
+      ${buildDataRows([
+        ["Ticket reference", `#${opts.ticketId}`],
+        ["Subject", opts.subject],
+      ])}
+      <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Reply:</p>
+      <div style="background: #F8FAFC; border-left: 3px solid #C8497A; padding: 14px 16px;
+                  border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.7; color: #102B36;">
+        ${textToHtml(opts.replyBody)}
+      </div>
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        Reply to this email or log in to
+        <a href="https://aiofusion.ai" style="color: #C8497A;">AIO Fusion</a>
+        to view the full thread.
+      </p>
+    `,
+    cta: { text: "View your support thread", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
+    logger.info({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: support ticket reply notification sent");
+    return true;
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: failed to send support ticket reply notification (non-fatal)");
+    return false;
+  }
+}
+
 export async function sendEnquiryConfirmation(opts: {
   name: string;
   toEmail: string;
