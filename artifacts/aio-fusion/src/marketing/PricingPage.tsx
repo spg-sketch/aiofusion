@@ -145,7 +145,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(251,246,236,0.95)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
           <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
           </button>
           <div className="hidden md:flex items-center gap-6">
             {navLinks.map((it) => (

@@ -48,7 +48,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
       <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
           <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10 sm:h-14" />
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
           </button>
           <div className="hidden lg:flex items-center gap-7">
             {[
