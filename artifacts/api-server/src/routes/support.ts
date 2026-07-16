@@ -4,6 +4,7 @@ import {
   supportFaqTable,
   supportTicketsTable,
   supportTicketMessagesTable,
+  platformMetaTable,
 } from "@workspace/db";
 import {
   and,
@@ -18,6 +19,25 @@ import {
 } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { sendSupportTicketAlert, sendSupportTicketAck } from "../lib/notify-email";
+
+const PROFILE_PREFIX = "account:profile:";
+
+async function getDisplayName(username: string): Promise<string | undefined> {
+  const key = `${PROFILE_PREFIX}${username.trim().toLowerCase()}`;
+  const [row] = await db
+    .select({ value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, key))
+    .limit(1);
+  if (!row?.value) return undefined;
+  try {
+    const obj = JSON.parse(row.value) as { displayName?: unknown };
+    const dn = typeof obj?.displayName === "string" ? obj.displayName.trim() : "";
+    return dn || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const router: IRouter = Router();
 
@@ -229,17 +249,20 @@ router.post(
       res.status(201).json({ ticket });
 
       // Fire-and-forget email notifications (non-fatal if they fail)
+      const displayName = await getDisplayName(account.username).catch(() => undefined);
       void sendSupportTicketAlert({
         ticketId: ticket.id,
         subject: ticket.subject,
         category: ticket.category,
         description: ticket.description,
         accountUsername: ticket.accountUsername,
+        displayName,
       });
       if (account.email) {
         void sendSupportTicketAck({
           toEmail: account.email,
           toName: account.username,
+          displayName,
           ticketId: ticket.id,
           subject: ticket.subject,
         });

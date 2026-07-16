@@ -447,12 +447,17 @@ export async function sendSupportTicketAlert(opts: {
   category: string;
   description: string;
   accountUsername: string;
+  displayName?: string;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
     logger.warn({ ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket alert not sent");
     return;
   }
+
+  const accountLabel = opts.displayName
+    ? `${opts.displayName} (${opts.accountUsername})`
+    : opts.accountUsername;
 
   const emailSubject = `[AIO Fusion] New support ticket #${opts.ticketId} — ${opts.subject}`;
   const text = [
@@ -461,7 +466,7 @@ export async function sendSupportTicketAlert(opts: {
     `Ticket ID:   #${opts.ticketId}`,
     `Subject:     ${opts.subject}`,
     `Category:    ${opts.category}`,
-    `Account:     ${opts.accountUsername}`,
+    `Account:     ${accountLabel}`,
     ``,
     `Description:`,
     opts.description,
@@ -479,7 +484,7 @@ export async function sendSupportTicketAlert(opts: {
         ["Ticket ID", `#${opts.ticketId}`],
         ["Subject", opts.subject],
         ["Category", opts.category],
-        ["Account", opts.accountUsername],
+        ["Account", accountLabel],
       ])}
       <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Description:</p>
       <div style="background: #F8FAFC; border-left: 3px solid #C8497A; padding: 14px 16px;
@@ -501,6 +506,7 @@ export async function sendSupportTicketAlert(opts: {
 export async function sendSupportTicketAck(opts: {
   toEmail: string;
   toName: string;
+  displayName?: string;
   ticketId: number;
   subject: string;
 }): Promise<void> {
@@ -510,9 +516,11 @@ export async function sendSupportTicketAck(opts: {
     return;
   }
 
+  const greeting = opts.displayName || opts.toName;
+
   const emailSubject = `We've received your support request — AIO Fusion [#${opts.ticketId}]`;
   const text = [
-    `Hi ${opts.toName},`,
+    `Hi ${greeting},`,
     ``,
     `Thank you for getting in touch. We've received your support ticket and a member`,
     `of our team will get back to you as soon as possible.`,
@@ -530,7 +538,7 @@ export async function sendSupportTicketAck(opts: {
   const html = buildEmailHtml({
     label: "Support Request Received",
     bodyHtml: `
-      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(greeting)},</p>
       <p style="margin: 0 0 16px 0;">
         Thank you for getting in touch. We've received your support ticket and a member
         of our team will get back to you as soon as possible.
