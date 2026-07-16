@@ -23,7 +23,7 @@ import {
   type SessionInfo,
 } from "./lib/auth";
 import { vars } from "./marketing/vars";
-import { useState, useEffect, useMemo, useRef, useCallback, lazy } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import {
   ChevronRight,
   Lock,
@@ -125,6 +125,7 @@ import { loadSavedDiagnostics, loadSavedScored, contentGeoKey, techGeoKey } from
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { GenerateFromUrlModal } from "./components/GenerateFromUrlModal";
 import { Sidebar } from "./components/Sidebar";
+import { GeorgeSupport } from "./components/GeorgeSupport";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
 
 // ---------------------------------------------------------------------------
@@ -198,6 +199,9 @@ const ArchivedProjectsPage = lazy(() =>
 );
 const MediaDatabasePage = lazy(() =>
   import("./pages/MediaDatabasePage").then((m) => ({ default: m.MediaDatabasePage }))
+);
+const SupportAdminPage = lazy(() =>
+  import("./pages/SupportAdminPage").then((m) => ({ default: m.SupportAdminPage }))
 );
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
@@ -276,7 +280,10 @@ function App() {
   const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
   const [pendingContentGeoId, setPendingContentGeoId] = useState<string | null>(null);
   const [pendingTechGeoId, setPendingTechGeoId] = useState<string | null>(null);
+  const [georgeOpen, setGeorgeOpen] = useState(false);
+  const [georgeHasUpdate, setGeorgeHasUpdate] = useState(false);
   const [, setSavedAuditsVersion] = useState(0);
+
   useEffect(() => {
     const handler = () => setSavedAuditsVersion((v) => v + 1);
     window.addEventListener("aio:saved-audits-changed", handler);
@@ -496,6 +503,26 @@ function App() {
 
   useEffect(() => { removeDemoSeedData(); }, []);
 
+  // Poll for George unread replies persistently: on session load and every 5 min
+  const checkGeorgeUpdates = useCallback(async () => {
+    if (!session) return;
+    try {
+      const r = await fetch(
+        `${import.meta.env.VITE_API_BASE ?? ""}/api/support/tickets?mine=true&hasUpdate=true`,
+        { credentials: "include" },
+      );
+      if (!r.ok) return;
+      const d = (await r.json()) as { tickets?: unknown[] };
+      setGeorgeHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
+    } catch { /* non-fatal */ }
+  }, [session]);
+
+  useEffect(() => {
+    void checkGeorgeUpdates();
+    const id = window.setInterval(() => { void checkGeorgeUpdates(); }, 5 * 60 * 1000);
+    return () => window.clearInterval(id);
+  }, [checkGeorgeUpdates]);
+
   // Shown on the login form when the admin stash cookie expires mid view-as
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
@@ -709,7 +736,15 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} />;
+    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => setView("support-admin" as any)} />;
+  }
+  if ((view as string) === "support-admin") {
+    if (!session || session.role !== "admin") return null;
+    return (
+      <Suspense fallback={null}>
+        <SupportAdminPage onBack={() => setView("users-admin")} />
+      </Suspense>
+    );
   }
   if (view === "token-usage") {
     if (!session || session.role !== "admin") return null;
@@ -891,6 +926,13 @@ function App() {
         onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); setCurrentPage("diagnostic"); }}
         onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
+        onOpenGeorge={() => { setGeorgeOpen(true); setGeorgeHasUpdate(false); }}
+        georgeHasUpdate={georgeHasUpdate}
+      />
+      <GeorgeSupport
+        open={georgeOpen}
+        onClose={() => setGeorgeOpen(false)}
+        userName={session?.username}
       />
       <main ref={mainRef} className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
         {currentPage === "dashboard" && (

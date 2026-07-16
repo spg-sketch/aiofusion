@@ -21,11 +21,13 @@ function UsersAdminPage({
   onBack,
   onAssignProjectOwner,
   onProjectCreated,
+  onSupportAdmin,
 }: {
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => void;
   onProjectCreated?: () => void;
+  onSupportAdmin?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -993,13 +995,24 @@ function UsersAdminPage({
         <button onClick={onBack} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
-          style={{ background: accent, color: "white" }}
-        >
-          <ArrowLeft size={16} /> Back to platform
-        </button>
+        <div className="flex items-center gap-3">
+          {onSupportAdmin && (
+            <button
+              onClick={onSupportAdmin}
+              className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
+              style={{ borderColor: vars.g200, color: ink, background: "white" }}
+            >
+              <MessageSquare size={14} /> Support
+            </button>
+          )}
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] rounded-xl transition-all hover:brightness-110"
+            style={{ background: accent, color: "white" }}
+          >
+            <ArrowLeft size={16} /> Back to platform
+          </button>
+        </div>
       </header>
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">

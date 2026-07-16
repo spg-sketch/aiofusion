@@ -6,6 +6,7 @@ import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
 import { pruneExpiredSessions } from "./lib/auth";
+import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 
@@ -63,6 +64,10 @@ app.listen(port, (err) => {
 
   pruneExpiredSessions().catch((err) => {
     logger.error({ err }, "Failed to prune expired sessions on startup");
+  });
+
+  seedSupportFaq().catch((err) => {
+    logger.error({ err }, "Failed to seed support FAQ (non-fatal)");
   });
 
   // One-time data migration: move the 'patrick' demo account under the

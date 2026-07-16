@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronRight, Lock, BarChart3, ArrowLeft, Clock, Menu, X,
   FileEdit, Search, Globe, CalendarDays, PenTool, Wand2, Archive as ArchiveIcon,
-  Users, Database, TrendingUp, PieChart, Trash2,
+  Users, Database, TrendingUp, PieChart, Trash2, MessageCircle,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "../LlmCheckPage";
@@ -98,6 +98,8 @@ function SidebarContent({
   onOpenSavedDiagnostic,
   onOpenSavedContentGeo,
   onOpenSavedTechGeo,
+  onOpenGeorge,
+  georgeHasUpdate,
   wide,
   onToggleWide,
 }: {
@@ -111,6 +113,8 @@ function SidebarContent({
   onOpenSavedDiagnostic?: (id: string) => void;
   onOpenSavedContentGeo?: (id: string) => void;
   onOpenSavedTechGeo?: (id: string) => void;
+  onOpenGeorge?: () => void;
+  georgeHasUpdate?: boolean;
   wide?: boolean;
   onToggleWide?: () => void;
 }) {
@@ -439,16 +443,32 @@ function SidebarContent({
           </div>
         ))}
       </nav>
-      <div className="px-4 py-5 border-t" style={{ borderColor: vars.g200 }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
-              SP
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold" style={{ color: vars.navy }}>Admin</span>
-              <span className="text-[12px] font-medium" style={{ color: vars.g400 }}>Intelligence Tier</span>
-            </div>
+      <div className="px-4 py-4 border-t flex flex-col gap-3" style={{ borderColor: vars.g200 }}>
+        {onOpenGeorge && (
+          <button
+            onClick={() => { onOpenGeorge(); onItemClick?.(); }}
+            className="relative flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 active:scale-95"
+            style={{ background: vars.accent ?? "#C8497A", color: "white" }}
+          >
+            <MessageCircle size={15} />
+            <span>Ask George — Support</span>
+            {georgeHasUpdate && (
+              <span
+                className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                style={{ background: "#ef4444", color: "white" }}
+              >
+                1
+              </span>
+            )}
+          </button>
+        )}
+        <div className="flex items-center gap-3 px-1">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
+            SP
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-semibold truncate" style={{ color: vars.navy }}>Admin</span>
+            <span className="text-[11px] font-medium" style={{ color: vars.g400 }}>Intelligence Tier</span>
           </div>
         </div>
       </div>
@@ -466,6 +486,8 @@ export function Sidebar({
   onOpenSavedDiagnostic,
   onOpenSavedContentGeo,
   onOpenSavedTechGeo,
+  onOpenGeorge,
+  georgeHasUpdate,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -476,6 +498,8 @@ export function Sidebar({
   onOpenSavedDiagnostic?: (id: string) => void;
   onOpenSavedContentGeo?: (id: string) => void;
   onOpenSavedTechGeo?: (id: string) => void;
+  onOpenGeorge?: () => void;
+  georgeHasUpdate?: boolean;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [width, setWidth] = useState<number>(() => {
@@ -532,7 +556,7 @@ export function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
           </div>
         </div>
       )}
@@ -541,7 +565,7 @@ export function Sidebar({
         className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 relative"
         style={{ width: `${width}px`, borderColor: vars.g200, background: "white" }}
       >
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
         {/* Drag handle */}
         <div
           onMouseDown={onDragHandleMouseDown}

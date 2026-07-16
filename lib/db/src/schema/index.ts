@@ -26,3 +26,4 @@ export * from "./content";
 export * from "./audit-locks";
 export * from "./admin-events";
 export * from "./token-usage";
+export * from "./support";
