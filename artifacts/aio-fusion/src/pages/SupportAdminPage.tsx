@@ -3,7 +3,7 @@ import {
   ChevronDown, Plus, Pencil, ToggleLeft, ToggleRight, Loader2,
   CheckCircle2, AlertCircle, Search, Filter, X, Save, ArrowLeft,
   MessageSquare, Ticket, BookOpen, Clock, RefreshCw, Tag,
-  ChevronUp, GripVertical,
+  ChevronUp, GripVertical, MailX,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/contentAi";
@@ -33,6 +33,7 @@ type Ticket = {
   status: string;
   adminNotes: string | null;
   hasAdminReply: boolean;
+  emailFailed: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -250,6 +251,13 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
           </h2>
           <StatusBadge status={selectedTicket.status} />
         </div>
+
+        {selectedTicket.emailFailed && (
+          <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px] font-medium" style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>
+            <MailX size={15} />
+            <span><strong>Email delivery failed</strong> — the notification email to the team and/or the acknowledgement email to the user was not delivered when this ticket was submitted. Check the Resend API key and configuration.</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-5">
           {/* Main */}
@@ -474,7 +482,14 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
                   className="hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-[12px]" style={{ color: vars.g400 }}>#{ticket.id}</td>
-                  <td className="px-4 py-3 font-medium max-w-[200px] truncate" style={{ color: navy }}>{ticket.subject}</td>
+                  <td className="px-4 py-3 font-medium max-w-[200px]" style={{ color: navy }}>
+                    <span className="truncate block">{ticket.subject}</span>
+                    {ticket.emailFailed && (
+                      <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#dc2626" }}>
+                        <MailX size={9} /> Email delivery failed
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3" style={{ color: vars.g500 }}>
                     {ticket.displayName ? (
                       <span>

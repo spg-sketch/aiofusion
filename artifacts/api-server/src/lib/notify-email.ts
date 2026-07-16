@@ -448,11 +448,11 @@ export async function sendSupportTicketAlert(opts: {
   description: string;
   accountUsername: string;
   displayName?: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
     logger.warn({ ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket alert not sent");
-    return;
+    return false;
   }
 
   const accountLabel = opts.displayName
@@ -498,8 +498,10 @@ export async function sendSupportTicketAlert(opts: {
   try {
     await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject: emailSubject, text, html });
     logger.info({ ticketId: opts.ticketId, accountUsername: opts.accountUsername }, "notify-email: support ticket alert sent");
+    return true;
   } catch (err) {
     logger.warn({ err, ticketId: opts.ticketId }, "notify-email: failed to send support ticket alert (non-fatal)");
+    return false;
   }
 }
 
@@ -509,11 +511,11 @@ export async function sendSupportTicketAck(opts: {
   displayName?: string;
   ticketId: number;
   subject: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
     logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket ack not sent");
-    return;
+    return false;
   }
 
   const greeting = opts.displayName || opts.toName;
@@ -558,8 +560,10 @@ export async function sendSupportTicketAck(opts: {
   try {
     await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
     logger.info({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: support ticket ack sent");
+    return true;
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: failed to send support ticket ack (non-fatal)");
+    return false;
   }
 }
 

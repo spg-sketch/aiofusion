@@ -248,24 +248,35 @@ router.post(
         .returning();
       res.status(201).json({ ticket });
 
-      // Fire-and-forget email notifications (non-fatal if they fail)
+      // Send email notifications; track failures and persist them to the ticket row.
       const displayName = await getDisplayName(account.username).catch(() => undefined);
-      void sendSupportTicketAlert({
-        ticketId: ticket.id,
-        subject: ticket.subject,
-        category: ticket.category,
-        description: ticket.description,
-        accountUsername: ticket.accountUsername,
-        displayName,
-      });
-      if (account.email) {
-        void sendSupportTicketAck({
-          toEmail: account.email,
-          toName: account.username,
-          displayName,
+      const [alertOk, ackOk] = await Promise.all([
+        sendSupportTicketAlert({
           ticketId: ticket.id,
           subject: ticket.subject,
-        });
+          category: ticket.category,
+          description: ticket.description,
+          accountUsername: ticket.accountUsername,
+          displayName,
+        }),
+        account.email
+          ? sendSupportTicketAck({
+              toEmail: account.email,
+              toName: account.username,
+              displayName,
+              ticketId: ticket.id,
+              subject: ticket.subject,
+            })
+          : Promise.resolve(true),
+      ]);
+      if (!alertOk || !ackOk) {
+        await db
+          .update(supportTicketsTable)
+          .set({ emailFailed: true })
+          .where(eq(supportTicketsTable.id, ticket.id))
+          .catch((err) => {
+            console.error("[support] Failed to set emailFailed flag on ticket", ticket.id, err);
+          });
       }
     } catch (err) {
       console.error("[support] POST /tickets", err);

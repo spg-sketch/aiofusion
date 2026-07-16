@@ -40,6 +40,7 @@ export const supportTicketsTable = pgTable("support_tickets", {
   adminNotes: text("admin_notes"),
   hasAdminReply: boolean("has_admin_reply").notNull().default(false),
   userSeenReply: boolean("user_seen_reply").notNull().default(false),
+  emailFailed: boolean("email_failed").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
