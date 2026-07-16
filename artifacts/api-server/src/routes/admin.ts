@@ -17,6 +17,8 @@ import {
   sendBookDemoConfirmation,
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
+  sendSupportTicketAlert,
+  sendSupportTicketAck,
 } from "../lib/notify-email";
 
 const adminRouter = Router();
@@ -1162,10 +1164,25 @@ adminRouter.post(
         res.status(500).json({ error: "Resend returned errors", details: errors });
         return;
       }
-      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all 11 alerts sent");
+      await Promise.all([
+        sendSupportTicketAlert({
+          ticketId: 999,
+          subject: "SMOKE TEST — smoke test support ticket",
+          category: "general",
+          description: "This is a smoke-test support ticket. No action needed.",
+          accountUsername: "test-account",
+        }),
+        sendSupportTicketAck({
+          toEmail: "test@example.com",
+          toName: "Test User",
+          ticketId: 999,
+          subject: "SMOKE TEST — smoke test support ticket",
+        }),
+      ]);
+      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all 13 alerts sent");
       res.json({
         ok: true,
-        message: "All 11 email templates dispatched: spike, quota-breach, spend-cap, backup-failure, backup-success, new-signup, approval, book-demo-internal, book-demo-confirmation, enquiry-internal, enquiry-confirmation.",
+        message: "All 13 email templates dispatched: spike, quota-breach, spend-cap, backup-failure, backup-success, new-signup, approval, book-demo-internal, book-demo-confirmation, enquiry-internal, enquiry-confirmation, support-ticket-alert, support-ticket-ack.",
         ids,
       });
     } catch (err) {
