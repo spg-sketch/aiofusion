@@ -12,6 +12,7 @@ import storeAuditsRouter from "./store-audits";
 import mediaDbRouter from "./media-db";
 import platformRouter from "./platform";
 import adminRouter from "./admin";
+import contactRouter from "./contact";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(storeRouter);
 router.use(storeContentRouter);
 router.use(storeAuditsRouter);
 router.use(mediaDbRouter);
+router.use(contactRouter);
 
 export default router;

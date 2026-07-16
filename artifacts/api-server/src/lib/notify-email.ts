@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { logger } from "./logger";
+import { buildEmailHtml, buildDataRows, textToHtml, escHtml } from "./email-template";
 
 const ALERT_RECIPIENTS = [
   "patrick@aiofusion.ai",
@@ -46,13 +47,26 @@ export async function sendNewSignupAlert(opts: {
     `Admin panel: https://aiofusion.ai`,
   ].join("\n");
 
+  const html = buildEmailHtml({
+    label: "New Signup",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">A new account application has been received and is awaiting approval.</p>
+      ${buildDataRows([
+        ["Name", opts.name],
+        ["Email", opts.email],
+        ["Company", opts.companyName],
+        ["Username", opts.username],
+        ["Sign-up via", opts.method === "google" ? "Google OAuth" : "Email & password"],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        Log in to the admin panel to review and approve or reject the application.
+      </p>
+    `,
+    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+  });
+
   try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ALERT_RECIPIENTS,
-      subject,
-      text,
-    });
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ username: opts.username, method: opts.method }, "notify-email: signup alert sent");
   } catch (err) {
     logger.warn({ err, username: opts.username }, "notify-email: failed to send signup alert (non-fatal)");
@@ -87,13 +101,28 @@ export async function sendApprovalEmail(opts: {
     `Questions? Reply to this email or contact info@aiofusion.ai`,
   ].join("\n");
 
+  const html = buildEmailHtml({
+    label: "Account Approved",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Great news — your AIO Fusion account has been approved and is ready to use.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        You can sign in now and start exploring the platform. If you signed up with Google,
+        use the <strong>Continue with Google</strong> button. If you signed up with a password,
+        use your email and password.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        Questions? Reply to this email or write to
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>
+      </p>
+    `,
+    cta: { text: "Sign in to AIO Fusion", href: opts.loginUrl },
+  });
+
   try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: [opts.toEmail],
-      subject,
-      text,
-    });
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
     logger.info({ toEmail: opts.toEmail }, "notify-email: approval email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send approval email (non-fatal)");
@@ -126,13 +155,27 @@ export async function sendSpikeAlert(opts: {
     `Admin token usage panel: https://aiofusion.ai`,
   ].join("\n");
 
+  const html = buildEmailHtml({
+    label: "Spend Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        A content AI spend spike has been detected on account
+        <strong>${escHtml(opts.slug)}</strong>.
+      </p>
+      ${buildDataRows([
+        ["Last 7 days spend", `£${opts.last7Cost.toFixed(4)}`],
+        ["Prior 7 days spend", `£${opts.prior7Cost.toFixed(4)}`],
+        ["Ratio", `${opts.ratio.toFixed(1)}× (threshold: 3×)`],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        Review the account's usage, adjust their quota, or block the account if the activity looks abusive.
+      </p>
+    `,
+    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+  });
+
   try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ALERT_RECIPIENTS,
-      subject,
-      text,
-    });
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, ratio: opts.ratio.toFixed(2) }, "notify-email: spike alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send spike alert (non-fatal)");
@@ -164,13 +207,26 @@ export async function sendQuotaBreachAlert(opts: {
     `Admin token usage panel: https://aiofusion.ai`,
   ].join("\n");
 
+  const html = buildEmailHtml({
+    label: "Fair Usage Limit Reached",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        Account <strong>${escHtml(opts.slug)}</strong> has reached their 30-day content AI fair usage limit.
+      </p>
+      ${buildDataRows([
+        ["30-day content AI calls", String(opts.callCount)],
+        ["Account limit", String(opts.limit)],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        The account is now receiving 429 responses on all content AI and LLM check routes.
+        Adjust their quota multiplier or block the account if needed.
+      </p>
+    `,
+    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+  });
+
   try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ALERT_RECIPIENTS,
-      subject,
-      text,
-    });
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, callCount: opts.callCount }, "notify-email: quota breach alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send quota breach alert (non-fatal)");
@@ -201,15 +257,233 @@ export async function sendSpendCapAlert(opts: {
     `Admin token usage panel: https://aiofusion.ai`,
   ].join("\n");
 
+  const html = buildEmailHtml({
+    label: "Monthly Spend Cap Reached",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        Account <strong>${escHtml(opts.slug)}</strong> has hit their monthly GBP spend cap.
+      </p>
+      ${buildDataRows([
+        ["Current month spend", `£${opts.spendGbp.toFixed(4)}`],
+        ["Monthly cap", `£${opts.limitGbp.toFixed(2)}`],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        The account is now receiving 429 responses on all AI routes until the cap is raised
+        or the calendar month resets.
+      </p>
+    `,
+    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+  });
+
   try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ALERT_RECIPIENTS,
-      subject,
-      text,
-    });
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
     logger.info({ slug: opts.slug, spendGbp: opts.spendGbp }, "notify-email: spend cap alert sent");
   } catch (err) {
     logger.warn({ err, slug: opts.slug }, "notify-email: failed to send spend cap alert (non-fatal)");
+  }
+}
+
+export async function sendBookDemoInternalAlert(opts: {
+  name: string;
+  email: string;
+  company: string;
+  goal: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({}, "notify-email: RESEND_API_KEY not set — book demo internal alert not sent");
+    return;
+  }
+
+  const subject = `[AIO Fusion] Demo request — ${opts.company || opts.name}`;
+  const text = [
+    `A new demo request has been submitted via the website.`,
+    ``,
+    `Name:    ${opts.name}`,
+    `Email:   ${opts.email}`,
+    `Company: ${opts.company}`,
+    `Goal:    ${opts.goal}`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Demo Request",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">A new demo request has been submitted via the website.</p>
+      ${buildDataRows([
+        ["Name", opts.name],
+        ["Email", opts.email],
+        ["Company", opts.company],
+        ["What they hope to achieve", opts.goal],
+      ])}
+    `,
+    cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
+  });
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: ["info@aiofusion.ai"],
+      subject,
+      text,
+      html,
+    });
+    logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
+  } catch (err) {
+    logger.warn({ err }, "notify-email: failed to send book demo internal alert (non-fatal)");
+  }
+}
+
+export async function sendBookDemoConfirmation(opts: {
+  name: string;
+  toEmail: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — book demo confirmation not sent");
+    return;
+  }
+
+  const subject = `We've received your demo request — AIO Fusion`;
+  const text = [
+    `Hi ${opts.name},`,
+    ``,
+    `Thank you for requesting a demo of AIO Fusion. We'll be in touch within one`,
+    `business day to arrange a time that works for you.`,
+    ``,
+    `In the meantime, if you have any questions, feel free to reply to this email`,
+    `or write to us at info@aiofusion.ai.`,
+    ``,
+    `Warm regards,`,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Demo Request Received",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.name)},</p>
+      <p style="margin: 0 0 16px 0;">
+        Thank you for requesting a demo of AIO Fusion. We'll be in touch within
+        <strong>one business day</strong> to arrange a time that works for you.
+      </p>
+      <p style="margin: 0 0 0 0; font-size: 13px; color: #475569;">
+        In the meantime, if you have any questions, feel free to reply to this email
+        or write to us at
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
+      </p>
+    `,
+    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send book demo confirmation (non-fatal)");
+  }
+}
+
+export async function sendEnquiryInternalAlert(opts: {
+  name: string;
+  email: string;
+  company: string;
+  subject: string;
+  message: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({}, "notify-email: RESEND_API_KEY not set — enquiry internal alert not sent");
+    return;
+  }
+
+  const emailSubject = `[AIO Fusion] Enquiry — ${opts.subject}`;
+  const text = [
+    `A new general enquiry has been submitted via the website.`,
+    ``,
+    `Name:    ${opts.name}`,
+    `Email:   ${opts.email}`,
+    `Company: ${opts.company || "(not provided)"}`,
+    `Subject: ${opts.subject}`,
+    ``,
+    `Message:`,
+    opts.message,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "General Enquiry",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">A new general enquiry has been submitted via the website.</p>
+      ${buildDataRows([
+        ["Name", opts.name],
+        ["Email", opts.email],
+        ["Company", opts.company || "(not provided)"],
+        ["Subject", opts.subject],
+      ])}
+      <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Message:</p>
+      <div style="background: #F8FAFC; border-left: 3px solid #C8497A; padding: 14px 16px;
+                  border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.7; color: #102B36;">
+        ${textToHtml(opts.message)}
+      </div>
+    `,
+    cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
+  });
+
+  try {
+    await resend.emails.send({
+      from: fromAddress(),
+      to: ["info@aiofusion.ai"],
+      subject: emailSubject,
+      text,
+      html,
+    });
+    logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
+  } catch (err) {
+    logger.warn({ err }, "notify-email: failed to send enquiry internal alert (non-fatal)");
+  }
+}
+
+export async function sendEnquiryConfirmation(opts: {
+  name: string;
+  toEmail: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — enquiry confirmation not sent");
+    return;
+  }
+
+  const subject = `We've received your message — AIO Fusion`;
+  const text = [
+    `Hi ${opts.name},`,
+    ``,
+    `Thank you for getting in touch with AIO Fusion. We've received your message`,
+    `and a member of our team will get back to you as soon as possible.`,
+    ``,
+    `If your enquiry is urgent, you can also reach us directly at info@aiofusion.ai.`,
+    ``,
+    `Warm regards,`,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Enquiry Received",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.name)},</p>
+      <p style="margin: 0 0 16px 0;">
+        Thank you for getting in touch with AIO Fusion. We've received your message
+        and a member of our team will get back to you as soon as possible.
+      </p>
+      <p style="margin: 0 0 0 0; font-size: 13px; color: #475569;">
+        If your enquiry is urgent, you can also reach us directly at
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
+      </p>
+    `,
+    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send enquiry confirmation (non-fatal)");
   }
 }

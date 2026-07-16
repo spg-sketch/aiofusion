@@ -11,6 +11,13 @@ import { deepStripEmDashes } from "../lib/text-sanitise";
 import {
   analyseWithClaude,
 } from "./diagnostic";
+import { buildEmailHtml, buildDataRows, escHtml } from "../lib/email-template";
+import {
+  sendBookDemoInternalAlert,
+  sendBookDemoConfirmation,
+  sendEnquiryInternalAlert,
+  sendEnquiryConfirmation,
+} from "../lib/notify-email";
 
 const adminRouter = Router();
 
@@ -891,7 +898,7 @@ adminRouter.delete(
   },
 );
 
-// Smoke-test endpoint — sends one of each alert type to all recipients.
+// Smoke-test endpoint — sends one of each alert type (HTML) to all recipients.
 // Calls Resend directly (no error-swallowing wrapper) so failures propagate as HTTP 500.
 // Admin only.
 adminRouter.post(
@@ -911,31 +918,241 @@ adminRouter.post(
     const resend = new Resend(key);
     const from = process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
     const to = ["patrick@aiofusion.ai", "natalie@aiofusion.ai", "spg@bluhalo.com"];
+
+    const spikeHtml = buildEmailHtml({
+      label: "Spend Alert",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — A content AI spend spike has been detected on account
+          <strong>test-account</strong>.
+        </p>
+        ${buildDataRows([
+          ["Last 7 days spend", "£0.0123"],
+          ["Prior 7 days spend", "£0.0041"],
+          ["Ratio", "3.0× (threshold: 3×)"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const quotaHtml = buildEmailHtml({
+      label: "Fair Usage Limit Reached",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — Account <strong>test-account</strong> has reached
+          their 30-day content AI fair usage limit.
+        </p>
+        ${buildDataRows([
+          ["30-day content AI calls", "50"],
+          ["Account limit", "50"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const capHtml = buildEmailHtml({
+      label: "Monthly Spend Cap Reached",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — Account <strong>test-account</strong> has hit
+          their monthly GBP spend cap.
+        </p>
+        ${buildDataRows([
+          ["Current month spend", "£5.0000"],
+          ["Monthly cap", "£5.00"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const backupHtml = buildEmailHtml({
+      label: "Backup Failed",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — The nightly backup job has failed.
+        </p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const backupSuccessHtml = buildEmailHtml({
+      label: "Backup Success",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — The nightly backup job completed successfully.
+        </p>
+        ${buildDataRows([
+          ["Duration", "~12s"],
+          ["Projects verified", "42"],
+          ["Storage destination", "Object storage bucket"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const signupHtml = buildEmailHtml({
+      label: "New Signup",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new account application has been received.</p>
+        ${buildDataRows([
+          ["Name", "Test User"],
+          ["Email", "test@example.com"],
+          ["Company", "Test Company Ltd"],
+          ["Username", "test-company"],
+          ["Sign-up via", "Email & password"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const approvalHtml = buildEmailHtml({
+      label: "Account Approved",
+      bodyHtml: `
+        <p style="margin:0 0 12px 0;">Hi Test User,</p>
+        <p style="margin:0 0 16px 0;font-size:17px;font-weight:600;color:#102B36;">
+          <strong>SMOKE TEST</strong> — Great news — your AIO Fusion account has been approved and is ready to use.
+        </p>
+        <p style="margin:0 0 16px 0;">
+          You can sign in now and start exploring the platform.
+        </p>
+        <p style="margin:24px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Sign in to AIO Fusion", href: "https://aiofusion.ai" },
+    });
+
+    const bookDemoInternalHtml = buildEmailHtml({
+      label: "Demo Request",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new demo request has been submitted via the website.</p>
+        ${buildDataRows([
+          ["Name", "Test User"],
+          ["Email", "test@example.com"],
+          ["Company", "Test Company Ltd"],
+          ["What they hope to achieve", "Improve AI visibility for our brand."],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Reply to enquiry", href: "mailto:test@example.com" },
+    });
+
+    const bookDemoConfirmHtml = buildEmailHtml({
+      label: "Demo Request Received",
+      bodyHtml: `
+        <p style="margin:0 0 12px 0;">Hi Test User,</p>
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — Thank you for requesting a demo of AIO Fusion.
+          We'll be in touch within <strong>one business day</strong> to arrange a time.
+        </p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    });
+
+    const enquiryInternalHtml = buildEmailHtml({
+      label: "General Enquiry",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new general enquiry has been submitted via the website.</p>
+        ${buildDataRows([
+          ["Name", "Test User"],
+          ["Email", "test@example.com"],
+          ["Company", "(not provided)"],
+          ["Subject", "Smoke test enquiry"],
+        ])}
+        <p style="margin:16px 0 6px 0;font-weight:600;font-size:13px;color:#475569;">Message:</p>
+        <div style="background:#F8FAFC;border-left:3px solid #C8497A;padding:14px 16px;
+                    border-radius:0 8px 8px 0;font-size:14px;line-height:1.7;color:#102B36;">
+          This is a smoke test message. No action needed.
+        </div>
+      `,
+      cta: { text: "Reply to enquiry", href: "mailto:test@example.com" },
+    });
+
+    const enquiryConfirmHtml = buildEmailHtml({
+      label: "Enquiry Received",
+      bodyHtml: `
+        <p style="margin:0 0 12px 0;">Hi Test User,</p>
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — Thank you for getting in touch with AIO Fusion.
+          We've received your message and a member of our team will get back to you.
+        </p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    });
+
     try {
       const results = await Promise.all([
         resend.emails.send({
-          from,
-          to,
+          from, to,
           subject: "[AIO Fusion] TEST — Spend spike detected (smoke-test)",
-          text: "This is a smoke-test for the spend-spike alert. No action needed.",
+          text: "SMOKE TEST — spend-spike alert. No action needed.",
+          html: spikeHtml,
         }),
         resend.emails.send({
-          from,
-          to,
+          from, to,
           subject: "[AIO Fusion] TEST — Fair usage limit reached (smoke-test)",
-          text: "This is a smoke-test for the quota-breach alert. No action needed.",
+          text: "SMOKE TEST — quota-breach alert. No action needed.",
+          html: quotaHtml,
         }),
         resend.emails.send({
-          from,
-          to,
+          from, to,
           subject: "[AIO Fusion] TEST — Monthly spend cap reached (smoke-test)",
-          text: "This is a smoke-test for the spend-cap alert. No action needed.",
+          text: "SMOKE TEST — spend-cap alert. No action needed.",
+          html: capHtml,
         }),
         resend.emails.send({
-          from,
-          to,
+          from, to,
           subject: "[AIO Fusion] TEST — Backup job FAILED (smoke-test)",
-          text: "This is a smoke-test for the backup failure alert. No action needed.",
+          text: "SMOKE TEST — backup failure alert. No action needed.",
+          html: backupHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Backup job succeeded (smoke-test)",
+          text: "SMOKE TEST — backup success alert. No action needed.",
+          html: backupSuccessHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — New account application (smoke-test)",
+          text: "SMOKE TEST — new signup alert. No action needed.",
+          html: signupHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Account approved (smoke-test)",
+          text: "SMOKE TEST — approval email. No action needed.",
+          html: approvalHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Demo request internal (smoke-test)",
+          text: "SMOKE TEST — book demo internal alert. No action needed.",
+          html: bookDemoInternalHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Demo request confirmation (smoke-test)",
+          text: "SMOKE TEST — book demo customer confirmation. No action needed.",
+          html: bookDemoConfirmHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Enquiry internal (smoke-test)",
+          text: "SMOKE TEST — general enquiry internal alert. No action needed.",
+          html: enquiryInternalHtml,
+        }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — Enquiry confirmation (smoke-test)",
+          text: "SMOKE TEST — general enquiry customer confirmation. No action needed.",
+          html: enquiryConfirmHtml,
         }),
       ]);
       const ids = results.map(r => r.data?.id ?? null);
@@ -945,8 +1162,12 @@ adminRouter.post(
         res.status(500).json({ error: "Resend returned errors", details: errors });
         return;
       }
-      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all four alerts sent");
-      res.json({ ok: true, message: "Spike, quota-breach, spend-cap, and backup-failure test alerts dispatched.", ids });
+      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all 11 alerts sent");
+      res.json({
+        ok: true,
+        message: "All 11 email templates dispatched: spike, quota-breach, spend-cap, backup-failure, backup-success, new-signup, approval, book-demo-internal, book-demo-confirmation, enquiry-internal, enquiry-confirmation.",
+        ids,
+      });
     } catch (err) {
       logger.error({ err }, "admin test-email-alerts: failed");
       res.status(500).json({ error: "Failed to send test alerts", detail: String(err) });
