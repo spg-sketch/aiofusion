@@ -1004,3 +1004,109 @@ describe("POST /api/support/tickets/:id/messages", () => {
     }
   });
 });
+
+// ── POST /api/support/tickets/:id/seen ────────────────────────────────────────
+
+describe("POST /api/support/tickets/:id/seen", () => {
+  let server: Server;
+  let baseUrl: string;
+  const ownerActor = { username: "user1", role: "client" };
+  const otherActor = { username: "user2", role: "client" };
+  const adminActor = { username: "admin", role: "admin" };
+
+  beforeEach(async () => {
+    h.state.reset();
+    h.state.tickets.push({
+      id: 1,
+      accountUsername: "user1",
+      userRole: "client",
+      projectId: null,
+      category: "General",
+      subject: "My issue",
+      description: "Something broke.",
+      attachmentUrl: null,
+      status: "in_progress",
+      adminNotes: null,
+      hasAdminReply: true,
+      userSeenReply: false,
+      createdAt: new Date(),
+    });
+  });
+
+  afterEach(async () => close(server));
+
+  it("ticket owner can mark an admin reply as seen and gets ok:true", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "POST", "/api/support/tickets/1/seen");
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
+
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.userSeenReply).toBe(true);
+  });
+
+  it("marking seen removes the ticket from hasUpdate results", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const before = await req(baseUrl, "GET", "/api/support/tickets?mine=true&hasUpdate=true");
+    expect(before.json.tickets.length).toBe(1);
+
+    await req(baseUrl, "POST", "/api/support/tickets/1/seen");
+
+    const after = await req(baseUrl, "GET", "/api/support/tickets?mine=true&hasUpdate=true");
+    expect(after.json.tickets.length).toBe(0);
+  });
+
+  it("non-owner cannot mark another user's ticket as seen (403)", async () => {
+    const app = buildApp(otherActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "POST", "/api/support/tickets/1/seen");
+    expect(status).toBe(403);
+
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.userSeenReply).toBe(false);
+  });
+
+  it("admin can also mark any ticket as seen", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "POST", "/api/support/tickets/1/seen");
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
+
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.userSeenReply).toBe(true);
+  });
+
+  it("returns 404 for a non-existent ticket", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "POST", "/api/support/tickets/9999/seen");
+    expect(status).toBe(404);
+  });
+
+  it("returns 400 for an invalid (non-numeric) ticket id", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "POST", "/api/support/tickets/abc/seen");
+    expect(status).toBe(400);
+  });
+
+  it("unauthenticated request gets 401", async () => {
+    const unauthApp = buildApp(undefined);
+    const { server: s2, baseUrl: url2 } = await listen(unauthApp);
+    try {
+      const { status } = await req(url2, "POST", "/api/support/tickets/1/seen");
+      expect(status).toBe(401);
+    } finally {
+      await close(s2);
+    }
+  });
+});

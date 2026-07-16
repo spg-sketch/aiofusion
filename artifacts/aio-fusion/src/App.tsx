@@ -482,6 +482,38 @@ function App() {
     return storedProjects.filter((p) => allowedSet.has((p.owner || "").toLowerCase()));
   }, [storedProjects, session]);
 
+  // Poll for unseen admin replies so the George badge lights up even before
+  // the user opens the support panel. Only runs when logged in (non-admin
+  // users own tickets; admins don't need the badge).
+  useEffect(() => {
+    if (!session || session.role === "admin") return;
+
+    const check = () => {
+      void fetch(`${apiBase()}/api/support/tickets?mine=true&hasUpdate=true`, {
+        credentials: "include",
+      })
+        .then((r) => r.json())
+        .then((d: { tickets?: unknown[] }) => {
+          setGeorgeHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
+        })
+        .catch(() => {});
+    };
+
+    check();
+
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    const onFocus = () => check();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    const interval = window.setInterval(check, 90_000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(interval);
+    };
+  }, [session]);
+
   const handleAssignProjectOwner = (id: string, owner: string) => {
     // Persist server-side first (the upsert push deliberately never changes
     // owner). Only mirror the change locally once the server confirms it, so a
