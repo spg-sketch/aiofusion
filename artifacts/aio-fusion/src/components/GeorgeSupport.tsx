@@ -88,11 +88,17 @@ export function GeorgeSupport({
   const [submitting, setSubmitting] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
 
+  // Reply state (used in ticket_detail view)
+  const [replyText, setReplyText] = useState("");
+  const [replySubmitting, setReplySubmitting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
   const [hasUpdate, setHasUpdate] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Check for pending ticket updates on open
   useEffect(() => {
@@ -118,6 +124,8 @@ export function GeorgeSupport({
       setTicketCategory("General");
       setTicketAttachment(null);
       setTicketError(null);
+      setReplyText("");
+      setReplyError(null);
     }
   }, [open]);
 
@@ -128,10 +136,15 @@ export function GeorgeSupport({
     }
   }, [step.type]);
 
-  // Scroll thread to bottom when detail view loads
+  // Scroll thread to bottom and focus reply input when detail view loads
   useEffect(() => {
     if (step.type === "ticket_detail") {
-      setTimeout(() => threadEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      setTimeout(() => {
+        threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (step.ticket.status === "open" || step.ticket.status === "in_progress") {
+          replyInputRef.current?.focus();
+        }
+      }, 50);
     }
   }, [step.type]);
 
@@ -207,6 +220,8 @@ export function GeorgeSupport({
   }
 
   async function handleViewTicket(ticket: TicketFull) {
+    setReplyText("");
+    setReplyError(null);
     setStep({ type: "ticket_detail_loading", ticketId: ticket.id });
     try {
       const r = await fetch(`${apiBase()}/api/support/tickets/${ticket.id}/messages`, {
@@ -234,6 +249,40 @@ export function GeorgeSupport({
     } catch {
       // Fall back to showing ticket with no messages
       setStep({ type: "ticket_detail", ticket, messages: [] });
+    }
+  }
+
+  async function handleSendReply() {
+    if (step.type !== "ticket_detail") return;
+    if (replySubmitting) return;
+    const body = replyText.trim();
+    if (!body) return;
+    setReplySubmitting(true);
+    setReplyError(null);
+    try {
+      const r = await fetch(`${apiBase()}/api/support/tickets/${step.ticket.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ body }),
+      });
+      const data = (await r.json()) as { message?: TicketMessage; error?: string };
+      if (!r.ok || !data.message) {
+        setReplyError(data.error ?? "Failed to send reply. Please try again.");
+        return;
+      }
+      // Append to thread immediately and clear input
+      setStep({
+        type: "ticket_detail",
+        ticket: step.ticket,
+        messages: [...step.messages, data.message],
+      });
+      setReplyText("");
+      setTimeout(() => threadEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    } catch {
+      setReplyError("Failed to send reply. Please try again.");
+    } finally {
+      setReplySubmitting(false);
     }
   }
 
@@ -738,6 +787,47 @@ export function GeorgeSupport({
             >
               <Send size={14} />
             </button>
+          </div>
+        )}
+
+        {/* Reply bar — shown in ticket_detail when ticket is open or in_progress */}
+        {step.type === "ticket_detail" && (step.ticket.status === "open" || step.ticket.status === "in_progress") && (
+          <div
+            className="flex-shrink-0 border-t px-4 py-3 flex flex-col gap-2"
+            style={{ borderColor: vars.g200 }}
+          >
+            {replyError && (
+              <p className="text-[11px] px-2 py-1 rounded-lg" style={{ color: "#dc2626", background: "#fef2f2" }}>
+                {replyError}
+              </p>
+            )}
+            <div className="flex gap-2 items-end">
+              <textarea
+                ref={replyInputRef}
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSendReply(); }
+                }}
+                placeholder="Reply to this ticket…"
+                rows={2}
+                className="flex-1 text-[13px] px-3 py-2 rounded-lg border outline-none focus:ring-2 resize-none"
+                style={{
+                  borderColor: vars.g200,
+                  color: navy,
+                  ["--tw-ring-color" as string]: teal,
+                }}
+              />
+              <button
+                onClick={() => void handleSendReply()}
+                disabled={!replyText.trim() || replySubmitting}
+                className="p-2.5 rounded-lg text-white transition-all disabled:opacity-40 hover:brightness-110 flex-shrink-0"
+                style={{ background: teal }}
+                title="Send reply"
+              >
+                {replySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              </button>
+            </div>
           </div>
         )}
       </div>
