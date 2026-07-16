@@ -17,8 +17,6 @@ import {
   sendBookDemoConfirmation,
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
-  sendSupportTicketAlert,
-  sendSupportTicketAck,
 } from "../lib/notify-email";
 
 const adminRouter = Router();
@@ -1088,6 +1086,42 @@ adminRouter.post(
       cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
     });
 
+    const supportTicketAlertHtml = buildEmailHtml({
+      label: "New Support Ticket",
+      bodyHtml: `
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new support ticket has been submitted and is awaiting a response.</p>
+        ${buildDataRows([
+          ["Ticket ID", "#999"],
+          ["Subject", "SMOKE TEST — smoke test support ticket"],
+          ["Category", "general"],
+          ["Account", "test-account"],
+        ])}
+        <p style="margin:16px 0 6px 0;font-weight:600;font-size:13px;color:#475569;">Description:</p>
+        <div style="background:#F8FAFC;border-left:3px solid #C8497A;padding:14px 16px;
+                    border-radius:0 8px 8px 0;font-size:14px;line-height:1.7;color:#102B36;">
+          This is a smoke-test support ticket. No action needed.
+        </div>
+      `,
+      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    });
+
+    const supportTicketAckHtml = buildEmailHtml({
+      label: "Support Request Received",
+      bodyHtml: `
+        <p style="margin:0 0 12px 0;">Hi Test User,</p>
+        <p style="margin:0 0 16px 0;">
+          <strong>SMOKE TEST</strong> — Thank you for getting in touch. We've received your support ticket
+          and a member of our team will get back to you as soon as possible.
+        </p>
+        ${buildDataRows([
+          ["Ticket reference", "#999"],
+          ["Subject", "SMOKE TEST — smoke test support ticket"],
+        ])}
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+      `,
+      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    });
+
     try {
       const results = await Promise.all([
         resend.emails.send({
@@ -1156,34 +1190,46 @@ adminRouter.post(
           text: "SMOKE TEST — general enquiry customer confirmation. No action needed.",
           html: enquiryConfirmHtml,
         }),
+        resend.emails.send({
+          from, to,
+          subject: "[AIO Fusion] TEST — New support ticket #999 (smoke-test)",
+          text: "SMOKE TEST — support ticket alert. No action needed.",
+          html: supportTicketAlertHtml,
+        }),
+        resend.emails.send({
+          from, to: ["test@example.com"],
+          subject: "[AIO Fusion] TEST — Support request received (smoke-test)",
+          text: "SMOKE TEST — support ticket ack. No action needed.",
+          html: supportTicketAckHtml,
+        }),
       ]);
       const ids = results.map(r => r.data?.id ?? null);
       const errors = results.map(r => r.error).filter(Boolean);
       if (errors.length > 0) {
-        logger.error({ errors, by: req.account.username }, "admin test-email-alerts: Resend returned errors");
+        logger.error({ errors, by: req.account?.username }, "admin test-email-alerts: Resend returned errors");
         res.status(500).json({ error: "Resend returned errors", details: errors });
         return;
       }
-      await Promise.all([
-        sendSupportTicketAlert({
-          ticketId: 999,
-          subject: "SMOKE TEST — smoke test support ticket",
-          category: "general",
-          description: "This is a smoke-test support ticket. No action needed.",
-          accountUsername: "test-account",
-        }),
-        sendSupportTicketAck({
-          toEmail: "test@example.com",
-          toName: "Test User",
-          ticketId: 999,
-          subject: "SMOKE TEST — smoke test support ticket",
-        }),
-      ]);
-      logger.info({ ids, by: req.account.username }, "admin test-email-alerts: all 13 alerts sent");
+      logger.info({ ids, by: req.account?.username }, "admin test-email-alerts: all 13 alerts sent");
       res.json({
         ok: true,
+        count: 13,
         message: "All 13 email templates dispatched: spike, quota-breach, spend-cap, backup-failure, backup-success, new-signup, approval, book-demo-internal, book-demo-confirmation, enquiry-internal, enquiry-confirmation, support-ticket-alert, support-ticket-ack.",
-        ids,
+        ids: {
+          spike: ids[0],
+          quotaBreach: ids[1],
+          spendCap: ids[2],
+          backupFailure: ids[3],
+          backupSuccess: ids[4],
+          newSignup: ids[5],
+          approval: ids[6],
+          bookDemoInternal: ids[7],
+          bookDemoConfirmation: ids[8],
+          enquiryInternal: ids[9],
+          enquiryConfirmation: ids[10],
+          supportTicketAlert: ids[11],
+          supportTicketAck: ids[12],
+        },
       });
     } catch (err) {
       logger.error({ err }, "admin test-email-alerts: failed");
