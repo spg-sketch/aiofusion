@@ -432,6 +432,34 @@ describe("GET /api/support/faq", () => {
     expect(json.faq.find((f: any) => f.category === "Hidden")).toBeUndefined();
     expect(json.faq.every((f: any) => f.isActive !== false)).toBe(true);
   });
+
+  it("non-admin + category=Hidden returns 0 results (inactive entries excluded by category filter)", async () => {
+    // The seeded "Hidden" entry is inactive. A non-admin explicitly requesting
+    // that category must still get nothing — the isActive guard must fire before
+    // the category filter, not be bypassed by an explicit category param.
+    const { status, json } = await req(baseUrl, "GET", "/api/support/faq?category=Hidden");
+    expect(status).toBe(200);
+    expect(Array.isArray(json.faq)).toBe(true);
+    expect(json.faq.length).toBe(0);
+  });
+
+  it("admin=1 from a non-admin authenticated session is treated as a regular (active-only) request", async () => {
+    // An authenticated non-admin (role: "client") passing admin=1 must not
+    // unlock the full list — the check must be role === "admin", not just
+    // !!req.account. If that distinction regresses, the inactive "Hidden"
+    // entry would leak through.
+    const clientApp = buildApp({ username: "user1", role: "client" });
+    const { server: s2, baseUrl: url2 } = await listen(clientApp);
+    try {
+      const { status, json } = await req(url2, "GET", "/api/support/faq?admin=1");
+      expect(status).toBe(200);
+      expect(Array.isArray(json.faq)).toBe(true);
+      expect(json.faq.find((f: any) => f.category === "Hidden")).toBeUndefined();
+      expect(json.faq.every((f: any) => f.isActive !== false)).toBe(true);
+    } finally {
+      await close(s2);
+    }
+  });
 });
 
 // ── POST /api/support/tickets ─────────────────────────────────────────────────
