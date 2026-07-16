@@ -17,6 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import { sendSupportTicketAlert, sendSupportTicketAck } from "../lib/notify-email";
 
 const router: IRouter = Router();
 
@@ -226,6 +227,23 @@ router.post(
         })
         .returning();
       res.status(201).json({ ticket });
+
+      // Fire-and-forget email notifications (non-fatal if they fail)
+      void sendSupportTicketAlert({
+        ticketId: ticket.id,
+        subject: ticket.subject,
+        category: ticket.category,
+        description: ticket.description,
+        accountUsername: ticket.accountUsername,
+      });
+      if (account.email) {
+        void sendSupportTicketAck({
+          toEmail: account.email,
+          toName: account.username,
+          ticketId: ticket.id,
+          subject: ticket.subject,
+        });
+      }
     } catch (err) {
       console.error("[support] POST /tickets", err);
       res.status(500).json({ error: "Failed to create ticket" });

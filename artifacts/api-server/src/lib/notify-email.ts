@@ -441,6 +441,120 @@ export async function sendEnquiryInternalAlert(opts: {
   }
 }
 
+export async function sendSupportTicketAlert(opts: {
+  ticketId: number;
+  subject: string;
+  category: string;
+  description: string;
+  accountUsername: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket alert not sent");
+    return;
+  }
+
+  const emailSubject = `[AIO Fusion] New support ticket #${opts.ticketId} — ${opts.subject}`;
+  const text = [
+    `A new support ticket has been submitted.`,
+    ``,
+    `Ticket ID:   #${opts.ticketId}`,
+    `Subject:     ${opts.subject}`,
+    `Category:    ${opts.category}`,
+    `Account:     ${opts.accountUsername}`,
+    ``,
+    `Description:`,
+    opts.description,
+    ``,
+    `Log in to the admin panel to view and respond to this ticket.`,
+    ``,
+    `Admin panel: https://aiofusion.ai`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "New Support Ticket",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">A new support ticket has been submitted and is awaiting a response.</p>
+      ${buildDataRows([
+        ["Ticket ID", `#${opts.ticketId}`],
+        ["Subject", opts.subject],
+        ["Category", opts.category],
+        ["Account", opts.accountUsername],
+      ])}
+      <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Description:</p>
+      <div style="background: #F8FAFC; border-left: 3px solid #C8497A; padding: 14px 16px;
+                  border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.7; color: #102B36;">
+        ${textToHtml(opts.description)}
+      </div>
+    `,
+    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject: emailSubject, text, html });
+    logger.info({ ticketId: opts.ticketId, accountUsername: opts.accountUsername }, "notify-email: support ticket alert sent");
+  } catch (err) {
+    logger.warn({ err, ticketId: opts.ticketId }, "notify-email: failed to send support ticket alert (non-fatal)");
+  }
+}
+
+export async function sendSupportTicketAck(opts: {
+  toEmail: string;
+  toName: string;
+  ticketId: number;
+  subject: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket ack not sent");
+    return;
+  }
+
+  const emailSubject = `We've received your support request — AIO Fusion [#${opts.ticketId}]`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `Thank you for getting in touch. We've received your support ticket and a member`,
+    `of our team will get back to you as soon as possible.`,
+    ``,
+    `Your ticket reference is: #${opts.ticketId}`,
+    `Subject: ${opts.subject}`,
+    ``,
+    `If you have any additional information to share, you can reply directly to this`,
+    `email or contact us at info@aiofusion.ai.`,
+    ``,
+    `Warm regards,`,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Support Request Received",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0;">
+        Thank you for getting in touch. We've received your support ticket and a member
+        of our team will get back to you as soon as possible.
+      </p>
+      ${buildDataRows([
+        ["Ticket reference", `#${opts.ticketId}`],
+        ["Subject", opts.subject],
+      ])}
+      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
+        If you have additional information to share, reply to this email or write to
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
+      </p>
+    `,
+    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject: emailSubject, text, html });
+    logger.info({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: support ticket ack sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: failed to send support ticket ack (non-fatal)");
+  }
+}
+
 export async function sendEnquiryConfirmation(opts: {
   name: string;
   toEmail: string;
