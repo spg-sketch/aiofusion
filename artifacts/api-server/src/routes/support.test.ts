@@ -31,15 +31,28 @@ const h = vi.hoisted(() => {
     createdAt: Date;
   };
 
+  type MessageRow = {
+    id: number;
+    ticketId: number;
+    authorType: string;
+    authorUsername: string;
+    body: string;
+    createdAt: Date;
+  };
+
   let faqSeq = 1;
   let ticketSeq = 1;
+  let messageSeq = 1;
 
   const state = {
     faq: [] as FaqRow[],
     tickets: [] as TicketRow[],
+    messages: [] as MessageRow[],
     reset() {
       faqSeq = 1;
       ticketSeq = 1;
+      messageSeq = 1;
+      state.messages = [];
       state.faq = [
         {
           id: faqSeq++,
@@ -102,6 +115,9 @@ const h = vi.hoisted(() => {
     nextTicketId() {
       return ticketSeq++;
     },
+    nextMessageId() {
+      return messageSeq++;
+    },
   };
 
   const supportFaqTable = {
@@ -130,7 +146,15 @@ const h = vi.hoisted(() => {
     adminNotes: { __col: "adminNotes" },
   };
 
-  const supportTicketMessagesTable = { __table: "messages" };
+  const supportTicketMessagesTable = {
+    __table: "messages",
+    id: { __col: "id" },
+    ticketId: { __col: "ticketId" },
+    authorType: { __col: "authorType" },
+    authorUsername: { __col: "authorUsername" },
+    body: { __col: "body" },
+    createdAt: { __col: "createdAt" },
+  };
 
   type Pred =
     | { kind: "eq"; col: string; val: unknown }
@@ -152,6 +176,7 @@ const h = vi.hoisted(() => {
   function rowsFor(table: unknown): Record<string, unknown>[] {
     if (table === supportFaqTable) return state.faq as unknown as Record<string, unknown>[];
     if (table === supportTicketsTable) return state.tickets as unknown as Record<string, unknown>[];
+    if (table === supportTicketMessagesTable) return state.messages as unknown as Record<string, unknown>[];
     return [];
   }
 
@@ -235,21 +260,32 @@ vi.mock("@workspace/db", () => {
             rows.push(row);
             return Promise.resolve([{ ...row }]);
           }
+          if (table === h.supportTicketMessagesTable) {
+            const row = {
+              id: h.state.nextMessageId(),
+              createdAt: new Date(),
+              ...values,
+            };
+            rows.push(row);
+            return Promise.resolve([{ ...row }]);
+          }
           return Promise.resolve([{ id: 1, ...values }]);
         },
       }),
     }),
     update: (table: unknown) => ({
       set: (updates: Record<string, unknown>) => ({
-        where: (pred: any) => ({
-          returning: () => {
-            const rows = h.rowsFor(table);
-            const idx = rows.findIndex((r) => h.matches(r, pred));
-            if (idx < 0) return Promise.resolve([]);
-            Object.assign(rows[idx], updates);
-            return Promise.resolve([{ ...rows[idx] }]);
-          },
-        }),
+        where: (pred: any) => {
+          const rows = h.rowsFor(table);
+          const idx = rows.findIndex((r) => h.matches(r, pred));
+          if (idx >= 0) Object.assign(rows[idx], updates);
+          const updated = idx >= 0 ? { ...rows[idx] } : undefined;
+          return {
+            returning: () => Promise.resolve(updated ? [updated] : []),
+            then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+              Promise.resolve(undefined).then(resolve, reject),
+          };
+        },
       }),
     }),
   };
@@ -679,6 +715,266 @@ describe("PATCH /api/support/tickets/:id", () => {
     try {
       const { status } = await req(url2, "PATCH", "/api/support/tickets/1", {
         status: "resolved",
+      });
+      expect(status).toBe(401);
+    } finally {
+      await close(s2);
+    }
+  });
+});
+
+// ── GET /api/support/tickets/:id/messages ─────────────────────────────────────
+
+describe("GET /api/support/tickets/:id/messages", () => {
+  let server: Server;
+  let baseUrl: string;
+  const adminActor = { username: "admin", role: "admin" };
+  const ownerActor = { username: "user1", role: "client" };
+  const otherActor = { username: "user2", role: "client" };
+
+  beforeEach(async () => {
+    h.state.reset();
+    h.state.tickets.push({
+      id: 1,
+      accountUsername: "user1",
+      userRole: "client",
+      projectId: null,
+      category: "General",
+      subject: "My issue",
+      description: "Something broke.",
+      attachmentUrl: null,
+      status: "open",
+      adminNotes: null,
+      hasAdminReply: true,
+      userSeenReply: false,
+      createdAt: new Date(),
+    });
+    h.state.messages.push(
+      {
+        id: 1,
+        ticketId: 1,
+        authorType: "user",
+        authorUsername: "user1",
+        body: "I cannot log in.",
+        createdAt: new Date("2024-06-01T10:00:00Z"),
+      },
+      {
+        id: 2,
+        ticketId: 1,
+        authorType: "admin",
+        authorUsername: "admin",
+        body: "We are looking into it.",
+        createdAt: new Date("2024-06-01T11:00:00Z"),
+      },
+    );
+  });
+
+  afterEach(async () => close(server));
+
+  it("ticket owner can read their own thread", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets/1/messages");
+    expect(status).toBe(200);
+    expect(Array.isArray(json.messages)).toBe(true);
+    expect(json.messages.length).toBe(2);
+    expect(json.messages[0].body).toBe("I cannot log in.");
+    expect(json.messages[1].body).toBe("We are looking into it.");
+  });
+
+  it("admin can read any ticket thread", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets/1/messages");
+    expect(status).toBe(200);
+    expect(json.messages.length).toBe(2);
+  });
+
+  it("non-owner non-admin gets 403", async () => {
+    const app = buildApp(otherActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets/1/messages");
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/access denied/i);
+  });
+
+  it("returns 404 for a non-existent ticket", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "GET", "/api/support/tickets/9999/messages");
+    expect(status).toBe(404);
+  });
+
+  it("returns 400 for an invalid ticket id", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(baseUrl, "GET", "/api/support/tickets/abc/messages");
+    expect(status).toBe(400);
+  });
+
+  it("unauthenticated request gets 401", async () => {
+    const unauthApp = buildApp(undefined);
+    const { server: s2, baseUrl: url2 } = await listen(unauthApp);
+    try {
+      const { status } = await req(url2, "GET", "/api/support/tickets/1/messages");
+      expect(status).toBe(401);
+    } finally {
+      await close(s2);
+    }
+  });
+});
+
+// ── POST /api/support/tickets/:id/messages ────────────────────────────────────
+
+describe("POST /api/support/tickets/:id/messages", () => {
+  let server: Server;
+  let baseUrl: string;
+  const adminActor = { username: "admin", role: "admin" };
+  const ownerActor = { username: "user1", role: "client" };
+  const otherActor = { username: "user2", role: "client" };
+
+  beforeEach(async () => {
+    h.state.reset();
+    h.state.tickets.push({
+      id: 1,
+      accountUsername: "user1",
+      userRole: "client",
+      projectId: null,
+      category: "General",
+      subject: "My issue",
+      description: "Something broke.",
+      attachmentUrl: null,
+      status: "open",
+      adminNotes: null,
+      hasAdminReply: false,
+      userSeenReply: false,
+      createdAt: new Date(),
+    });
+  });
+
+  afterEach(async () => close(server));
+
+  it("admin reply sets hasAdminReply=true and status=in_progress on the ticket", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/1/messages",
+      { body: "We are investigating your issue." },
+    );
+    expect(status).toBe(201);
+    expect(json.message).toBeDefined();
+    expect(json.message.authorType).toBe("admin");
+    expect(json.message.body).toBe("We are investigating your issue.");
+
+    // Verify the ticket's flags were updated in state
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.hasAdminReply).toBe(true);
+    expect(ticket?.userSeenReply).toBe(false);
+    expect(ticket?.status).toBe("in_progress");
+  });
+
+  it("ticket owner (user) can reply to their own ticket", async () => {
+    const app = buildApp(ownerActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/1/messages",
+      { body: "Any update?" },
+    );
+    expect(status).toBe(201);
+    expect(json.message.authorType).toBe("user");
+    expect(json.message.authorUsername).toBe("user1");
+
+    // User reply must NOT flip hasAdminReply
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.hasAdminReply).toBe(false);
+    expect(ticket?.status).toBe("open");
+  });
+
+  it("non-owner non-admin gets 403", async () => {
+    const app = buildApp(otherActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/1/messages",
+      { body: "I should not be able to do this." },
+    );
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/access denied/i);
+  });
+
+  it("returns 400 when body is empty", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/1/messages",
+      { body: "   " },
+    );
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/body/i);
+  });
+
+  it("returns 400 when body field is missing", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status, json } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/1/messages",
+      {},
+    );
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/body/i);
+  });
+
+  it("returns 404 when ticket does not exist", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/9999/messages",
+      { body: "Hello?" },
+    );
+    expect(status).toBe(404);
+  });
+
+  it("returns 400 for an invalid ticket id", async () => {
+    const app = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(app));
+
+    const { status } = await req(
+      baseUrl,
+      "POST",
+      "/api/support/tickets/abc/messages",
+      { body: "Hello?" },
+    );
+    expect(status).toBe(400);
+  });
+
+  it("unauthenticated request gets 401", async () => {
+    const unauthApp = buildApp(undefined);
+    const { server: s2, baseUrl: url2 } = await listen(unauthApp);
+    try {
+      const { status } = await req(url2, "POST", "/api/support/tickets/1/messages", {
+        body: "Hello?",
       });
       expect(status).toBe(401);
     } finally {
