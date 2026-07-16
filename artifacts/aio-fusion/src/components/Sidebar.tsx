@@ -230,6 +230,24 @@ function SidebarContent({
         </button>
       </div>
       <nav className="flex-1 pb-6 pt-2 px-4 space-y-4 overflow-y-auto">
+        {onOpenGeorge && (
+          <button
+            onClick={() => { onOpenGeorge(); onItemClick?.(); }}
+            className="relative flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 active:scale-95"
+            style={{ background: vars.accent ?? "#C8497A", color: "white" }}
+          >
+            <MessageCircle size={15} />
+            <span>Ask George — Support</span>
+            {georgeHasUpdate && (
+              <span
+                className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                style={{ background: "#ef4444", color: "white" }}
+              >
+                1
+              </span>
+            )}
+          </button>
+        )}
         <div
           className="rounded-[20px] p-2"
           style={{
@@ -443,25 +461,7 @@ function SidebarContent({
           </div>
         ))}
       </nav>
-      <div className="px-4 py-4 border-t flex flex-col gap-3" style={{ borderColor: vars.g200 }}>
-        {onOpenGeorge && (
-          <button
-            onClick={() => { onOpenGeorge(); onItemClick?.(); }}
-            className="relative flex items-center gap-2 w-full px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 active:scale-95"
-            style={{ background: vars.accent ?? "#C8497A", color: "white" }}
-          >
-            <MessageCircle size={15} />
-            <span>Ask George — Support</span>
-            {georgeHasUpdate && (
-              <span
-                className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-                style={{ background: "#ef4444", color: "white" }}
-              >
-                1
-              </span>
-            )}
-          </button>
-        )}
+      <div className="px-4 py-4 border-t" style={{ borderColor: vars.g200 }}>
         <div className="flex items-center gap-3 px-1">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
             SP
