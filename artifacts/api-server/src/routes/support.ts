@@ -333,7 +333,20 @@ router.get(
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(supportTicketsTable.createdAt));
 
-      res.json({ tickets });
+      const uniqueUsernames = [...new Set(tickets.map((t) => t.accountUsername))];
+      const displayNameMap: Record<string, string | undefined> = {};
+      await Promise.all(
+        uniqueUsernames.map(async (username) => {
+          displayNameMap[username] = await getDisplayName(username).catch(() => undefined);
+        }),
+      );
+
+      const annotated = tickets.map((t) => ({
+        ...t,
+        displayName: displayNameMap[t.accountUsername] ?? undefined,
+      }));
+
+      res.json({ tickets: annotated });
     } catch (err) {
       console.error("[support] GET /tickets", err);
       res.status(500).json({ error: "Failed to load tickets" });

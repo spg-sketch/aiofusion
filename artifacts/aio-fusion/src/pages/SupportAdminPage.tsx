@@ -23,6 +23,7 @@ type FaqEntry = {
 type Ticket = {
   id: number;
   accountUsername: string;
+  displayName?: string;
   userRole: string;
   projectId: string | null;
   category: string;
@@ -257,6 +258,9 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
             <div className="rounded-xl border p-4" style={{ borderColor: vars.g200, background: "white" }}>
               <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: vars.g400 }}>Submitted by</p>
               <div className="flex flex-wrap gap-4 text-[13px]">
+                {selectedTicket.displayName && (
+                  <span><strong>Name:</strong> {selectedTicket.displayName}</span>
+                )}
                 <span><strong>Account:</strong> {selectedTicket.accountUsername}</span>
                 <span><strong>Role:</strong> {selectedTicket.userRole}</span>
                 {selectedTicket.projectId && <span><strong>Project:</strong> {selectedTicket.projectId}</span>}
@@ -471,7 +475,14 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
                 >
                   <td className="px-4 py-3 font-mono text-[12px]" style={{ color: vars.g400 }}>#{ticket.id}</td>
                   <td className="px-4 py-3 font-medium max-w-[200px] truncate" style={{ color: navy }}>{ticket.subject}</td>
-                  <td className="px-4 py-3" style={{ color: vars.g500 }}>{ticket.accountUsername}</td>
+                  <td className="px-4 py-3" style={{ color: vars.g500 }}>
+                    {ticket.displayName ? (
+                      <span>
+                        <span className="font-medium" style={{ color: vars.navy }}>{ticket.displayName}</span>
+                        <span className="ml-1 text-[11px]" style={{ color: vars.g400 }}>({ticket.accountUsername})</span>
+                      </span>
+                    ) : ticket.accountUsername}
+                  </td>
                   <td className="px-4 py-3" style={{ color: vars.g500 }}>{ticket.category}</td>
                   <td className="px-4 py-3"><StatusBadge status={ticket.status} /></td>
                   <td className="px-4 py-3" style={{ color: vars.g500 }}>
