@@ -39,6 +39,7 @@ type ChatStep =
   | { type: "greeting" }
   | { type: "waiting_question" }
   | { type: "searching" }
+  | { type: "faq_options"; entries: FaqEntry[] }
   | { type: "faq_result"; entry: FaqEntry }
   | { type: "not_helpful" }
   | { type: "no_match" }
@@ -144,11 +145,15 @@ export function GeorgeSupport({
         { credentials: "include" },
       );
       const data = (await r.json()) as { faq: FaqEntry[] };
-      const top = data.faq?.[0];
-      if (top) {
-        setStep({ type: "faq_result", entry: top });
-      } else {
+      const results = data.faq ?? [];
+      if (results.length === 0) {
         setStep({ type: "no_match" });
+      } else if (results.length === 1) {
+        // Only one match — go straight to the answer
+        setStep({ type: "faq_result", entry: results[0] });
+      } else {
+        // Multiple matches — let the user pick the most relevant one
+        setStep({ type: "faq_options", entries: results });
       }
     } catch {
       setStep({ type: "no_match" });
@@ -451,8 +456,9 @@ export function GeorgeSupport({
 
           {/* ── Standard chat flow ── */}
           {(step.type === "greeting" || step.type === "waiting_question" || step.type === "searching" ||
-            step.type === "faq_result" || step.type === "not_helpful" || step.type === "no_match" ||
-            step.type === "ticket_form" || step.type === "ticket_success" || step.type === "ask_another") && (
+            step.type === "faq_options" || step.type === "faq_result" || step.type === "not_helpful" ||
+            step.type === "no_match" || step.type === "ticket_form" || step.type === "ticket_success" ||
+            step.type === "ask_another") && (
             <>
               {/* George greeting bubble */}
               <GeorgeBubble>
@@ -501,6 +507,38 @@ export function GeorgeSupport({
                     <Loader2 size={14} className="animate-spin" style={{ color: teal }} />
                     <span className="text-[13px]" style={{ color: vars.g500 }}>Searching the FAQ…</span>
                   </div>
+                </GeorgeBubble>
+              )}
+
+              {step.type === "faq_options" && (
+                <GeorgeBubble>
+                  <p className="text-[13px] mb-3" style={{ color: navy }}>
+                    I found a few articles that might help — which one looks closest to your question?
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {step.entries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        onClick={() => { setHelpfulVote(null); setStep({ type: "faq_result", entry }); }}
+                        className="text-left px-3 py-2.5 rounded-lg border transition-all hover:bg-gray-50 group"
+                        style={{ borderColor: vars.g200 }}
+                      >
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider mb-0.5" style={{ color: vars.g400 }}>
+                          {entry.category}
+                        </span>
+                        <span className="block text-[13px] font-medium leading-snug group-hover:underline" style={{ color: navy }}>
+                          {entry.question}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setQuestion(""); setStep({ type: "waiting_question" }); }}
+                    className="mt-3 text-[12px]"
+                    style={{ color: vars.g400 }}
+                  >
+                    None of these — try a different question
+                  </button>
                 </GeorgeBubble>
               )}
 
