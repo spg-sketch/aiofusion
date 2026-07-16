@@ -40,6 +40,7 @@ type ChatStep =
   | { type: "waiting_question" }
   | { type: "searching" }
   | { type: "faq_result"; entry: FaqEntry }
+  | { type: "not_helpful" }
   | { type: "no_match" }
   | { type: "ticket_form" }
   | { type: "ticket_success"; ticket: Ticket }
@@ -450,8 +451,8 @@ export function GeorgeSupport({
 
           {/* ── Standard chat flow ── */}
           {(step.type === "greeting" || step.type === "waiting_question" || step.type === "searching" ||
-            step.type === "faq_result" || step.type === "no_match" || step.type === "ticket_form" ||
-            step.type === "ticket_success" || step.type === "ask_another") && (
+            step.type === "faq_result" || step.type === "not_helpful" || step.type === "no_match" ||
+            step.type === "ticket_form" || step.type === "ticket_success" || step.type === "ask_another") && (
             <>
               {/* George greeting bubble */}
               <GeorgeBubble>
@@ -529,7 +530,7 @@ export function GeorgeSupport({
                           <CheckCircle2 size={13} style={{ color: "#22c55e" }} /> Yes, thanks!
                         </button>
                         <button
-                          onClick={() => { setHelpfulVote("no"); setStep({ type: "ticket_form" }); }}
+                          onClick={() => { setHelpfulVote("no"); setStep({ type: "not_helpful" }); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
                           style={{ borderColor: vars.g200, color: navy }}
                         >
@@ -565,32 +566,52 @@ export function GeorgeSupport({
                 </GeorgeBubble>
               )}
 
-              {step.type === "no_match" && (
+              {step.type === "not_helpful" && (
                 <GeorgeBubble>
-                  <p className="text-[13px] leading-relaxed" style={{ color: navy }}>
-                    I don't have an answer for that in my knowledge base yet. Let me connect you with the support team — they'll get back to you shortly.
+                  <p className="text-[13px] mb-3" style={{ color: navy }}>
+                    Sorry that didn't quite hit the mark. Would you like to try asking a different way, or shall I raise a support ticket for you?
                   </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => { setHelpfulVote(null); setQuestion(""); setStep({ type: "waiting_question" }); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                      style={{ borderColor: vars.g200, color: navy }}
+                    >
+                      Try a different question
+                    </button>
+                    <button
+                      onClick={() => setStep({ type: "ticket_form" })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      Raise a support ticket
+                    </button>
+                  </div>
                 </GeorgeBubble>
               )}
 
-              {(step.type === "no_match" || (step.type === "faq_result" && helpfulVote === "no")) && (
-                <TicketForm
-                  category={ticketCategory}
-                  subject={ticketSubject}
-                  description={ticketDescription}
-                  attachment={ticketAttachment}
-                  error={ticketError}
-                  submitting={submitting}
-                  fileRef={fileRef}
-                  onCategory={setTicketCategory}
-                  onSubject={setTicketSubject}
-                  onDescription={setTicketDescription}
-                  onAttachment={setTicketAttachment}
-                  onSubmit={handleSubmitTicket}
-                  navy={navy}
-                  accent={accent}
-                  teal={teal}
-                />
+              {step.type === "no_match" && (
+                <GeorgeBubble>
+                  <p className="text-[13px] mb-3" style={{ color: navy }}>
+                    I don't have an answer for that in my knowledge base yet. Want to try rephrasing the question, or would you prefer to raise a support ticket?
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => { setQuestion(""); setStep({ type: "waiting_question" }); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                      style={{ borderColor: vars.g200, color: navy }}
+                    >
+                      Try a different question
+                    </button>
+                    <button
+                      onClick={() => setStep({ type: "ticket_form" })}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      Raise a support ticket
+                    </button>
+                  </div>
+                </GeorgeBubble>
               )}
 
               {step.type === "ticket_form" && (
