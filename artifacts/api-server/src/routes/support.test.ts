@@ -1206,3 +1206,220 @@ describe("POST /api/support/tickets/:id/seen", () => {
     }
   });
 });
+
+// ── Multi-turn thread: full reply cycle ───────────────────────────────────────
+// Covers the scenario where both the user and the admin post multiple messages
+// and the GET thread endpoint returns them all in order with correct authorType
+// (authorType drives the "user" vs "admin" bubble styling in SupportAdminPage).
+
+describe("Ticket thread renders correctly with multiple user and admin messages", () => {
+  let server: Server;
+  let baseUrl: string;
+  const adminActor = { username: "admin_agent", role: "admin" };
+  const userActor = { username: "client_user", role: "client" };
+
+  beforeEach(async () => {
+    h.state.reset();
+    // Seed a ticket owned by client_user
+    h.state.tickets.push({
+      id: 1,
+      accountUsername: "client_user",
+      userRole: "client",
+      projectId: null,
+      category: "Bug / Technical Issue",
+      subject: "Audit keeps timing out",
+      description: "Every time I run the audit it times out after 2 minutes.",
+      attachmentUrl: null,
+      status: "open",
+      adminNotes: null,
+      hasAdminReply: false,
+      userSeenReply: false,
+      createdAt: new Date("2026-07-10T09:00:00Z"),
+    });
+  });
+
+  afterEach(async () => {
+    if (server) await close(server);
+  });
+
+  it("full reply cycle: user sends two messages, admin sends two replies — thread GET returns all four in order", async () => {
+    // Each step uses its own ephemeral server so the shared `server` variable
+    // (used by the other two tests via afterEach) is never touched here.
+
+    // ── Step 1: user posts first message ──────────────────────────────────
+    const { server: s1, baseUrl: url1 } = await listen(buildApp(userActor));
+    const r1 = await req(url1, "POST", "/api/support/tickets/1/messages", {
+      body: "Still happening. Tried Chrome and Firefox.",
+    });
+    await close(s1);
+    expect(r1.status).toBe(201);
+    expect(r1.json.message.authorType).toBe("user");
+    expect(r1.json.message.body).toBe("Still happening. Tried Chrome and Firefox.");
+
+    // ── Step 2: admin posts first reply ───────────────────────────────────
+    const { server: s2, baseUrl: url2 } = await listen(buildApp(adminActor));
+    const r2 = await req(url2, "POST", "/api/support/tickets/1/messages", {
+      body: "Thanks for the report. Can you share your project ID?",
+    });
+    await close(s2);
+    expect(r2.status).toBe(201);
+    expect(r2.json.message.authorType).toBe("admin");
+    // Admin reply must flip hasAdminReply and set status to in_progress
+    const ticketAfterAdminReply1 = h.state.tickets.find((t) => t.id === 1);
+    expect(ticketAfterAdminReply1?.hasAdminReply).toBe(true);
+    expect(ticketAfterAdminReply1?.status).toBe("in_progress");
+
+    // ── Step 3: user posts a follow-up message ────────────────────────────
+    const { server: s3, baseUrl: url3 } = await listen(buildApp(userActor));
+    const r3 = await req(url3, "POST", "/api/support/tickets/1/messages", {
+      body: "Project ID is proj-abc-123.",
+    });
+    await close(s3);
+    expect(r3.status).toBe(201);
+    expect(r3.json.message.authorType).toBe("user");
+    // User reply must NOT change status or flip hasAdminReply again
+    const ticketAfterUserReply2 = h.state.tickets.find((t) => t.id === 1);
+    expect(ticketAfterUserReply2?.status).toBe("in_progress");
+
+    // ── Step 4: admin posts a second reply ────────────────────────────────
+    const { server: s4, baseUrl: url4 } = await listen(buildApp(adminActor));
+    const r4 = await req(url4, "POST", "/api/support/tickets/1/messages", {
+      body: "Found the issue. A fix is being deployed.",
+    });
+    await close(s4);
+    expect(r4.status).toBe(201);
+    expect(r4.json.message.authorType).toBe("admin");
+
+    // ── Step 5: admin GETs the full thread and verifies all 4 messages ────
+    const { server: s5, baseUrl: url5 } = await listen(buildApp(adminActor));
+    const { status, json } = await req(url5, "GET", "/api/support/tickets/1/messages");
+    await close(s5);
+
+    expect(status).toBe(200);
+    expect(Array.isArray(json.messages)).toBe(true);
+    expect(json.messages).toHaveLength(4);
+
+    // Verify chronological ordering and alternating user/admin bubbles
+    expect(json.messages[0].authorType).toBe("user");
+    expect(json.messages[0].body).toBe("Still happening. Tried Chrome and Firefox.");
+    expect(json.messages[0].authorUsername).toBe("client_user");
+
+    expect(json.messages[1].authorType).toBe("admin");
+    expect(json.messages[1].body).toBe("Thanks for the report. Can you share your project ID?");
+    expect(json.messages[1].authorUsername).toBe("admin_agent");
+
+    expect(json.messages[2].authorType).toBe("user");
+    expect(json.messages[2].body).toBe("Project ID is proj-abc-123.");
+    expect(json.messages[2].authorUsername).toBe("client_user");
+
+    expect(json.messages[3].authorType).toBe("admin");
+    expect(json.messages[3].body).toBe("Found the issue. A fix is being deployed.");
+    expect(json.messages[3].authorUsername).toBe("admin_agent");
+
+    // Every message must carry the fields the UI uses for bubble rendering:
+    // id (React key), ticketId, authorType, authorUsername, body, createdAt
+    for (const m of json.messages) {
+      expect(typeof m.id).toBe("number");
+      expect(m.ticketId).toBe(1);
+      expect(["user", "admin"]).toContain(m.authorType);
+      expect(typeof m.authorUsername).toBe("string");
+      expect(typeof m.body).toBe("string");
+      expect(m.createdAt).toBeDefined();
+    }
+  });
+
+  it("ticket owner also sees the complete thread in order after admin replies", async () => {
+    // Seed the four messages directly so we can test the read path in isolation
+    h.state.messages.push(
+      {
+        id: 1,
+        ticketId: 1,
+        authorType: "user",
+        authorUsername: "client_user",
+        body: "First message from user.",
+        createdAt: new Date("2026-07-10T09:05:00Z"),
+      },
+      {
+        id: 2,
+        ticketId: 1,
+        authorType: "admin",
+        authorUsername: "admin_agent",
+        body: "First reply from admin.",
+        createdAt: new Date("2026-07-10T09:15:00Z"),
+      },
+      {
+        id: 3,
+        ticketId: 1,
+        authorType: "user",
+        authorUsername: "client_user",
+        body: "Follow-up from user.",
+        createdAt: new Date("2026-07-10T09:20:00Z"),
+      },
+      {
+        id: 4,
+        ticketId: 1,
+        authorType: "admin",
+        authorUsername: "admin_agent",
+        body: "Second reply from admin.",
+        createdAt: new Date("2026-07-10T09:30:00Z"),
+      },
+    );
+
+    const userApp = buildApp(userActor);
+    ({ server, baseUrl } = await listen(userApp));
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/tickets/1/messages");
+    expect(status).toBe(200);
+    expect(json.messages).toHaveLength(4);
+
+    // Verify user sees both bubble types with correct authorType field
+    const userBubbles = json.messages.filter((m: { authorType: string }) => m.authorType === "user");
+    const adminBubbles = json.messages.filter((m: { authorType: string }) => m.authorType === "admin");
+    expect(userBubbles).toHaveLength(2);
+    expect(adminBubbles).toHaveLength(2);
+
+    // The ordering must be preserved (ascending createdAt)
+    expect(json.messages[0].id).toBe(1);
+    expect(json.messages[1].id).toBe(2);
+    expect(json.messages[2].id).toBe(3);
+    expect(json.messages[3].id).toBe(4);
+  });
+
+  it("authorType='admin' messages have different username to the ticket owner — no bubble identity collision", async () => {
+    // Guards against a regression where admin replies appear as if sent by the user
+    h.state.messages.push(
+      {
+        id: 1,
+        ticketId: 1,
+        authorType: "user",
+        authorUsername: "client_user",
+        body: "Help me please.",
+        createdAt: new Date("2026-07-10T10:00:00Z"),
+      },
+      {
+        id: 2,
+        ticketId: 1,
+        authorType: "admin",
+        authorUsername: "admin_agent",
+        body: "On it.",
+        createdAt: new Date("2026-07-10T10:05:00Z"),
+      },
+    );
+
+    const adminApp = buildApp(adminActor);
+    ({ server, baseUrl } = await listen(adminApp));
+
+    const { json } = await req(baseUrl, "GET", "/api/support/tickets/1/messages");
+
+    const userMsg = json.messages.find((m: { authorType: string }) => m.authorType === "user");
+    const adminMsg = json.messages.find((m: { authorType: string }) => m.authorType === "admin");
+
+    expect(userMsg).toBeDefined();
+    expect(adminMsg).toBeDefined();
+    // Distinct usernames ensure the UI can style each bubble independently
+    expect(userMsg.authorUsername).not.toBe(adminMsg.authorUsername);
+    // authorType is always the canonical signal for bubble styling
+    expect(userMsg.authorType).toBe("user");
+    expect(adminMsg.authorType).toBe("admin");
+  });
+});
