@@ -215,6 +215,21 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
     }
   };
 
+  const clearEmailFailed = async () => {
+    if (!selectedTicket) return;
+    try {
+      const r = await fetch(`${apiBase()}/api/support/tickets/${selectedTicket.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ emailFailed: false }),
+      });
+      const data = (await r.json()) as { ticket: Ticket };
+      setSelectedTicket(data.ticket);
+      setTickets((prev) => prev.map((t) => t.id === data.ticket.id ? data.ticket : t));
+    } catch { /* ignore */ }
+  };
+
   const sendReply = async () => {
     if (!selectedTicket || !replyText.trim()) return;
     setSendingReply(true);
@@ -255,7 +270,14 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
         {selectedTicket.emailFailed && (
           <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px] font-medium" style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>
             <MailX size={15} />
-            <span><strong>Email delivery failed</strong> — the notification email to the team and/or the acknowledgement email to the user was not delivered when this ticket was submitted. Check the Resend API key and configuration.</span>
+            <span className="flex-1"><strong>Email delivery failed</strong> — the notification email to the team and/or the acknowledgement email to the user was not delivered when this ticket was submitted. Check the Resend API key and configuration.</span>
+            <button
+              onClick={() => void clearEmailFailed()}
+              className="ml-2 shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-semibold hover:opacity-80 transition-opacity"
+              style={{ background: "#dc2626", color: "white" }}
+            >
+              Clear flag
+            </button>
           </div>
         )}
 

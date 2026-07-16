@@ -381,12 +381,13 @@ router.patch(
       return;
     }
     try {
-      const { status, adminNotes, hasAdminReply, userSeenReply } = req.body ?? {};
+      const { status, adminNotes, hasAdminReply, userSeenReply, emailFailed } = req.body ?? {};
       const set: Record<string, unknown> = {};
       if (status !== undefined) set.status = String(status);
       if (adminNotes !== undefined) set.adminNotes = String(adminNotes);
       if (hasAdminReply !== undefined) set.hasAdminReply = Boolean(hasAdminReply);
       if (userSeenReply !== undefined) set.userSeenReply = Boolean(userSeenReply);
+      if (emailFailed !== undefined) set.emailFailed = Boolean(emailFailed);
 
       const [ticket] = await db
         .update(supportTicketsTable)
