@@ -400,13 +400,35 @@ describe("GET /api/support/faq", () => {
     expect(haystack).toMatch(/login|password|access/);
   });
 
-  it("does not include inactive entries in search results", async () => {
-    // "internal hidden" matches the inactive row's keywords
+  it("does not include inactive entries in search results (soft-keyword match)", async () => {
+    // "internal hidden" matches the inactive row's keywords — the guard is
+    // unconditional so a regression that returns the inactive row is always caught
     const { status, json } = await req(baseUrl, "GET", "/api/support/faq?q=internal%20hidden");
     expect(status).toBe(200);
-    if (json.faq.length > 0) {
-      expect(json.faq.every((f: any) => f.category !== "Hidden")).toBe(true);
-    }
+    expect(json.faq.every((f: any) => f.isActive !== false)).toBe(true);
+    expect(json.faq.find((f: any) => f.category === "Hidden")).toBeUndefined();
+  });
+
+  it("never returns inactive entries even when an active entry shares the same keywords", async () => {
+    // Seed an *active* entry whose keywords overlap exactly with the inactive one.
+    // After the search both should score, but only the active one may be returned.
+    h.state.faq.push({
+      id: 99,
+      category: "Getting Started",
+      question: "What about internal tools?",
+      answer: "We provide internal tooling for agency users.",
+      keywords: "internal, hidden, tools",
+      displayOrder: 30,
+      isActive: true,
+    });
+
+    const { status, json } = await req(baseUrl, "GET", "/api/support/faq?q=internal%20hidden");
+    expect(status).toBe(200);
+    // At least the active entry should come back
+    expect(json.faq.length).toBeGreaterThan(0);
+    // The inactive "Hidden" entry must never appear regardless of DB isActive state
+    expect(json.faq.find((f: any) => f.category === "Hidden")).toBeUndefined();
+    expect(json.faq.every((f: any) => f.isActive !== false)).toBe(true);
   });
 });
 
