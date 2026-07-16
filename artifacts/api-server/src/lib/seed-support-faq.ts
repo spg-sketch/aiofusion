@@ -8,14 +8,14 @@ export async function seedSupportFaq(): Promise<void> {
   // Check if table already has enough entries — re-seeds if below target
   const existing = await db.execute(sql`SELECT COUNT(*) AS cnt FROM support_faq`);
   const cnt = Number((existing.rows[0] as { cnt: string | number })?.cnt ?? 0);
-  if (cnt >= 60) {
+  if (cnt >= 150) {
     logger.info({ cnt }, "seedSupportFaq: FAQ entries already seeded, skipping");
     return;
   }
-  // If fewer than 60, truncate and re-seed with the full set
+  // If fewer than 150, truncate and re-seed with the full set
   if (cnt > 0) {
     await db.execute(sql`TRUNCATE TABLE support_faq RESTART IDENTITY CASCADE`);
-    logger.info({ cnt }, "seedSupportFaq: Truncating to re-seed with full 60+ entry set");
+    logger.info({ cnt }, "seedSupportFaq: Truncating to re-seed with full 150+ entry set");
   }
 
   const entries = [
@@ -62,7 +62,21 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "geo, generative engine optimisation, what is geo, ai visibility, ai mentions, seo vs geo",
       displayOrder: 60,
     },
-    // ── Project Set-Up ──────────────────────────────────────────────────────
+    {
+      category: "Getting Started",
+      question: "How do I navigate between different tools in AIO Fusion?",
+      answer: "All tools are accessible from the left-hand sidebar. The sidebar is organised by function: Project Set-Up at the top, then audit tools (LLM Check, Technical GEO), content tools (Creator, Optimiser, Comms Planner, Media Research), and Archive / Reports at the bottom. Click any item to go directly to that tool.",
+      keywords: "navigation, sidebar, how to use, find tools, where is, menu",
+      displayOrder: 70,
+    },
+    {
+      category: "Getting Started",
+      question: "Does AIO Fusion work on mobile devices?",
+      answer: "AIO Fusion is a web platform designed primarily for desktop use. It is accessible on tablets and mobile devices via a browser, but some features — particularly the audit results tables and the Comms Planner — are best experienced on a larger screen. We recommend using a desktop or laptop for detailed work.",
+      keywords: "mobile, tablet, phone, browser, responsive, desktop, works on mobile",
+      displayOrder: 80,
+    },
+    // ── Project Set-Up ───────────────────────────────────────────────────────
     {
       category: "Project Set-Up",
       question: "What is the Intake Form and why do I need to fill it in?",
@@ -98,7 +112,147 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "key messages, what to write, messaging, core messages, brand messages, examples",
       displayOrder: 50,
     },
-    // ── LLM Check / Earned Media Audit ───────────────────────────────────────
+    {
+      category: "Project Set-Up",
+      question: "How do I add competitors to my project?",
+      answer: "In the Intake Form, scroll to the Competitor section. Add up to 10 competitors by entering their brand name and website URL. The LLM Check audit will then measure their AI visibility alongside yours, giving you share-of-voice comparisons. Update competitors any time to keep results relevant.",
+      keywords: "competitors, add competitor, competitor list, rival, share of voice, intake form competitors",
+      displayOrder: 60,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are LLM Queries and how are they generated?",
+      answer: "LLM Queries (section 1.6 of the Intake Form) are the actual questions the platform sends to ChatGPT and Claude during the LLM Check audit. They are AI-generated from your brand context and categorised into Discovery, Shortlist, and Comparison queries. You can regenerate them once every 21 days from the Project Set-Up page.",
+      keywords: "llm queries, what are they, how generated, 1.6, discovery shortlist comparison, regenerate, 21 day lock",
+      displayOrder: 70,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is 'Section 1 – Earned Media Message Framework' in the Intake Form?",
+      answer: "Section 1 is the most important section of the Intake Form. It defines your brand's core narrative for AI visibility: the boilerplate descriptor, your primary and supporting messages, the evidence that backs them up, and the topics and phrases you want associated with the brand. Everything in this section directly influences how the Content Creator and Optimiser generate and score output.",
+      keywords: "section 1, message framework, earned media, boilerplate, primary message, intake form section 1",
+      displayOrder: 80,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is 'Core Boilerplate' in the Intake Form?",
+      answer: "Core Boilerplate is the standard 250-word descriptor used at the end of every press release and communications piece. It should summarise the company — what it does, who it serves, and why it matters — in factual, citable language. Avoid marketing superlatives; write it like a Wikipedia entry.",
+      keywords: "core boilerplate, company descriptor, 250 word, what is it, how to write, boilerplate",
+      displayOrder: 90,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is 'Message Hierarchy' in Section 1?",
+      answer: "Message Hierarchy is the structured list of your primary message (the single most important claim) and supporting messages (additional factual claims that reinforce the primary). This hierarchy ensures that the Content Creator and Optimiser always lead with the most strategically important point and layer in evidence consistently.",
+      keywords: "message hierarchy, primary message, supporting messages, section 1, intake form, hierarchy",
+      displayOrder: 100,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What should I put in the 'Evidence / Online Evidence' field?",
+      answer: "This field is for factual, verifiable proof points that back up your key messages — published reports, awards, case study data, certifications, third-party endorsements, or notable media coverage. Strong evidence makes AI models more likely to cite your brand as a credible source. The more specific and verifiable the better.",
+      keywords: "evidence, online evidence, proof points, what to put, citations, facts, case study, awards",
+      displayOrder: 110,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is the 'Semantic Phrase Guide & Topics' field?",
+      answer: "This is where you enter the specific words, phrases, and topic clusters you want associated with your brand in AI responses. Think of these as the terms you want to 'own' in the AI's understanding of your sector — e.g. 'AI governance', 'responsible technology', 'carbon-neutral logistics'. Include both technical terms and natural language phrases.",
+      keywords: "semantic phrase guide, topics, what is it, keywords, phrases, semantic, topics to own",
+      displayOrder: 120,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What should I put in the 'What to Avoid' field?",
+      answer: "List any terms, comparisons, or associations you want to steer clear of in generated content — competitor names you don't want mentioned, outdated product names, sensitive topics, or language that doesn't fit the brand tone. The Content Creator and Optimiser use this to filter their output accordingly.",
+      keywords: "what to avoid, avoid, exclusions, blacklist, competitor names, tone, content restrictions",
+      displayOrder: 130,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What does the 'Optimise' button on a text field do?",
+      answer: "The Optimise button (available on longer text fields like the boilerplate and evidence fields) sends the current text to the AI for a GEO-focused rewrite. It improves clarity, adds E-E-A-T markers, and ensures the language is structured for AI citation. You can accept or discard the suggestion — your original text is preserved until you save.",
+      keywords: "optimise button, ai rewrite, text field, what does it do, optimise field, intake form button",
+      displayOrder: 140,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is 'Section 2 – FAQ & Customer Questions'?",
+      answer: "Section 2 captures the questions your actual customers and prospects ask — both before and after becoming clients. These questions train the platform on what information AI models are likely to be asked about your sector, helping the audit and content tools align with real-world search and conversational intent.",
+      keywords: "section 2, faq, customer questions, intake form section 2, questions",
+      displayOrder: 150,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are 'Post-Client Questions' in the Intake Form?",
+      answer: "Post-Client Questions are questions your customers ask after they've become clients — onboarding queries, common support questions, 'how do I' questions. Including these helps the platform generate content that addresses the full customer journey, not just the sales funnel.",
+      keywords: "post client questions, after sales, existing client, intake form, section 2",
+      displayOrder: 160,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are 'Misconceptions' in the Intake Form?",
+      answer: "Misconceptions are false or misleading beliefs that exist in the market about your brand, product, or sector. For example: 'People think we only serve large enterprise clients, when actually we work with mid-market businesses too.' Including these helps the Content Creator and Optimiser proactively address and correct them.",
+      keywords: "misconceptions, false beliefs, myths, what is it, intake form, correct misconceptions",
+      displayOrder: 170,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is 'Section 3 – Audience & Intent Mapping'?",
+      answer: "Section 3 defines who the brand's target audience is in granular detail — their job roles, sectors, pain points, desired outcomes, and how they make buying decisions. This section is used to personalise content output and to ensure the LLM Check audit uses queries that reflect the real questions your audience is asking.",
+      keywords: "section 3, audience, intent mapping, target audience, buyer personas, icp",
+      displayOrder: 180,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is the difference between 'Ideal Target Client' and 'ICP' in the Intake Form?",
+      answer: "Ideal Target Client is a narrative description of who the perfect client is — their situation, mindset, and what makes them a great fit. ICP (Ideal Client Profile) is the structured version: job title, company size, sector, geography, and budget range. Both are used together to sharpen the audit queries and content targeting.",
+      keywords: "ideal target client, icp, ideal client profile, difference, audience, target client",
+      displayOrder: 190,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What should I put in 'Pain Points'?",
+      answer: "Pain Points are the problems, frustrations, and challenges your ideal clients face before they find your solution. Be specific — 'Struggling to prove ROI to the board' is more useful than 'Marketing challenges'. These are used to align content and audit queries with the actual language your audience uses when searching for solutions.",
+      keywords: "pain points, challenges, problems, what to put, audience, intake form",
+      displayOrder: 200,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are 'Outcomes' in the Intake Form?",
+      answer: "Outcomes are the specific results and transformations your clients experience after working with you — the measurable improvements, time savings, revenue gains, or competitive advantages. Including strong outcome statements helps the Content Creator produce case-study-style content that AI models treat as high-credibility evidence.",
+      keywords: "outcomes, results, transformation, benefits, what clients get, intake form outcomes",
+      displayOrder: 210,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are 'Trust Signals' in Section 4?",
+      answer: "Trust Signals are external validators that confirm your brand's credibility — accreditations, certifications, industry memberships, notable clients (where public), awards, and years in business. AI models weight these signals heavily when deciding whether to cite a brand as authoritative. Include any you have, even minor ones.",
+      keywords: "trust signals, credibility, certifications, awards, accreditations, section 4, business fundamentals",
+      displayOrder: 220,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What are 'Trading Names' and why do they matter?",
+      answer: "Trading Names are any names the company operates under other than its legal name — shortened names, product brand names, or former names. This helps the LLM Check audit recognise when the brand is mentioned under any of its aliases, so citations aren't missed and your scores are accurate.",
+      keywords: "trading names, aliases, former name, brand name, legal name, section 4",
+      displayOrder: 230,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What is the Completeness Score on the Intake Form?",
+      answer: "The Completeness Score (shown as a percentage at the top of the Project Set-Up page) tracks how much of the Intake Form you've filled in across all sections. A higher score means more context for the platform's AI tools, leading to better audit accuracy and content quality. Aim for 80%+ before your first audit run.",
+      keywords: "completeness score, percentage, progress, how complete, intake form score, what does it mean",
+      displayOrder: 240,
+    },
+    {
+      category: "Project Set-Up",
+      question: "What does 'Export Project Data' do?",
+      answer: "Export Project Data downloads a PDF summary of everything in your Intake Form — all brand context, messages, audience profiles, and queries. This is useful for sharing brand context with colleagues, briefing copywriters, or keeping an offline record of your project configuration.",
+      keywords: "export project data, download, pdf, intake form export, brand context, project summary",
+      displayOrder: 250,
+    },
+    // ── LLM Check / Earned Media Audit ────────────────────────────────────────
     {
       category: "LLM Check / Earned Media Audit",
       question: "What does the Earned Media Visibility Audit measure?",
@@ -141,6 +295,97 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "share of voice, sov, competitors, comparison, what is share of voice, relative score",
       displayOrder: 60,
     },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "Which AI models does the LLM Check audit query?",
+      answer: "The LLM Check audit runs queries against ChatGPT (OpenAI) and Claude (Anthropic). These are the two dominant AI assistants used by consumers and businesses for information discovery and shortlisting. Perplexity and other AI search tools are not currently included in the audit scope.",
+      keywords: "which models, chatgpt, claude, openai, anthropic, ai models tested, perplexity, not included",
+      displayOrder: 70,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What is the 'Business Type' input on the LLM Check?",
+      answer: "Business Type is a short descriptor of how the brand operates — e.g. 'B2B SaaS', 'Professional services', 'Consumer retail'. It helps the platform contextualise the audit queries correctly. It's pre-filled from your Intake Form but you can override it for a specific audit run without changing the Intake Form.",
+      keywords: "business type, input, llm check, what is it, b2b, saas, override",
+      displayOrder: 80,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What is the 'ICP Profile' input on the LLM Check configuration?",
+      answer: "ICP Profile is a brief description of the ideal client the brand is targeting — used to calibrate the audit queries to the right audience context. For example: 'Mid-market HR Directors at manufacturing companies'. It's drawn from your Intake Form and can be overridden for a specific run.",
+      keywords: "icp profile, ideal client profile, llm check, input, what is it, configuration",
+      displayOrder: 90,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What are Discovery, Shortlist, and Comparison queries?",
+      answer: "These are the three types of questions the audit sends to ChatGPT and Claude. Discovery queries are broad awareness questions ('Who are the leading providers of X?'). Shortlist queries simulate a buyer narrowing down options ('What are the best B2B platforms for Y?'). Comparison queries test specific head-to-head scenarios ('How does Brand A compare to Brand B?'). All three map to different stages of the buyer journey.",
+      keywords: "discovery queries, shortlist queries, comparison queries, what are they, query types, audit questions",
+      displayOrder: 100,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What does the 'Scorecard' show in the audit results?",
+      answer: "The Scorecard is a breakdown of your performance across multiple GEO dimensions: Presence (were you mentioned?), Prominence (how early in the response?), Sentiment (positive, neutral, or negative framing), Share of Voice, and Narrative Accuracy (did the AI describe you correctly?). Each dimension has a score and a brief explanation.",
+      keywords: "scorecard, audit results, dimensions, presence, prominence, sentiment, narrative accuracy, breakdown",
+      displayOrder: 110,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What is 'Presence' in the audit scorecard?",
+      answer: "Presence measures how often your brand was mentioned at all across the full set of audit probes — expressed as a percentage. A Presence of 60% means the brand appeared in 6 out of every 10 queries tested. This is the most fundamental GEO metric: you can't score well on any other dimension if you're not present.",
+      keywords: "presence, scorecard, what is it, audit, cited, mentioned, percentage, fundamental metric",
+      displayOrder: 120,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What is 'Prominence' in the audit scorecard?",
+      answer: "Prominence measures where in the AI's response your brand appears when it is mentioned — near the top (high prominence) or buried at the end of a long list (low prominence). A brand mentioned first in 80% of responses scores higher on prominence than one that's always fifth in a list of ten.",
+      keywords: "prominence, where mentioned, position, response, scorecard, ranking in response",
+      displayOrder: 130,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What are 'Narrative Signals' in the audit results?",
+      answer: "Narrative Signals summarise how the AI models actually describe your brand when they mention it — what topics and associations they link to you, how accurately they reflect your key messages, and whether any incorrect information appeared. This section highlights gaps between how you want to be perceived and how AI models currently portray you.",
+      keywords: "narrative signals, how described, associations, accuracy, brand narrative, key messages, audit",
+      displayOrder: 140,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What is the 'Query Evidence Log'?",
+      answer: "The Query Evidence Log is the full list of every probe sent to ChatGPT and Claude during the audit, with the result for each. You can expand any row to see the exact response the AI gave, whether your brand was mentioned, and the context around the mention. This is the raw evidence behind your scores.",
+      keywords: "query evidence log, probe list, raw results, expand row, full response, audit detail",
+      displayOrder: 150,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What does 'Anchored' mean on a query tag in the Evidence Log?",
+      answer: "'Anchored' means the query was modified by the platform to include a clarifying reference to your brand before sending — for example, turning a generic question into a more targeted one. This is used for Comparison queries where context is needed to get a meaningful AI response. Anchored queries are flagged so you know they weren't sent verbatim.",
+      keywords: "anchored, query tag, evidence log, what does it mean, clarified query, modified query",
+      displayOrder: 160,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What does 'Mention Context' show when I expand a query row?",
+      answer: "Mention Context shows the exact sentence or passage from the AI's response where your brand was referenced. This lets you see not just that you were mentioned, but how — what context, what framing, and alongside which other brands or claims. It's the most direct evidence of how AI models are portraying you.",
+      keywords: "mention context, expand row, evidence log, response detail, exact mention, how mentioned",
+      displayOrder: 170,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What does 'Print Report' do on the audit?",
+      answer: "Print Report generates a formatted PDF of the audit results — including your scores, the scorecard, narrative signals, and the query evidence log. It's designed to be shared with clients or stakeholders as a professional deliverable. The PDF is generated in your browser's print dialog.",
+      keywords: "print report, pdf, export, audit report, share, download, client report",
+      displayOrder: 180,
+    },
+    {
+      category: "LLM Check / Earned Media Audit",
+      question: "What does 'Delete Audit' do?",
+      answer: "Delete Audit permanently removes a saved audit run from your project history. This cannot be undone. If you need to remove an audit — for example, one run with incorrect settings — use this option. Deleted audits are also removed from the trend charts on the Report page.",
+      keywords: "delete audit, remove audit, permanent, undo, audit history, delete run",
+      displayOrder: 190,
+    },
     // ── Technical GEO / Website Audit ─────────────────────────────────────────
     {
       category: "Technical GEO / Website Audit",
@@ -163,7 +408,56 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "eeat, e-e-a-t, experience, expertise, authority, trust, what is it, why does it matter, google, signals",
       displayOrder: 30,
     },
-    // ── Content Creator ───────────────────────────────────────────────────────
+    {
+      category: "Technical GEO / Website Audit",
+      question: "How often should I run the Technical GEO audit?",
+      answer: "We recommend running the Technical GEO audit after any major website update, and at minimum once per quarter. The audit measures your site's structural GEO readiness, which changes when you update your site architecture, add or remove pages, or change your content structure. Unlike the LLM Check, there is no enforced waiting period between Technical GEO runs.",
+      keywords: "how often, technical geo, audit frequency, quarterly, run again, website audit frequency",
+      displayOrder: 40,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What is the 'AIO Readiness Score'?",
+      answer: "The AIO Readiness Score is a 0-100 overall rating of how well your website is technically prepared for AI citation. It aggregates scores across all the categories the diagnostic checks: structured data, content architecture, authority signals, E-E-A-T, and more. Use it to track improvement over time as you implement recommendations.",
+      keywords: "aio readiness score, what is it, 0-100, readiness, technical geo score, overall score",
+      displayOrder: 50,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What are the 'Category Scores' in the Technical GEO results?",
+      answer: "Category Scores break the overall Readiness Score down by specific technical areas — for example, Schema Markup, Site Architecture, Content Authority, Crawlability, and Link Signals. Each category gets its own score and a list of specific recommendations, so you know exactly where to focus your development effort.",
+      keywords: "category scores, schema, architecture, authority, crawlability, breakdown, technical geo, specific scores",
+      displayOrder: 60,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What are 'Priority Actions' and 'Critical Gaps' in the audit?",
+      answer: "Priority Actions are the highest-impact improvements you can make to your website's GEO readiness — listed in order of expected score improvement. Critical Gaps are the areas where your site is actively missing signals that AI models rely on. Address Critical Gaps first, then work through Priority Actions for maximum score improvement.",
+      keywords: "priority actions, critical gaps, recommendations, what to fix, audit recommendations, improve score",
+      displayOrder: 70,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What does 'Copy Vibe-Code Prompt' do?",
+      answer: "Copy Vibe-Code Prompt copies a pre-formatted technical prompt to your clipboard that you can paste directly into an AI coding assistant (like Claude or ChatGPT) to implement the recommended schema and technical fixes on your website. It's a shortcut for developers — the prompt contains the specific changes needed based on your audit results.",
+      keywords: "vibe code prompt, copy prompt, developer, implement, schema, technical fixes, code prompt, what does it do",
+      displayOrder: 80,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What does 'Copy SEO Improvements' do?",
+      answer: "Copy SEO Improvements copies a plain-language summary of all the recommended SEO and GEO improvements to your clipboard, formatted as a clear action list. This is useful for briefing a developer, copywriter, or web agency without sharing the full technical audit.",
+      keywords: "copy seo improvements, copy to clipboard, brief developer, recommendations, what does it do",
+      displayOrder: 90,
+    },
+    {
+      category: "Technical GEO / Website Audit",
+      question: "What is the 'Homepage Content' paste field on the Website Audit?",
+      answer: "If your website uses JavaScript rendering or is behind a login, the audit may not be able to crawl it automatically. In that case, you can manually paste in your homepage content (copy the visible text from your homepage) into this field so the audit can analyse the content directly. The URL-based scan always runs first; this field supplements it.",
+      keywords: "homepage content, paste field, manual input, website content, javascript, behind login, crawl",
+      displayOrder: 100,
+    },
+    // ── Content Creator ────────────────────────────────────────────────────────
     {
       category: "Content Creator",
       question: "What types of content can the Content Creator generate?",
@@ -192,6 +486,62 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "usage limit, fair usage, 50 actions, limit reached, quota, monthly limit, content limit",
       displayOrder: 40,
     },
+    {
+      category: "Content Creator",
+      question: "What is a 'Standfirst' in the Content Creator?",
+      answer: "A standfirst is the brief paragraph that sits directly below a headline in a press release or news article — sometimes called a deck or subheadline. It gives readers the key facts in 2-3 sentences before the full article begins. The Content Creator fills this in automatically based on the headline and key messages, and you can edit it freely.",
+      keywords: "standfirst, what is it, deck, subheadline, press release, article, content creator",
+      displayOrder: 50,
+    },
+    {
+      category: "Content Creator",
+      question: "What does the 'Spokesperson Picker' do?",
+      answer: "The Spokesperson Picker lets you select which company spokesperson — an executive, director, or named expert — will be quoted in the generated content. Spokespeople are set up in your Intake Form. Choosing one ensures the content uses the right name, title, and attributed quote style for that person.",
+      keywords: "spokesperson picker, who is quoted, executive, director, quote, intake form spokesperson, content creator",
+      displayOrder: 60,
+    },
+    {
+      category: "Content Creator",
+      question: "What are 'Media Target Categories' in the Content Creator?",
+      answer: "Media Target Categories let you select which type of publication or audience you're writing for — trade press, national press, lifestyle media, regional, or digital. The Content Creator adjusts the tone, jargon level, and structure of the output to suit the target publication type.",
+      keywords: "media target categories, target audience, publication type, trade press, national press, content creator",
+      displayOrder: 70,
+    },
+    {
+      category: "Content Creator",
+      question: "What does 'Create AI Draft' do?",
+      answer: "Create AI Draft sends your selected content type, spokesperson, target category, and Intake Form context to the AI, which then generates a full first draft. You'll see the content stream in section by section. Once complete, you can edit freely, optimise with the Content Optimiser, or accept and archive it.",
+      keywords: "create ai draft, generate, what does it do, stream, content creator, draft",
+      displayOrder: 80,
+    },
+    {
+      category: "Content Creator",
+      question: "What does 'Accept & Archive' do?",
+      answer: "Accept & Archive saves the current content piece to your Archive (Content Library) and marks it as finalised. Once archived, it appears in the Archive section in the sidebar and can be accessed from the Release Gateway when it's ready to publish or distribute.",
+      keywords: "accept and archive, save, finalise, content library, archive, what does it do",
+      displayOrder: 90,
+    },
+    {
+      category: "Content Creator",
+      question: "What does 'Push to Comms Planner' do?",
+      answer: "Push to Comms Planner creates a new entry in the Comms Planner calendar for this content piece — so it appears on your communications schedule. You'll be asked to set a planned publication date and it will inherit the content type and title automatically.",
+      keywords: "push to comms planner, add to planner, schedule, calendar, what does it do, content creator",
+      displayOrder: 100,
+    },
+    {
+      category: "Content Creator",
+      question: "What is 'Action Notes' in the Content Creator?",
+      answer: "Action Notes is a free-text field where you can add specific instructions or context for the AI draft — for example, 'Focus on the UK market launch', 'Include a reference to the Q3 results', or 'Keep the tone formal'. These notes supplement your Intake Form context for this specific piece.",
+      keywords: "action notes, instructions, context, specific direction, content creator, notes field",
+      displayOrder: 110,
+    },
+    {
+      category: "Content Creator",
+      question: "What is the 'Change Log' in the Content Creator?",
+      answer: "The Change Log tracks all AI-generated edits and optimisations made to a piece of content during a session — so you can see exactly what was changed, why, and in what order. This is useful when reviewing optimised content with a client or colleague, as every change has a reasoning note attached.",
+      keywords: "change log, audit trail, what changed, edits, optimiser, content creator, reasoning",
+      displayOrder: 120,
+    },
     // ── Content Optimiser ─────────────────────────────────────────────────────
     {
       category: "Content Optimiser",
@@ -213,6 +563,27 @@ export async function seedSupportFaq(): Promise<void> {
       answer: "Optimisation typically takes 30-90 seconds depending on the length of the content. You'll see the optimised version and annotations stream in as they're generated.",
       keywords: "optimiser time, how long, duration, wait, processing",
       displayOrder: 30,
+    },
+    {
+      category: "Content Optimiser",
+      question: "Can I paste in content from any source to optimise it?",
+      answer: "Yes. The Content Optimiser accepts any text you paste in — press releases, web copy, blog posts, articles, or social posts. You don't need to have created the content in AIO Fusion. Simply paste the text, set the content type and target audience, then run the optimisation.",
+      keywords: "paste content, any source, existing content, external content, copy paste, optimise external",
+      displayOrder: 40,
+    },
+    {
+      category: "Content Optimiser",
+      question: "What do 'Accept Changes' and 'Reject Changes' do in the Optimiser?",
+      answer: "After optimisation runs, each suggested change is shown alongside the original text. 'Accept Changes' applies a specific suggestion to your content — replacing the original with the improved version. 'Reject Changes' discards a suggestion and keeps your original text. You can accept and reject individual changes independently.",
+      keywords: "accept changes, reject changes, what does it do, apply suggestion, keep original, optimiser",
+      displayOrder: 50,
+    },
+    {
+      category: "Content Optimiser",
+      question: "What does 'Push to Planner' do from the Optimiser?",
+      answer: "Push to Planner adds the current optimised content piece to the Comms Planner as a scheduled activity. This is the final step in the content workflow: create → optimise → schedule. You'll set the planned publication date and it will appear on your communications calendar.",
+      keywords: "push to planner, optimiser, schedule, comms planner, workflow, content pipeline",
+      displayOrder: 60,
     },
     // ── Comms Planner ─────────────────────────────────────────────────────────
     {
@@ -236,7 +607,178 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "export planner, download, calendar, pdf, csv, comms planner export",
       displayOrder: 30,
     },
-    // ── Media Research & Media Database ───────────────────────────────────────
+    {
+      category: "Comms Planner",
+      question: "How many activities can I add to the Comms Planner?",
+      answer: "There is no hard limit on the number of activities you can add to the Comms Planner. However, we recommend focusing on the next 3-6 months and limiting to 15-20 key activities for the scoring and prioritisation to be most useful. A very large plan with many low-priority items can obscure the signal.",
+      keywords: "comms planner, how many, activities, limit, number, how much can I add",
+      displayOrder: 40,
+    },
+    {
+      category: "Comms Planner",
+      question: "What is the 'Projected Total Score' on the Comms Planner?",
+      answer: "The Projected Total Score is an aggregate estimate of the GEO impact your planned activities are expected to deliver over the selected period — based on the types, volume, and quality of planned communications. It's a planning metric, not a guaranteed outcome, and updates as you add or remove activities.",
+      keywords: "projected total score, comms planner, what is it, estimated impact, aggregate score, planning",
+      displayOrder: 50,
+    },
+    {
+      category: "Comms Planner",
+      question: "What do the progress bars (Visibility and Authority) mean on the Comms Planner?",
+      answer: "The Visibility bar shows how much of your planned activity targets broad brand awareness (getting mentioned more often). The Authority bar shows how much targets brand credibility (being cited as an expert source). A healthy plan should have a balance of both. You can use these to spot if your plan is too heavily weighted in one direction.",
+      keywords: "visibility bar, authority bar, progress bars, comms planner, what do they mean, balance",
+      displayOrder: 60,
+    },
+    {
+      category: "Comms Planner",
+      question: "What does 'Calendar View' vs 'List View' show?",
+      answer: "Calendar View displays your planned activities on a monthly calendar grid — useful for spotting gaps, clashes, and pacing. List View shows the same activities in a table format with columns for type, title, status, planned date, and GEO score — useful for sorting and bulk editing. You can switch between views at any time.",
+      keywords: "calendar view, list view, what does it show, how to switch, comms planner view",
+      displayOrder: 70,
+    },
+    {
+      category: "Comms Planner",
+      question: "What does the 'Methodology' button do in the Comms Planner?",
+      answer: "The Methodology button opens a panel explaining how the Comms Planner scores each type of activity — which content types score highest, why, and what factors the platform considers. It's designed to help you understand the scoring rationale so you can plan strategically.",
+      keywords: "methodology button, how scoring works, comms planner, scoring rationale, what does it do",
+      displayOrder: 80,
+    },
+    {
+      category: "Comms Planner",
+      question: "What do the Status colours mean in the Comms Planner?",
+      answer: "Status colours track each planned activity through its lifecycle: Draft (grey) means the activity has been added but content hasn't been started; In Progress (amber) means content is being created; Review (blue) means it's ready for sign-off; Final (green) means approved and ready to publish. These map to the content statuses in the Archive.",
+      keywords: "status colours, draft, in progress, review, final, comms planner, status, what do they mean",
+      displayOrder: 90,
+    },
+    {
+      category: "Comms Planner",
+      question: "What happens when I click a row in the Comms Planner?",
+      answer: "Clicking a row opens the detail panel for that activity, where you can view any attached content, edit the planned date, update the status, or navigate directly to the Content Creator or Optimiser to work on the associated piece. If content has already been created for that activity, there will be a link to open it.",
+      keywords: "click row, planner row, activity detail, edit, open content, comms planner",
+      displayOrder: 100,
+    },
+    // ── Earned Media Tracker ──────────────────────────────────────────────────
+    {
+      category: "Earned Media Tracker",
+      question: "What is the Earned Media Tracker and where do I find it?",
+      answer: "The Earned Media Tracker is a log of all earned media coverage — articles, mentions, podcasts, broadcasts — your brand has received. It lives within the Report / Measure section of the platform. You can populate it via AI Coverage Search (which finds recent coverage automatically) or by adding entries manually.",
+      keywords: "earned media tracker, what is it, where to find, coverage log, report section",
+      displayOrder: 10,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "What is 'AI Coverage Search'?",
+      answer: "AI Coverage Search automatically searches for recent online coverage of your brand across news sources and digital media. Enter a date range and optionally a spokesperson name or region, then click Run AI Search. Results are returned as a list of coverage items that you can review and add to your tracker.",
+      keywords: "ai coverage search, automated search, find coverage, online mentions, run ai search, how does it work",
+      displayOrder: 20,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "How does the Manual Log work in the Earned Media Tracker?",
+      answer: "The Manual Log lets you add a coverage item by hand — useful for broadcast coverage, print publications, or anything the AI search doesn't find automatically. Fill in the title, publication/outlet, coverage type, URL (if available), and estimated reach, then click Add to Tracker. The item is saved permanently to your project.",
+      keywords: "manual log, add manually, coverage, how to add, manual entry, tracker, print, broadcast",
+      displayOrder: 30,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "What is 'Reach' in the Earned Media Tracker?",
+      answer: "Reach is the estimated total audience for a piece of coverage — the number of people who could have seen or heard the mention. For online articles it may be based on publication traffic estimates; for broadcast, it uses typical audience figures. Reach is summed across all entries to give you a Total Reach metric for the reporting period.",
+      keywords: "reach, what is it, audience, total reach, coverage metric, how measured",
+      displayOrder: 40,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "What does 'Export' do from the Earned Media Tracker?",
+      answer: "Export downloads your tracker entries as a CSV file. It includes all coverage items in the selected date range — title, outlet, type, URL, reach, date, and spokesperson. The CSV is formatted for import into spreadsheets or client reporting tools.",
+      keywords: "export, csv, download, tracker export, coverage report, what does it do",
+      displayOrder: 50,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "What is the 'Authority Trend Chart' in the Report section?",
+      answer: "The Authority Trend Chart shows your Authority Index score over time — plotted from each saved LLM Check audit run. It lets you see whether your AI visibility is improving, declining, or plateauing, and correlate changes with specific communications activities. You need at least two saved audits for trend data to appear.",
+      keywords: "authority trend chart, trend, over time, report, authority index, chart, progress",
+      displayOrder: 60,
+    },
+    {
+      category: "Earned Media Tracker",
+      question: "How do I delete entries from the Earned Media Tracker?",
+      answer: "To remove a single entry, hover over the row and click the delete icon. To remove multiple entries at once, tick the checkboxes on the left of each row, then click the 'Delete selected' button that appears at the top of the table. Deletions are permanent — there is no undo.",
+      keywords: "delete, remove entry, bulk delete, tracker, delete selected, how to delete",
+      displayOrder: 70,
+    },
+    // ── Marketing Intelligence ────────────────────────────────────────────────
+    {
+      category: "Marketing Intelligence",
+      question: "What is the Marketing Intelligence page?",
+      answer: "Marketing Intelligence helps you identify speaking opportunities, industry awards, and events that are relevant to your brand's sector and messaging. It searches a database of upcoming opportunities and scores each one for its predicted GEO impact — so you can prioritise the opportunities most likely to boost your AI visibility.",
+      keywords: "marketing intelligence, what is it, awards, events, speaking, opportunities, how does it work",
+      displayOrder: 10,
+    },
+    {
+      category: "Marketing Intelligence",
+      question: "What are the 'Actionable Opportunities' at the top of Marketing Intelligence?",
+      answer: "Actionable Opportunities are the top 3 highest-scoring events or awards for your brand at this moment — hand-picked by the platform based on your Intake Form context, current GEO positioning, and submission deadlines. These are the ones to act on first for the fastest visibility uplift.",
+      keywords: "actionable opportunities, top 3, marketing intelligence, best opportunities, priorities",
+      displayOrder: 20,
+    },
+    {
+      category: "Marketing Intelligence",
+      question: "What does '[C] Confirmed' and '[U] Unconfirmed' mean on events?",
+      answer: "[C] Confirmed means the event details — date, location, submission deadline — have been verified against the official event website. [U] Unconfirmed means the entry is based on prior-year data and the current year's details haven't yet been announced. Always check official sources for Unconfirmed entries before committing.",
+      keywords: "confirmed, unconfirmed, c u tag, event status, verified, marketing intelligence, check details",
+      displayOrder: 30,
+    },
+    {
+      category: "Marketing Intelligence",
+      question: "What does 'LLM Brief' generate?",
+      answer: "LLM Brief generates a customised written brief for a selected opportunity — a tailored overview of what the award or event is looking for, what makes a strong submission, and how your brand's key messages align with the judging criteria. It's designed to brief your team or copywriter quickly and accurately.",
+      keywords: "llm brief, generate brief, award brief, event brief, what does it do, marketing intelligence",
+      displayOrder: 40,
+    },
+    {
+      category: "Marketing Intelligence",
+      question: "What does 'Push to Project Set-Up' do from Marketing Intelligence?",
+      answer: "Push to Project Set-Up adds selected events or awards directly to the relevant section of your Intake Form — so they become part of your formal GEO strategy and can influence audit queries and content generation. Use this to formally commit to pursuing an opportunity.",
+      keywords: "push to project setup, marketing intelligence, add to intake form, events, awards, what does it do",
+      displayOrder: 50,
+    },
+    {
+      category: "Marketing Intelligence",
+      question: "What is the 'Authority Score' shown on each event?",
+      answer: "The Authority Score (0-100) on an event or award estimates how much GEO impact securing that opportunity would have for your brand — based on the event's reach, prestige, and relevance to your sector and key messages. Higher scores indicate opportunities with greater potential to move your Authority Index.",
+      keywords: "authority score, event score, 0-100, marketing intelligence, what is it, impact score",
+      displayOrder: 60,
+    },
+    // ── Website Content GEO ───────────────────────────────────────────────────
+    {
+      category: "Website Content GEO",
+      question: "What is the Website Content GEO audit?",
+      answer: "Website Content GEO analyses the actual text content of your website pages and scores how well each page is aligned with your brand's key messages, topics, and GEO signals from the Intake Form. It's different from the Technical GEO audit — that checks structure; this checks content quality and message alignment.",
+      keywords: "website content geo, what is it, content audit, message alignment, geo score, pages",
+      displayOrder: 10,
+    },
+    {
+      category: "Website Content GEO",
+      question: "What does 'Scan Site Content' do?",
+      answer: "Scan Site Content crawls your website's publicly accessible pages and retrieves the content for analysis. It then compares each page's content against your Intake Form data — measuring how well your live website content reflects your brand's key messages and GEO topics. Results show per-page alignment scores and recommended improvements.",
+      keywords: "scan site content, what does it do, crawl, analyse pages, website, content scan",
+      displayOrder: 20,
+    },
+    {
+      category: "Website Content GEO",
+      question: "What is an 'Alignment Score' on the Website Content GEO?",
+      answer: "An Alignment Score measures how closely the content on a specific web page matches the key messages, semantic topics, and brand claims defined in your Intake Form. A high alignment score (80+) means the page is strongly on-message. A low score (below 50) means the page either misses key messages or uses language inconsistent with your GEO strategy.",
+      keywords: "alignment score, what is it, website content geo, on message, page score, match",
+      displayOrder: 30,
+    },
+    {
+      category: "Website Content GEO",
+      question: "What does 'Push to Project Set-Up' do from Website Content GEO?",
+      answer: "Push to Project Set-Up takes the recommended improvements from the Website Content GEO audit and adds them as action items in your Intake Form — so your next round of content creation and optimisation targets the specific gaps the audit identified. It keeps your Intake Form in sync with your actual website content.",
+      keywords: "push to project setup, website content geo, intake form, recommendations, what does it do",
+      displayOrder: 40,
+    },
+    // ── Media Research ────────────────────────────────────────────────────────
     {
       category: "Media Research & Media Database",
       question: "What is the Media Research tool?",
@@ -258,7 +800,42 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "save journalist, media list, add contact, how to save, media database",
       displayOrder: 30,
     },
-    // ── Archive & Reports ────────────────────────────────────────────────────
+    {
+      category: "Media Research & Media Database",
+      question: "What do [V], [P], and [U] tags mean on journalist results?",
+      answer: "[V] Verified means the journalist's beat and contact details have been confirmed against a live source. [P] Inferred (Probable) means the beat is estimated from recent coverage patterns but not directly confirmed. [U] Unverified means the journalist has been identified as potentially relevant but details should be checked before outreach. Always prioritise [V] contacts for time-sensitive campaigns.",
+      keywords: "v verified p inferred u unverified, journalist tags, what do they mean, media research, confidence, status",
+      displayOrder: 40,
+    },
+    {
+      category: "Media Research & Media Database",
+      question: "What is a 'Pitch Angle' in the Media Research results?",
+      answer: "A Pitch Angle is a suggested approach for pitching a specific journalist or outlet — based on their recent coverage patterns, beat focus, and what's likely to resonate with their audience. The platform generates these automatically to save you the research time. Treat them as a starting point; personalise each pitch before sending.",
+      keywords: "pitch angle, what is it, media research, pitch suggestion, how to pitch, journalist",
+      displayOrder: 50,
+    },
+    {
+      category: "Media Research & Media Database",
+      question: "What does 'Recommend Media' do?",
+      answer: "Recommend Media takes a selected piece of content from your Archive (a press release, article, or other piece) and returns a ranked list of journalists and outlets most likely to cover it — based on the content's topics, tone, and format. It's the most efficient way to build a targeted media list for a specific press release.",
+      keywords: "recommend media, what does it do, media list, content based, targeted, journalists, media research",
+      displayOrder: 60,
+    },
+    {
+      category: "Media Research & Media Database",
+      question: "What is the difference between the 'Outlets' and 'Contacts' tabs in the Media Database?",
+      answer: "Outlets are publications, websites, or broadcasters — the media organisations. Contacts are individual journalists or contributors at those organisations. You can add outlets first and then link contacts to them. The Outlets tab lets you filter and browse by publication type, reach, and sector; the Contacts tab lets you filter by beat, outlet, or tier.",
+      keywords: "outlets tab, contacts tab, difference, media database, publications, journalists, how organised",
+      displayOrder: 70,
+    },
+    {
+      category: "Media Research & Media Database",
+      question: "What is 'Global vs Project-specific' scoping in the Media Database?",
+      answer: "Global contacts and outlets are shared across all projects in your agency account — useful for journalists you pitch regularly regardless of which client's story you're working on. Project-specific entries are visible only within the project they were added to — useful for niche contacts relevant only to one client. You set the scope when adding a new entry.",
+      keywords: "global, project specific, scoping, media database, shared, visible, which project, scope",
+      displayOrder: 80,
+    },
+    // ── Report & Dashboard ────────────────────────────────────────────────────
     {
       category: "Archive & Reports",
       question: "What is saved in the Archive?",
@@ -287,7 +864,64 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "export report, pdf, share, client report, download, white label, branded report",
       displayOrder: 40,
     },
-    // ── Account & Access Management ──────────────────────────────────────────
+    {
+      category: "Archive & Reports",
+      question: "How long is data retained in the Archive?",
+      answer: "All saved content, audits, and reports are retained for the lifetime of your account. There is no automatic expiry. If you close or pause your account, we retain your data for 90 days before permanent deletion — giving you time to export anything important.",
+      keywords: "data retention, how long, archive, storage, delete, expiry, account closed",
+      displayOrder: 50,
+    },
+    {
+      category: "Archive & Reports",
+      question: "What does the main Dashboard show?",
+      answer: "The Dashboard gives you an at-a-glance overview of your project's current state: your latest Authority Index score (from the most recent LLM Check), your Intake Form completion percentage, quick-link stat cards showing how many content pieces are in Draft, In Progress, Review, and Final status, and lock-status indicators for each audit tool.",
+      keywords: "dashboard, what does it show, overview, authority index, stat cards, quick view, main page",
+      displayOrder: 60,
+    },
+    {
+      category: "Archive & Reports",
+      question: "What do the lock icons on the Dashboard mean?",
+      answer: "Lock icons on the Dashboard appear next to audit tools (LLM Check, Technical GEO) when they're in their waiting period — showing how many days remain before you can run them again. A green unlocked icon means the tool is ready to run. Clicking the icon takes you directly to that audit tool.",
+      keywords: "lock icons, dashboard, locked, audit waiting period, days remaining, when can I run, lock",
+      displayOrder: 70,
+    },
+    {
+      category: "Archive & Reports",
+      question: "What are the stat cards (Total Articles, In Planner, In Draft, Final/Ready) on the Dashboard?",
+      answer: "These cards count your content pieces by status across the project. 'Total Articles' is all content created. 'In Planner' is how many are scheduled in the Comms Planner. 'In Draft' is work in progress. 'Final / Ready' is content approved and ready to release. Clicking any card takes you to the filtered Archive view.",
+      keywords: "stat cards, total articles, in planner, in draft, final ready, dashboard, content count, what are they",
+      displayOrder: 80,
+    },
+    // ── Release Gateway ────────────────────────────────────────────────────────
+    {
+      category: "Release Gateway",
+      question: "What is the Release Gateway?",
+      answer: "The Release Gateway is where you distribute finalised content to wire services, social media, and other distribution channels. Any content piece marked 'Final' in the Archive appears here. From the Release Gateway you can download the piece, share it to LinkedIn, or submit it to connected press wire services.",
+      keywords: "release gateway, what is it, distribution, wire services, publish, final content, how to release",
+      displayOrder: 10,
+    },
+    {
+      category: "Release Gateway",
+      question: "What wire services are supported in the Release Gateway?",
+      answer: "The Release Gateway supports integration with major press wire services including PR Newswire, Business Wire, and EIN Presswire. Connection status for each service is shown in the Gateway. If a service shows as 'Not connected', contact your platform admin or support to set up the integration.",
+      keywords: "wire services, pr newswire, business wire, ein presswire, release gateway, which services, distribution",
+      displayOrder: 20,
+    },
+    {
+      category: "Release Gateway",
+      question: "What does 'LinkedIn Share' do in the Release Gateway?",
+      answer: "LinkedIn Share opens a pre-formatted LinkedIn post based on the selected content piece — with a suggested caption and a link to the content. You'll be taken to LinkedIn in a new tab where you can review and post. The content text itself is formatted to fit LinkedIn's character limits.",
+      keywords: "linkedin share, social media, release gateway, post to linkedin, what does it do, social",
+      displayOrder: 30,
+    },
+    {
+      category: "Release Gateway",
+      question: "What content appears in the Release Gateway?",
+      answer: "Only content pieces with a status of 'Final' appear in the Release Gateway. Content in Draft, In Progress, or Review status is not shown. To move a piece to Final, update its status in the Content Creator or Archive. Once Final, it appears in the Gateway automatically.",
+      keywords: "what appears, release gateway, final status, content, archive, which pieces show",
+      displayOrder: 40,
+    },
+    // ── Account & Access Management ───────────────────────────────────────────
     {
       category: "Account & Access Management",
       question: "How do I add a new team member to my agency?",
@@ -326,11 +960,11 @@ export async function seedSupportFaq(): Promise<void> {
     {
       category: "Account & Access Management",
       question: "How do I change the account email address?",
-      answer: "Email address changes are handled by the platform admin. Contact info@aiofusions.ai with your account username and the new email address you'd like to use. For security, we'll confirm the change with both the old and new email addresses.",
+      answer: "Contact your agency admin or platform support to change the email address on an account. For security reasons, email changes require verification. If you're the admin, email info@aiofusions.ai with the account username and the new email address.",
       keywords: "change email, update email, email address, account email, username",
       displayOrder: 60,
     },
-    // ── Billing & Payments ────────────────────────────────────────────────────
+    // ── Billing & Payments ─────────────────────────────────────────────────────
     {
       category: "Billing & Payments",
       question: "How is AIO Fusion priced?",
@@ -352,7 +986,7 @@ export async function seedSupportFaq(): Promise<void> {
       keywords: "upgrade, change plan, billing, subscription change, more projects, higher limit",
       displayOrder: 30,
     },
-    // ── Bug / Technical Issue ─────────────────────────────────────────────────
+    // ── Bug / Technical Issue ──────────────────────────────────────────────────
     {
       category: "Bug / Technical Issue",
       question: "The page is loading slowly or not loading at all — what should I do?",
@@ -387,76 +1021,6 @@ export async function seedSupportFaq(): Promise<void> {
       answer: "Saved audits, content, and planner data are stored server-side and are not lost on browser refresh. If data appears missing, try logging out and back in to force a full re-sync. If data is genuinely missing, contact support immediately — we maintain database backups and can usually recover recent work.",
       keywords: "data lost, disappeared, missing data, recovery, restore, saved work gone",
       displayOrder: 50,
-    },
-    // ── Getting Started (additional) ─────────────────────────────────────────
-    {
-      category: "Getting Started",
-      question: "How do I navigate between different tools in AIO Fusion?",
-      answer: "All tools are accessible from the left-hand sidebar. The sidebar is organised by function: Project Set-Up at the top, then audit tools (LLM Check, Technical GEO), content tools (Creator, Optimiser, Comms Planner, Media Research), and Archive / Reports at the bottom. Click any item to go directly to that tool.",
-      keywords: "navigation, sidebar, how to use, find tools, where is, menu",
-      displayOrder: 70,
-    },
-    {
-      category: "Getting Started",
-      question: "Does AIO Fusion work on mobile devices?",
-      answer: "AIO Fusion is a web platform designed primarily for desktop use. It is accessible on tablets and mobile devices via a browser, but some features — particularly the audit results tables and the Comms Planner — are best experienced on a larger screen. We recommend using a desktop or laptop for detailed work.",
-      keywords: "mobile, tablet, phone, browser, responsive, desktop, works on mobile",
-      displayOrder: 80,
-    },
-    // ── Project Set-Up (additional) ──────────────────────────────────────────
-    {
-      category: "Project Set-Up",
-      question: "How do I add competitors to my project?",
-      answer: "In the Intake Form, scroll to the Competitor section. Add up to 10 competitors by entering their brand name and website URL. The LLM Check audit will then measure their AI visibility alongside yours, giving you share-of-voice comparisons. Update competitors any time to keep results relevant.",
-      keywords: "competitors, add competitor, competitor list, rival, share of voice, intake form competitors",
-      displayOrder: 60,
-    },
-    {
-      category: "Project Set-Up",
-      question: "What are LLM Queries and how are they generated?",
-      answer: "LLM Queries (section 1.6 of the Intake Form) are the actual questions the platform sends to ChatGPT and Claude during the LLM Check audit. They are AI-generated from your brand context and categorised into Discovery, Shortlist, and Comparison queries. You can regenerate them once every 21 days from the Project Set-Up page.",
-      keywords: "llm queries, what are they, how generated, 1.6, discovery shortlist comparison, regenerate, 21 day lock",
-      displayOrder: 70,
-    },
-    // ── Content Optimiser (additional) ────────────────────────────────────────
-    {
-      category: "Content Optimiser",
-      question: "Can I paste in content from any source to optimise it?",
-      answer: "Yes. The Content Optimiser accepts any text you paste in — press releases, web copy, blog posts, articles, or social posts. You don't need to have created the content in AIO Fusion. Simply paste the text, set the content type and target audience, then run the optimisation.",
-      keywords: "paste content, any source, existing content, external content, copy paste, optimise external",
-      displayOrder: 40,
-    },
-    // ── Comms Planner (additional) ────────────────────────────────────────────
-    {
-      category: "Comms Planner",
-      question: "How many activities can I add to the Comms Planner?",
-      answer: "There is no hard limit on the number of activities you can add to the Comms Planner. However, we recommend focusing on the next 3-6 months and limiting to 15-20 key activities for the scoring and prioritisation to be most useful. A very large plan with many low-priority items can obscure the signal.",
-      keywords: "comms planner, how many, activities, limit, number, how much can I add",
-      displayOrder: 40,
-    },
-    // ── Archive & Reports (additional) ────────────────────────────────────────
-    {
-      category: "Archive & Reports",
-      question: "How long is data retained in the Archive?",
-      answer: "All saved content, audits, and reports are retained for the lifetime of your account. There is no automatic expiry. If you close or pause your account, we retain your data for 90 days before permanent deletion — giving you time to export anything important.",
-      keywords: "data retention, how long, archive, storage, delete, expiry, account closed",
-      displayOrder: 50,
-    },
-    // ── LLM Check / Earned Media Audit (additional) ───────────────────────────
-    {
-      category: "LLM Check / Earned Media Audit",
-      question: "Which AI models does the LLM Check audit query?",
-      answer: "The LLM Check audit runs queries against ChatGPT (OpenAI) and Claude (Anthropic). These are the two dominant AI assistants used by consumers and businesses for information discovery and shortlisting. Perplexity and other AI search tools are not currently included in the audit scope.",
-      keywords: "which models, chatgpt, claude, openai, anthropic, ai models tested, perplexity, not included",
-      displayOrder: 70,
-    },
-    // ── Technical GEO / Website Audit (additional) ────────────────────────────
-    {
-      category: "Technical GEO / Website Audit",
-      question: "How often should I run the Technical GEO audit?",
-      answer: "We recommend running the Technical GEO audit after any major website update, and at minimum once per quarter. The audit measures your site's structural GEO readiness, which changes when you update your site architecture, add or remove pages, or change your content structure. Unlike the LLM Check, there is no enforced waiting period between Technical GEO runs.",
-      keywords: "how often, technical geo, audit frequency, quarterly, run again, website audit frequency",
-      displayOrder: 40,
     },
   ];
 
