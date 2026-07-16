@@ -14,6 +14,7 @@ export default function MarketingPage({ title, eyebrow, children, onLogin, onBac
           </button>
           <div className="hidden md:flex items-center gap-8">
             {[
+              { l: "Home", v: "landing" },
               { l: "Features", v: "landing#features" },
               { l: "For In-house", v: "for-inhouse" },
               { l: "For PR Agencies", v: "for-agencies" },
