@@ -133,6 +133,7 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [userSearch, setUserSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [replyText, setReplyText] = useState("");
@@ -465,10 +466,40 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
     );
   }
 
+  const userSearchLower = userSearch.trim().toLowerCase();
+  const visibleTickets = userSearchLower
+    ? tickets.filter(
+        (t) =>
+          t.accountUsername.toLowerCase().includes(userSearchLower) ||
+          (t.displayName ?? "").toLowerCase().includes(userSearchLower),
+      )
+    : tickets;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Filters */}
       <div className="flex gap-3 items-center flex-wrap">
+        {/* User search */}
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+          <input
+            type="text"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder="Search by name or username…"
+            className="text-[12px] pl-7 pr-7 py-2 rounded-lg border outline-none w-52"
+            style={{ borderColor: vars.g200, color: navy }}
+          />
+          {userSearch && (
+            <button
+              onClick={() => setUserSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 hover:opacity-60 transition-opacity"
+              style={{ color: vars.g400 }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
         <div className="relative">
           <select
             value={statusFilter}
@@ -501,7 +532,9 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
           <RefreshCw size={12} /> Refresh
         </button>
         <span className="text-[12px] ml-auto" style={{ color: vars.g400 }}>
-          {tickets.length} ticket{tickets.length !== 1 ? "s" : ""}
+          {userSearchLower && visibleTickets.length !== tickets.length
+            ? `${visibleTickets.length} of ${tickets.length} ticket${tickets.length !== 1 ? "s" : ""}`
+            : `${tickets.length} ticket${tickets.length !== 1 ? "s" : ""}`}
         </span>
       </div>
 
@@ -515,10 +548,12 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
         <div className="flex items-center justify-center py-16">
           <Loader2 size={22} className="animate-spin" style={{ color: teal }} />
         </div>
-      ) : tickets.length === 0 ? (
+      ) : visibleTickets.length === 0 ? (
         <div className="text-center py-16" style={{ color: vars.g400 }}>
           <Ticket size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-[14px]">No tickets found</p>
+          <p className="text-[14px]">
+            {userSearchLower ? `No tickets match "${userSearch}"` : "No tickets found"}
+          </p>
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
@@ -533,10 +568,10 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
               </tr>
             </thead>
             <tbody>
-              {tickets.map((ticket, i) => (
+              {visibleTickets.map((ticket, i) => (
                 <tr
                   key={ticket.id}
-                  style={{ borderBottom: i < tickets.length - 1 ? `1px solid ${vars.g200}` : "none", background: "white" }}
+                  style={{ borderBottom: i < visibleTickets.length - 1 ? `1px solid ${vars.g200}` : "none", background: "white" }}
                   className="hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-[12px]" style={{ color: vars.g400 }}>#{ticket.id}</td>
