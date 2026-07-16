@@ -40,6 +40,11 @@ const h = vi.hoisted(() => {
     createdAt: Date;
   };
 
+  type AccountRow = {
+    username: string;
+    email: string | null;
+  };
+
   let faqSeq = 1;
   let ticketSeq = 1;
   let messageSeq = 1;
@@ -48,11 +53,16 @@ const h = vi.hoisted(() => {
     faq: [] as FaqRow[],
     tickets: [] as TicketRow[],
     messages: [] as MessageRow[],
+    accounts: [] as AccountRow[],
     reset() {
       faqSeq = 1;
       ticketSeq = 1;
       messageSeq = 1;
       state.messages = [];
+      state.accounts = [
+        { username: "alice", email: "alice@example.com" },
+        { username: "bob", email: null },
+      ];
       state.faq = [
         {
           id: faqSeq++,
@@ -156,6 +166,12 @@ const h = vi.hoisted(() => {
     createdAt: { __col: "createdAt" },
   };
 
+  const platformAccountsTable = {
+    __table: "accounts",
+    username: { __col: "username" },
+    email: { __col: "email" },
+  };
+
   type Pred =
     | { kind: "eq"; col: string; val: unknown }
     | { kind: "and"; parts: Pred[] }
@@ -177,6 +193,7 @@ const h = vi.hoisted(() => {
     if (table === supportFaqTable) return state.faq as unknown as Record<string, unknown>[];
     if (table === supportTicketsTable) return state.tickets as unknown as Record<string, unknown>[];
     if (table === supportTicketMessagesTable) return state.messages as unknown as Record<string, unknown>[];
+    if (table === platformAccountsTable) return state.accounts as unknown as Record<string, unknown>[];
     return [];
   }
 
@@ -185,6 +202,7 @@ const h = vi.hoisted(() => {
     supportFaqTable,
     supportTicketsTable,
     supportTicketMessagesTable,
+    platformAccountsTable,
     matches,
     rowsFor,
   };
@@ -296,9 +314,15 @@ vi.mock("@workspace/db", () => {
     supportTicketsTable: h.supportTicketsTable,
     supportTicketMessagesTable: h.supportTicketMessagesTable,
     platformMetaTable: { __table: "platform_meta", key: { __col: "key" }, value: { __col: "value" } },
-    platformAccountsTable: { __table: "platform_accounts", username: { __col: "username" }, email: { __col: "email" } },
+    platformAccountsTable: h.platformAccountsTable,
   };
 });
+
+vi.mock("../lib/notify-email", () => ({
+  sendSupportTicketAlert: vi.fn().mockResolvedValue(true),
+  sendSupportTicketAck: vi.fn().mockResolvedValue(true),
+  sendSupportTicketReplyNotification: vi.fn().mockResolvedValue(true),
+}));
 
 import supportRouter from "./support";
 
