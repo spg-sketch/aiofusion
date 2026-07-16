@@ -555,6 +555,16 @@ function App() {
     return () => window.clearInterval(id);
   }, [checkGeorgeUpdates]);
 
+  // Keep the sidebar trigger badge in sync when GeorgeSupport marks a reply as seen
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ hasUpdate: boolean }>).detail;
+      setGeorgeHasUpdate(detail.hasUpdate);
+    };
+    window.addEventListener("aio:george-updates-changed", handler);
+    return () => window.removeEventListener("aio:george-updates-changed", handler);
+  }, []);
+
   // Shown on the login form when the admin stash cookie expires mid view-as
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);

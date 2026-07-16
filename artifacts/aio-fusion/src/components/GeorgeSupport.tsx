@@ -242,7 +242,14 @@ export function GeorgeSupport({
           });
         }).then((r) => r.json())
           .then((d: { tickets?: unknown[] }) => {
-            setHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
+            const stillHasUpdate = Array.isArray(d.tickets) && d.tickets.length > 0;
+            setHasUpdate(stillHasUpdate);
+            // Notify the sidebar trigger button so it clears without a page reload
+            window.dispatchEvent(
+              new CustomEvent("aio:george-updates-changed", {
+                detail: { hasUpdate: stillHasUpdate },
+              }),
+            );
           })
           .catch(() => {});
       }
