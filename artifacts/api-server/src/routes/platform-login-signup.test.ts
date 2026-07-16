@@ -189,6 +189,21 @@ vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
+// Prevent real emails firing during tests — all notify-email functions are no-ops
+vi.mock("../lib/notify-email", () => ({
+  sendNewSignupAlert: () => Promise.resolve(),
+  sendApprovalEmail: () => Promise.resolve(),
+  sendSpikeAlert: () => Promise.resolve(),
+  sendQuotaBreachAlert: () => Promise.resolve(),
+  sendSpendCapAlert: () => Promise.resolve(),
+  sendBookDemoInternalAlert: () => Promise.resolve(),
+  sendBookDemoConfirmation: () => Promise.resolve(),
+  sendEnquiryInternalAlert: () => Promise.resolve(),
+  sendEnquiryConfirmation: () => Promise.resolve(),
+  sendSupportTicketAlert: () => Promise.resolve(),
+  sendSupportTicketAck: () => Promise.resolve(),
+}));
+
 import {
   db,
   platformUsersTable,
