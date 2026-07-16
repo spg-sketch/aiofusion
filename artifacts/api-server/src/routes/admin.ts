@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable } from "@workspace/db";
-import { and, eq, inArray, sql, gte } from "drizzle-orm";
+import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable, contactSubmissionsTable } from "@workspace/db";
+import { and, desc, eq, inArray, sql, gte } from "drizzle-orm";
 import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -1234,6 +1234,30 @@ adminRouter.post(
     } catch (err) {
       logger.error({ err }, "admin test-email-alerts: failed");
       res.status(500).json({ error: "Failed to send test alerts", detail: String(err) });
+    }
+  },
+);
+
+// List recent contact form submissions (admin only).
+// Returns up to 200 rows, most recent first.
+adminRouter.get(
+  "/admin/contact-submissions",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    try {
+      const rows = await db
+        .select()
+        .from(contactSubmissionsTable)
+        .orderBy(desc(contactSubmissionsTable.createdAt))
+        .limit(200);
+      res.json({ rows });
+    } catch (err) {
+      logger.error({ err }, "admin contact-submissions: query failed");
+      res.status(500).json({ error: "Could not load contact submissions." });
     }
   },
 );

@@ -203,6 +203,9 @@ const MediaDatabasePage = lazy(() =>
 const SupportAdminPage = lazy(() =>
   import("./pages/SupportAdminPage").then((m) => ({ default: m.SupportAdminPage }))
 );
+const ContactSubmissionsAdminPage = lazy(() =>
+  import("./pages/ContactSubmissionsAdminPage").then((m) => ({ default: m.ContactSubmissionsAdminPage }))
+);
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
 // user-created projects loaded from localStorage.
@@ -778,13 +781,21 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => setView("support-admin" as any)} />;
+    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => setView("support-admin" as any)} onContactAdmin={() => setView("contact-admin" as any)} />;
   }
   if ((view as string) === "support-admin") {
     if (!session || session.role !== "admin") return null;
     return (
       <Suspense fallback={null}>
         <SupportAdminPage onBack={() => setView("users-admin")} />
+      </Suspense>
+    );
+  }
+  if ((view as string) === "contact-admin") {
+    if (!session || session.role !== "admin") return null;
+    return (
+      <Suspense fallback={null}>
+        <ContactSubmissionsAdminPage onBack={() => setView("users-admin")} />
       </Suspense>
     );
   }

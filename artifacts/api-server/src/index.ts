@@ -6,6 +6,7 @@ import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
 import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-cascade";
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
 import { ensureSupportEmailFailedColumn } from "./lib/ensure-support-email-failed-column";
+import { ensureContactSubmissionsTable } from "./lib/ensure-contact-submissions-table";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
@@ -65,6 +66,10 @@ app.listen(port, (err) => {
 
   ensureSupportEmailFailedColumn().catch((err) => {
     logger.error({ err }, "Failed to ensure support tickets email_failed column");
+  });
+
+  ensureContactSubmissionsTable().catch((err) => {
+    logger.error({ err }, "Failed to ensure contact_submissions table");
   });
 
   pruneExpiredSessions().catch((err) => {
