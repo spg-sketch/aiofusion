@@ -69,16 +69,45 @@ router.get("/support/faq", async (req: Request, res: Response) => {
     }
 
     if (q) {
-      const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-      // Score each row by how many terms it matches, then return top results
+      // Strip common stop-words so "what does this do" doesn't match everything equally
+      const STOP = new Set([
+        "a","an","and","are","as","at","be","been","but","by","can","did","do",
+        "does","for","from","get","got","had","has","have","he","her","him","his",
+        "how","i","if","in","is","it","its","just","me","my","no","not","of","on",
+        "or","our","out","so","some","that","the","their","them","then","there",
+        "they","this","to","up","us","was","we","were","what","when","where",
+        "which","who","why","will","with","you","your",
+      ]);
+      const rawTerms = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const terms = rawTerms.filter((t) => t.length > 1 && !STOP.has(t));
+      // Fall back to all raw terms if stop-word filtering removed everything
+      const effectiveTerms = terms.length > 0 ? terms : rawTerms.filter((t) => t.length > 1);
+
+      const phraseQ = q.toLowerCase();
+
       const scored = rows
         .map((r) => {
-          const haystack =
-            `${r.question} ${r.answer} ${r.keywords}`.toLowerCase();
-          const score = terms.reduce(
-            (acc, t) => acc + (haystack.includes(t) ? 1 : 0),
-            0,
-          );
+          const qLower  = r.question.toLowerCase();
+          const kLower  = r.keywords.toLowerCase();
+          const aLower  = r.answer.toLowerCase();
+
+          // Exact phrase appearing in the question title = large bonus
+          let score = qLower.includes(phraseQ) ? 30 : 0;
+
+          // Per-term scoring with field weights:
+          //   question field: 4 × term-length weight  (most specific)
+          //   keywords field: 2 × term-length weight  (curated synonyms)
+          //   answer field:   1 × term-length weight  (broad context)
+          // Longer terms earn proportionally more — "methodology" beats "me"
+          score += effectiveTerms.reduce((acc, t) => {
+            const w = Math.min(t.length, 6); // cap weight at length 6
+            let ts = 0;
+            if (qLower.includes(t)) ts += 4 * w;
+            if (kLower.includes(t)) ts += 2 * w;
+            if (aLower.includes(t)) ts += 1 * w;
+            return acc + ts;
+          }, 0);
+
           return { row: r, score };
         })
         .filter((s) => s.score > 0)
