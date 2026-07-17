@@ -259,10 +259,10 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
-              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation.", url: "#", external: false, accent: accent },
-              { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme.", url: "#", external: false, accent: vars.gold },
+              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: null, external: false, accent: accent },
+              { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: null, external: false, accent: vars.gold },
             ].map((a) => (
-              <a key={a.title} href={a.url} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
+              <a key={a.title} href={a.url ?? undefined} onClick={!a.external ? (e) => { e.preventDefault(); onNavigate("insights"); } : undefined} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
                   <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>

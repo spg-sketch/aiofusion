@@ -60,7 +60,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
         >
           <ArticleDetailView
             article={articleData}
-            onBack={() => setOpenArticleId(null)}
+            onBack={() => { setOpenArticleId(null); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
             coverImg={coverImg}
           />
         </MarketingPage>
@@ -101,7 +101,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
             return (
               <button
                 key={a.id}
-                onClick={() => setOpenArticleId(a.id)}
+                onClick={() => { setOpenArticleId(a.id); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
                 className="group block rounded-2xl overflow-hidden bg-white transition-all hover:shadow-xl hover:-translate-y-1 text-left w-full"
                 style={{ border: `1px solid ${vars.g200}` }}
               >

@@ -38,6 +38,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         "Website Content GEO and Technical GEO",
         "Measure and Report - PR impact and AI authority",
         "Content Library - long-term content curation",
+        "Additional projects at £500/yr each",
         "Email support",
       ],
     },
@@ -93,7 +94,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ── end WITH AGENTS ── */
 
   const TABLE_ROWS: PlanFeature[] = [
-    { label: "Brands / projects", inhouse: "1", agency: "3 included (+£500/yr each)", agentic: "3 included (+£500/yr each)" },
+    { label: "Brands / projects", inhouse: "1 (+£500/yr each)", agency: "3 included (+£500/yr each)", agentic: "3 included (+£500/yr each)" },
     { label: "AI Visibility Audit + GEO strategy", inhouse: true, agency: true, agentic: true },
     { label: "Comms Planner", inhouse: true, agency: true, agentic: true },
     { label: "Content Optimiser and Editor", inhouse: true, agency: true, agentic: true },
@@ -194,10 +195,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
 
           <div className="grid sm:grid-cols-2 gap-5 mb-8">
             {STANDARD_PLANS.map((plan) => (
-              <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.highlight ? `2px solid ${accent}` : `1px solid ${vars.g200}`, background: plan.highlight ? "white" : paper, boxShadow: plan.highlight ? `0 20px 48px -12px ${accent}30` : "none" }}>
-                {plan.highlight && (
-                  <div className="text-center py-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ background: accent, color: "white" }}>Most Popular</div>
-                )}
+              <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.key === "agency" ? `2px solid ${accent}` : `2px solid ${ink}`, background: "white", boxShadow: plan.key === "agency" ? `0 20px 48px -12px ${accent}30` : `0 20px 48px -12px rgba(16,43,54,0.15)` }}>
                 <div className="p-7 flex flex-col flex-1">
                   <div className="mb-1">
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: plan.color }}>{plan.name}</span>
