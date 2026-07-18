@@ -1299,4 +1299,96 @@ adminRouter.patch(
   },
 );
 
+// ---------------------------------------------------------------------------
+// Contact-form smoke-test endpoint.
+// Calls the ACTUAL sendBook*/sendEnquiry* helper functions (the same code path
+// used by /api/contact/book-demo and /api/contact/enquiry in production) so
+// that Resend domain verification, from-address config, and template rendering
+// can all be confirmed end-to-end.  Customer confirmations are redirected to
+// info@aiofusion.ai so the team can inspect them without spamming real inboxes.
+// Admin only.
+// ---------------------------------------------------------------------------
+adminRouter.post(
+  "/admin/test-contact-forms",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    if (!process.env.RESEND_API_KEY) {
+      res.status(500).json({ error: "RESEND_API_KEY is not set — cannot send test emails." });
+      return;
+    }
+
+    const SMOKE_TO = "info@aiofusion.ai";
+
+    type SendResult = { label: string; ok: boolean; error?: string };
+    const results: SendResult[] = [];
+
+    async function attempt(label: string, fn: () => Promise<void>): Promise<void> {
+      try {
+        await fn();
+        results.push({ label, ok: true });
+      } catch (err) {
+        results.push({ label, ok: false, error: String(err) });
+      }
+    }
+
+    await attempt("book-demo internal alert", () =>
+      sendBookDemoInternalAlert({
+        name: "Smoke Test User",
+        email: SMOKE_TO,
+        company: "AIO Fusion (smoke test)",
+        goal: "Verify that the Book a Demo form delivers emails correctly.",
+      }),
+    );
+
+    await attempt("book-demo customer confirmation", () =>
+      sendBookDemoConfirmation({
+        name: "Smoke Test User",
+        toEmail: SMOKE_TO,
+      }),
+    );
+
+    await attempt("enquiry internal alert", () =>
+      sendEnquiryInternalAlert({
+        name: "Smoke Test User",
+        email: SMOKE_TO,
+        company: "AIO Fusion (smoke test)",
+        subject: "Contact-form smoke test",
+        message:
+          "This is an automated smoke-test message. Please ignore — verify it arrived and then delete.",
+      }),
+    );
+
+    await attempt("enquiry customer confirmation", () =>
+      sendEnquiryConfirmation({
+        name: "Smoke Test User",
+        toEmail: SMOKE_TO,
+      }),
+    );
+
+    const failures = results.filter((r) => !r.ok);
+    if (failures.length > 0) {
+      logger.error({ failures, by: req.account?.username }, "admin test-contact-forms: some sends failed");
+      res.status(500).json({
+        ok: false,
+        message: `${failures.length} of ${results.length} sends failed.`,
+        results,
+      });
+      return;
+    }
+
+    logger.info({ by: req.account?.username }, "admin test-contact-forms: all 4 contact emails dispatched");
+    res.json({
+      ok: true,
+      count: results.length,
+      message:
+        "All 4 contact-form emails dispatched: book-demo-internal, book-demo-confirmation, enquiry-internal, enquiry-confirmation. Check info@aiofusion.ai for delivery.",
+      results,
+    });
+  },
+);
+
 export default adminRouter;

@@ -166,7 +166,7 @@ async function startServer(): Promise<{ url: string; close: () => Promise<void> 
   });
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// ── Tests — /contact/book-demo ────────────────────────────────────────────────
 
 describe("POST /contact/book-demo", () => {
   const validBody = {
@@ -205,6 +205,40 @@ describe("POST /contact/book-demo", () => {
     await close();
   });
 
+  it("calls sendBookDemoInternalAlert with correct args", async () => {
+    await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validBody),
+    });
+    expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledWith({
+      name: "Alice Smith",
+      email: "alice@example.com",
+      company: "Acme Ltd",
+      goal: "Improve our AI visibility.",
+    });
+    expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledWith({
+      name: "Alice Smith",
+      toEmail: "alice@example.com",
+    });
+    await close();
+  });
+
+  it("normalises email to lower-case before dispatch", async () => {
+    await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "Alice@EXAMPLE.COM" }),
+    });
+    expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "alice@example.com" }),
+    );
+    expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "alice@example.com" }),
+    );
+    await close();
+  });
+
   it("returns 500 and does NOT call email when DB insert fails", async () => {
     h.state.insertShouldFail = true;
 
@@ -232,23 +266,73 @@ describe("POST /contact/book-demo", () => {
     expect(r.status).toBe(200);
 
     expect(h.state.rows).toHaveLength(1);
-    // Give the async update a tick to settle
     await new Promise((res) => setTimeout(res, 10));
     expect(h.state.rows[0].emailFailed).toBe("true");
     await close();
   });
 
-  it("returns 400 for missing required fields", async () => {
+  it("returns 400 with error mentioning name when name is missing", async () => {
     const r = await fetch(`${url}/contact/book-demo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Alice", email: "alice@example.com" }),
+      body: JSON.stringify({ ...validBody, name: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/name/i);
+    expect(h.state.rows).toHaveLength(0);
+    await close();
+  });
+
+  it("returns 400 with error mentioning email when email is missing", async () => {
+    const r = await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/email/i);
+    await close();
+  });
+
+  it("returns 400 when email is malformed", async () => {
+    const r = await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "not-an-email" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/email/i);
+    await close();
+  });
+
+  it("returns 400 with error mentioning company when company is missing", async () => {
+    const r = await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, company: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/company/i);
+    await close();
+  });
+
+  it("returns 400 when goal is missing", async () => {
+    const r = await fetch(`${url}/contact/book-demo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, goal: "" }),
     });
     expect(r.status).toBe(400);
     expect(h.state.rows).toHaveLength(0);
     await close();
   });
 });
+
+// ── Tests — /contact/enquiry ──────────────────────────────────────────────────
 
 describe("POST /contact/enquiry", () => {
   const validBody = {
@@ -288,6 +372,55 @@ describe("POST /contact/enquiry", () => {
     await close();
   });
 
+  it("calls sendEnquiryInternalAlert and sendEnquiryConfirmation with correct args", async () => {
+    await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validBody),
+    });
+    expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledWith({
+      name: "Bob Jones",
+      email: "bob@example.com",
+      company: "Beta Corp",
+      subject: "Partnership question",
+      message: "We would like to explore a partnership.",
+    });
+    expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledWith({
+      name: "Bob Jones",
+      toEmail: "bob@example.com",
+    });
+    await close();
+  });
+
+  it("normalises email to lower-case before dispatch", async () => {
+    await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "BOB@EXAMPLE.COM" }),
+    });
+    expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "bob@example.com" }),
+    );
+    expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "bob@example.com" }),
+    );
+    await close();
+  });
+
+  it("company is optional — succeeds without it", async () => {
+    const { company: _c, ...noCompany } = validBody;
+    const r = await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(noCompany),
+    });
+    expect(r.status).toBe(200);
+    expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ company: "" }),
+    );
+    await close();
+  });
+
   it("returns 500 and does NOT call email when DB insert fails", async () => {
     h.state.insertShouldFail = true;
 
@@ -317,6 +450,53 @@ describe("POST /contact/enquiry", () => {
     expect(h.state.rows).toHaveLength(1);
     await new Promise((res) => setTimeout(res, 10));
     expect(h.state.rows[0].emailFailed).toBe("true");
+    await close();
+  });
+
+  it("returns 400 with error mentioning name when name is missing", async () => {
+    const r = await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, name: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/name/i);
+    expect(h.state.rows).toHaveLength(0);
+    await close();
+  });
+
+  it("returns 400 with error mentioning email when email is missing", async () => {
+    const r = await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/email/i);
+    await close();
+  });
+
+  it("returns 400 when email is malformed", async () => {
+    const r = await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, email: "bad@@email" }),
+    });
+    expect(r.status).toBe(400);
+    await close();
+  });
+
+  it("returns 400 with error mentioning subject when subject is missing", async () => {
+    const r = await fetch(`${url}/contact/enquiry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...validBody, subject: "" }),
+    });
+    expect(r.status).toBe(400);
+    const body = await r.json() as { error: string };
+    expect(body.error).toMatch(/subject/i);
     await close();
   });
 
