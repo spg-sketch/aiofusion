@@ -405,6 +405,7 @@ function App() {
     void (async () => {
       const s = await bootstrapAuth();
       setSessionState(s);
+      setAuthLoading(false);
       await migrateLocalStorageContentToServer();
       await initContentStore();
       await resyncProjects();
@@ -493,6 +494,11 @@ function App() {
     seedAdminIfEmpty();
     return getLocalSession();
   });
+  // True until the server has confirmed (or denied) the session via
+  // bootstrapAuth(). Guards must not redirect while this is true — the session
+  // state is still provisional (localStorage only) and may not yet reflect the
+  // real cookie state.
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -685,7 +691,11 @@ function App() {
   // Access guard for the admin-only users page. Done in an effect (not during
   // render) and as a history-replacing redirect so Back does not loop back
   // onto the denied page.
+  // Guard is suppressed while authLoading is true — the session is still being
+  // confirmed by the server and a null session at this point does not mean the
+  // user is logged out.
   useEffect(() => {
+    if (authLoading) return;
     if (view === "users-admin" && (!session || session.role !== "admin")) {
       replaceNextNav.current = true;
       setView("platform-home");
@@ -696,7 +706,7 @@ function App() {
       replaceNextNav.current = true;
       setView("platform-home");
     }
-  }, [view, session]);
+  }, [view, session, authLoading]);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
@@ -710,6 +720,9 @@ function App() {
   };
 
   const requireSessionThen = (next: () => void) => {
+    // While auth is still loading, silently wait — the session is being
+    // confirmed by the server and may not be null for much longer.
+    if (authLoading) return;
     if (!session) {
       setView("platform-home");
       window.scrollTo(0, 0);
