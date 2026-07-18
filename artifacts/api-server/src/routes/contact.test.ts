@@ -14,7 +14,8 @@ const h = vi.hoisted(() => {
     company: string;
     subject: string;
     message: string;
-    emailFailed: string;
+    goal: string;
+    status: string;
     createdAt: Date;
   };
 
@@ -23,12 +24,10 @@ const h = vi.hoisted(() => {
   const state = {
     rows: [] as SubmissionRow[],
     insertShouldFail: false,
-    updateShouldFail: false,
     reset() {
       seq = 1;
       state.rows = [];
       state.insertShouldFail = false;
-      state.updateShouldFail = false;
     },
     nextId() {
       return seq++;
@@ -44,7 +43,8 @@ const h = vi.hoisted(() => {
     company: { __col: "company" },
     subject: { __col: "subject" },
     message: { __col: "message" },
-    emailFailed: { __col: "emailFailed" },
+    goal: { __col: "goal" },
+    status: { __col: "status" },
     createdAt: { __col: "createdAt" },
   };
 
@@ -56,11 +56,11 @@ const h = vi.hoisted(() => {
 vi.mock("@workspace/db", () => {
   const { state, contactSubmissionsTable } = h;
 
-  const makeChain = (table: unknown, values?: Record<string, unknown>) => {
+  const makeChain = (table: unknown) => {
     return {
       values(v: Record<string, unknown>) {
         return {
-          returning(fields: Record<string, unknown>) {
+          returning(_fields: Record<string, unknown>) {
             return {
               then(resolve: (rows: unknown[]) => void, reject: (err: Error) => void) {
                 if (state.insertShouldFail) {
@@ -75,7 +75,8 @@ vi.mock("@workspace/db", () => {
                     company: String(v.company ?? ""),
                     subject: String(v.subject ?? ""),
                     message: String(v.message ?? ""),
-                    emailFailed: String(v.emailFailed ?? "false"),
+                    goal: String(v.goal ?? ""),
+                    status: String(v.status ?? "pending"),
                     createdAt: new Date(),
                   });
                   resolve([{ id }]);
@@ -86,50 +87,17 @@ vi.mock("@workspace/db", () => {
         };
       },
     };
-    void table; void values;
+    void table;
   };
 
   const db = {
     insert(table: unknown) {
       return makeChain(table);
     },
-    update(table: unknown) {
-      return {
-        set(fields: Record<string, unknown>) {
-          return {
-            where(pred: unknown) {
-              return {
-                catch(fn: (err: Error) => void) {
-                  if (state.updateShouldFail) {
-                    fn(new Error("DB update failed"));
-                  } else {
-                    const predTyped = pred as { kind: string; col: string; val: unknown } | undefined;
-                    if (predTyped?.kind === "eq" && predTyped.col === "id") {
-                      const row = state.rows.find((r) => r.id === predTyped.val);
-                      if (row) {
-                        Object.assign(row, fields);
-                      }
-                    }
-                  }
-                  return this;
-                },
-              };
-            },
-          };
-        },
-      };
-      void table;
-    },
   };
 
   return { db, contactSubmissionsTable };
 });
-
-// ── Mock drizzle-orm ──────────────────────────────────────────────────────────
-
-vi.mock("drizzle-orm", () => ({
-  eq: (col: { __col: string }, val: unknown) => ({ kind: "eq", col: col.__col, val }),
-}));
 
 // ── Mock notify-email ─────────────────────────────────────────────────────────
 
@@ -198,7 +166,7 @@ describe("POST /contact/book-demo", () => {
     expect(h.state.rows).toHaveLength(1);
     expect(h.state.rows[0].type).toBe("book-demo");
     expect(h.state.rows[0].email).toBe("alice@example.com");
-    expect(h.state.rows[0].emailFailed).toBe("false");
+    expect(h.state.rows[0].goal).toBe("Improve our AI visibility.");
 
     expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledOnce();
     expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledOnce();
@@ -255,7 +223,7 @@ describe("POST /contact/book-demo", () => {
     await close();
   });
 
-  it("returns 200 and marks email_failed=true when email delivery fails after successful DB insert", async () => {
+  it("returns 200 even when email delivery fails after successful DB insert", async () => {
     emailMocks.sendBookDemoInternalAlert.mockRejectedValueOnce(new Error("Resend timeout"));
 
     const r = await fetch(`${url}/contact/book-demo`, {
@@ -264,10 +232,7 @@ describe("POST /contact/book-demo", () => {
       body: JSON.stringify(validBody),
     });
     expect(r.status).toBe(200);
-
     expect(h.state.rows).toHaveLength(1);
-    await new Promise((res) => setTimeout(res, 10));
-    expect(h.state.rows[0].emailFailed).toBe("true");
     await close();
   });
 
@@ -365,7 +330,6 @@ describe("POST /contact/enquiry", () => {
     expect(h.state.rows).toHaveLength(1);
     expect(h.state.rows[0].type).toBe("enquiry");
     expect(h.state.rows[0].subject).toBe("Partnership question");
-    expect(h.state.rows[0].emailFailed).toBe("false");
 
     expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledOnce();
     expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledOnce();
@@ -437,7 +401,7 @@ describe("POST /contact/enquiry", () => {
     await close();
   });
 
-  it("returns 200 and marks email_failed=true when email delivery fails after successful DB insert", async () => {
+  it("returns 200 even when email delivery fails after successful DB insert", async () => {
     emailMocks.sendEnquiryInternalAlert.mockRejectedValueOnce(new Error("Resend timeout"));
 
     const r = await fetch(`${url}/contact/enquiry`, {
@@ -446,10 +410,7 @@ describe("POST /contact/enquiry", () => {
       body: JSON.stringify(validBody),
     });
     expect(r.status).toBe(200);
-
     expect(h.state.rows).toHaveLength(1);
-    await new Promise((res) => setTimeout(res, 10));
-    expect(h.state.rows[0].emailFailed).toBe("true");
     await close();
   });
 

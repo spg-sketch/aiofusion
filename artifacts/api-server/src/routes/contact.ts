@@ -1,7 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { db, contactSubmissionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import {
   sendBookDemoInternalAlert,
@@ -9,7 +8,6 @@ import {
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
 } from "../lib/notify-email";
-import { db, contactSubmissionsTable } from "@workspace/db";
 
 const contactRouter = Router();
 
@@ -78,7 +76,7 @@ contactRouter.post(
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "book-demo", name, email, company, subject: "", message: goal, emailFailed: "false" })
+        .values({ type: "book-demo", name, email, company, goal })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;
       logger.info({ savedId, email }, "contact/book-demo: submission saved to DB");
@@ -89,29 +87,15 @@ contactRouter.post(
     }
 
     // ── Step 2: Attempt email delivery (non-fatal) ───────────────────────────
-    // Submission is already persisted; email failure only sets the flag on the row.
+    // Submission is already persisted; email failure is logged but does not block the response.
     try {
       await Promise.all([
         sendBookDemoInternalAlert({ name, email, company, goal }),
         sendBookDemoConfirmation({ name, toEmail: email }),
-        db.insert(contactSubmissionsTable).values({
-          type: "book-demo",
-          name,
-          email,
-          company,
-          goal,
-          status: "pending",
-        }).catch((err) => {
-          logger.error({ err, email }, "contact/book-demo: failed to persist to DB");
-        }),
       ]);
       logger.info({ savedId, email }, "contact/book-demo: emails dispatched");
     } catch (err) {
       logger.error({ err, savedId, email }, "contact/book-demo: email delivery failed (non-fatal, submission #" + savedId + " already saved)");
-      db.update(contactSubmissionsTable)
-        .set({ emailFailed: "true" })
-        .where(eq(contactSubmissionsTable.id, savedId))
-        .catch((updateErr) => logger.warn({ updateErr, savedId }, "contact/book-demo: could not mark email_failed on row #" + savedId));
     }
 
     res.json({ ok: true });
@@ -163,7 +147,7 @@ contactRouter.post(
     try {
       const [row] = await db
         .insert(contactSubmissionsTable)
-        .values({ type: "enquiry", name, email, company, subject, message, emailFailed: "false" })
+        .values({ type: "enquiry", name, email, company, subject, message })
         .returning({ id: contactSubmissionsTable.id });
       savedId = row.id;
       logger.info({ savedId, email }, "contact/enquiry: submission saved to DB");
@@ -178,25 +162,10 @@ contactRouter.post(
       await Promise.all([
         sendEnquiryInternalAlert({ name, email, company, subject, message }),
         sendEnquiryConfirmation({ name, toEmail: email }),
-        db.insert(contactSubmissionsTable).values({
-          type: "enquiry",
-          name,
-          email,
-          company,
-          subject,
-          message,
-          status: "pending",
-        }).catch((err) => {
-          logger.error({ err, email }, "contact/enquiry: failed to persist to DB");
-        }),
       ]);
       logger.info({ savedId, email }, "contact/enquiry: emails dispatched");
     } catch (err) {
       logger.error({ err, savedId, email }, "contact/enquiry: email delivery failed (non-fatal, submission #" + savedId + " already saved)");
-      db.update(contactSubmissionsTable)
-        .set({ emailFailed: "true" })
-        .where(eq(contactSubmissionsTable.id, savedId))
-        .catch((updateErr) => logger.warn({ updateErr, savedId }, "contact/enquiry: could not mark email_failed on row #" + savedId));
     }
 
     res.json({ ok: true });
