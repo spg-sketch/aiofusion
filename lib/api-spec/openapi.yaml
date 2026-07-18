@@ -164,8 +164,14 @@ components:
       properties:
         status:
           type: string
+        features:
+          type: array
+          items:
+            type: string
+          description: Names of active server-side feature flags. Empty on production; lists enabled flags on staging.
       required:
         - status
+        - features
     AuthUser:
       type: object
       required: [id, email, firstName, lastName, profileImageUrl]

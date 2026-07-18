@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { features } from "./lib/features";
 import { ensureDefaultAdmin, backfillPlatformUsers } from "./lib/platform-auth";
 import { ensureAuditLocksTable } from "./lib/ensure-audit-locks-table";
 import { ensureSavedAuditTables } from "./lib/ensure-saved-audit-tables";
@@ -34,7 +35,10 @@ app.listen(port, (err) => {
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  const activeFlags = Object.entries(features)
+    .filter(([, v]) => v === true)
+    .map(([k]) => k);
+  logger.info({ port, activeFeatureFlags: activeFlags }, "Server listening");
 
   // Make sure the platform is never locked out: seed the default admin login if
   // no admin account exists yet.

@@ -96,3 +96,65 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+---
+
+## Deployment: Production vs Staging
+
+This project uses **two separate Replit Deployments** to keep experimental features completely isolated from live client data.
+
+### Production deployment
+
+- URL: `aio-fusion.replit.app` (or the primary published domain)
+- **No `FEATURE_*` or `VITE_FEATURE_*` secrets should be set here.**
+- All feature flags default to `false` (disabled) when the env var is absent, so production is always stable.
+- Required secrets (set in the production deployment's secret manager):
+  - All standard app secrets (`DATABASE_URL`, `SESSION_SECRET`, `AI_INTEGRATIONS_*`, etc.)
+  - Do **not** add any `FEATURE_*` or `VITE_FEATURE_*` keys.
+
+### Staging deployment
+
+- URL: `aio-fusion-staging.replit.app` (a second deployment created from the same codebase)
+- Used by internal testers and developers to validate experimental features before they reach clients.
+- Has its own isolated database (separate `DATABASE_URL`) so no client data is ever at risk.
+- Staging-specific secrets (set in the staging deployment's secret manager):
+
+| Secret | Value | Purpose |
+|---|---|---|
+| `VITE_FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables AI Coverage Search in the frontend |
+| `FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables the matching API route on the server |
+| `BRAVE_API_KEY` | *(key when available)* | Powers the AI Coverage Search feature |
+
+- All standard app secrets (`DATABASE_URL`, `SESSION_SECRET`, `AI_INTEGRATIONS_*`, etc.) must also be set in the staging deployment, pointing to staging resources.
+
+### How to add a new feature flag to staging
+
+1. Add the flag in `artifacts/aio-fusion/src/lib/features.ts` (frontend, `VITE_FEATURE_*`) and/or `artifacts/api-server/src/lib/features.ts` (server, `FEATURE_*`).
+2. Guard your UI/route behind the flag so it's invisible when the var is absent.
+3. In the **staging deployment** secret manager, add `VITE_FEATURE_<YOUR_FLAG>=true` and/or `FEATURE_<YOUR_FLAG>=true`.
+4. Do **not** add those secrets to the production deployment.
+5. Once the feature is ready to ship, remove the flag guard from code and delete the secrets from both deployments.
+
+### Setting up a new staging deployment (one-time)
+
+1. In Replit, open **Deployments** → **New deployment**.
+2. Point it at this same codebase.
+3. Set all standard secrets (copy from production, swap `DATABASE_URL` for a staging database).
+4. Add the `FEATURE_*` / `VITE_FEATURE_*` secrets listed in the table above.
+5. Deploy. The staging URL is fully isolated — it shares no database or session store with production.
+
+### Verifying the correct flags are active
+
+The API server reports active feature flags in two places so you can confirm the environment without manual inspection:
+
+**Startup log** — immediately after boot, the server emits a structured log line:
+```
+{"port":…,"activeFeatureFlags":["aiCoverageSearch"],"msg":"Server listening"}
+```
+On production the `activeFeatureFlags` array will be empty (`[]`). On staging it will list every enabled flag.
+
+**Health endpoint** — `GET /api/healthz` returns:
+```json
+{ "status": "ok", "features": ["aiCoverageSearch"] }
+```
+Hit `https://<staging-url>/api/healthz` to confirm flags are on, and `https://<production-url>/api/healthz` to confirm `"features": []`.
