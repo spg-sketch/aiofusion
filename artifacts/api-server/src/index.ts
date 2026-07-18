@@ -15,6 +15,58 @@ import { and, eq } from "drizzle-orm";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+// ---------------------------------------------------------------------------
+// Staging isolation guard
+// ---------------------------------------------------------------------------
+// If DEPLOYMENT_ENV (or NODE_ENV as a fallback) is "staging", verify that
+// DATABASE_URL does not contain any of the substrings listed in
+// PRODUCTION_DB_IDENTIFIERS (comma-separated hostnames / db names).  If it
+// does, we refuse to boot so that a misconfigured secret can never silently
+// contaminate production data.
+// ---------------------------------------------------------------------------
+const deploymentEnv = (
+  process.env["DEPLOYMENT_ENV"] ??
+  process.env["NODE_ENV"] ??
+  ""
+).toLowerCase().trim();
+
+if (deploymentEnv === "staging") {
+  const dbUrl = process.env["DATABASE_URL"] ?? "";
+  const rawIdentifiers = process.env["PRODUCTION_DB_IDENTIFIERS"] ?? "";
+  const productionIdentifiers = rawIdentifiers
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (productionIdentifiers.length === 0) {
+    logger.error(
+      "FATAL: DEPLOYMENT_ENV=staging but PRODUCTION_DB_IDENTIFIERS is not set. " +
+        "Set PRODUCTION_DB_IDENTIFIERS to the production DB hostname or name " +
+        "(comma-separated) so the isolation guard can verify this deployment is " +
+        "not connected to the production database.",
+    );
+    process.exit(1);
+  }
+
+  for (const identifier of productionIdentifiers) {
+    if (dbUrl.includes(identifier)) {
+      logger.error(
+        { identifier },
+        "FATAL: Staging deployment is pointed at the production database. " +
+          "Update DATABASE_URL to the staging database and redeploy.",
+      );
+      process.exit(1);
+    }
+  }
+
+  logger.info(
+    { identifiersChecked: productionIdentifiers.length },
+    "Staging isolation check passed — DATABASE_URL does not reference production.",
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

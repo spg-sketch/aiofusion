@@ -121,11 +121,23 @@ This project uses **two separate Replit Deployments** to keep experimental featu
 
 | Secret | Value | Purpose |
 |---|---|---|
+| `DEPLOYMENT_ENV` | `staging` | Tells the server it is running in the staging environment; triggers the DB isolation guard below |
+| `PRODUCTION_DB_IDENTIFIERS` | *(comma-separated list of production DB hostnames / DB names, e.g. `prod-db.example.com,aio_prod`)* | **Required when `DEPLOYMENT_ENV=staging`.** Substrings that must **not** appear in `DATABASE_URL` — the server exits non-zero if unset or if any identifier matches, preventing accidental production DB usage |
 | `VITE_FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables AI Coverage Search in the frontend |
 | `FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables the matching API route on the server |
 | `BRAVE_API_KEY` | *(key when available)* | Powers the AI Coverage Search feature |
 
 - All standard app secrets (`DATABASE_URL`, `SESSION_SECRET`, `AI_INTEGRATIONS_*`, etc.) must also be set in the staging deployment, pointing to staging resources.
+
+#### Database isolation guard
+
+On startup, if `DEPLOYMENT_ENV=staging` (or `NODE_ENV=staging` as a fallback), the API server checks that `DATABASE_URL` does not contain any of the substrings in `PRODUCTION_DB_IDENTIFIERS`.
+
+- If `PRODUCTION_DB_IDENTIFIERS` is **not set** → the server logs a **FATAL** error and exits non-zero. The secret is required when `DEPLOYMENT_ENV=staging`.
+- If a match is found → the server logs a **FATAL** error and exits non-zero, causing the deployment to fail immediately.
+- If the check passes → an **info** log confirms isolation is verified.
+
+To populate `PRODUCTION_DB_IDENTIFIERS`, copy the hostname and/or database name from the production `DATABASE_URL` (e.g. a Replit-managed PostgreSQL connection string looks like `postgresql://user:pass@<hostname>/<dbname>`) and paste those two values as a comma-separated list into the staging secret.
 
 ### How to add a new feature flag to staging
 
