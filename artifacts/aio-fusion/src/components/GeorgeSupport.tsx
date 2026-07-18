@@ -71,10 +71,12 @@ export function GeorgeSupport({
   open,
   onClose,
   userName,
+  anonMode = false,
 }: {
   open: boolean;
   onClose: () => void;
   userName?: string;
+  anonMode?: boolean;
 }) {
   const [step, setStep] = useState<ChatStep>({ type: "greeting" });
   const [question, setQuestion] = useState("");
@@ -84,6 +86,7 @@ export function GeorgeSupport({
   const [ticketCategory, setTicketCategory] = useState("General");
   const [ticketSubject, setTicketSubject] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
+  const [ticketEmail, setTicketEmail] = useState("");
   const [ticketAttachment, setTicketAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [ticketError, setTicketError] = useState<string | null>(null);
@@ -100,9 +103,9 @@ export function GeorgeSupport({
   const threadEndRef = useRef<HTMLDivElement>(null);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Check for pending ticket updates on open
+  // Check for pending ticket updates on open (authenticated mode only)
   useEffect(() => {
-    if (!open) return;
+    if (!open || anonMode) return;
     void fetch(`${apiBase()}/api/support/tickets?mine=true&hasUpdate=true`, {
       credentials: "include",
     })
@@ -111,7 +114,7 @@ export function GeorgeSupport({
         setHasUpdate(Array.isArray(d.tickets) && d.tickets.length > 0);
       })
       .catch(() => {});
-  }, [open]);
+  }, [open, anonMode]);
 
   // Reset to greeting on close
   useEffect(() => {
@@ -122,6 +125,7 @@ export function GeorgeSupport({
       setTicketSubject("");
       setTicketDescription("");
       setTicketCategory("General");
+      setTicketEmail("");
       setTicketAttachment(null);
       setTicketError(null);
       setReplyText("");
@@ -181,16 +185,21 @@ export function GeorgeSupport({
     setSubmitting(true);
     setTicketError(null);
     try {
-      const r = await fetch(`${apiBase()}/api/support/tickets`, {
+      const endpoint = anonMode
+        ? `${apiBase()}/api/support/tickets/anon`
+        : `${apiBase()}/api/support/tickets`;
+      const body: Record<string, string> = {
+        category: ticketCategory,
+        subject: ticketSubject.trim(),
+        description: ticketDescription.trim(),
+      };
+      if (anonMode && ticketEmail.trim()) body.email = ticketEmail.trim();
+      if (ticketAttachment) body.attachmentUrl = ticketAttachment.dataUrl;
+      const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          category: ticketCategory,
-          subject: ticketSubject.trim(),
-          description: ticketDescription.trim(),
-          ...(ticketAttachment ? { attachmentUrl: ticketAttachment.dataUrl } : {}),
-        }),
+        body: JSON.stringify(body),
       });
       const data = (await r.json()) as { ticket?: Ticket; error?: string };
       if (!r.ok || !data.ticket) {
@@ -524,8 +533,8 @@ export function GeorgeSupport({
                 </p>
               </GeorgeBubble>
 
-              {/* My tickets CTA on greeting — prominent if there's a new reply */}
-              {step.type === "greeting" && (
+              {/* My tickets CTA on greeting — hidden in anon/unauthenticated mode */}
+              {step.type === "greeting" && !anonMode && (
                 <div className="flex gap-2">
                   {hasUpdate ? (
                     <button
@@ -713,6 +722,7 @@ export function GeorgeSupport({
                   category={ticketCategory}
                   subject={ticketSubject}
                   description={ticketDescription}
+                  email={anonMode ? ticketEmail : undefined}
                   attachment={ticketAttachment}
                   error={ticketError}
                   submitting={submitting}
@@ -720,6 +730,7 @@ export function GeorgeSupport({
                   onCategory={setTicketCategory}
                   onSubject={setTicketSubject}
                   onDescription={setTicketDescription}
+                  onEmail={anonMode ? setTicketEmail : undefined}
                   onAttachment={setTicketAttachment}
                   onSubmit={handleSubmitTicket}
                   navy={navy}
@@ -737,17 +748,21 @@ export function GeorgeSupport({
                     </p>
                   </div>
                   <p className="text-[13px] leading-relaxed" style={{ color: vars.g500 }}>
-                    We've received your request and will get back to you by email. Reference number:{" "}
+                    {anonMode
+                      ? "We've received your request. If you provided an email, we'll be in touch. Reference number: "
+                      : "We've received your request and will get back to you by email. Reference number: "}
                     <strong style={{ color: navy }}>#{step.ticket.id}</strong>.
                   </p>
                   <div className="flex gap-2 mt-3">
-                    <button
-                      onClick={() => void handleViewMyTickets()}
-                      className="px-4 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
-                      style={{ borderColor: vars.g200, color: navy }}
-                    >
-                      View my tickets
-                    </button>
+                    {!anonMode && (
+                      <button
+                        onClick={() => void handleViewMyTickets()}
+                        className="px-4 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                        style={{ borderColor: vars.g200, color: navy }}
+                      >
+                        View my tickets
+                      </button>
+                    )}
                     <button
                       onClick={onClose}
                       className="px-4 py-2 rounded-lg text-[12px] font-semibold text-white transition-all hover:brightness-110"
@@ -931,13 +946,14 @@ function formatDate(iso: string): string {
 }
 
 function TicketForm({
-  category, subject, description, attachment, error, submitting, fileRef,
-  onCategory, onSubject, onDescription, onAttachment, onSubmit,
+  category, subject, description, email, attachment, error, submitting, fileRef,
+  onCategory, onSubject, onDescription, onEmail, onAttachment, onSubmit,
   navy, accent, teal,
 }: {
   category: string;
   subject: string;
   description: string;
+  email?: string;
   attachment: { name: string; dataUrl: string } | null;
   error: string | null;
   submitting: boolean;
@@ -945,6 +961,7 @@ function TicketForm({
   onCategory: (v: string) => void;
   onSubject: (v: string) => void;
   onDescription: (v: string) => void;
+  onEmail?: (v: string) => void;
   onAttachment: (v: { name: string; dataUrl: string } | null) => void;
   onSubmit: () => void;
   navy: string;
@@ -959,6 +976,18 @@ function TicketForm({
       <p className="text-[13px] font-semibold" style={{ color: navy }}>
         Submit a support ticket
       </p>
+
+      {/* Email — shown only in anon/pre-login mode */}
+      {onEmail !== undefined && (
+        <input
+          type="email"
+          value={email ?? ""}
+          onChange={(e) => onEmail(e.target.value)}
+          placeholder="Your email (optional — so we can reply)"
+          className="text-[12px] px-3 py-2 rounded-lg border outline-none focus:ring-1"
+          style={{ borderColor: vars.g200, color: navy }}
+        />
+      )}
 
       {/* Category */}
       <div className="relative">

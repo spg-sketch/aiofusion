@@ -285,6 +285,7 @@ function App() {
   const [pendingTechGeoId, setPendingTechGeoId] = useState<string | null>(null);
   const [georgeOpen, setGeorgeOpen] = useState(false);
   const [georgeHasUpdate, setGeorgeHasUpdate] = useState(false);
+  const [georgeAnonOpen, setGeorgeAnonOpen] = useState(false);
   const [, setSavedAuditsVersion] = useState(0);
 
   useEffect(() => {
@@ -759,6 +760,7 @@ function App() {
           session={session}
           onLoginSuccess={(s) => {
             setSessionExpiredNotice(undefined);
+            setGeorgeAnonOpen(false);
             setSessionState(s);
             void initContentStore().then(() => resyncProjects());
           }}
@@ -771,8 +773,16 @@ function App() {
           onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
           onGuidance={() => setView("guidance")}
           onBackToLanding={() => goHome()}
+          onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
           initialNotice={sessionExpiredNotice}
         />
+        {!session && (
+          <GeorgeSupport
+            open={georgeAnonOpen}
+            onClose={() => setGeorgeAnonOpen(false)}
+            anonMode
+          />
+        )}
         {namingProject && <CreateProjectModal onCancel={() => setNamingProject(false)} onCreate={confirmCreateProject} />}
       </>
     );

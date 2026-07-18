@@ -25,6 +25,7 @@ function PlatformHomePage({
   onManageUsers,
   onManageSubAccounts,
   onTokenUsage,
+  onOpenGeorge,
   initialNotice,
 }: {
   onCreateProject: () => void;
@@ -38,6 +39,7 @@ function PlatformHomePage({
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
   onTokenUsage: () => void;
+  onOpenGeorge?: () => void;
   initialNotice?: string;
 }) {
   const [username, setUsername] = useState("");
@@ -400,7 +402,7 @@ function PlatformHomePage({
                   </button>
                 </form>
 
-                {/* Create account */}
+                {/* Create account + George help */}
                 <div className="mt-5 pt-5 flex items-center justify-between" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
                   <span className="text-[14px]" style={{ color: "rgba(255,255,255,0.6)" }}>New to AIO Fusion?</span>
                   <button
@@ -411,6 +413,19 @@ function PlatformHomePage({
                     Create an account <ArrowRight size={14} />
                   </button>
                 </div>
+                {onOpenGeorge && (
+                  <div className="mt-3 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={onOpenGeorge}
+                      className="flex items-center gap-1.5 text-[13px] hover:opacity-80 transition-opacity"
+                      style={{ color: "rgba(255,255,255,0.55)" }}
+                    >
+                      <HelpCircle size={14} />
+                      Need help? Ask George
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

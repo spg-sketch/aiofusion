@@ -234,6 +234,64 @@ router.post(
   },
 );
 
+// ── POST /api/support/tickets/anon ─────────────────────────────────────────
+// No auth required: create a support ticket as an anonymous (pre-login) user.
+// Accepts an optional email address so the admin can follow up.
+router.post("/support/tickets/anon", async (req: Request, res: Response) => {
+  try {
+    const { email, category, subject, description, attachmentUrl } = req.body ?? {};
+    if (!subject || !description) {
+      res.status(400).json({ error: "subject and description are required." });
+      return;
+    }
+    const rawEmail = typeof email === "string" ? email.trim() : "";
+    const accountUsername = rawEmail ? `anon:${rawEmail.slice(0, 50)}` : "anonymous";
+
+    let resolvedAttachmentUrl: string | null = null;
+    if (typeof attachmentUrl === "string" && attachmentUrl.startsWith("data:")) {
+      const bytes = Math.ceil((attachmentUrl.length * 3) / 4);
+      if (bytes > 512 * 1024) {
+        res.status(400).json({ error: "Attachment must be under 512 KB." });
+        return;
+      }
+      resolvedAttachmentUrl = attachmentUrl;
+    }
+
+    const [ticket] = await db
+      .insert(supportTicketsTable)
+      .values({
+        accountUsername,
+        userRole: "user",
+        projectId: null,
+        category:
+          typeof category === "string" && category.trim()
+            ? category.trim()
+            : "General",
+        subject: String(subject).trim().slice(0, 255),
+        description: String(description).trim(),
+        attachmentUrl: resolvedAttachmentUrl,
+        status: "open",
+      })
+      .returning();
+    res.status(201).json({ ticket });
+
+    // Alert admin; no ack to the user (no guaranteed email).
+    await sendSupportTicketAlert({
+      ticketId: ticket.id,
+      subject: ticket.subject,
+      category: ticket.category,
+      description: ticket.description,
+      accountUsername: ticket.accountUsername,
+      displayName: rawEmail || undefined,
+    }).catch((err) => {
+      console.error("[support] anon ticket alert email failed", err);
+    });
+  } catch (err) {
+    console.error("[support] POST /tickets/anon", err);
+    res.status(500).json({ error: "Failed to create ticket" });
+  }
+});
+
 // ── POST /api/support/tickets ──────────────────────────────────────────────
 // Auth required: create a support ticket. Account/role/project auto-attached.
 router.post(
