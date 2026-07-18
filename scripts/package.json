@@ -9,6 +9,7 @@
     "restore:list": "tsx ./src/restore-db.ts --list",
     "restore:download": "tsx ./src/restore-db.ts --download",
     "restore:verify": "tsx ./src/restore-db.ts --verify-restore",
+    "seed-staging": "tsx ./src/seed-staging.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -17,6 +18,8 @@
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:",
     "resend": "catalog:"
   }
 }

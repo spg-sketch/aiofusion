@@ -97,6 +97,44 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
 
+#### Available scripts
+
+| Script | Command | Purpose |
+|---|---|---|
+| `hello` | `pnpm --filter @workspace/scripts run hello` | Smoke-test that the scripts package runs |
+| `backup` | `pnpm --filter @workspace/scripts run backup` | Full verified Postgres backup to object storage |
+| `restore:list` | `pnpm --filter @workspace/scripts run restore:list` | List available backups |
+| `restore:download` | `pnpm --filter @workspace/scripts run restore:download` | Download a backup locally |
+| `restore:verify` | `pnpm --filter @workspace/scripts run restore:verify` | Verify a downloaded backup |
+| `seed-staging` | `pnpm --filter @workspace/scripts run seed-staging` | Seed fresh test data into the staging database |
+
+#### Staging seed (`seed-staging`)
+
+`scripts/src/seed-staging.ts` populates a staging database with representative accounts, projects, and audit records so testers always start from a known, realistic state.
+
+**When to run it:** After creating or resetting the staging deployment's database — typically whenever you want a clean test baseline.
+
+**How to run it:**
+
+```bash
+# If DATABASE_URL is already set in the environment (e.g. inside Replit):
+pnpm --filter @workspace/scripts run seed-staging
+
+# Or with an explicit staging URL:
+DATABASE_URL=<staging-database-url> pnpm --filter @workspace/scripts run seed-staging
+```
+
+**What it creates:**
+
+| Type | Details |
+|---|---|
+| Agency account | username: `seed-staging-agency` / password: `Staging-Agency-2026!` |
+| Client account | username: `seed-staging-client` / password: `Staging-Client-2026!` (child of agency) |
+| Projects | Greenleaf Sustainability, FinBridge Capital (owned by agency); HealthNext Diagnostics (owned by client) |
+| Audit records | One Earned Media audit + one GEO diagnostic per project |
+
+The script is **idempotent** — running it multiple times is safe; existing rows are left untouched. It also includes a safety guard that refuses to run if `DATABASE_URL` looks like a production URL (override with `SEED_STAGING_FORCE=1` if needed).
+
 ---
 
 ## Deployment: Production vs Staging
