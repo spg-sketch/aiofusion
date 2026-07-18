@@ -28,6 +28,7 @@ const h = vi.hoisted(() => {
     adminNotes: string | null;
     hasAdminReply: boolean;
     userSeenReply: boolean;
+    emailFailed: boolean;
     createdAt: Date;
   };
 
@@ -152,6 +153,7 @@ const h = vi.hoisted(() => {
     status: { __col: "status" },
     hasAdminReply: { __col: "hasAdminReply" },
     userSeenReply: { __col: "userSeenReply" },
+    emailFailed: { __col: "emailFailed" },
     createdAt: { __col: "createdAt" },
     adminNotes: { __col: "adminNotes" },
   };
@@ -273,6 +275,7 @@ vi.mock("@workspace/db", () => {
               attachmentUrl: null,
               hasAdminReply: false,
               userSeenReply: false,
+              emailFailed: false,
               ...values,
             };
             rows.push(row);
@@ -605,6 +608,7 @@ describe("GET /api/support/tickets", () => {
         adminNotes: null,
         hasAdminReply: true,
         userSeenReply: false,
+        emailFailed: false,
         createdAt: new Date("2024-01-01"),
       },
       {
@@ -620,6 +624,7 @@ describe("GET /api/support/tickets", () => {
         adminNotes: null,
         hasAdminReply: false,
         userSeenReply: false,
+        emailFailed: false,
         createdAt: new Date("2024-01-02"),
       },
     );
@@ -715,6 +720,7 @@ describe("PATCH /api/support/tickets/:id", () => {
       adminNotes: null,
       hasAdminReply: false,
       userSeenReply: false,
+      emailFailed: false,
       createdAt: new Date(),
     });
 
@@ -863,6 +869,58 @@ describe("PATCH /api/support/tickets/:id", () => {
     expect(status).toBe(200);
     expect(json.ticket.status).toBe("closed");
   });
+
+  it("admin can clear the emailFailed flag by sending { emailFailed: false }", async () => {
+    // Seed the ticket with emailFailed=true
+    Object.assign(h.state.tickets[0], { emailFailed: true });
+
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      emailFailed: false,
+    });
+    expect(status).toBe(200);
+    expect(json.ticket.emailFailed).toBe(false);
+
+    // Verify the DB row was actually updated
+    const ticket = h.state.tickets.find((t) => t.id === 1);
+    expect(ticket?.emailFailed).toBe(false);
+  });
+
+  it("clearing emailFailed does not mutate status or other fields", async () => {
+    Object.assign(h.state.tickets[0], { emailFailed: true, status: "in_progress", adminNotes: "Keep this." });
+
+    const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
+      emailFailed: false,
+    });
+    expect(status).toBe(200);
+    expect(json.ticket.emailFailed).toBe(false);
+    expect(json.ticket.status).toBe("in_progress");
+    expect(json.ticket.adminNotes).toBe("Keep this.");
+  });
+
+  it("non-admin cannot clear the emailFailed flag — returns 403", async () => {
+    Object.assign(h.state.tickets[0], { emailFailed: true });
+
+    const nonAdminApp = buildApp({ username: "user1", role: "client" });
+    const { server: s2, baseUrl: url2 } = await listen(nonAdminApp);
+    try {
+      const { status } = await req(url2, "PATCH", "/api/support/tickets/1", {
+        emailFailed: false,
+      });
+      expect(status).toBe(403);
+      // Confirm the flag was NOT cleared
+      const ticket = h.state.tickets.find((t) => t.id === 1);
+      expect(ticket?.emailFailed).toBe(true);
+    } finally {
+      await close(s2);
+    }
+  });
+
+  it("clearing emailFailed on a non-existent ticket returns 404", async () => {
+    const { status } = await req(baseUrl, "PATCH", "/api/support/tickets/9999", {
+      emailFailed: false,
+    });
+    expect(status).toBe(404);
+  });
 });
 
 // ── GET /api/support/tickets/:id/messages ─────────────────────────────────────
@@ -889,6 +947,7 @@ describe("GET /api/support/tickets/:id/messages", () => {
       adminNotes: null,
       hasAdminReply: true,
       userSeenReply: false,
+      emailFailed: false,
       createdAt: new Date(),
     });
     h.state.messages.push(
@@ -995,6 +1054,7 @@ describe("POST /api/support/tickets/:id/messages", () => {
       adminNotes: null,
       hasAdminReply: false,
       userSeenReply: false,
+      emailFailed: false,
       createdAt: new Date(),
     });
   });
@@ -1149,6 +1209,7 @@ describe("POST /api/support/tickets/:id/seen", () => {
       adminNotes: null,
       hasAdminReply: true,
       userSeenReply: false,
+      emailFailed: false,
       createdAt: new Date(),
     });
   });
@@ -1258,6 +1319,7 @@ describe("Ticket thread renders correctly with multiple user and admin messages"
       adminNotes: null,
       hasAdminReply: false,
       userSeenReply: false,
+      emailFailed: false,
       createdAt: new Date("2026-07-10T09:00:00Z"),
     });
   });
