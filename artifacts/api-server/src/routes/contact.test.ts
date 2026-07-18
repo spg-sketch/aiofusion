@@ -16,6 +16,7 @@ const h = vi.hoisted(() => {
     message: string;
     goal: string;
     status: string;
+    emailFailed: boolean;
     createdAt: Date;
   };
 
@@ -45,6 +46,8 @@ const h = vi.hoisted(() => {
     message: { __col: "message" },
     goal: { __col: "goal" },
     status: { __col: "status" },
+    emailFailed: { __col: "emailFailed" },
+    updatedAt: { __col: "updatedAt" },
     createdAt: { __col: "createdAt" },
   };
 
@@ -77,6 +80,7 @@ vi.mock("@workspace/db", () => {
                     message: String(v.message ?? ""),
                     goal: String(v.goal ?? ""),
                     status: String(v.status ?? "pending"),
+                    emailFailed: Boolean(v.emailFailed ?? false),
                     createdAt: new Date(),
                   });
                   resolve([{ id }]);
@@ -94,6 +98,24 @@ vi.mock("@workspace/db", () => {
     insert(table: unknown) {
       return makeChain(table);
     },
+    update(_table: unknown) {
+      return {
+        set(vals: Record<string, unknown>) {
+          return {
+            where(_cond: unknown) {
+              if (vals.emailFailed !== undefined && state.rows.length > 0) {
+                state.rows[state.rows.length - 1].emailFailed = Boolean(vals.emailFailed);
+              }
+              return Promise.resolve();
+            },
+            catch(fn: (err: Error) => void) {
+              void fn;
+              return Promise.resolve();
+            },
+          };
+        },
+      };
+    },
   };
 
   return { db, contactSubmissionsTable };
@@ -106,6 +128,7 @@ const emailMocks = vi.hoisted(() => ({
   sendBookDemoConfirmation: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   sendEnquiryInternalAlert: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   sendEnquiryConfirmation: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  sendContactFormFailedAlert: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
 }));
 
 vi.mock("../lib/notify-email", () => emailMocks);
@@ -167,6 +190,7 @@ describe("POST /contact/book-demo", () => {
     expect(h.state.rows[0].type).toBe("book-demo");
     expect(h.state.rows[0].email).toBe("alice@example.com");
     expect(h.state.rows[0].goal).toBe("Improve our AI visibility.");
+    expect(h.state.rows[0].emailFailed).toBe(false);
 
     expect(emailMocks.sendBookDemoInternalAlert).toHaveBeenCalledOnce();
     expect(emailMocks.sendBookDemoConfirmation).toHaveBeenCalledOnce();
@@ -233,6 +257,8 @@ describe("POST /contact/book-demo", () => {
     });
     expect(r.status).toBe(200);
     expect(h.state.rows).toHaveLength(1);
+    await new Promise((res) => setTimeout(res, 10));
+    expect(h.state.rows[0].emailFailed).toBe(true);
     await close();
   });
 
@@ -330,6 +356,7 @@ describe("POST /contact/enquiry", () => {
     expect(h.state.rows).toHaveLength(1);
     expect(h.state.rows[0].type).toBe("enquiry");
     expect(h.state.rows[0].subject).toBe("Partnership question");
+    expect(h.state.rows[0].emailFailed).toBe(false);
 
     expect(emailMocks.sendEnquiryInternalAlert).toHaveBeenCalledOnce();
     expect(emailMocks.sendEnquiryConfirmation).toHaveBeenCalledOnce();
@@ -411,6 +438,8 @@ describe("POST /contact/enquiry", () => {
     });
     expect(r.status).toBe(200);
     expect(h.state.rows).toHaveLength(1);
+    await new Promise((res) => setTimeout(res, 10));
+    expect(h.state.rows[0].emailFailed).toBe(true);
     await close();
   });
 

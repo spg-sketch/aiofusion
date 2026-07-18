@@ -189,6 +189,9 @@ const PlatformHomePage = lazy(() =>
 const UsersAdminPage = lazy(() =>
   import("./pages/UsersAdminPage").then((m) => ({ default: m.UsersAdminPage }))
 );
+const ContactSubmissionsAdminPage = lazy(() =>
+  import("./pages/ContactSubmissionsAdminPage").then((m) => ({ default: m.ContactSubmissionsAdminPage }))
+);
 const SubAccountsPage = lazy(() =>
   import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }))
 );

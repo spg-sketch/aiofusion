@@ -319,18 +319,14 @@ export async function sendBookDemoInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ["info@aiofusion.ai"],
-      subject,
-      text,
-      html,
-    });
-    logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
-  } catch (err) {
-    logger.warn({ err }, "notify-email: failed to send book demo internal alert (non-fatal)");
-  }
+  await resend.emails.send({
+    from: fromAddress(),
+    to: ["info@aiofusion.ai"],
+    subject,
+    text,
+    html,
+  });
+  logger.info({ email: opts.email }, "notify-email: book demo internal alert sent");
 }
 
 export async function sendBookDemoConfirmation(opts: {
@@ -374,12 +370,8 @@ export async function sendBookDemoConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
   });
 
-  try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-    logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
-  } catch (err) {
-    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send book demo confirmation (non-fatal)");
-  }
+  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  logger.info({ toEmail: opts.toEmail }, "notify-email: book demo confirmation sent");
 }
 
 export async function sendEnquiryInternalAlert(opts: {
@@ -427,18 +419,14 @@ export async function sendEnquiryInternalAlert(opts: {
     cta: { text: "Reply to enquiry", href: `mailto:${opts.email}` },
   });
 
-  try {
-    await resend.emails.send({
-      from: fromAddress(),
-      to: ["info@aiofusion.ai"],
-      subject: emailSubject,
-      text,
-      html,
-    });
-    logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
-  } catch (err) {
-    logger.warn({ err }, "notify-email: failed to send enquiry internal alert (non-fatal)");
-  }
+  await resend.emails.send({
+    from: fromAddress(),
+    to: ["info@aiofusion.ai"],
+    subject: emailSubject,
+    text,
+    html,
+  });
+  logger.info({ email: opts.email }, "notify-email: enquiry internal alert sent");
 }
 
 export async function sendSupportTicketAlert(opts: {
@@ -636,6 +624,72 @@ export async function sendSupportTicketReplyNotification(opts: {
   }
 }
 
+export async function sendContactFormFailedAlert(opts: {
+  submissionId: number;
+  type: "book-demo" | "enquiry";
+  name: string;
+  email: string;
+  company: string;
+  error: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ submissionId: opts.submissionId }, "notify-email: RESEND_API_KEY not set — contact form failed alert not sent");
+    return;
+  }
+
+  const typeLabel = opts.type === "book-demo" ? "Demo Request" : "General Enquiry";
+  const subject = `[AIO Fusion] ALERT — Contact form email delivery failed (#${opts.submissionId})`;
+  const text = [
+    `A contact form submission was received and saved to the database, but`,
+    `the confirmation and alert emails failed to send.`,
+    ``,
+    `Submission ID: #${opts.submissionId}`,
+    `Type:          ${typeLabel}`,
+    `Name:          ${opts.name}`,
+    `Email:         ${opts.email}`,
+    `Company:       ${opts.company || "(not provided)"}`,
+    ``,
+    `Error: ${opts.error}`,
+    ``,
+    `The lead is safe in the database. Log in to the admin panel → Leads to`,
+    `re-send the emails once Resend is back online.`,
+    ``,
+    `Admin panel: https://aiofusion.ai`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Contact Form Email Failed",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        A contact form submission was saved to the database but email delivery failed.
+        The lead is safe — use the admin panel to re-send once Resend is back online.
+      </p>
+      ${buildDataRows([
+        ["Submission ID", `#${opts.submissionId}`],
+        ["Type", typeLabel],
+        ["Name", opts.name],
+        ["Email", opts.email],
+        ["Company", opts.company || "(not provided)"],
+      ])}
+      <p style="margin: 16px 0 6px 0; font-weight: 600; font-size: 13px; color: #475569;">Error:</p>
+      <div style="background: #FFF1F2; border-left: 3px solid #E11D48; padding: 12px 16px;
+                  border-radius: 0 8px 8px 0; font-size: 13px; font-family: monospace; color: #881337;
+                  word-break: break-all;">
+        ${escHtml(opts.error)}
+      </div>
+    `,
+    cta: { text: "Open Leads Panel", href: "https://aiofusion.ai" },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: ALERT_RECIPIENTS, subject, text, html });
+    logger.info({ submissionId: opts.submissionId }, "notify-email: contact form failed alert sent");
+  } catch (err) {
+    logger.warn({ err, submissionId: opts.submissionId }, "notify-email: failed to send contact form failed alert");
+  }
+}
+
 export async function sendEnquiryConfirmation(opts: {
   name: string;
   toEmail: string;
@@ -675,10 +729,6 @@ export async function sendEnquiryConfirmation(opts: {
     cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
   });
 
-  try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-    logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
-  } catch (err) {
-    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send enquiry confirmation (non-fatal)");
-  }
+  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
 }

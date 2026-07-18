@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // Stores every Book a Demo and General Enquiry submission from the marketing
 // site so the team can track leads and mark follow-up status in the admin panel.
@@ -8,10 +8,7 @@ import { pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 //  - `goal`        populated for book-demo submissions only
 //  - `subject`     populated for enquiry submissions only
 //  - `message`     populated for enquiry submissions only
-//  - `emailFailed` "false" (default) | "true" — set to "true" when the
-//                  post-save email dispatch fails so ops can identify and
-//                  manually follow up with leads whose confirmation email
-//                  was not sent.
+//  - `emailFailed` true when Resend delivery failed; cleared on successful re-send
 export const contactSubmissionsTable = pgTable("contact_submissions", {
   id: serial("id").primaryKey(),
   type: varchar("type", { length: 32 }).notNull(),
@@ -22,7 +19,7 @@ export const contactSubmissionsTable = pgTable("contact_submissions", {
   subject: varchar("subject", { length: 256 }),
   message: text("message"),
   status: varchar("status", { length: 32 }).notNull().default("pending"),
-  emailFailed: varchar("email_failed", { length: 8 }).notNull().default("false"),
+  emailFailed: boolean("email_failed").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

@@ -17,6 +17,7 @@ import {
   sendBookDemoConfirmation,
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
+  sendContactFormFailedAlert,
 } from "../lib/notify-email";
 
 const adminRouter = Router();
@@ -1270,7 +1271,7 @@ adminRouter.patch(
       res.status(403).json({ error: "Admin only" });
       return;
     }
-    const id = parseInt(String(req.params.id), 10);
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) {
       res.status(400).json({ error: "Invalid id" });
       return;
@@ -1296,6 +1297,104 @@ adminRouter.patch(
       logger.error({ err, id }, "admin/leads: failed to update status");
       res.status(500).json({ error: "Failed to update status" });
     }
+  },
+);
+
+// ── Leads admin: re-send emails for a failed submission ─────────────────────
+adminRouter.post(
+  "/admin/leads/:id/resend",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+
+    // Fetch the submission
+    let row: (typeof contactSubmissionsTable.$inferSelect) | undefined;
+    try {
+      const rows = await db
+        .select()
+        .from(contactSubmissionsTable)
+        .where(eq(contactSubmissionsTable.id, id))
+        .limit(1);
+      row = rows[0];
+    } catch (err) {
+      logger.error({ err, id }, "admin/leads/resend: DB fetch failed");
+      res.status(500).json({ error: "Failed to fetch submission" });
+      return;
+    }
+
+    if (!row) {
+      res.status(404).json({ error: "Submission not found" });
+      return;
+    }
+
+    // Attempt re-send
+    try {
+      if (row.type === "book-demo") {
+        await Promise.all([
+          sendBookDemoInternalAlert({
+            name: row.name,
+            email: row.email,
+            company: row.company,
+            goal: row.goal ?? "",
+          }),
+          sendBookDemoConfirmation({ name: row.name, toEmail: row.email }),
+        ]);
+      } else if (row.type === "enquiry") {
+        await Promise.all([
+          sendEnquiryInternalAlert({
+            name: row.name,
+            email: row.email,
+            company: row.company,
+            subject: row.subject ?? "",
+            message: row.message ?? "",
+          }),
+          sendEnquiryConfirmation({ name: row.name, toEmail: row.email }),
+        ]);
+      } else {
+        res.status(400).json({ error: `Unknown submission type: ${row.type}` });
+        return;
+      }
+    } catch (err) {
+      logger.error({ err, id }, "admin/leads/resend: email delivery failed");
+      // Update the error timestamp so admins know a retry was attempted
+      await db
+        .update(contactSubmissionsTable)
+        .set({ updatedAt: new Date() })
+        .where(eq(contactSubmissionsTable.id, id))
+        .catch(() => {});
+      // Re-alert so the team knows the retry also failed
+      sendContactFormFailedAlert({
+        submissionId: id,
+        type: row.type as "book-demo" | "enquiry",
+        name: row.name,
+        email: row.email,
+        company: row.company,
+        error: `Re-send attempt failed: ${String(err)}`,
+      }).catch(() => {});
+      res.status(500).json({ error: "Email delivery failed. Resend may still be down.", detail: String(err) });
+      return;
+    }
+
+    // Clear the failure flag on success
+    try {
+      await db
+        .update(contactSubmissionsTable)
+        .set({ emailFailed: false, updatedAt: new Date() })
+        .where(eq(contactSubmissionsTable.id, id));
+    } catch (err) {
+      logger.warn({ err, id }, "admin/leads/resend: could not clear email_failed flag (emails did send)");
+    }
+
+    logger.info({ id, type: row.type, by: req.account?.username }, "admin/leads/resend: emails re-sent successfully");
+    res.json({ ok: true, message: "Emails re-sent successfully." });
   },
 );
 
