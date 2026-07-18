@@ -1238,14 +1238,13 @@ adminRouter.post(
   },
 );
 
-// List recent contact form submissions (admin only).
-// Returns up to 200 rows, most recent first.
+// ── Leads admin: list all contact submissions ────────────────────────────────
 adminRouter.get(
-  "/admin/contact-submissions",
+  "/admin/leads",
   requirePlatformAuth,
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<void> => {
     if (req.account?.role !== "admin") {
-      res.status(403).json({ error: "Admin access required" });
+      res.status(403).json({ error: "Admin only" });
       return;
     }
     try {
@@ -1254,10 +1253,48 @@ adminRouter.get(
         .from(contactSubmissionsTable)
         .orderBy(desc(contactSubmissionsTable.createdAt))
         .limit(200);
-      res.json({ rows });
+      res.json({ submissions: rows });
     } catch (err) {
-      logger.error({ err }, "admin contact-submissions: query failed");
-      res.status(500).json({ error: "Could not load contact submissions." });
+      logger.error({ err }, "admin/leads: failed to fetch");
+      res.status(500).json({ error: "Failed to load leads" });
+    }
+  },
+);
+
+// ── Leads admin: update status for a single submission ──────────────────────
+adminRouter.patch(
+  "/admin/leads/:id/status",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const { status } = req.body as { status?: string };
+    if (status !== "pending" && status !== "actioned") {
+      res.status(400).json({ error: "status must be 'pending' or 'actioned'" });
+      return;
+    }
+    try {
+      const updated = await db
+        .update(contactSubmissionsTable)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(contactSubmissionsTable.id, id))
+        .returning();
+      if (updated.length === 0) {
+        res.status(404).json({ error: "Submission not found" });
+        return;
+      }
+      logger.info({ id, status, by: req.account?.username }, "admin/leads: status updated");
+      res.json({ ok: true, submission: updated[0] });
+    } catch (err) {
+      logger.error({ err, id }, "admin/leads: failed to update status");
+      res.status(500).json({ error: "Failed to update status" });
     }
   },
 );

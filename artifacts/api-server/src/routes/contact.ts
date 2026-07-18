@@ -9,6 +9,7 @@ import {
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
 } from "../lib/notify-email";
+import { db, contactSubmissionsTable } from "@workspace/db";
 
 const contactRouter = Router();
 
@@ -93,6 +94,16 @@ contactRouter.post(
       await Promise.all([
         sendBookDemoInternalAlert({ name, email, company, goal }),
         sendBookDemoConfirmation({ name, toEmail: email }),
+        db.insert(contactSubmissionsTable).values({
+          type: "book-demo",
+          name,
+          email,
+          company,
+          goal,
+          status: "pending",
+        }).catch((err) => {
+          logger.error({ err, email }, "contact/book-demo: failed to persist to DB");
+        }),
       ]);
       logger.info({ savedId, email }, "contact/book-demo: emails dispatched");
     } catch (err) {
@@ -167,6 +178,17 @@ contactRouter.post(
       await Promise.all([
         sendEnquiryInternalAlert({ name, email, company, subject, message }),
         sendEnquiryConfirmation({ name, toEmail: email }),
+        db.insert(contactSubmissionsTable).values({
+          type: "enquiry",
+          name,
+          email,
+          company,
+          subject,
+          message,
+          status: "pending",
+        }).catch((err) => {
+          logger.error({ err, email }, "contact/enquiry: failed to persist to DB");
+        }),
       ]);
       logger.info({ savedId, email }, "contact/enquiry: emails dispatched");
     } catch (err) {

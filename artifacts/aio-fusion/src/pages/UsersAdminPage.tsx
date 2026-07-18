@@ -22,14 +22,14 @@ function UsersAdminPage({
   onAssignProjectOwner,
   onProjectCreated,
   onSupportAdmin,
-  onContactAdmin,
+  onLeadsAdmin,
 }: {
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => void;
   onProjectCreated?: () => void;
   onSupportAdmin?: () => void;
-  onContactAdmin?: () => void;
+  onLeadsAdmin?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -998,9 +998,9 @@ function UsersAdminPage({
           <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
         <div className="flex items-center gap-3">
-          {onContactAdmin && (
+          {onLeadsAdmin && (
             <button
-              onClick={onContactAdmin}
+              onClick={onLeadsAdmin}
               className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
               style={{ borderColor: vars.g200, color: ink, background: "white" }}
             >
