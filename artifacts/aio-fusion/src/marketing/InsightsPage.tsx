@@ -23,9 +23,13 @@ const ARTICLE_IMAGES: Record<string, string> = {
   "article-6-pr-attribution": article6Img,
 };
 
-export default function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean; initialFilter?: string | null; onClearFilter?: () => void }) {
-  const { initialFilter, onClearFilter, ...marketingProps } = props;
-  const [openArticleId, setOpenArticleId] = useState<string | null>(null);
+export default function InsightsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean; initialFilter?: string | null; onClearFilter?: () => void; openArticleId?: string | null; onOpenArticle?: (id: string) => void; onCloseArticle?: () => void }) {
+  const { initialFilter, onClearFilter, openArticleId: controlledArticleId, onOpenArticle, onCloseArticle, ...marketingProps } = props;
+  const openArticleId = controlledArticleId ?? null;
+  const setOpenArticleId = (id: string | null) => {
+    window.scrollTo(0, 0);
+    if (id) onOpenArticle?.(id); else onCloseArticle?.();
+  };
 
   const articles = [
     { id: "pr-professionals-not-threat", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: null, tag: "Article", img: article1Img, accent: vars.accent, external: false },

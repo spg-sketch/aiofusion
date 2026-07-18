@@ -263,11 +263,23 @@ function slugFromLocation(): string {
   return p.replace(/^\/+/, "").replace(/\/+$/, "").split("/")[0].toLowerCase();
 }
 
+function articleIdFromLocation(): string | null {
+  const base = appBase().replace(/\/+$/, "");
+  let p = window.location.pathname;
+  if (base && (p === base || p.startsWith(base + "/"))) p = p.slice(base.length);
+  const parts = p.replace(/^\/+/, "").replace(/\/+$/, "").split("/");
+  if (parts[0]?.toLowerCase() === "insights" && parts[1]) return parts[1].toLowerCase();
+  return null;
+}
+
 function publicViewFromLocation(): PublicView | null {
   return SLUG_TO_VIEW[slugFromLocation()] ?? null;
 }
 
-function viewToUrl(v: string): string {
+function viewToUrl(v: string, insightsArticleId?: string | null): string {
+  if (v === "insights" && insightsArticleId) {
+    return appBase() + "insights/" + insightsArticleId;
+  }
   return appBase() + (VIEW_TO_SLUG[v] ?? "");
 }
 
@@ -295,6 +307,9 @@ function App() {
     return () => window.removeEventListener("aio:saved-audits-changed", handler);
   }, []);
   const [insightsFilter, setInsightsFilter] = useState<string | null>(null);
+  const [insightsArticleId, setInsightsArticleId] = useState<string | null>(() =>
+    (publicViewFromLocation() ?? "landing") === "insights" ? articleIdFromLocation() : null
+  );
   const [clientLogos, setClientLogos] = useState<Record<string, string>>(() => loadClientLogos());
   const [namingProject, setNamingProject] = useState(false);
   const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
@@ -613,13 +628,15 @@ function App() {
   viewRef.current = view;
   const pageRef = useRef(currentPage);
   pageRef.current = currentPage;
+  const insightsArticleIdRef = useRef(insightsArticleId);
+  insightsArticleIdRef.current = insightsArticleId;
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
 
   useEffect(() => {
-    const navState = { __aioNav: true, view, currentPage };
-    const url = viewToUrl(view);
+    const navState = { __aioNav: true, view, currentPage, insightsArticleId };
+    const url = viewToUrl(view, insightsArticleId);
     if (!navInitDone.current) {
       navInitDone.current = true;
       window.history.replaceState(navState, "", url);
@@ -635,23 +652,27 @@ function App() {
       return;
     }
     window.history.pushState(navState, "", url);
-  }, [view, currentPage]);
+  }, [view, currentPage, insightsArticleId]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string } | null;
+      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string; insightsArticleId?: string | null } | null;
       // Prefer the navigation state we pushed; fall back to deriving a public
       // page from the URL (e.g. a directly typed /about or a forward nav).
       const targetView = (
         s && s.__aioNav && s.view ? s.view : (publicViewFromLocation() ?? "landing")
       ) as typeof view;
       const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
+      const targetArticleId = s && s.__aioNav
+        ? (s.insightsArticleId ?? null)
+        : (targetView === "insights" ? articleIdFromLocation() : null);
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
-      if (targetView !== viewRef.current || targetPage !== pageRef.current) {
+      if (targetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current) {
         skipHistoryPush.current = true;
         setView(targetView);
         setCurrentPage(targetPage);
+        setInsightsArticleId(targetArticleId);
       }
       window.scrollTo(0, 0);
     };
@@ -709,7 +730,7 @@ function App() {
 
   const goToView = (v: string) => {
     if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "terms-conditions") {
-      if (v === "insights") setInsightsFilter(null);
+      if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
       setView(v as any);
       window.scrollTo(0, 0);
     } else if (v === "landing" || v === "landing-b" || v === "landing-c") {
@@ -734,7 +755,7 @@ function App() {
     return <ForAgenciesPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
   }
   if (view === "insights") {
-    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} initialFilter={insightsFilter} onClearFilter={() => setInsightsFilter(null)} />;
+    return <InsightsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} initialFilter={insightsFilter} onClearFilter={() => setInsightsFilter(null)} openArticleId={insightsArticleId} onOpenArticle={setInsightsArticleId} onCloseArticle={() => setInsightsArticleId(null)} />;
   }
   if (view === "about") {
     return <AboutPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />;
