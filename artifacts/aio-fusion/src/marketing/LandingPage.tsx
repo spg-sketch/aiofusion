@@ -26,8 +26,8 @@ import step3Img from "../assets/photos/photo-plan.jpg";
 import step4Img from "../assets/photos/photo-optimise.jpg";
 import step5Img from "../assets/photos/photo-measure.jpg";
 import blogTile1 from "../assets/blog-tile-1.png";
-import blogTile2 from "../assets/blog-tile-2.png";
-import blogTile3 from "../assets/blog-tile-3.png";
+import article1Img from "../assets/article-1-pr-ai.png";
+import article2Img from "../assets/article-2-thought-leadership.png";
 import heroBgImg from "../assets/hero-bg.png";
 
 const llmEngines = [
@@ -259,8 +259,8 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
-              { img: blogTile2, tag: "Article", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: null, external: false, accent: accent },
-              { img: blogTile3, tag: "Playbook", title: "From SEO to AIO: a transition playbook", excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.", url: null, external: false, accent: vars.gold },
+              { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: null, external: false, accent: accent },
+              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.", url: null, external: false, accent: vars.gold },
             ].map((a) => (
               <a key={a.title} href={a.url ?? undefined} onClick={!a.external ? (e) => { e.preventDefault(); onNavigate("insights"); } : undefined} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
