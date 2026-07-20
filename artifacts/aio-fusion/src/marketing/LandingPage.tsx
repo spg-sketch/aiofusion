@@ -237,8 +237,8 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
             <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
             {llmEngines.map((engine) => (
               engine.logo
-                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-7 object-contain" />
-                : <span key={engine.name} className="px-3 py-1 rounded-full text-[12px] font-semibold border" style={{ color: ink, borderColor: vars.g300, background: "white" }}>{engine.name}</span>
+                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-10 object-contain" />
+                : <span key={engine.name} className="text-[13px] font-semibold" style={{ color: ink }}>{engine.name}</span>
             ))}
           </div>
         </div>
