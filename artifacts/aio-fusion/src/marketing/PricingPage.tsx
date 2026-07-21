@@ -148,12 +148,14 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   }
 
   const navLinks = [
+    { l: "Home", v: "landing" },
     { l: "Features", v: "landing#features" },
     { l: "For In-house", v: "for-inhouse" },
     { l: "For PR Agencies", v: "for-agencies" },
     { l: "Pricing", v: "pricing" },
     { l: "Insights", v: "insights" },
     { l: "Contact", v: "contact" },
+    { l: "About", v: "about" },
   ];
 
   return (
@@ -173,7 +175,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
           </button>
           <div className="hidden md:flex items-center gap-6">
             {navLinks.map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: it.v === "pricing" ? accent : ink }}>{it.l}</button>
+              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: ink }}>{it.l}</button>
             ))}
             <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
               {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
