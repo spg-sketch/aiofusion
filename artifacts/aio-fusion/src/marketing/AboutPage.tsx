@@ -6,13 +6,10 @@ export default function AboutPage(props: { onLogin: () => void; onBack: () => vo
   return (
     <MarketingPage title="Designed by PR consultants. Built with deep tech expertise." eyebrow={<><Users size={12} /> About AIO Fusion</> as any} {...props}>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-        AIO Fusion was created by experts from the PR, business marketing and tech development worlds to help in-house teams answer the communications challenges of the AI age.
-      </p>
-      <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
-        It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.
+        AIO Fusion is a Generative Engine Optimisation (GEO) platform which measures in real time how visible your brand is to AI search engines such as ChatGPT and Claude.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
-        Feed your business messaging, PR content and marketing plans into AIO Fusion and receive visibility diagnostics, planning advice, optimised content creation and measurement across it all. Our platform offers in-house teams a rapid, cost-effective route to achieving business visibility for AI and human audiences.
+        The platform's suite of tools allows you to improve that visibility systematically through earned media and website content. Supporting PR and marketing strategy, media relations, measurement and reporting, AIO Fusion AI-optimises PR and marketing at scale, through one easy-to-use platform.
       </p>
 
       <h2 className="text-[24px] mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Built on decades of experience</h2>
