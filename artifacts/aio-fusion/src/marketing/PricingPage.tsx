@@ -22,10 +22,12 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       tagline: "For B2B and B2C in-house teams building AI authority for a single brand.",
       annualTotal: 4000,
       monthly: 333,
+      quarterly: 4600,
+      quarterlyMonthly: 383,
       color: teal,
       highlight: false,
       cta: "Book a Demo",
-      projects: "1 brand / project",
+      projects: "1 Premium brand/project",
       competitorNote: "CisionOne AI from £15,000–£40,000+/yr. AIO Fusion pays for itself in one client engagement.",
       includes: [
         "Full Standard platform - all 10 modules",
@@ -38,7 +40,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         "Website Content GEO and Technical GEO",
         "Measure and Report - PR impact and AI authority",
         "Content Library - long-term content curation",
-        "Additional projects at £500/yr each",
         "Email support",
       ],
     },
@@ -46,19 +47,20 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       key: "agency",
       name: "Standard",
       sub: "Agency",
-      tagline: "For PR agencies running AI visibility programmes for multiple clients.",
+      tagline: "For PR and digital marketing agencies running AI visibility programmes for multiple clients.",
       annualTotal: 5000,
       monthly: 417,
+      quarterly: 5750,
+      quarterlyMonthly: 479,
       color: accent,
       highlight: true,
       cta: "Book a Demo",
-      projects: "3 projects included",
+      projects: "3 Premium projects included",
       competitorNote: "Typically recovered by billing a single client £500/month for AI visibility services.",
       includes: [
         "Everything in Standard In-House, plus:",
         "Multi-client architecture and agency dashboard",
-        "3 projects included - each a full brand workspace",
-        "Additional projects at £500/yr each (10 projects = £9,500/yr)",
+        "3 Premium projects included - each a full brand workspace",
         "Client sub-accounts and reporting",
         "Priority email and chat support",
       ],
@@ -94,7 +96,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ── end WITH AGENTS ── */
 
   const TABLE_ROWS: PlanFeature[] = [
-    { label: "Brands / projects", inhouse: "1 (+£500/yr each)", agency: "3 included (+£500/yr each)", agentic: "3 included (+£500/yr each)" },
+    { label: "Brands / projects", inhouse: "1 Premium brand/project", agency: "3 Premium projects included", agentic: "3 Premium projects included" },
     { label: "AI Visibility Audit + GEO strategy", inhouse: true, agency: true, agentic: true },
     { label: "Comms Planner", inhouse: true, agency: true, agentic: true },
     { label: "Content Optimiser and Editor", inhouse: true, agency: true, agentic: true },
@@ -120,9 +122,15 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   const FAQS = [
     { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Content Library. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
     { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through Claude and ChatGPT simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
-    { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 projects. You can add further projects at £500/yr each. For example, 10 projects would total £9,500/yr." },
+    { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 Premium projects. You can add further projects at Standard, Premium, or Max tier — see the additional project tiers on this page for details." },
     { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },
     { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details." },
+  ];
+
+  const ADDITIONAL_PROJECT_TIERS = [
+    { name: "Standard", price: 500, actions: 50, color: teal },
+    { name: "Premium", price: 650, actions: 75, color: accent },
+    { name: "Max", price: 800, actions: 150, color: agenticGold },
   ];
 
   function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
@@ -143,7 +151,15 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
 
   return (
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(251,246,236,0.95)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
+
+      {/* Beta banner */}
+      <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center px-4 py-2 text-center" style={{ background: "#F59E0B", minHeight: "40px" }}>
+        <p className="text-[12px] font-semibold" style={{ color: "#78350F" }}>
+          AIO Fusion is in Beta — please note that all pricing is currently indicative
+        </p>
+      </div>
+
+      <nav className="fixed left-0 right-0 z-50 backdrop-blur-md" style={{ top: "40px", background: "rgba(251,246,236,0.95)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
           <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
@@ -169,7 +185,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       </nav>
 
       {/* Hero */}
-      <section className="pt-[110px] sm:pt-[130px] pb-12 sm:pb-16 text-center px-4">
+      <section className="pt-[150px] sm:pt-[170px] pb-12 sm:pb-16 text-center px-4">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
           <Sparkles size={11} color={accent} />
           <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Transparent Pricing</span>
@@ -183,7 +199,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       </section>
 
       {/* Pricing cards */}
-      <section className="pb-16 px-4 sm:px-8">
+      <section className="pb-10 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
 
           {/* Standard plans group label */}
@@ -209,6 +225,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
                       <span className="text-[13px]" style={{ color: vars.g400 }}>/mo</span>
                     </div>
                     <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>£{plan.annualTotal.toLocaleString()}/yr billed annually · {plan.projects}</p>
+                    <p className="text-[11px] mt-2 pt-2" style={{ color: vars.g400, borderTop: `1px solid ${vars.g100}` }}>
+                      Or <span className="font-semibold" style={{ color: ink }}>£{plan.quarterlyMonthly}/month · £{plan.quarterly.toLocaleString()}/yr</span> billed quarterly
+                    </p>
                   </div>
                   <button onClick={() => onNavigate("contact")} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6" style={{ background: plan.highlight ? accent : ink, color: "white" }}>
                     {plan.cta}
@@ -233,6 +252,37 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             ))}
           </div>
 
+        </div>
+      </section>
+
+      {/* Additional Projects section */}
+      <section className="pb-16 px-4 sm:px-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: vars.g400 }}>Additional Projects</span>
+            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-4 mb-5">
+            {ADDITIONAL_PROJECT_TIERS.map((tier) => (
+              <div key={tier.name} className="rounded-xl p-5 flex flex-col gap-2" style={{ border: `1px solid ${vars.g200}`, background: "white" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: tier.color }}>{tier.name}</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: `${tier.color}15`, color: tier.color }}>{tier.actions} actions/mo</span>
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
+                  <span className="text-[32px] font-bold leading-none" style={{ color: ink }}>{tier.price}</span>
+                  <span className="text-[12px]" style={{ color: vars.g400 }}>/yr per project</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[12px] font-light leading-relaxed text-center max-w-2xl mx-auto" style={{ color: vars.g500 }}>
+            One action = one LLM input and output task (e.g. creating an article, optimising content, media search). AIO Fusion uses a dual LLM engine.
+          </p>
         </div>
       </section>
 
@@ -263,6 +313,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               </div>
             ))}
           </div>
+          <p className="text-[11px] font-light mt-4 text-center" style={{ color: vars.g400 }}>
+            Additional projects available in Standard, Premium, and Max tiers — see project tier pricing above.
+          </p>
         </div>
       </section>
 
