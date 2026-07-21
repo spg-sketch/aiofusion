@@ -135,9 +135,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ];
 
   const ADDITIONAL_PROJECT_TIERS = [
-    { name: "Standard", price: 500, articles: 50, color: teal },
-    { name: "Premium", price: 650, articles: 100, color: accent },
-    { name: "Max", price: 800, articles: 150, color: agenticGold },
+    { name: "Standard", price: 500, actions: 50, color: teal },
+    { name: "Premium", price: 650, actions: 75, color: accent },
+    { name: "Max", price: 800, actions: 150, color: agenticGold },
   ];
 
   function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
@@ -258,24 +258,37 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       </section>
 
       {/* Additional Projects section */}
-      <section className="pb-16 px-4 sm:px-8">
+      <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: vars.g400 }}>Need Additional Projects?</span>
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
+          <div className="mb-10">
+            <h2 className="text-3xl md:text-4xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Additional Project Pricing</h2>
+            <p className="text-[16px] font-light leading-[1.8] mb-4 max-w-2xl" style={{ color: vars.g600 }}>
+              Because no two clients are the same, we have created three price brackets for additional projects to add to your plan.
+            </p>
+            <p className="text-[15px] font-light leading-[1.7] mb-4 max-w-2xl" style={{ color: vars.g500 }}>
+              Each 'action' refers to the number of pieces of content you create and optimise and/or marketing and media intelligence searches run per month.
+            </p>
+            <p className="text-[15px] font-semibold mb-8" style={{ color: ink }}>
+              Choose the activity level to match your client or brand requirements:
+            </p>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4 mb-5">
+          <div className="flex flex-col gap-4 max-w-2xl">
             {ADDITIONAL_PROJECT_TIERS.map((tier) => (
-              <div key={tier.name} className="rounded-xl p-5 flex flex-col gap-2" style={{ border: `1px solid ${vars.g200}`, background: "white" }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: tier.color }}>{tier.name}</span>
+              <div key={tier.name} className="rounded-2xl p-6 flex items-center justify-between" style={{ border: `1.5px solid ${tier.color}30`, background: `${tier.color}08` }}>
+                <div className="flex items-center gap-5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.2em] w-20 flex-shrink-0" style={{ color: tier.color }}>{tier.name}</span>
+                  <div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
+                      <span className="text-[36px] font-bold leading-none" style={{ color: ink }}>{tier.price}</span>
+                      <span className="text-[13px]" style={{ color: vars.g400 }}>/yr per additional project</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
-                  <span className="text-[32px] font-bold leading-none" style={{ color: ink }}>{tier.price}</span>
-                  <span className="text-[12px]" style={{ color: vars.g400 }}>/yr per project</span>
+                <div className="text-right flex-shrink-0 ml-6">
+                  <span className="text-[22px] font-bold" style={{ color: tier.color }}>×{tier.actions}</span>
+                  <p className="text-[11px] font-medium mt-0.5" style={{ color: vars.g500 }}>actions/month</p>
                 </div>
               </div>
             ))}
