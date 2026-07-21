@@ -28,7 +28,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       highlight: false,
       cta: "Book a Demo",
       projects: "1 Premium brand/project",
-      competitorNote: "CisionOne AI from £15,000–£40,000+/yr. AIO Fusion pays for itself in one client engagement.",
       includes: [
         "Full Standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
@@ -56,7 +55,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       highlight: true,
       cta: "Book a Demo",
       projects: "3 Premium projects included",
-      competitorNote: "Typically recovered by billing a single client £500/month for AI visibility services.",
       includes: [
         "Full Standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
@@ -247,7 +245,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
                       </li>
                     ))}
                   </ul>
-                  <p className="text-[11px] mt-6 pt-5 leading-relaxed" style={{ color: vars.g400, borderTop: `1px solid ${vars.g100}` }}>{plan.competitorNote}</p>
                 </div>
               </div>
             ))}
