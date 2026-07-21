@@ -27,7 +27,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       color: teal,
       highlight: false,
       cta: "Book a Demo",
-      projects: "1 Premium brand/project",
+      projects: "1 Premium project",
       includes: [
         "Full standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
