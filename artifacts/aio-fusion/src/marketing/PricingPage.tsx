@@ -202,19 +202,11 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       <section className="pb-10 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
 
-          {/* Standard plans group label */}
-          <div className="flex items-center gap-3 mb-5">
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: teal }}>Standard</span>
-            <div className="h-px flex-1" style={{ background: vars.g200 }} />
-          </div>
-
           <div className="grid sm:grid-cols-2 gap-5 mb-8">
             {STANDARD_PLANS.map((plan) => (
               <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.key === "agency" ? `2px solid ${accent}` : `2px solid ${ink}`, background: "white", boxShadow: plan.key === "agency" ? `0 20px 48px -12px ${accent}30` : `0 20px 48px -12px rgba(16,43,54,0.15)` }}>
                 <div className="p-7 flex flex-col flex-1">
                   <div className="mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: plan.color }}>{plan.name}</span>
                     <h2 className="text-[26px] mt-0.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.sub}</h2>
                   </div>
                   <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{plan.tagline}</p>
@@ -297,12 +289,10 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             <div className="grid grid-cols-3" style={{ background: vars.g50, borderBottom: `1px solid ${vars.g200}` }}>
               <div className="p-4" />
               <div className="p-4 text-center">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: teal }}>Standard</p>
-                <p className="text-[12px] font-semibold mt-0.5" style={{ color: ink }}>In-House</p>
+                <p className="text-[12px] font-semibold" style={{ color: ink }}>In-House</p>
               </div>
               <div className="p-4 text-center">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Standard</p>
-                <p className="text-[12px] font-semibold mt-0.5" style={{ color: ink }}>Agency</p>
+                <p className="text-[12px] font-semibold" style={{ color: ink }}>Agency</p>
               </div>
             </div>
             {TABLE_ROWS.filter(row => row.inhouse !== false || row.agency !== false).map((row, i) => (
