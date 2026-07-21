@@ -258,7 +258,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-3 mb-6">
             <div className="h-px flex-1" style={{ background: vars.g200 }} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: vars.g400 }}>Additional Projects</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.26em]" style={{ color: vars.g400 }}>Need Additional Projects?</span>
             <div className="h-px flex-1" style={{ background: vars.g200 }} />
           </div>
 
