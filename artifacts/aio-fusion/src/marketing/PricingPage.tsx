@@ -192,17 +192,19 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       </nav>
 
       {/* Hero */}
-      <section className="pt-[150px] sm:pt-[170px] pb-12 sm:pb-16 text-center px-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
-          <Sparkles size={11} color={accent} />
-          <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Transparent Pricing</span>
+      <section className="pt-[150px] sm:pt-[170px] pb-12 sm:pb-16 px-4 sm:px-8">
+        <div className="max-w-5xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-5" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
+            <Sparkles size={11} color={accent} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Transparent Pricing</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.1] mb-4 max-w-3xl" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+            Plans built for PR and marketing teams
+          </h1>
+          <p className="text-[15px] font-light max-w-xl mb-4 leading-relaxed" style={{ color: vars.g600 }}>
+            Annual subscriptions. No hidden costs. All prices exclude VAT.
+          </p>
         </div>
-        <h1 className="text-4xl md:text-5xl lg:text-[3.5rem] leading-[1.1] mb-4 max-w-3xl mx-auto" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-          Plans built for PR and marketing teams
-        </h1>
-        <p className="text-[15px] font-light max-w-xl mx-auto mb-4 leading-relaxed" style={{ color: vars.g600 }}>
-          Annual subscriptions. No hidden costs. All prices exclude VAT.
-        </p>
       </section>
 
       {/* Pricing cards */}
