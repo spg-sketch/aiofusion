@@ -135,9 +135,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   ];
 
   const ADDITIONAL_PROJECT_TIERS = [
-    { name: "Standard", price: 500, actions: 50, color: teal },
-    { name: "Premium", price: 650, actions: 75, color: accent },
-    { name: "Max", price: 800, actions: 150, color: agenticGold },
+    { name: "Standard", price: 500, articles: 50, color: teal },
+    { name: "Premium", price: 650, articles: 100, color: accent },
+    { name: "Max", price: 800, articles: 150, color: agenticGold },
   ];
 
   function Cell({ v, agentic }: { v: string | boolean; agentic?: boolean }) {
@@ -267,6 +267,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               <div key={tier.name} className="rounded-xl p-5 flex flex-col gap-2" style={{ border: `1px solid ${vars.g200}`, background: "white" }}>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: tier.color }}>{tier.name}</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: `${tier.color}15`, color: tier.color }}>{tier.articles} articles/mo</span>
                 </div>
                 <div className="flex items-baseline gap-1">
                   <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
