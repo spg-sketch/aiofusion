@@ -29,7 +29,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       cta: "Book a Demo",
       projects: "1 Premium brand/project",
       includes: [
-        "Full Standard platform - all 10 modules",
+        "Full standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
         "Comms Planner - plan, score and manage schedules",
         "Content Optimiser and Editor",
@@ -56,7 +56,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       cta: "Book a Demo",
       projects: "3 Premium projects included",
       includes: [
-        "Full Standard platform - all 10 modules",
+        "Full standard platform - all 10 modules",
         "AI Visibility Audit + GEO strategy builder",
         "Comms Planner - plan, score and manage schedules",
         "Content Optimiser and Editor",
@@ -218,7 +218,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
                   <div className="mb-1">
                     <h2 className="text-[26px] mt-0.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.sub}</h2>
                   </div>
-                  <p className="text-[13px] font-light leading-relaxed mb-6" style={{ color: vars.g500 }}>{plan.tagline}</p>
+                  <p className="text-[13px] font-light leading-relaxed mb-6 min-h-[40px]" style={{ color: vars.g500 }}>{plan.tagline}</p>
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
                       <span className="text-[13px] font-semibold" style={{ color: vars.g500 }}>£</span>
