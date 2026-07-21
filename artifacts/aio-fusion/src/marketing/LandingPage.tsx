@@ -233,12 +233,12 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-6 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
+          <div className="flex flex-wrap items-center justify-center gap-10 pt-10 mt-10 border-t" style={{ borderColor: `${vars.g300}` }}>
+            <p className="text-[30px] font-bold uppercase tracking-[0.22em]" style={{ color: vars.g500 }}>Optimised for</p>
             {llmEngines.map((engine) => (
               engine.logo
-                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-10 object-contain" />
-                : <span key={engine.name} className="text-[13px] font-semibold" style={{ color: ink }}>{engine.name}</span>
+                ? <img key={engine.name} src={engine.logo} alt={engine.name} className="h-[120px] object-contain" />
+                : <span key={engine.name} className="text-[39px] font-semibold" style={{ color: ink }}>{engine.name}</span>
             ))}
           </div>
         </div>
