@@ -281,9 +281,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
             ))}
           </div>
 
-          <p className="text-[12px] font-light leading-relaxed text-center max-w-2xl mx-auto" style={{ color: vars.g500 }}>
-            One action = one LLM input and output task (e.g. creating an article, optimising content, media search). AIO Fusion uses a dual LLM engine.
-          </p>
         </div>
       </section>
 
