@@ -309,9 +309,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               </div>
             ))}
           </div>
-          <p className="text-[11px] font-light mt-4 text-center" style={{ color: vars.g400 }}>
-            Additional projects available in Standard, Premium, and Max tiers — see project tier pricing above.
-          </p>
         </div>
       </section>
 
