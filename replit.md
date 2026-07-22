@@ -152,7 +152,7 @@ This project uses **two separate Replit Deployments** to keep experimental featu
 
 ### Staging deployment
 
-- URL: `aio-fusion-staging.replit.app` (a second deployment created from the same codebase)
+- URL: `staging.aiofusion.ai` (a second deployment created from the same codebase)
 - Used by internal testers and developers to validate experimental features before they reach clients.
 - Has its own isolated database (separate `DATABASE_URL`) so no client data is ever at risk.
 - Staging-specific secrets (set in the staging deployment's secret manager):
