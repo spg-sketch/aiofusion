@@ -179,3 +179,9 @@ id = "DVdFRa-GS8rTuzPyyUy2o"
 uri = "file://investor-faq.md"
 type = "text"
 title = "Investor Technical Due Diligence FAQ"
+
+[[outputs]]
+id = "xuztEBNe0sMw264AIWkUw"
+uri = "file://aio-fusion-august-roadmap.pdf"
+type = "pdf"
+title = "AIO Fusion — August Roadmap & Architecture"
