@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIO Fusion — August Build Plan</title>
+<title>AIO Fusion - August Build Plan</title>
 <style>
   :root {
     --ink:    #102B36;
@@ -464,7 +464,7 @@
     <div class="block">
       <div class="block-title">Why this comes first</div>
       <div class="block-body">
-        <p style="color:var(--g700);font-size:13.5px;line-height:1.6;">All of the login, SSO, permissions, and Stripe work in the tasks below must be built and tested without touching the live demo — active demo users must not be affected. A staging environment gives us a safe, isolated copy of the platform where every change can be validated before it reaches real clients.</p>
+        <p style="color:var(--g700);font-size:13.5px;line-height:1.6;">All of the login, SSO, permissions, and Stripe work in the tasks below must be built and tested without touching the live demo - active demo users must not be affected. A staging environment gives us a safe, isolated copy of the platform where every change can be validated before it reaches real clients.</p>
       </div>
     </div>
 
@@ -473,7 +473,7 @@
       <div class="block-body">
         <ul class="done-list">
           <li><span class="done-check">✓</span>A separate deployment exists at a staging subdomain (staging.aiofusion.ai)</li>
-          <li><span class="done-check">✓</span>Staging has its own PostgreSQL database — completely separate from production</li>
+          <li><span class="done-check">✓</span>Staging has its own PostgreSQL database - completely separate from production</li>
           <li><span class="done-check">✓</span>Staging has its own environment variables; no secrets are shared with live</li>
           <li><span class="done-check">✓</span>A seed script populates staging with test accounts: admin, agency/partner, and client roles</li>
           <li><span class="done-check">✓</span>Google OAuth redirect URIs updated so Google SSO works on staging without affecting live</li>
@@ -487,12 +487,12 @@
       <div class="block-title">Steps</div>
       <div class="block-body">
         <ol class="steps-list">
-          <li><span class="step-num" style="background:var(--teal);">1</span><div class="step-body"><span class="step-title">Fork the project into a new Replit app</span> — duplicate the monorepo into a separate Replit project configured to deploy to the staging subdomain; own Replit Secrets section, no shared values.</div></li>
-          <li><span class="step-num" style="background:var(--teal);">2</span><div class="step-body"><span class="step-title">Provision a separate database</span> — create a new PostgreSQL database for staging, run all migrations against it, confirm the connection string is staging-only.</div></li>
-          <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body"><span class="step-title">Wire staging environment variables</span> — set all required secrets (auth keys, Google OAuth redirect URIs pointing to staging URL) in the staging app.</div></li>
-          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><span class="step-title">Update Google OAuth config</span> — add staging domain as an authorised redirect URI in Google Cloud Console; leave live config untouched.</div></li>
-          <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body"><span class="step-title">Write and run a seed script</span> — repeatable script that creates: one admin account, one Agency/Partner account with two client sub-accounts, and a sample project per client.</div></li>
-          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body"><span class="step-title">Smoke-test</span> — verify login, Google SSO, and project loading all work on staging before declaring it ready.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">1</span><div class="step-body"><span class="step-title">Fork the project into a new Replit app</span> - duplicate the monorepo into a separate Replit project configured to deploy to the staging subdomain; own Replit Secrets section, no shared values.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">2</span><div class="step-body"><span class="step-title">Provision a separate database</span> - create a new PostgreSQL database for staging, run all migrations against it, confirm the connection string is staging-only.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body"><span class="step-title">Wire staging environment variables</span> - set all required secrets (auth keys, Google OAuth redirect URIs pointing to staging URL) in the staging app.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><span class="step-title">Update Google OAuth config</span> - add staging domain as an authorised redirect URI in Google Cloud Console; leave live config untouched.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body"><span class="step-title">Write and run a seed script</span> - repeatable script that creates: one admin account, one Agency/Partner account with two client sub-accounts, and a sample project per client.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body"><span class="step-title">Smoke-test</span> - verify login, Google SSO, and project loading all work on staging before declaring it ready.</div></li>
         </ol>
       </div>
     </div>
@@ -524,7 +524,7 @@
 
     <div class="note note-blue">
       <span class="note-icon">🏷</span>
-      <div><strong>Terminology note:</strong> The user-facing label throughout the product is <strong>Agency/Partner</strong> — never "Reseller". Internal code may retain "reseller" to avoid a migration. Microsoft SSO is always labelled <strong>"Sign in with Microsoft"</strong> or <strong>Microsoft Entra ID</strong> — never "Teams SSO".</div>
+      <div><strong>Terminology note:</strong> The user-facing label throughout the product is <strong>Agency/Partner</strong> - never "Reseller". Internal code may retain "reseller" to avoid a migration. Microsoft SSO is always labelled <strong>"Sign in with Microsoft"</strong> or <strong>Microsoft Entra ID</strong> - never "Teams SSO".</div>
     </div>
 
     <div class="block">
@@ -554,7 +554,7 @@
         </div>
         <div class="note note-gold" style="margin-top:14px;">
           <span class="note-icon">⚠</span>
-          <div>Seat limits are configurable per account in the database — 3 is the launch default for all non-master tiers. Patrick to confirm if limits vary by package.</div>
+          <div>Seat limits are configurable per account in the database - 3 is the launch default for all non-master tiers. Patrick to confirm if limits vary by package.</div>
         </div>
       </div>
     </div>
@@ -580,7 +580,7 @@
             <tr><td>Viewer</td><td>Assigned only</td><td>Read-only</td><td class="cross">✗</td><td class="cross">✗</td></tr>
           </tbody>
         </table>
-        <p style="font-size:12px;color:var(--g500);margin-top:10px;">Billing contact: a separate billing email field per account — invoices are sent there regardless of who the Owner is. VAT number stored on account and shown on Stripe invoices.</p>
+        <p style="font-size:12px;color:var(--g500);margin-top:10px;">Billing contact: a separate billing email field per account - invoices are sent there regardless of who the Owner is. VAT number stored on account and shown on Stripe invoices.</p>
       </div>
     </div>
 
@@ -598,11 +598,11 @@
             </tr>
             <tr>
               <td>Technical</td>
-              <td>Usage dashboard, impersonation (debug), audit log, system health — no flags, no user management, no restore</td>
+              <td>Usage dashboard, impersonation (debug), audit log, system health - no flags, no user management, no restore</td>
             </tr>
             <tr>
               <td>Operational Support</td>
-              <td>View accounts, impersonation (support), usage dashboard read-only — no flags, no deletions, no master user management</td>
+              <td>View accounts, impersonation (support), usage dashboard read-only - no flags, no deletions, no master user management</td>
             </tr>
           </tbody>
         </table>
@@ -620,14 +620,14 @@
           <li><span class="step-num" style="background:var(--teal);">1</span><div class="step-body">User arrives → clicks Sign Up</div></li>
           <li><span class="step-num" style="background:var(--teal);">2</span><div class="step-body">Chooses: <strong>Email + password</strong>, <strong>Sign in with Google</strong>, or <strong>Sign in with Microsoft</strong></div></li>
           <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body">Email/password: verification email sent (expires 24h); click to confirm; resend option available</div></li>
-          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><strong>Organic signups only:</strong> account type selection — Agency/Partner or Client (described by behaviour, not jargon)</div></li>
+          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><strong>Organic signups only:</strong> account type selection - Agency/Partner or Client (described by behaviour, not jargon)</div></li>
           <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body">Company details: name, website, billing email, VAT number (optional)</div></li>
           <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body">→ Stripe Checkout for chosen plan (task #384)</div></li>
           <li><span class="step-num" style="background:var(--teal);">7</span><div class="step-body">Payment success → Dashboard. <strong>No admin approval queue.</strong></div></li>
         </ol>
         <div class="note note-blue" style="margin-top:14px;">
           <span class="note-icon">💡</span>
-          <div><strong>Invited users</strong> (staff and clients invited by an Agency/Partner) skip steps 4–6 entirely — their role and account context are set at invite time. They go straight to set-password / SSO → dashboard.</div>
+          <div><strong>Invited users</strong> (staff and clients invited by an Agency/Partner) skip steps 4–6 entirely - their role and account context are set at invite time. They go straight to set-password / SSO → dashboard.</div>
         </div>
       </div>
     </div>
@@ -690,7 +690,7 @@
         </table>
         <div class="note note-gold" style="margin-top:12px;">
           <span class="note-icon">⚠</span>
-          <div>Agency/Partner suspension cascades to all staff and clients beneath it. The client-facing suspended message is kept neutral: "Access is currently unavailable — please contact [agency]" — the Agency/Partner's payment status is never disclosed to their clients.</div>
+          <div>Agency/Partner suspension cascades to all staff and clients beneath it. The client-facing suspended message is kept neutral: "Access is currently unavailable - please contact [agency]" - the Agency/Partner's payment status is never disclosed to their clients.</div>
         </div>
       </div>
     </div>
@@ -699,9 +699,9 @@
       <div class="block-title">Security &amp; compliance highlights</div>
       <div class="block-body">
         <ul class="done-list">
-          <li><span class="done-check">✓</span><strong>Session revocation is immediate</strong> — a removed or suspended user cannot survive on an existing session. A <code>session_version</code> counter per user ensures stale sessions are rejected at the next request.</li>
+          <li><span class="done-check">✓</span><strong>Session revocation is immediate</strong> - a removed or suspended user cannot survive on an existing session. A <code>session_version</code> counter per user ensures stale sessions are rejected at the next request.</li>
           <li><span class="done-check">✓</span><strong>MFA mandatory for master accounts (TOTP)</strong>; strongly prompted for Agency/Partner Admins; available to all users.</li>
-          <li><span class="done-check">✓</span><strong>Impersonation guardrails</strong> — every impersonation session is logged (who, which account, start/end). Blocked actions while impersonating: change account password/email, delete account.</li>
+          <li><span class="done-check">✓</span><strong>Impersonation guardrails</strong> - every impersonation session is logged (who, which account, start/end). Blocked actions while impersonating: change account password/email, delete account.</li>
           <li><span class="done-check">✓</span><strong>Data retention:</strong> hard-delete has 30-day recovery window; financial records retained 6 years (HMRC). GDPR erasure requests use the same pipeline.</li>
           <li><span class="done-check">✓</span><strong>Rate limiting</strong> on all auth endpoints with progressive lockout after 5 failed attempts.</li>
           <li><span class="done-check">✓</span><strong>Password reset:</strong> identical response whether email exists or not (no enumeration). Single-use links, 1-hour expiry.</li>
@@ -718,7 +718,7 @@
           <li><span class="done-check">✓</span>Account type selection (Agency/Partner vs Client) at signup</li>
           <li><span class="done-check">✓</span>Agency/Partner can invite staff with role assignment and project access pre-assignment</li>
           <li><span class="done-check">✓</span>Agency/Partner can add clients, view as client, upgrade/downgrade/cancel/remove clients</li>
-          <li><span class="done-check">✓</span>Session revocation is immediate — all sessions end when access is removed</li>
+          <li><span class="done-check">✓</span>Session revocation is immediate - all sessions end when access is removed</li>
           <li><span class="done-check">✓</span>Master admin panel: impersonation, free-access flags, audit log, usage dashboard</li>
           <li><span class="done-check">✓</span>MFA enforced for master accounts</li>
           <li><span class="done-check">✓</span>All tests passing on staging; live environment unaffected</li>
@@ -742,17 +742,17 @@
 
     <div class="note note-blue">
       <span class="note-icon">💡</span>
-      <div>This task is merged into #382 and will be built as part of that sprint. It is documented separately here because it is the most granular layer of the permissions model — an Agency/Partner might have five staff members but only want two of them to access a particular client's data.</div>
+      <div>This task is merged into #382 and will be built as part of that sprint. It is documented separately here because it is the most granular layer of the permissions model - an Agency/Partner might have five staff members but only want two of them to access a particular client's data.</div>
     </div>
 
     <div class="block">
       <div class="block-title">How it works</div>
       <div class="block-body">
         <ul class="done-list">
-          <li><span class="done-check">✓</span>An Agency/Partner admin can assign a staff member access to specific client projects — not all projects by default</li>
+          <li><span class="done-check">✓</span>An Agency/Partner admin can assign a staff member access to specific client projects - not all projects by default</li>
           <li><span class="done-check">✓</span>A staff member who logs in sees only the projects they have been explicitly granted access to</li>
-          <li><span class="done-check">✓</span>The project switcher and sidebar reflect server-enforced visibility — no client-side filtering</li>
-          <li><span class="done-check">✓</span>A client account sees only its own projects — never sibling clients under the same Agency/Partner</li>
+          <li><span class="done-check">✓</span>The project switcher and sidebar reflect server-enforced visibility - no client-side filtering</li>
+          <li><span class="done-check">✓</span>A client account sees only its own projects - never sibling clients under the same Agency/Partner</li>
           <li><span class="done-check">✓</span>A "Manage access" view in the Agency/Partner admin dashboard shows which staff member has access to which projects, with add/remove controls</li>
           <li><span class="done-check">✓</span>All permission checks are server-enforced; privilege escalation between sibling clients is not possible</li>
         </ul>
@@ -763,11 +763,11 @@
       <div class="block-title">Implementation approach</div>
       <div class="block-body">
         <ol class="steps-list">
-          <li><span class="step-num" style="background:var(--indigo);">1</span><div class="step-body"><span class="step-title">Extend the permission model</span> — add a <code>project_grants</code> join table linking a user to a specific project with a role; server logic enforces project-level grants on top of the account hierarchy.</div></li>
-          <li><span class="step-num" style="background:var(--indigo);">2</span><div class="step-body"><span class="step-title">Build "Manage access" UI</span> — agency admin dashboard view listing all staff and their project access; toggles to grant/remove access per project; changes saved immediately.</div></li>
-          <li><span class="step-num" style="background:var(--indigo);">3</span><div class="step-body"><span class="step-title">Enforce visibility in project list and sidebar</span> — update the project switcher to show only server-approved projects for the logged-in user.</div></li>
-          <li><span class="step-num" style="background:var(--indigo);">4</span><div class="step-body"><span class="step-title">Guard all project routes</span> — every API route that returns project data checks the requester's project-level grant; returns 403 for unauthorised attempts.</div></li>
-          <li><span class="step-num" style="background:var(--indigo);">5</span><div class="step-body"><span class="step-title">Test role matrix on staging</span> — test all combinations: agency admin (all), staff member (subset), client user (own only), master admin (all via impersonation).</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">1</span><div class="step-body"><span class="step-title">Extend the permission model</span> - add a <code>project_grants</code> join table linking a user to a specific project with a role; server logic enforces project-level grants on top of the account hierarchy.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">2</span><div class="step-body"><span class="step-title">Build "Manage access" UI</span> - agency admin dashboard view listing all staff and their project access; toggles to grant/remove access per project; changes saved immediately.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">3</span><div class="step-body"><span class="step-title">Enforce visibility in project list and sidebar</span> - update the project switcher to show only server-approved projects for the logged-in user.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">4</span><div class="step-body"><span class="step-title">Guard all project routes</span> - every API route that returns project data checks the requester's project-level grant; returns 403 for unauthorised attempts.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">5</span><div class="step-body"><span class="step-title">Test role matrix on staging</span> - test all combinations: agency admin (all), staff member (subset), client user (own only), master admin (all via impersonation).</div></li>
         </ol>
       </div>
     </div>
@@ -838,7 +838,7 @@
         </div>
         <div class="note note-pink" style="margin-top:12px;">
           <span class="note-icon">ℹ</span>
-          <div>All pricing is currently indicative — AIO Fusion is in Beta. Each 'action' = a piece of content created or optimised, or a marketing/media intelligence search, per month.</div>
+          <div>All pricing is currently indicative - AIO Fusion is in Beta. Each 'action' = a piece of content created or optimised, or a marketing/media intelligence search, per month.</div>
         </div>
       </div>
     </div>
@@ -849,10 +849,10 @@
         <ul class="done-list">
           <li><span class="done-check">✓</span>View current plan name, billing frequency, and next renewal date</li>
           <li><span class="done-check">✓</span>See projects used vs projects included in plan</li>
-          <li><span class="done-check">✓</span><strong>Update payment method</strong> — opens Stripe Customer Portal</li>
-          <li><span class="done-check">✓</span><strong>Download invoices</strong> — lists past invoices with PDF download links via Stripe</li>
-          <li><span class="done-check">✓</span><strong>Add a project</strong> — opens tier selection (Standard / Premium / Max) → Stripe Checkout for the add-on</li>
-          <li><span class="done-check">✓</span><strong>Cancel subscription</strong> — opens Stripe Customer Portal cancellation flow</li>
+          <li><span class="done-check">✓</span><strong>Update payment method</strong> - opens Stripe Customer Portal</li>
+          <li><span class="done-check">✓</span><strong>Download invoices</strong> - lists past invoices with PDF download links via Stripe</li>
+          <li><span class="done-check">✓</span><strong>Add a project</strong> - opens tier selection (Standard / Premium / Max) → Stripe Checkout for the add-on</li>
+          <li><span class="done-check">✓</span><strong>Cancel subscription</strong> - opens Stripe Customer Portal cancellation flow</li>
         </ul>
       </div>
     </div>
@@ -876,15 +876,15 @@
       <div class="block-title">Steps</div>
       <div class="block-body">
         <ol class="steps-list">
-          <li><span class="step-num" style="background:var(--gold);">1</span><div class="step-body"><span class="step-title">Set up Stripe in test mode on staging</span> — install Stripe SDK, add test-mode API keys to staging secrets, register webhook endpoint.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">2</span><div class="step-body"><span class="step-title">Create Stripe products and prices</span> — In-House annual &amp; quarterly, Agency annual &amp; quarterly, Standard / Premium / Max additional project add-ons.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">3</span><div class="step-body"><span class="step-title">Build Stripe Checkout flow</span> — after signup, redirect user to Stripe Checkout; on payment success webhook, activate account and set plan tier.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">4</span><div class="step-body"><span class="step-title">Wire per-project action limits</span> — replace the hardcoded default action limit with a per-project limit stored in the DB, derived from the subscription tier.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">5</span><div class="step-body"><span class="step-title">Build add-project flow</span> — in-app tier selector → Stripe Checkout for the add-on → project created with correct action limit on success.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">6</span><div class="step-body"><span class="step-title">Build self-serve billing page</span> — plan details, usage, renewal date, update payment method, download invoices, add project, cancel.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">7</span><div class="step-body"><span class="step-title">Build admin subscription view</span> — all accounts with subscription status, plan tier, current-month action usage, last payment date.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">8</span><div class="step-body"><span class="step-title">Handle webhook events</span> — implement all four webhook handlers; send user notification emails on payment failure.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">9</span><div class="step-body"><span class="step-title">Test full lifecycle on staging</span> — use Stripe test cards to cover: successful payment, failed payment, cancellation, renewal, adding a project, hitting an action limit.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">1</span><div class="step-body"><span class="step-title">Set up Stripe in test mode on staging</span> - install Stripe SDK, add test-mode API keys to staging secrets, register webhook endpoint.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">2</span><div class="step-body"><span class="step-title">Create Stripe products and prices</span> - In-House annual &amp; quarterly, Agency annual &amp; quarterly, Standard / Premium / Max additional project add-ons.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">3</span><div class="step-body"><span class="step-title">Build Stripe Checkout flow</span> - after signup, redirect user to Stripe Checkout; on payment success webhook, activate account and set plan tier.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">4</span><div class="step-body"><span class="step-title">Wire per-project action limits</span> - replace the hardcoded default action limit with a per-project limit stored in the DB, derived from the subscription tier.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">5</span><div class="step-body"><span class="step-title">Build add-project flow</span> - in-app tier selector → Stripe Checkout for the add-on → project created with correct action limit on success.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">6</span><div class="step-body"><span class="step-title">Build self-serve billing page</span> - plan details, usage, renewal date, update payment method, download invoices, add project, cancel.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">7</span><div class="step-body"><span class="step-title">Build admin subscription view</span> - all accounts with subscription status, plan tier, current-month action usage, last payment date.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">8</span><div class="step-body"><span class="step-title">Handle webhook events</span> - implement all four webhook handlers; send user notification emails on payment failure.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">9</span><div class="step-body"><span class="step-title">Test full lifecycle on staging</span> - use Stripe test cards to cover: successful payment, failed payment, cancellation, renewal, adding a project, hitting an action limit.</div></li>
         </ol>
       </div>
     </div>
@@ -937,13 +937,13 @@
       <div class="block-title">Cutover steps</div>
       <div class="block-body">
         <ol class="steps-list">
-          <li><span class="step-num" style="background:var(--green);">1</span><div class="step-body"><span class="step-title">Pre-cutover checklist</span> — document every environment variable, OAuth redirect URI, and Stripe config that differs between staging and live. Review with Spencer before cutover night.</div></li>
-          <li><span class="step-num" style="background:var(--green);">2</span><div class="step-body"><span class="step-title">Take a database snapshot</span> — captured immediately before any migration step runs.</div></li>
-          <li><span class="step-num" style="background:var(--green);">3</span><div class="step-body"><span class="step-title">Run account migration script on live DB</span> — execute the auth model migration against the production database; verify row counts before and after.</div></li>
-          <li><span class="step-num" style="background:var(--green);">4</span><div class="step-body"><span class="step-title">Update OAuth providers for live</span> — add live domain as authorised redirect URI in Google Cloud Console and Azure AD (Microsoft Entra ID); remove staging-only test URIs.</div></li>
-          <li><span class="step-num" style="background:var(--green);">5</span><div class="step-body"><span class="step-title">Switch Stripe to live mode</span> — replace staging test-mode API keys with live-mode keys; update webhook endpoint to live URL; confirm first live webhook event is received.</div></li>
-          <li><span class="step-num" style="background:var(--green);">6</span><div class="step-body"><span class="step-title">Smoke-test live environment</span> — email login, Google SSO, Microsoft SSO, project load, Stripe checkout. All must pass before declaring cutover complete.</div></li>
-          <li><span class="step-num" style="background:var(--green);">7</span><div class="step-body"><span class="step-title">Monitor for 30 minutes</span> — watch error logs post-cutover; rollback procedure ready if needed.</div></li>
+          <li><span class="step-num" style="background:var(--green);">1</span><div class="step-body"><span class="step-title">Pre-cutover checklist</span> - document every environment variable, OAuth redirect URI, and Stripe config that differs between staging and live. Review with Spencer before cutover night.</div></li>
+          <li><span class="step-num" style="background:var(--green);">2</span><div class="step-body"><span class="step-title">Take a database snapshot</span> - captured immediately before any migration step runs.</div></li>
+          <li><span class="step-num" style="background:var(--green);">3</span><div class="step-body"><span class="step-title">Run account migration script on live DB</span> - execute the auth model migration against the production database; verify row counts before and after.</div></li>
+          <li><span class="step-num" style="background:var(--green);">4</span><div class="step-body"><span class="step-title">Update OAuth providers for live</span> - add live domain as authorised redirect URI in Google Cloud Console and Azure AD (Microsoft Entra ID); remove staging-only test URIs.</div></li>
+          <li><span class="step-num" style="background:var(--green);">5</span><div class="step-body"><span class="step-title">Switch Stripe to live mode</span> - replace staging test-mode API keys with live-mode keys; update webhook endpoint to live URL; confirm first live webhook event is received.</div></li>
+          <li><span class="step-num" style="background:var(--green);">6</span><div class="step-body"><span class="step-title">Smoke-test live environment</span> - email login, Google SSO, Microsoft SSO, project load, Stripe checkout. All must pass before declaring cutover complete.</div></li>
+          <li><span class="step-num" style="background:var(--green);">7</span><div class="step-body"><span class="step-title">Monitor for 30 minutes</span> - watch error logs post-cutover; rollback procedure ready if needed.</div></li>
         </ol>
       </div>
     </div>
