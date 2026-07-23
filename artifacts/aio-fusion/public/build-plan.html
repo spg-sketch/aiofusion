@@ -622,7 +622,7 @@
           <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body">Email/password: verification email sent (expires 24h); click to confirm; resend option available</div></li>
           <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><strong>Organic signups only:</strong> account type selection - Agency/Partner or Client (described by behaviour, not jargon)</div></li>
           <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body">Company details: name, website, billing email, VAT number (optional)</div></li>
-          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body">→ Stripe Checkout for chosen plan (task #384)</div></li>
+          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body">→ Choose billing frequency: <strong>Quarterly</strong> or <strong>Annually</strong> (annual saves ~13%) → Stripe Checkout for chosen plan (task #384)</div></li>
           <li><span class="step-num" style="background:var(--teal);">7</span><div class="step-body">Payment success → Dashboard. <strong>No admin approval queue.</strong></div></li>
         </ol>
         <div class="note note-blue" style="margin-top:14px;">
@@ -878,7 +878,7 @@
         <ol class="steps-list">
           <li><span class="step-num" style="background:var(--gold);">1</span><div class="step-body"><span class="step-title">Set up Stripe in test mode on staging</span> - install Stripe SDK, add test-mode API keys to staging secrets, register webhook endpoint.</div></li>
           <li><span class="step-num" style="background:var(--gold);">2</span><div class="step-body"><span class="step-title">Create Stripe products and prices</span> - In-House annual &amp; quarterly, Agency annual &amp; quarterly, Standard / Premium / Max additional project add-ons.</div></li>
-          <li><span class="step-num" style="background:var(--gold);">3</span><div class="step-body"><span class="step-title">Build Stripe Checkout flow</span> - after signup, redirect user to Stripe Checkout; on payment success webhook, activate account and set plan tier.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">3</span><div class="step-body"><span class="step-title">Build Stripe Checkout flow</span> - before redirecting to Stripe, user selects billing frequency: <strong>Quarterly</strong> or <strong>Annually</strong>. The correct Stripe price ID is passed to checkout based on the selection. On payment success webhook, activate account and set plan tier and billing frequency in DB.</div></li>
           <li><span class="step-num" style="background:var(--gold);">4</span><div class="step-body"><span class="step-title">Wire per-project action limits</span> - replace the hardcoded default action limit with a per-project limit stored in the DB, derived from the subscription tier.</div></li>
           <li><span class="step-num" style="background:var(--gold);">5</span><div class="step-body"><span class="step-title">Build add-project flow</span> - in-app tier selector → Stripe Checkout for the add-on → project created with correct action limit on success.</div></li>
           <li><span class="step-num" style="background:var(--gold);">6</span><div class="step-body"><span class="step-title">Build self-serve billing page</span> - plan details, usage, renewal date, update payment method, download invoices, add project, cancel.</div></li>
