@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIO Fusion — August 2026 Roadmap</title>
+<style>
+  :root {
+    --ink:   #102B36;
+    --teal:  #2A8FA6;
+    --pink:  #C8497A;
+    --gold:  #B8860B;
+    --indigo:#4F46E5;
+    --green: #166534;
+    --g100:  #F1F5F9;
+    --g200:  #E2E8F0;
+    --g400:  #94A3B8;
+    --g500:  #64748B;
+    --g700:  #334155;
+    --white: #FFFFFF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #E8EDF2;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    background: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 80px 100px;
+    page-break-after: always;
+  }
+  .cover-eyebrow {
+    color: var(--pink);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .cover-title {
+    color: var(--white);
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+  .cover-title span { color: var(--pink); }
+  .cover-subtitle {
+    color: var(--g400);
+    font-size: 18px;
+    font-weight: 400;
+    margin-bottom: 48px;
+    max-width: 620px;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 40px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    padding-top: 32px;
+    width: 100%;
+    max-width: 700px;
+  }
+  .cover-meta-item label {
+    display: block;
+    color: var(--g400);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+  }
+  .cover-meta-item span {
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .cover-toc {
+    margin-top: 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cover-toc-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--g400);
+    font-size: 13px;
+  }
+  .cover-toc-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--pink);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ── Page shell ── */
+  .page {
+    background: var(--white);
+    max-width: 1100px;
+    margin: 40px auto;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    page-break-after: always;
+  }
+
+  .page-header {
+    background: var(--ink);
+    padding: 16px 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header-left .logo { color: var(--white); font-size: 15px; font-weight: 800; }
+  .page-header-left .tagline { color: var(--pink); font-size: 10px; margin-top: 1px; }
+  .page-header-right { text-align: right; }
+  .page-header-right .pg-title { color: var(--white); font-size: 15px; font-weight: 700; }
+  .page-header-right .pg-sub { color: var(--g400); font-size: 10px; margin-top: 2px; }
+  .page-num {
+    background: var(--pink);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-left: 14px;
+    flex-shrink: 0;
+  }
+  .page-header-right-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .page-body { padding: 32px 36px 36px; }
+
+  .section-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--g400);
+    margin-bottom: 18px;
+  }
+
+  /* ── Page footer ── */
+  .page-footer {
+    background: var(--ink);
+    padding: 10px 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .page-footer span { color: rgba(255,255,255,0.4); font-size: 10px; }
+
+  /* ═══════════════════ GANTT ═══════════════════ */
+  .gantt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .gantt-table thead tr {
+    background: #1A3344;
+  }
+  .gantt-table thead th {
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 8px 10px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .gantt-table thead th:first-child { width: 200px; }
+  .gantt-table tbody tr:nth-child(odd)  { background: var(--white); }
+  .gantt-table tbody tr:nth-child(even) { background: var(--g100); }
+  .gantt-table tbody td {
+    padding: 10px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--g200);
+  }
+  .gantt-task { font-weight: 700; font-size: 12px; color: var(--ink); }
+  .gantt-owner { font-size: 10px; color: var(--g400); margin-top: 2px; }
+  .gantt-bar {
+    border-radius: 6px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gantt-bar-label { color: rgba(255,255,255,0.9); font-size: 10px; font-weight: 700; }
+  .milestone-row { background: transparent !important; border-bottom: none !important; }
+  .milestone-row td { padding: 6px 10px 0; border-bottom: none; }
+  .milestone-badges { display: flex; gap: 12px; flex-wrap: wrap; padding-left: 200px; }
+  .milestone-badge {
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend-row { margin-top: 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--g500); }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* ═══════════════════ SIGNUP FLOW ═══════════════════ */
+  .flow-row {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+    margin-bottom: 20px;
+  }
+  .flow-phase {
+    flex: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--g200);
+    position: relative;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    color: var(--g400);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .flow-phase-header {
+    padding: 10px 10px 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .flow-phase-num {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--white);
+    line-height: 1;
+    min-width: 24px;
+  }
+  .flow-phase-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.3;
+  }
+  .flow-phase-items { padding: 8px 8px 10px; }
+  .flow-phase-item {
+    background: var(--g100);
+    border-radius: 5px;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    color: var(--ink);
+    margin-bottom: 5px;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .flow-master {
+    background: #1A3344;
+    border-radius: 8px;
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .flow-master-title { color: var(--white); font-size: 13px; font-weight: 700; min-width: 180px; }
+  .flow-master-sub { color: var(--g400); font-size: 10px; margin-top: 2px; }
+  .flow-master-items { display: flex; gap: 12px; flex-wrap: wrap; flex: 1; }
+  .flow-master-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--white);
+    font-size: 11px;
+  }
+  .flow-master-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pink); margin-top: 4px; flex-shrink: 0; }
+
+  /* ═══════════════════ HIERARCHY ═══════════════════ */
+  .hierarchy-layout { display: flex; gap: 32px; align-items: flex-start; }
+  .hierarchy-tree { flex: 0 0 280px; }
+  .hierarchy-table-wrap { flex: 1; }
+
+  .acct-node {
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--white);
+    margin-bottom: 0;
+  }
+  .acct-node-title { font-size: 12px; font-weight: 700; }
+  .acct-node-sub { font-size: 10px; opacity: 0.75; margin-top: 3px; line-height: 1.4; }
+  .tree-connector {
+    display: flex;
+    padding-left: 24px;
+    gap: 12px;
+    position: relative;
+    margin: 0;
+  }
+  .tree-connector::before {
+    content: '';
+    position: absolute;
+    left: 24px;
+    top: 0;
+    bottom: 20px;
+    width: 1px;
+    background: var(--g200);
+  }
+  .tree-branch {
+    flex: 1;
+    position: relative;
+    padding-left: 16px;
+    padding-top: 12px;
+  }
+  .tree-branch::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20px;
+    width: 16px;
+    height: 1px;
+    background: var(--g200);
+  }
+  .tree-sub-connector {
+    padding-left: 18px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .tree-sub-connector::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 20px;
+    width: 1px;
+    background: var(--g200);
+  }
+  .tree-sub-item {
+    position: relative;
+    padding-left: 16px;
+  }
+  .tree-sub-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 18px;
+    width: 16px;
+    height: 1px;
+    background: var(--g200);
+  }
+  .tree-note {
+    background: #FEF3C7;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #92400E;
+    margin-top: 12px;
+  }
+
+  .role-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+  }
+  .role-table thead tr { background: #1A3344; }
+  .role-table thead th {
+    color: var(--white);
+    padding: 9px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .role-table thead th:first-child { text-align: left; padding-left: 12px; }
+  .role-table tbody tr:nth-child(odd)  { background: var(--white); }
+  .role-table tbody tr:nth-child(even) { background: var(--g100); }
+  .role-table tbody td {
+    padding: 9px 8px;
+    text-align: center;
+    border-bottom: 1px solid var(--g200);
+  }
+  .role-table tbody td:first-child { text-align: left; padding-left: 12px; font-size: 12px; color: var(--ink); }
+  .check { color: #166534; font-weight: 700; font-size: 14px; }
+  .dash  { color: var(--g400); font-size: 16px; }
+  .check-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    background: #DCFCE7;
+    border-radius: 50%;
+    font-size: 12px;
+  }
+
+  /* ═══════════════════ PRICING ═══════════════════ */
+  .beta-banner {
+    background: #FEF3C7;
+    border-radius: 6px;
+    padding: 10px 16px;
+    color: #92400E;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+  .plans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+  .plan-card {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid;
+  }
+  .plan-card-header { padding: 18px 20px 14px; }
+  .plan-card-name { font-size: 22px; font-weight: 800; color: var(--white); }
+  .plan-card-projects { font-size: 11px; color: rgba(255,255,255,0.8); margin-top: 4px; }
+  .plan-card-body { padding: 16px 20px 20px; }
+  .plan-price-wrap { display: flex; align-items: baseline; gap: 3px; margin-bottom: 4px; }
+  .plan-price { font-size: 36px; font-weight: 800; color: var(--ink); }
+  .plan-period { font-size: 13px; color: var(--g400); }
+  .plan-annual { font-size: 11px; color: var(--g400); margin-bottom: 3px; }
+  .plan-quarterly { font-size: 11px; color: var(--g500); margin-bottom: 14px; }
+  .plan-divider { border: none; border-top: 1px solid var(--g200); margin: 10px 0 12px; }
+  .plan-features { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+  .plan-feature { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; color: var(--ink); padding: 2px 0; }
+  .plan-feature-tick { font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+
+  .tiers-section { margin-top: 4px; }
+  .tiers-intro { color: var(--g500); font-size: 12px; margin-bottom: 14px; line-height: 1.6; }
+  .tiers-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .tier-card {
+    border-radius: 8px;
+    border: 1.5px solid;
+    padding: 16px 18px;
+  }
+  .tier-name { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .tier-price-row { display: flex; align-items: baseline; gap: 4px; }
+  .tier-price { font-size: 26px; font-weight: 800; color: var(--ink); }
+  .tier-period { font-size: 11px; color: var(--g400); }
+  .tier-actions { font-size: 11px; font-weight: 600; margin-top: 6px; }
+
+  /* ═══════════════════ DECISIONS ═══════════════════ */
+  .decisions-list { display: flex; flex-direction: column; gap: 0; }
+  .decision-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--g200);
+  }
+  .decision-row:nth-child(odd)  { background: var(--white); }
+  .decision-row:nth-child(even) { background: var(--g100); }
+  .decision-row:last-child { border-bottom: none; }
+  .decision-cat {
+    background: #DBEAFE;
+    color: #1E40AF;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    align-self: flex-start;
+    min-width: 100px;
+    text-align: center;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+  .decision-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .decision-body { flex: 1; }
+  .decision-title { font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+  .decision-detail { font-size: 11px; color: var(--g500); line-height: 1.5; }
+
+  /* ── Print ── */
+  @media print {
+    body { background: white; }
+    .page { box-shadow: none; border-radius: 0; margin: 0; page-break-after: always; max-width: 100%; }
+    .cover { min-height: auto; padding: 60px; }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .cover { padding: 40px 24px; }
+    .cover-title { font-size: 32px; }
+    .plans-grid, .tiers-grid { grid-template-columns: 1fr; }
+    .hierarchy-layout { flex-direction: column; }
+    .plan-features { grid-template-columns: 1fr; }
+    .flow-row { flex-direction: column; }
+    .flow-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ COVER -->
+<div class="cover">
+  <div class="cover-eyebrow">Confidential Planning Document</div>
+  <div class="cover-title">AIO Fusion<br><span>August Roadmap</span></div>
+  <div class="cover-subtitle">Architecture, account hierarchy, pricing structure, signup flow and key planning decisions for the August 2026 build sprint.</div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><label>Date</label><span>July 2026</span></div>
+    <div class="cover-meta-item"><label>Target go-live</label><span>1 September 2026</span></div>
+    <div class="cover-meta-item"><label>Prepared for</label><span>Patrick Barrett &amp; Natalie Linder</span></div>
+    <div class="cover-meta-item"><label>Built by</label><span>Spencer</span></div>
+  </div>
+  <div class="cover-toc">
+    <div class="cover-toc-item"><div class="cover-toc-num">1</div> August Roadmap — 5-week Gantt</div>
+    <div class="cover-toc-item"><div class="cover-toc-num">2</div> Signup → Payment → Account Flow</div>
+    <div class="cover-toc-item"><div class="cover-toc-num">3</div> Account &amp; Permission Hierarchy</div>
+    <div class="cover-toc-item"><div class="cover-toc-num">4</div> Confirmed Pricing Structure</div>
+    <div class="cover-toc-item"><div class="cover-toc-num">5</div> Key Decisions Log</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ PAGE 1: GANTT -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="logo">AIO Fusion</div>
+      <div class="tagline">August 2026 Planning</div>
+    </div>
+    <div class="page-header-right-wrap">
+      <div class="page-header-right">
+        <div class="pg-title">1. August Roadmap</div>
+        <div class="pg-sub">Target: Live 1 Sep 2026</div>
+      </div>
+      <div class="page-num">1</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="section-eyebrow">5-week delivery plan &nbsp;·&nbsp; Wk1 = 4 Aug &nbsp;→&nbsp; Wk5 = 1 Sep 2026</div>
+    <table class="gantt-table">
+      <thead>
+        <tr>
+          <th>Workstream / Owner</th>
+          <th>Wk 1 &nbsp; 4–8 Aug</th>
+          <th>Wk 2 &nbsp; 11–15 Aug</th>
+          <th>Wk 3 &nbsp; 18–22 Aug</th>
+          <th>Wk 4 &nbsp; 25–29 Aug</th>
+          <th>Wk 5 &nbsp; 1 Sep</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Row 1 -->
+        <tr>
+          <td>
+            <div class="gantt-task">Staging Environment</div>
+            <div class="gantt-owner">Spencer</div>
+          </td>
+          <td><div class="gantt-bar" style="background:var(--teal)"></div></td>
+          <td></td><td></td><td></td><td></td>
+        </tr>
+        <!-- Row 2 -->
+        <tr>
+          <td>
+            <div class="gantt-task">Login / SSO / Accounts</div>
+            <div class="gantt-owner">Spencer</div>
+          </td>
+          <td></td>
+          <td><div class="gantt-bar" style="background:var(--pink)"></div></td>
+          <td><div class="gantt-bar" style="background:var(--pink)"></div></td>
+          <td></td><td></td>
+        </tr>
+        <!-- Row 3 -->
+        <tr>
+          <td>
+            <div class="gantt-task">Stripe / Payments</div>
+            <div class="gantt-owner">Spencer</div>
+          </td>
+          <td></td><td></td><td></td>
+          <td><div class="gantt-bar" style="background:var(--gold)"></div></td>
+          <td></td>
+        </tr>
+        <!-- Row 4 -->
+        <tr>
+          <td>
+            <div class="gantt-task">Decisions &amp; Testing</div>
+            <div class="gantt-owner">Patrick &amp; Natalie</div>
+          </td>
+          <td></td><td></td>
+          <td><div class="gantt-bar" style="background:var(--indigo)"></div></td>
+          <td><div class="gantt-bar" style="background:var(--indigo)"></div></td>
+          <td><div class="gantt-bar" style="background:var(--indigo)"></div></td>
+        </tr>
+        <!-- Row 5 -->
+        <tr>
+          <td>
+            <div class="gantt-task">Testing + Go-live</div>
+            <div class="gantt-owner">Spencer</div>
+          </td>
+          <td></td><td></td><td></td><td></td>
+          <td><div class="gantt-bar" style="background:var(--green)"></div></td>
+        </tr>
+        <!-- Milestones row -->
+        <tr class="milestone-row">
+          <td colspan="6">
+            <div class="milestone-badges">
+              <span class="milestone-badge" style="background:#FEF3C7;color:#92400E;">★ Pricing confirmed &nbsp; 18 Aug</span>
+              <span class="milestone-badge" style="background:#FBE3ED;color:#9B1C4A;">★ Payment policy &nbsp; 22 Aug</span>
+              <span class="milestone-badge" style="background:#DCFCE7;color:#166534;">🚀 Go-live target &nbsp; 1 Sep</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="legend-row">
+      <span style="font-size:11px;color:var(--g500);font-weight:600;">Owner colour key:</span>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> Spencer (build)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div> Patrick &amp; Natalie (decisions / testing)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Go-live</div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>AIO Fusion &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; August 2026</span>
+    <span>Page 1 of 5</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ PAGE 2: SIGNUP FLOW -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="logo">AIO Fusion</div>
+      <div class="tagline">August 2026 Planning</div>
+    </div>
+    <div class="page-header-right-wrap">
+      <div class="page-header-right">
+        <div class="pg-title">2. Signup → Payment → Account Flow</div>
+        <div class="pg-sub">End-to-end user journey</div>
+      </div>
+      <div class="page-num">2</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="section-eyebrow">Six phases from first visit to active account</div>
+
+    <div class="flow-row">
+      <!-- Phase 1 -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--teal)">
+          <div class="flow-phase-num">1</div>
+          <div class="flow-phase-title">Arrive &amp;<br>Authenticate</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Email + password</div>
+          <div class="flow-phase-item">Google SSO</div>
+          <div class="flow-phase-item">Microsoft Entra ID</div>
+        </div>
+      </div>
+      <div class="flow-arrow">›</div>
+      <!-- Phase 2 -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--indigo)">
+          <div class="flow-phase-num">2</div>
+          <div class="flow-phase-title">Registration</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Account type:<br>Agency/Partner or Client</div>
+          <div class="flow-phase-item">Company details</div>
+          <div class="flow-phase-item">Billing email + VAT</div>
+        </div>
+      </div>
+      <div class="flow-arrow">›</div>
+      <!-- Phase 3 -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--gold)">
+          <div class="flow-phase-num">3</div>
+          <div class="flow-phase-title">Payment<br>(Stripe)</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Annual or quarterly</div>
+          <div class="flow-phase-item">Checkout success</div>
+          <div class="flow-phase-item">Failure → retry</div>
+        </div>
+      </div>
+      <div class="flow-arrow">›</div>
+      <!-- Phase 4 -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--pink)">
+          <div class="flow-phase-num">4</div>
+          <div class="flow-phase-title">First Login</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Agency/Partner dashboard</div>
+          <div class="flow-phase-item">Client dashboard</div>
+        </div>
+      </div>
+      <div class="flow-arrow">›</div>
+      <!-- Phase 5a -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--teal)">
+          <div class="flow-phase-num">5a</div>
+          <div class="flow-phase-title">Agency/Partner<br>Mgmt</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Invite / view clients</div>
+          <div class="flow-phase-item">Manage staff</div>
+          <div class="flow-phase-item">Project access</div>
+        </div>
+      </div>
+      <div class="flow-arrow">›</div>
+      <!-- Phase 5b -->
+      <div class="flow-phase">
+        <div class="flow-phase-header" style="background:var(--indigo)">
+          <div class="flow-phase-num">5b</div>
+          <div class="flow-phase-title">Client Mgmt</div>
+        </div>
+        <div class="flow-phase-items">
+          <div class="flow-phase-item">Projects</div>
+          <div class="flow-phase-item">Invoices</div>
+          <div class="flow-phase-item">Plan changes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase 6 master admin -->
+    <div class="flow-master">
+      <div>
+        <div class="flow-master-title">Phase 6 — Master Admin</div>
+        <div class="flow-master-sub">Full platform visibility and control</div>
+      </div>
+      <div class="flow-master-items">
+        <div class="flow-master-item"><div class="flow-master-dot"></div>Impersonate any account in the hierarchy</div>
+        <div class="flow-master-item"><div class="flow-master-dot"></div>Free-access flags (beta / demo accounts)</div>
+        <div class="flow-master-item"><div class="flow-master-dot"></div>Usage monitoring across all accounts</div>
+        <div class="flow-master-item"><div class="flow-master-dot"></div>MFA mandatory (TOTP)</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>AIO Fusion &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; August 2026</span>
+    <span>Page 2 of 5</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ PAGE 3: HIERARCHY + ROLES -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="logo">AIO Fusion</div>
+      <div class="tagline">August 2026 Planning</div>
+    </div>
+    <div class="page-header-right-wrap">
+      <div class="page-header-right">
+        <div class="pg-title">3. Account &amp; Permission Hierarchy</div>
+        <div class="pg-sub">Roles, seats and access levels</div>
+      </div>
+      <div class="page-num">3</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="section-eyebrow">Account tree (left) &nbsp;·&nbsp; Role capability table (right)</div>
+    <div class="hierarchy-layout">
+
+      <!-- LEFT: tree -->
+      <div class="hierarchy-tree">
+        <!-- Master -->
+        <div class="acct-node" style="background:#1A3344;">
+          <div class="acct-node-title">Master</div>
+          <div class="acct-node-sub">Owner · Technical · Ops<br>Unlimited seats</div>
+        </div>
+
+        <div class="tree-connector" style="padding-top:0; margin-top:0;">
+          <!-- Agency/Partner branch -->
+          <div class="tree-branch">
+            <div class="acct-node" style="background:var(--teal);">
+              <div class="acct-node-title">Agency / Partner</div>
+              <div class="acct-node-sub">3 seats · Clients below</div>
+            </div>
+            <div class="tree-sub-connector">
+              <div class="tree-sub-item">
+                <div class="acct-node" style="background:#1B7A94;font-size:11px;padding:8px 12px;">
+                  <div class="acct-node-title" style="font-size:11px;">Staff Roles</div>
+                  <div class="acct-node-sub">Owner · Admin · Billing<br>Content · Viewer</div>
+                </div>
+              </div>
+              <div class="tree-sub-item">
+                <div class="acct-node" style="background:#A63868;font-size:11px;padding:8px 12px;">
+                  <div class="acct-node-title" style="font-size:11px;">Client Accounts</div>
+                  <div class="acct-node-sub">3 seats each · Full project access</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Standalone Client branch -->
+          <div class="tree-branch">
+            <div class="acct-node" style="background:var(--pink);">
+              <div class="acct-node-title">Standalone Client</div>
+              <div class="acct-node-sub">3 seats · Direct subscription</div>
+            </div>
+            <div class="tree-sub-connector">
+              <div class="tree-sub-item">
+                <div class="acct-node" style="background:#A63868;font-size:11px;padding:8px 12px;">
+                  <div class="acct-node-title" style="font-size:11px;">Staff Roles</div>
+                  <div class="acct-node-sub">Owner · Admin · Billing<br>Content · Viewer</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tree-note">⚠ Seat limits are configurable per account in the database.</div>
+      </div>
+
+      <!-- RIGHT: role table -->
+      <div class="hierarchy-table-wrap">
+        <table class="role-table">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding-left:12px;">Capability</th>
+              <th>Owner</th>
+              <th>Admin</th>
+              <th>Billing</th>
+              <th>Content</th>
+              <th>Viewer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Manage users / seats</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>Billing &amp; invoices</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>Create projects</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>Edit content</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>View reports</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+            </tr>
+            <tr>
+              <td>Invite staff</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>Add client accounts</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+            <tr>
+              <td>View-only access</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+            </tr>
+            <tr>
+              <td>Project-level access</td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+              <td><span class="check-wrap check">✓</span></td>
+              <td><span class="dash">–</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Standalone client note -->
+        <div style="margin-top:14px;background:#F0FDF4;border-radius:6px;padding:10px 14px;font-size:11px;color:var(--g700);line-height:1.6;">
+          <strong style="color:var(--green);">Agency/Partner clients</strong> are sub-accounts with their own 3-seat allocation. Client staff see only their own projects.<br>
+          <strong style="color:var(--green);">Standalone clients</strong> subscribe directly — no agency overhead — but share the same role structure above.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>AIO Fusion &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; August 2026</span>
+    <span>Page 3 of 5</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ PAGE 4: PRICING -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="logo">AIO Fusion</div>
+      <div class="tagline">August 2026 Planning</div>
+    </div>
+    <div class="page-header-right-wrap">
+      <div class="page-header-right">
+        <div class="pg-title">4. Confirmed Pricing Structure</div>
+        <div class="pg-sub">Beta: all pricing currently indicative</div>
+      </div>
+      <div class="page-num">4</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="beta-banner">⚠ Beta notice: AIO Fusion is in Beta — please note that all pricing is currently indicative.</div>
+
+    <div class="section-eyebrow">Standard Plans — annual subscription (billed in advance)</div>
+
+    <div class="plans-grid">
+      <!-- In-House -->
+      <div class="plan-card" style="border-color:var(--teal);">
+        <div class="plan-card-header" style="background:var(--teal);">
+          <div class="plan-card-name">In-House</div>
+          <div class="plan-card-projects">1 Premium project</div>
+        </div>
+        <div class="plan-card-body">
+          <div class="plan-price-wrap">
+            <div class="plan-price">£333</div>
+            <div class="plan-period">/mo</div>
+          </div>
+          <div class="plan-annual">£4,000/yr billed annually</div>
+          <div class="plan-quarterly">Or £383/month · £4,600/yr billed quarterly</div>
+          <hr class="plan-divider">
+          <div class="plan-features">
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Full standard platform – all 10 modules</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>AI Visibility Audit + GEO strategy builder</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Comms Planner</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Content Optimiser and Editor</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Content Creator</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Media Research</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Marketing Intelligence</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Website Content GEO</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Technical GEO</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Measure and Report</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Content Library</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--teal);">✓</span>Email support</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agency -->
+      <div class="plan-card" style="border-color:var(--pink);">
+        <div class="plan-card-header" style="background:var(--pink);">
+          <div class="plan-card-name">Agency / Partner</div>
+          <div class="plan-card-projects">3 Premium projects included</div>
+        </div>
+        <div class="plan-card-body">
+          <div class="plan-price-wrap">
+            <div class="plan-price">£417</div>
+            <div class="plan-period">/mo</div>
+          </div>
+          <div class="plan-annual">£5,000/yr billed annually</div>
+          <div class="plan-quarterly">Or £479/month · £5,750/yr billed quarterly</div>
+          <hr class="plan-divider">
+          <div class="plan-features">
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Full standard platform – all 10 modules</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>AI Visibility Audit + GEO strategy builder</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Comms Planner</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Content Optimiser and Editor</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Content Creator</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Media Research</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Marketing Intelligence</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Website Content GEO</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Technical GEO</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Measure and Report</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Multi-client architecture + agency dashboard</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>3 Premium projects – full brand workspaces</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Client sub-accounts and reporting</div>
+            <div class="plan-feature"><span class="plan-feature-tick" style="color:var(--pink);">✓</span>Priority email and chat support</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tiers-section">
+      <div class="section-eyebrow">Additional Project Tiers</div>
+      <div class="tiers-intro">Because no two clients are the same, we have created three price brackets for additional projects. Each 'action' refers to a piece of content created, optimised, or a marketing/media intelligence search per month.</div>
+      <div class="tiers-grid">
+        <div class="tier-card" style="border-color:var(--teal);">
+          <div class="tier-name" style="color:var(--teal);">Standard</div>
+          <div class="tier-price-row">
+            <div class="tier-price">£500</div>
+            <div class="tier-period">/yr per additional project</div>
+          </div>
+          <div class="tier-actions" style="color:var(--teal);">× 50 actions/month</div>
+        </div>
+        <div class="tier-card" style="border-color:var(--pink);">
+          <div class="tier-name" style="color:var(--pink);">Premium</div>
+          <div class="tier-price-row">
+            <div class="tier-price">£650</div>
+            <div class="tier-period">/yr per additional project</div>
+          </div>
+          <div class="tier-actions" style="color:var(--pink);">× 75 actions/month</div>
+        </div>
+        <div class="tier-card" style="border-color:var(--gold);">
+          <div class="tier-name" style="color:var(--gold);">Max</div>
+          <div class="tier-price-row">
+            <div class="tier-price">£800</div>
+            <div class="tier-period">/yr per additional project</div>
+          </div>
+          <div class="tier-actions" style="color:var(--gold);">× 150 actions/month</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>AIO Fusion &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; August 2026</span>
+    <span>Page 4 of 5</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ PAGE 5: DECISIONS LOG -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div class="logo">AIO Fusion</div>
+      <div class="tagline">August 2026 Planning</div>
+    </div>
+    <div class="page-header-right-wrap">
+      <div class="page-header-right">
+        <div class="pg-title">5. Key Decisions Log</div>
+        <div class="pg-sub">Agreed in August 2026 planning session</div>
+      </div>
+      <div class="page-num">5</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="section-eyebrow">Decisions confirmed — Spencer, Patrick &amp; Natalie</div>
+    <div class="decisions-list">
+
+      <div class="decision-row">
+        <span class="decision-cat">Environment</span>
+        <span class="decision-icon">🔒</span>
+        <div class="decision-body">
+          <div class="decision-title">Live demo frozen from July 2026</div>
+          <div class="decision-detail">No structural changes to the live platform until cutover. All build work happens on staging only.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Dependency order</span>
+        <span class="decision-icon">📋</span>
+        <div class="decision-body">
+          <div class="decision-title">Staging first — everything else depends on it</div>
+          <div class="decision-detail">Staging environment must be fully set up and verified before any login, payment, or permissions work begins.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Access control</span>
+        <span class="decision-icon">💳</span>
+        <div class="decision-body">
+          <div class="decision-title">No admin approval gate — Stripe payment = access</div>
+          <div class="decision-detail">The manual admin approval queue is removed. A completed Stripe payment is the only gate to platform access. Admins can grant a free-access flag for beta/demo accounts.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Terminology</span>
+        <span class="decision-icon">🏷</span>
+        <div class="decision-body">
+          <div class="decision-title">Agency/Partner — not Reseller — in all user-facing strings</div>
+          <div class="decision-detail">"Reseller" does not appear anywhere visible to users. All UI, marketing pages, and emails use "Agency/Partner".</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">SSO</span>
+        <span class="decision-icon">🔑</span>
+        <div class="decision-body">
+          <div class="decision-title">Microsoft Entra ID — not Teams SSO</div>
+          <div class="decision-detail">"Sign in with Microsoft" using Microsoft Entra ID (formerly Azure AD). "Teams SSO" is not used anywhere.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Seat limits</span>
+        <span class="decision-icon">👥</span>
+        <div class="decision-body">
+          <div class="decision-title">3 seats per account across all non-master tiers</div>
+          <div class="decision-detail">Agency/Partner: 3 seats. Client accounts: 3 seats each. Standalone clients: 3 seats. All limits stored in the DB and configurable per account.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Security</span>
+        <span class="decision-icon">🛡</span>
+        <div class="decision-body">
+          <div class="decision-title">MFA mandatory for master accounts (TOTP)</div>
+          <div class="decision-detail">Time-based one-time password (TOTP) required for all master-level accounts. Not enforced for other tiers at launch.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Data retention</span>
+        <span class="decision-icon">🗄</span>
+        <div class="decision-body">
+          <div class="decision-title">Hard-delete: 30-day recovery window; financial records 6 years</div>
+          <div class="decision-detail">Deleted accounts/projects move to soft-delete state for 30 days before permanent removal. Financial records (invoices, payments) retained for 6 years per UK accounting law.</div>
+        </div>
+      </div>
+
+      <div class="decision-row">
+        <span class="decision-cat">Deferred</span>
+        <span class="decision-icon">⏸</span>
+        <div class="decision-body">
+          <div class="decision-title">Post-launch deferrals confirmed</div>
+          <div class="decision-detail">Multi-workspace membership (one user, multiple companies), dormant project storage fee, and seat add-ons are all deferred to post-launch releases.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="page-footer">
+    <span>AIO Fusion &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; August 2026</span>
+    <span>Page 5 of 5</span>
+  </div>
+</div>
+
+</body>
+</html>
