@@ -25,8 +25,8 @@ export interface EmailTemplateOpts {
   footerNote?: string;
 }
 
-const LOGO_URL = "https://aiofusion.ai/images/logo-color.png";
-const SITE_URL = "https://aiofusion.ai";
+const LOGO_URL = "https://www.aiofusion.ai/images/logo-color.png";
+const SITE_URL = "https://www.aiofusion.ai";
 const CONTACT_EMAIL = "info@aiofusion.ai";
 
 const RASPBERRY = "#C8497A";

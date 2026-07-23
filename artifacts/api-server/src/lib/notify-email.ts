@@ -44,7 +44,7 @@ export async function sendNewSignupAlert(opts: {
     `The account is currently pending approval. Log in to the admin panel to`,
     `review and approve or reject the application.`,
     ``,
-    `Admin panel: https://aiofusion.ai`,
+    `Admin panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -62,7 +62,7 @@ export async function sendNewSignupAlert(opts: {
         Log in to the admin panel to review and approve or reject the application.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -152,7 +152,7 @@ export async function sendSpikeAlert(opts: {
     `Log in to the admin panel to review the account's usage, adjust their quota,`,
     `or block the account if the activity looks abusive.`,
     ``,
-    `Admin token usage panel: https://aiofusion.ai`,
+    `Admin token usage panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -171,7 +171,7 @@ export async function sendSpikeAlert(opts: {
         Review the account's usage, adjust their quota, or block the account if the activity looks abusive.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -204,7 +204,7 @@ export async function sendQuotaBreachAlert(opts: {
     `Log in to the admin panel to adjust their quota multiplier (e.g. grant 2× headroom)`,
     `or block the account if needed.`,
     ``,
-    `Admin token usage panel: https://aiofusion.ai`,
+    `Admin token usage panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -222,7 +222,7 @@ export async function sendQuotaBreachAlert(opts: {
         Adjust their quota multiplier or block the account if needed.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -254,7 +254,7 @@ export async function sendSpendCapAlert(opts: {
     `The account is now receiving 429 responses on all AI routes until the cap is raised`,
     `or the calendar month resets.`,
     ``,
-    `Admin token usage panel: https://aiofusion.ai`,
+    `Admin token usage panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -272,7 +272,7 @@ export async function sendSpendCapAlert(opts: {
         or the calendar month resets.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -367,7 +367,7 @@ export async function sendBookDemoConfirmation(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
   });
 
   await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
@@ -461,7 +461,7 @@ export async function sendSupportTicketAlert(opts: {
     ``,
     `Log in to the admin panel to view and respond to this ticket.`,
     ``,
-    `Admin panel: https://aiofusion.ai`,
+    `Admin panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -480,7 +480,7 @@ export async function sendSupportTicketAlert(opts: {
         ${textToHtml(opts.description)}
       </div>
     `,
-    cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -542,7 +542,7 @@ export async function sendSupportTicketAck(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -607,11 +607,11 @@ export async function sendSupportTicketReplyNotification(opts: {
       </div>
       <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
         Reply to this email or log in to
-        <a href="https://aiofusion.ai" style="color: #C8497A;">AIO Fusion</a>
+        <a href="https://www.aiofusion.ai" style="color: #C8497A;">AIO Fusion</a>
         to view the full thread.
       </p>
     `,
-    cta: { text: "View your support thread", href: "https://aiofusion.ai" },
+    cta: { text: "View your support thread", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -655,7 +655,7 @@ export async function sendContactFormFailedAlert(opts: {
     `The lead is safe in the database. Log in to the admin panel → Leads to`,
     `re-send the emails once Resend is back online.`,
     ``,
-    `Admin panel: https://aiofusion.ai`,
+    `Admin panel: https://www.aiofusion.ai`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -679,7 +679,7 @@ export async function sendContactFormFailedAlert(opts: {
         ${escHtml(opts.error)}
       </div>
     `,
-    cta: { text: "Open Leads Panel", href: "https://aiofusion.ai" },
+    cta: { text: "Open Leads Panel", href: "https://www.aiofusion.ai" },
   });
 
   try {
@@ -726,7 +726,7 @@ export async function sendEnquiryConfirmation(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
   });
 
   await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
