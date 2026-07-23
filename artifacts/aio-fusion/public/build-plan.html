@@ -719,7 +719,7 @@
           <li><span class="done-check">✓</span>Agency/Partner can invite staff with role assignment and project access pre-assignment</li>
           <li><span class="done-check">✓</span>Agency/Partner can add clients, view as client, upgrade/downgrade/cancel/remove clients</li>
           <li><span class="done-check">✓</span>Session revocation is immediate - all sessions end when access is removed</li>
-          <li><span class="done-check">✓</span>Master admin panel: impersonation, free-access flags, audit log, usage dashboard</li>
+          <li><span class="done-check">✓</span>Master admin panel: impersonation, free-access flags, audit log, usage dashboard, discount invite management (beta/VIP)</li>
           <li><span class="done-check">✓</span>MFA enforced for master accounts</li>
           <li><span class="done-check">✓</span>All tests passing on staging; live environment unaffected</li>
         </ul>
@@ -789,6 +789,37 @@
     <div class="note note-gold">
       <span class="note-icon">⚠</span>
       <div>All Stripe work uses <strong>test-mode API keys</strong> on staging. No real money is processed until the go-live cutover in task #385.</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Beta tester &amp; VIP discount management</div>
+      <div class="block-body">
+        <p style="font-size:14px;color:var(--g600);margin-bottom:14px;">The master admin can invite beta testers, early adopters, and VIP accounts at a variable discount. The discount is set per invite, applied automatically at Stripe Checkout, and persists on every renewal for the lifetime of the subscription - the recipient never has to enter a code.</p>
+
+        <p style="font-size:12px;font-weight:700;color:var(--g500);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">How it works</p>
+        <ol class="steps-list" style="margin-bottom:16px;">
+          <li><span class="step-num" style="background:var(--pink);">1</span><div class="step-body"><span class="step-title">Master admin creates a discount invite</span> - in the master admin panel, enter the invitee's email, choose their account type (In-House or Agency/Partner), and set the discount percentage (e.g. 30%). A unique, single-use invite link is generated.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">2</span><div class="step-body"><span class="step-title">Invite link sent to the recipient</span> - the link is pre-loaded with the account type and discount level. The recipient completes the normal signup flow (email/SSO, company details, billing frequency choice).</div></li>
+          <li><span class="step-num" style="background:var(--pink);">3</span><div class="step-body"><span class="step-title">Stripe coupon applied at checkout</span> - when the invite link is redeemed, the server creates a Stripe coupon for the specified % off (or reuses an existing one with the same value) and attaches it to the Checkout session. The discounted price is shown transparently on the Stripe Checkout page.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">4</span><div class="step-body"><span class="step-title">Discount persists on renewal</span> - the coupon is applied at subscription level (not one-time), so every quarterly or annual renewal is charged at the discounted rate automatically.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">5</span><div class="step-body"><span class="step-title">Discount visible in admin subscription view</span> - all discounted accounts are flagged in the master admin subscription table with the discount %, invite label (e.g. "Beta", "VIP"), and the date the invite was redeemed.</div></li>
+        </ol>
+
+        <p style="font-size:12px;font-weight:700;color:var(--g500);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Rules &amp; guardrails</p>
+        <ul class="done-list">
+          <li><span class="done-check">✓</span><strong>Master admin only</strong> - no Agency/Partner or other account type can create discount invites</li>
+          <li><span class="done-check">✓</span><strong>Variable discount</strong> - any integer % from 1-100 (100% = fully free; use the existing free-access flag instead)</li>
+          <li><span class="done-check">✓</span><strong>Single-use links</strong> - each invite link can only be redeemed once; unused links expire after 30 days</li>
+          <li><span class="done-check">✓</span><strong>Invite label</strong> - master admin sets a label at creation time (e.g. "Beta", "Early Adopter", "VIP", "Partner Preview") stored on the account record for internal reference</li>
+          <li><span class="done-check">✓</span><strong>Discount cannot be self-applied</strong> - a regular organic signup cannot access the discounted price; the coupon is only attached server-side when a valid invite token is present</li>
+          <li><span class="done-check">✓</span><strong>Discount can be removed</strong> - master admin can end the discount at next renewal via Stripe (does not affect the current billing period)</li>
+        </ul>
+
+        <div class="note note-pink" style="margin-top:12px;">
+          <span class="note-icon">ℹ</span>
+          <div>Stripe coupon creation is handled server-side using the Stripe API at the point of checkout session creation - no coupon codes are exposed to the client. The invite token in the URL is a short-lived server-side reference, not the Stripe coupon ID.</div>
+        </div>
+      </div>
     </div>
 
     <div class="block">
