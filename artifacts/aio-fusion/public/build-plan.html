@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIO Fusion — August Build Plan</title>
+<style>
+  :root {
+    --ink:    #102B36;
+    --teal:   #2A8FA6;
+    --pink:   #C8497A;
+    --gold:   #B8860B;
+    --indigo: #4F46E5;
+    --green:  #166534;
+    --g100:   #F1F5F9;
+    --g200:   #E2E8F0;
+    --g400:   #94A3B8;
+    --g500:   #64748B;
+    --g700:   #334155;
+    --white:  #FFFFFF;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #EEF2F7;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Sticky nav ── */
+  .sticky-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 40px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+  }
+  .sticky-nav .logo {
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 800;
+    padding: 14px 20px 14px 0;
+    border-right: 1px solid rgba(255,255,255,0.1);
+    margin-right: 20px;
+    white-space: nowrap;
+  }
+  .sticky-nav a {
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 14px 12px;
+    transition: color 0.15s;
+    white-space: nowrap;
+  }
+  .sticky-nav a:hover { color: var(--white); }
+  .sticky-nav .nav-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 700;
+    margin-right: 5px;
+    flex-shrink: 0;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    background: var(--ink);
+    padding: 72px 80px 64px;
+  }
+  .cover-eyebrow {
+    color: var(--pink);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .cover-title {
+    color: var(--white);
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 16px;
+  }
+  .cover-title em { color: var(--pink); font-style: normal; }
+  .cover-sub {
+    color: var(--g400);
+    font-size: 16px;
+    max-width: 640px;
+    line-height: 1.6;
+    margin-bottom: 48px;
+  }
+  .cover-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    padding-top: 32px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .cover-meta-item label {
+    display: block;
+    color: var(--g400);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 5px;
+  }
+  .cover-meta-item span {
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .task-index {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 48px;
+  }
+  .task-index-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    border-left: 3px solid;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  .task-index-item:hover { background: rgba(255,255,255,0.08); }
+  .task-index-num {
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    opacity: 0.5;
+    min-width: 28px;
+  }
+  .task-index-title {
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .task-index-sub {
+    color: rgba(255,255,255,0.4);
+    font-size: 11px;
+  }
+
+  /* ── Content wrapper ── */
+  .content { max-width: 900px; margin: 0 auto; padding: 0 40px 80px; }
+
+  /* ── Task section ── */
+  .task-section {
+    margin-top: 56px;
+    scroll-margin-top: 52px;
+  }
+  .task-header {
+    border-radius: 10px;
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .task-header-num {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--white);
+    opacity: 0.35;
+    line-height: 1;
+    min-width: 36px;
+  }
+  .task-header-body { flex: 1; }
+  .task-header-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 6px;
+  }
+  .task-header-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--white);
+    line-height: 1.2;
+  }
+
+  /* ── Sections within task ── */
+  .task-body { display: flex; flex-direction: column; gap: 28px; }
+
+  .block {
+    background: var(--white);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--g200);
+  }
+  .block-title {
+    padding: 14px 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    background: var(--g100);
+    border-bottom: 1px solid var(--g200);
+    color: var(--g500);
+  }
+  .block-body { padding: 20px; }
+
+  /* ── Done-looks-like list ── */
+  .done-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .done-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13.5px;
+    color: var(--g700);
+    line-height: 1.5;
+  }
+  .done-check {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: #DCFCE7;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--green);
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── Steps list ── */
+  .steps-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .steps-list li {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .step-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    color: var(--white);
+    margin-top: 1px;
+  }
+  .step-body { font-size: 13.5px; color: var(--g700); line-height: 1.55; }
+  .step-title { font-weight: 700; color: var(--ink); }
+
+  /* ── Scope pills ── */
+  .scope-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .scope-in, .scope-out {
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .scope-in  { background: #DCFCE7; color: #166534; }
+  .scope-out { background: #FEE2E2; color: #991B1B; }
+
+  /* ── Role / pricing tables ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .data-table thead tr { background: #1A3344; }
+  .data-table thead th {
+    color: var(--white);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .data-table tbody tr:nth-child(odd)  { background: var(--white); }
+  .data-table tbody tr:nth-child(even) { background: var(--g100); }
+  .data-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--g200);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .data-table tbody td:first-child { font-weight: 600; color: var(--ink); }
+  .check { color: var(--green); font-weight: 700; }
+  .cross { color: #991B1B; }
+
+  /* ── Info / note boxes ── */
+  .note {
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .note-icon { font-size: 16px; flex-shrink: 0; }
+  .note-gold  { background: #FEF3C7; color: #92400E; }
+  .note-blue  { background: #DBEAFE; color: #1E40AF; }
+  .note-pink  { background: #FCE7F3; color: #9B1C4A; }
+  .note-green { background: #DCFCE7; color: #166534; }
+
+  /* ── Pricing cards ── */
+  .pricing-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .pricing-card {
+    border-radius: 8px;
+    border: 2px solid;
+    overflow: hidden;
+  }
+  .pricing-card-header { padding: 14px 18px 12px; }
+  .pricing-card-name { font-size: 17px; font-weight: 800; color: var(--white); }
+  .pricing-card-sub  { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 3px; }
+  .pricing-card-body { padding: 14px 18px; }
+  .pricing-big { font-size: 28px; font-weight: 800; color: var(--ink); }
+  .pricing-period { font-size: 12px; color: var(--g400); }
+  .pricing-alt { font-size: 12px; color: var(--g500); margin-top: 2px; }
+
+  .tier-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .tier-card {
+    border-radius: 8px;
+    border: 1.5px solid;
+    padding: 14px 16px;
+  }
+  .tier-name { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .tier-price { font-size: 22px; font-weight: 800; color: var(--ink); }
+  .tier-period { font-size: 11px; color: var(--g400); }
+  .tier-actions { font-size: 12px; font-weight: 600; margin-top: 5px; }
+
+  /* ── Account hierarchy tree ── */
+  .hier-tree { display: flex; flex-direction: column; gap: 0; }
+  .hier-node {
+    border-radius: 8px;
+    padding: 11px 16px;
+    color: var(--white);
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .hier-sub { font-size: 11px; font-weight: 400; opacity: 0.75; margin-top: 2px; }
+  .hier-children {
+    margin-left: 28px;
+    padding-left: 16px;
+    border-left: 2px solid var(--g200);
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+
+  /* ── State / account status table ── */
+  .status-badge {
+    display: inline-block;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 680px) {
+    .cover { padding: 40px 24px; }
+    .cover-title { font-size: 28px; }
+    .content { padding: 0 20px 60px; }
+    .task-header { padding: 20px; }
+    .pricing-cards, .tier-cards { grid-template-columns: 1fr; }
+    .sticky-nav { padding: 0 16px; }
+    .sticky-nav a span { display: none; }
+  }
+
+  @media print {
+    .sticky-nav { display: none; }
+    body { background: white; }
+    .task-section { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sticky nav -->
+<nav class="sticky-nav">
+  <div class="logo">AIO Fusion</div>
+  <a href="#task-381"><span class="nav-num" style="background:var(--teal);">1</span><span>#381 Staging</span></a>
+  <a href="#task-382"><span class="nav-num" style="background:var(--pink);">2</span><span>#382 Login & Accounts</span></a>
+  <a href="#task-383"><span class="nav-num" style="background:var(--indigo);">3</span><span>#383 Project Access</span></a>
+  <a href="#task-384"><span class="nav-num" style="background:var(--gold);">4</span><span>#384 Stripe & Billing</span></a>
+  <a href="#task-385"><span class="nav-num" style="background:var(--green);">5</span><span>#385 Go-live</span></a>
+</nav>
+
+<!-- Cover -->
+<div class="cover">
+  <div class="cover-eyebrow">Confidential &nbsp;·&nbsp; August 2026 Build Plan</div>
+  <div class="cover-title">AIO Fusion<br><em>August Sprint</em></div>
+  <div class="cover-sub">Full technical spec for the five tasks that take AIO Fusion from its current demo state to a live, paying, multi-tenant SaaS product. Target go-live: 1 September 2026.</div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><label>Prepared for</label><span>Patrick Barrett &amp; Natalie Linder</span></div>
+    <div class="cover-meta-item"><label>Built by</label><span>Spencer</span></div>
+    <div class="cover-meta-item"><label>Go-live target</label><span>1 September 2026</span></div>
+    <div class="cover-meta-item"><label>Environment</label><span>Staging first &nbsp;→&nbsp; Live cutover</span></div>
+  </div>
+  <div class="task-index">
+    <a class="task-index-item" href="#task-381" style="border-color:var(--teal);">
+      <span class="task-index-num">#381</span>
+      <span class="task-index-title">Staging Environment Setup</span>
+      <span class="task-index-sub">Wk 1 &nbsp;·&nbsp; 4–8 Aug</span>
+    </a>
+    <a class="task-index-item" href="#task-382" style="border-color:var(--pink);">
+      <span class="task-index-num">#382</span>
+      <span class="task-index-title">Login, Signup, Account Architecture &amp; Access Control</span>
+      <span class="task-index-sub">Wk 2–3 &nbsp;·&nbsp; 11–22 Aug</span>
+    </a>
+    <a class="task-index-item" href="#task-383" style="border-color:var(--indigo);">
+      <span class="task-index-num">#383</span>
+      <span class="task-index-title">Project-Level Access Control within Agency Accounts</span>
+      <span class="task-index-sub">Wk 2–3 &nbsp;·&nbsp; merged into #382</span>
+    </a>
+    <a class="task-index-item" href="#task-384" style="border-color:var(--gold);">
+      <span class="task-index-num">#384</span>
+      <span class="task-index-title">Stripe Payments, Project Tiers &amp; Self-Serve Billing</span>
+      <span class="task-index-sub">Wk 4 &nbsp;·&nbsp; 25–29 Aug</span>
+    </a>
+    <a class="task-index-item" href="#task-385" style="border-color:var(--green);">
+      <span class="task-index-num">#385</span>
+      <span class="task-index-title">Staging-to-Live Cutover, Account Migration &amp; Stripe Go-Live</span>
+      <span class="task-index-sub">Wk 5 &nbsp;·&nbsp; 1 Sep</span>
+    </a>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ══════════════════════════════════════════════════ #381 STAGING -->
+<section class="task-section" id="task-381">
+  <div class="task-header" style="background:#1A3344;">
+    <div class="task-header-num">#381</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Task 1 of 5 &nbsp;·&nbsp; Week 1 &nbsp;·&nbsp; 4–8 Aug</div>
+      <div class="task-header-title">Staging Environment Setup</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-pink">
+      <span class="note-icon">🔒</span>
+      <div><strong>Live demo is frozen.</strong> No structural changes to the live environment until cutover. Everything in tasks #381–384 happens on staging only.</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Why this comes first</div>
+      <div class="block-body">
+        <p style="color:var(--g700);font-size:13.5px;line-height:1.6;">All of the login, SSO, permissions, and Stripe work in the tasks below must be built and tested without touching the live demo — active demo users must not be affected. A staging environment gives us a safe, isolated copy of the platform where every change can be validated before it reaches real clients.</p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Done looks like</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span>A separate deployment exists at a staging subdomain (staging.aiofusion.ai)</li>
+          <li><span class="done-check">✓</span>Staging has its own PostgreSQL database — completely separate from production</li>
+          <li><span class="done-check">✓</span>Staging has its own environment variables; no secrets are shared with live</li>
+          <li><span class="done-check">✓</span>A seed script populates staging with test accounts: admin, agency/partner, and client roles</li>
+          <li><span class="done-check">✓</span>Google OAuth redirect URIs updated so Google SSO works on staging without affecting live</li>
+          <li><span class="done-check">✓</span>Smoke test passes: login, Google SSO, and project loading all work on staging</li>
+          <li><span class="done-check">✓</span>Live demo confirmed unaffected</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Steps</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--teal);">1</span><div class="step-body"><span class="step-title">Fork the project into a new Replit app</span> — duplicate the monorepo into a separate Replit project configured to deploy to the staging subdomain; own Replit Secrets section, no shared values.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">2</span><div class="step-body"><span class="step-title">Provision a separate database</span> — create a new PostgreSQL database for staging, run all migrations against it, confirm the connection string is staging-only.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body"><span class="step-title">Wire staging environment variables</span> — set all required secrets (auth keys, Google OAuth redirect URIs pointing to staging URL) in the staging app.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><span class="step-title">Update Google OAuth config</span> — add staging domain as an authorised redirect URI in Google Cloud Console; leave live config untouched.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body"><span class="step-title">Write and run a seed script</span> — repeatable script that creates: one admin account, one Agency/Partner account with two client sub-accounts, and a sample project per client.</div></li>
+          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body"><span class="step-title">Smoke-test</span> — verify login, Google SSO, and project loading all work on staging before declaring it ready.</div></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Out of scope</div>
+      <div class="block-body">
+        <div class="scope-grid">
+          <span class="scope-out">✕ Login or SSO changes (task #382)</span>
+          <span class="scope-out">✕ Stripe or billing (task #384)</span>
+          <span class="scope-out">✕ Migrating real user data to staging</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ #382 LOGIN & ACCOUNTS -->
+<section class="task-section" id="task-382">
+  <div class="task-header" style="background:#8B1A4A;">
+    <div class="task-header-num">#382</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Task 2 of 5 &nbsp;·&nbsp; Weeks 2–3 &nbsp;·&nbsp; 11–22 Aug &nbsp;·&nbsp; Depends on #381</div>
+      <div class="task-header-title">Login, Signup, Account Architecture &amp; Access Control</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-blue">
+      <span class="note-icon">🏷</span>
+      <div><strong>Terminology note:</strong> The user-facing label throughout the product is <strong>Agency/Partner</strong> — never "Reseller". Internal code may retain "reseller" to avoid a migration. Microsoft SSO is always labelled <strong>"Sign in with Microsoft"</strong> or <strong>Microsoft Entra ID</strong> — never "Teams SSO".</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Account types</div>
+      <div class="block-body">
+        <div class="hier-tree">
+          <div class="hier-node" style="background:#1A3344;">
+            Master / Admin
+            <div class="hier-sub">Patrick + Spencer + future internal team &nbsp;·&nbsp; Unlimited seats &nbsp;·&nbsp; Full platform control</div>
+          </div>
+          <div class="hier-children">
+            <div class="hier-node" style="background:var(--teal);">
+              Agency / Partner &nbsp;·&nbsp; 3 seats
+              <div class="hier-sub">PR agencies and partners &nbsp;·&nbsp; Pays own plan &nbsp;·&nbsp; Creates and manages clients below</div>
+            </div>
+            <div class="hier-children">
+              <div class="hier-node" style="background:#A63868;font-size:12px;padding:9px 14px;">
+                Client (under Agency/Partner) &nbsp;·&nbsp; 3 seats
+                <div class="hier-sub">Invited by Agency/Partner &nbsp;·&nbsp; Own dashboard &nbsp;·&nbsp; Billed through Agency/Partner</div>
+              </div>
+            </div>
+            <div class="hier-node" style="background:var(--pink);">
+              Standalone Client &nbsp;·&nbsp; 3 seats
+              <div class="hier-sub">Direct signup &nbsp;·&nbsp; Pays own subscription &nbsp;·&nbsp; Own invoices</div>
+            </div>
+          </div>
+        </div>
+        <div class="note note-gold" style="margin-top:14px;">
+          <span class="note-icon">⚠</span>
+          <div>Seat limits are configurable per account in the database — 3 is the launch default for all non-master tiers. Patrick to confirm if limits vary by package.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Roles within each account</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Projects</th>
+              <th>Content tools</th>
+              <th>Team management</th>
+              <th>Billing &amp; invoices</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Owner</td><td>All</td><td class="check">✓</td><td>Full control</td><td>Full access</td></tr>
+            <tr><td>Admin</td><td>All</td><td class="check">✓</td><td>Add / remove users</td><td class="cross">✗</td></tr>
+            <tr><td>Billing</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td>Download invoices &amp; update billing email / VAT</td></tr>
+            <tr><td>Content / Staff</td><td>Assigned only</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+            <tr><td>Viewer</td><td>Assigned only</td><td>Read-only</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12px;color:var(--g500);margin-top:10px;">Billing contact: a separate billing email field per account — invoices are sent there regardless of who the Owner is. VAT number stored on account and shown on Stripe invoices.</p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Master account sub-roles</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead>
+            <tr><th>Role</th><th>Capabilities</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Owner</td>
+              <td>Everything: impersonation, free-access flags, usage dashboard, master user management, account restore</td>
+            </tr>
+            <tr>
+              <td>Technical</td>
+              <td>Usage dashboard, impersonation (debug), audit log, system health — no flags, no user management, no restore</td>
+            </tr>
+            <tr>
+              <td>Operational Support</td>
+              <td>View accounts, impersonation (support), usage dashboard read-only — no flags, no deletions, no master user management</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note note-pink" style="margin-top:12px;">
+          <span class="note-icon">🛡</span>
+          <div>MFA (TOTP) is mandatory for all master accounts on first login. Every master action is logged to an append-only audit log.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Signup flow</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--teal);">1</span><div class="step-body">User arrives → clicks Sign Up</div></li>
+          <li><span class="step-num" style="background:var(--teal);">2</span><div class="step-body">Chooses: <strong>Email + password</strong>, <strong>Sign in with Google</strong>, or <strong>Sign in with Microsoft</strong></div></li>
+          <li><span class="step-num" style="background:var(--teal);">3</span><div class="step-body">Email/password: verification email sent (expires 24h); click to confirm; resend option available</div></li>
+          <li><span class="step-num" style="background:var(--teal);">4</span><div class="step-body"><strong>Organic signups only:</strong> account type selection — Agency/Partner or Client (described by behaviour, not jargon)</div></li>
+          <li><span class="step-num" style="background:var(--teal);">5</span><div class="step-body">Company details: name, website, billing email, VAT number (optional)</div></li>
+          <li><span class="step-num" style="background:var(--teal);">6</span><div class="step-body">→ Stripe Checkout for chosen plan (task #384)</div></li>
+          <li><span class="step-num" style="background:var(--teal);">7</span><div class="step-body">Payment success → Dashboard. <strong>No admin approval queue.</strong></div></li>
+        </ol>
+        <div class="note note-blue" style="margin-top:14px;">
+          <span class="note-icon">💡</span>
+          <div><strong>Invited users</strong> (staff and clients invited by an Agency/Partner) skip steps 4–6 entirely — their role and account context are set at invite time. They go straight to set-password / SSO → dashboard.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Agency/Partner client management</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead>
+            <tr><th>Action</th><th>Behaviour</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Invite a client</td>
+              <td>"Add client" → client name, company, email → invite email → client sets password or uses SSO → own dashboard, billed through Agency/Partner</td>
+            </tr>
+            <tr>
+              <td>View as client</td>
+              <td>Click into any client account; persistent "Viewing as [name]" banner; one-click exit</td>
+            </tr>
+            <tr>
+              <td>Upgrade project tier</td>
+              <td>Standard → Premium → Max; prorated Stripe charge to Agency/Partner; action limit updated immediately</td>
+            </tr>
+            <tr>
+              <td>Downgrade project tier</td>
+              <td>Takes effect at end of billing period (no mid-cycle refund); confirmation screen shows usage warning if usage exceeds new cap; client notified; "Cancel scheduled downgrade" option until effective date</td>
+            </tr>
+            <tr>
+              <td>Cancel a project</td>
+              <td>End of billing period; project enters dormant state (read-only, data retained 90 days); day-76 warning email; reactivation within 90 days restores full history; after 90 days data archived</td>
+            </tr>
+            <tr>
+              <td>Soft-remove a client</td>
+              <td>Removes from Agency/Partner account; data retained; client notified; access suspended</td>
+            </tr>
+            <tr>
+              <td>Hard-delete a client</td>
+              <td>Owner-only; type-to-confirm gate; 30-day recovery window; then permanent purge; financial records retained 6 years (HMRC)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Account states</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead>
+            <tr><th>State</th><th>Behaviour</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Active</td><td>Full access per plan and tier</td></tr>
+            <tr><td>Past due</td><td>Payment failed; full access retained for 14-day dunning window; persistent banner for admins/owners</td></tr>
+            <tr><td>Suspended</td><td>Dunning exhausted; login → payment-required screen only; all data retained</td></tr>
+            <tr><td>Cancelled</td><td>Ended by choice; same as suspended; data retained 90 days then archived</td></tr>
+            <tr><td>Free access</td><td>Master-granted; bypasses payment gate entirely</td></tr>
+          </tbody>
+        </table>
+        <div class="note note-gold" style="margin-top:12px;">
+          <span class="note-icon">⚠</span>
+          <div>Agency/Partner suspension cascades to all staff and clients beneath it. The client-facing suspended message is kept neutral: "Access is currently unavailable — please contact [agency]" — the Agency/Partner's payment status is never disclosed to their clients.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Security &amp; compliance highlights</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span><strong>Session revocation is immediate</strong> — a removed or suspended user cannot survive on an existing session. A <code>session_version</code> counter per user ensures stale sessions are rejected at the next request.</li>
+          <li><span class="done-check">✓</span><strong>MFA mandatory for master accounts (TOTP)</strong>; strongly prompted for Agency/Partner Admins; available to all users.</li>
+          <li><span class="done-check">✓</span><strong>Impersonation guardrails</strong> — every impersonation session is logged (who, which account, start/end). Blocked actions while impersonating: change account password/email, delete account.</li>
+          <li><span class="done-check">✓</span><strong>Data retention:</strong> hard-delete has 30-day recovery window; financial records retained 6 years (HMRC). GDPR erasure requests use the same pipeline.</li>
+          <li><span class="done-check">✓</span><strong>Rate limiting</strong> on all auth endpoints with progressive lockout after 5 failed attempts.</li>
+          <li><span class="done-check">✓</span><strong>Password reset:</strong> identical response whether email exists or not (no enumeration). Single-use links, 1-hour expiry.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Done looks like</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span>Email + password signup with verification email working on staging</li>
+          <li><span class="done-check">✓</span>Google SSO and Microsoft Entra ID SSO both working on staging</li>
+          <li><span class="done-check">✓</span>Account type selection (Agency/Partner vs Client) at signup</li>
+          <li><span class="done-check">✓</span>Agency/Partner can invite staff with role assignment and project access pre-assignment</li>
+          <li><span class="done-check">✓</span>Agency/Partner can add clients, view as client, upgrade/downgrade/cancel/remove clients</li>
+          <li><span class="done-check">✓</span>Session revocation is immediate — all sessions end when access is removed</li>
+          <li><span class="done-check">✓</span>Master admin panel: impersonation, free-access flags, audit log, usage dashboard</li>
+          <li><span class="done-check">✓</span>MFA enforced for master accounts</li>
+          <li><span class="done-check">✓</span>All tests passing on staging; live environment unaffected</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ #383 PROJECT ACCESS -->
+<section class="task-section" id="task-383">
+  <div class="task-header" style="background:#312E81;">
+    <div class="task-header-num">#383</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Task 3 of 5 &nbsp;·&nbsp; Weeks 2–3 &nbsp;·&nbsp; Merged into #382</div>
+      <div class="task-header-title">Project-Level Access Control within Agency Accounts</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-blue">
+      <span class="note-icon">💡</span>
+      <div>This task is merged into #382 and will be built as part of that sprint. It is documented separately here because it is the most granular layer of the permissions model — an Agency/Partner might have five staff members but only want two of them to access a particular client's data.</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">How it works</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span>An Agency/Partner admin can assign a staff member access to specific client projects — not all projects by default</li>
+          <li><span class="done-check">✓</span>A staff member who logs in sees only the projects they have been explicitly granted access to</li>
+          <li><span class="done-check">✓</span>The project switcher and sidebar reflect server-enforced visibility — no client-side filtering</li>
+          <li><span class="done-check">✓</span>A client account sees only its own projects — never sibling clients under the same Agency/Partner</li>
+          <li><span class="done-check">✓</span>A "Manage access" view in the Agency/Partner admin dashboard shows which staff member has access to which projects, with add/remove controls</li>
+          <li><span class="done-check">✓</span>All permission checks are server-enforced; privilege escalation between sibling clients is not possible</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Implementation approach</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--indigo);">1</span><div class="step-body"><span class="step-title">Extend the permission model</span> — add a <code>project_grants</code> join table linking a user to a specific project with a role; server logic enforces project-level grants on top of the account hierarchy.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">2</span><div class="step-body"><span class="step-title">Build "Manage access" UI</span> — agency admin dashboard view listing all staff and their project access; toggles to grant/remove access per project; changes saved immediately.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">3</span><div class="step-body"><span class="step-title">Enforce visibility in project list and sidebar</span> — update the project switcher to show only server-approved projects for the logged-in user.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">4</span><div class="step-body"><span class="step-title">Guard all project routes</span> — every API route that returns project data checks the requester's project-level grant; returns 403 for unauthorised attempts.</div></li>
+          <li><span class="step-num" style="background:var(--indigo);">5</span><div class="step-body"><span class="step-title">Test role matrix on staging</span> — test all combinations: agency admin (all), staff member (subset), client user (own only), master admin (all via impersonation).</div></li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ #384 STRIPE -->
+<section class="task-section" id="task-384">
+  <div class="task-header" style="background:#78570A;">
+    <div class="task-header-num">#384</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Task 4 of 5 &nbsp;·&nbsp; Week 4 &nbsp;·&nbsp; 25–29 Aug &nbsp;·&nbsp; Depends on #382</div>
+      <div class="task-header-title">Stripe Payments, Project Tiers &amp; Self-Serve Billing</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-gold">
+      <span class="note-icon">⚠</span>
+      <div>All Stripe work uses <strong>test-mode API keys</strong> on staging. No real money is processed until the go-live cutover in task #385.</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Confirmed pricing structure</div>
+      <div class="block-body">
+        <div class="pricing-cards">
+          <div class="pricing-card" style="border-color:var(--teal);">
+            <div class="pricing-card-header" style="background:var(--teal);">
+              <div class="pricing-card-name">In-House</div>
+              <div class="pricing-card-sub">1 Premium project included</div>
+            </div>
+            <div class="pricing-card-body">
+              <div class="pricing-big">£333<span style="font-size:14px;font-weight:400;color:var(--g400);">/mo</span></div>
+              <div class="pricing-alt">£4,000/yr billed annually</div>
+              <div class="pricing-alt" style="color:var(--g500);">Or £383/mo · £4,600/yr quarterly</div>
+            </div>
+          </div>
+          <div class="pricing-card" style="border-color:var(--pink);">
+            <div class="pricing-card-header" style="background:var(--pink);">
+              <div class="pricing-card-name">Agency / Partner</div>
+              <div class="pricing-card-sub">3 Premium projects included</div>
+            </div>
+            <div class="pricing-card-body">
+              <div class="pricing-big">£417<span style="font-size:14px;font-weight:400;color:var(--g400);">/mo</span></div>
+              <div class="pricing-alt">£5,000/yr billed annually</div>
+              <div class="pricing-alt" style="color:var(--g500);">Or £479/mo · £5,750/yr quarterly</div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:12px;font-weight:700;color:var(--g500);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;">Additional project tiers</p>
+        <div class="tier-cards">
+          <div class="tier-card" style="border-color:var(--teal);">
+            <div class="tier-name" style="color:var(--teal);">Standard</div>
+            <div class="tier-price">£500</div><span class="tier-period">/yr per additional project</span>
+            <div class="tier-actions" style="color:var(--teal);">× 50 actions/month</div>
+          </div>
+          <div class="tier-card" style="border-color:var(--pink);">
+            <div class="tier-name" style="color:var(--pink);">Premium</div>
+            <div class="tier-price">£650</div><span class="tier-period">/yr per additional project</span>
+            <div class="tier-actions" style="color:var(--pink);">× 75 actions/month</div>
+          </div>
+          <div class="tier-card" style="border-color:var(--gold);">
+            <div class="tier-name" style="color:var(--gold);">Max</div>
+            <div class="tier-price">£800</div><span class="tier-period">/yr per additional project</span>
+            <div class="tier-actions" style="color:var(--gold);">× 150 actions/month</div>
+          </div>
+        </div>
+        <div class="note note-pink" style="margin-top:12px;">
+          <span class="note-icon">ℹ</span>
+          <div>All pricing is currently indicative — AIO Fusion is in Beta. Each 'action' = a piece of content created or optimised, or a marketing/media intelligence search, per month.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Self-serve billing page (what users can do)</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span>View current plan name, billing frequency, and next renewal date</li>
+          <li><span class="done-check">✓</span>See projects used vs projects included in plan</li>
+          <li><span class="done-check">✓</span><strong>Update payment method</strong> — opens Stripe Customer Portal</li>
+          <li><span class="done-check">✓</span><strong>Download invoices</strong> — lists past invoices with PDF download links via Stripe</li>
+          <li><span class="done-check">✓</span><strong>Add a project</strong> — opens tier selection (Standard / Premium / Max) → Stripe Checkout for the add-on</li>
+          <li><span class="done-check">✓</span><strong>Cancel subscription</strong> — opens Stripe Customer Portal cancellation flow</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Stripe webhook events handled</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead><tr><th>Event</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>checkout.session.completed</td><td>Account activated, plan set, project allowance set in DB</td></tr>
+            <tr><td>invoice.payment_succeeded</td><td>Renewal confirmed, account stays active</td></tr>
+            <tr><td>invoice.payment_failed</td><td>Account enters Past due state; dunning email sent to billing contact</td></tr>
+            <tr><td>customer.subscription.deleted</td><td>Account enters Cancelled state; cancellation email sent</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Steps</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--gold);">1</span><div class="step-body"><span class="step-title">Set up Stripe in test mode on staging</span> — install Stripe SDK, add test-mode API keys to staging secrets, register webhook endpoint.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">2</span><div class="step-body"><span class="step-title">Create Stripe products and prices</span> — In-House annual &amp; quarterly, Agency annual &amp; quarterly, Standard / Premium / Max additional project add-ons.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">3</span><div class="step-body"><span class="step-title">Build Stripe Checkout flow</span> — after signup, redirect user to Stripe Checkout; on payment success webhook, activate account and set plan tier.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">4</span><div class="step-body"><span class="step-title">Wire per-project action limits</span> — replace the hardcoded default action limit with a per-project limit stored in the DB, derived from the subscription tier.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">5</span><div class="step-body"><span class="step-title">Build add-project flow</span> — in-app tier selector → Stripe Checkout for the add-on → project created with correct action limit on success.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">6</span><div class="step-body"><span class="step-title">Build self-serve billing page</span> — plan details, usage, renewal date, update payment method, download invoices, add project, cancel.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">7</span><div class="step-body"><span class="step-title">Build admin subscription view</span> — all accounts with subscription status, plan tier, current-month action usage, last payment date.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">8</span><div class="step-body"><span class="step-title">Handle webhook events</span> — implement all four webhook handlers; send user notification emails on payment failure.</div></li>
+          <li><span class="step-num" style="background:var(--gold);">9</span><div class="step-body"><span class="step-title">Test full lifecycle on staging</span> — use Stripe test cards to cover: successful payment, failed payment, cancellation, renewal, adding a project, hitting an action limit.</div></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Out of scope</div>
+      <div class="block-body">
+        <div class="scope-grid">
+          <span class="scope-out">✕ Server-side invoice PDF generation (Stripe handles this)</span>
+          <span class="scope-out">✕ Multiple payment methods beyond card</span>
+          <span class="scope-out">✕ Live-mode Stripe keys (task #385)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ #385 GO-LIVE -->
+<section class="task-section" id="task-385">
+  <div class="task-header" style="background:#14532D;">
+    <div class="task-header-num">#385</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Task 5 of 5 &nbsp;·&nbsp; Week 5 &nbsp;·&nbsp; 1 Sep &nbsp;·&nbsp; Depends on #381 #382 #383 #384</div>
+      <div class="task-header-title">Staging-to-Live Cutover, Account Migration &amp; Stripe Go-Live</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-pink">
+      <span class="note-icon">🚀</span>
+      <div>Cutover is performed <strong>out of hours</strong>. A database snapshot is taken immediately before the migration step. A rollback procedure is documented and tested before cutover night begins.</div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Done looks like</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check">✓</span>All staging changes are deployed to the live environment</li>
+          <li><span class="done-check">✓</span>Existing demo/beta accounts are migrated to the new auth model with no data loss</li>
+          <li><span class="done-check">✓</span>Google and Microsoft SSO redirect URIs updated to point to the live domain</li>
+          <li><span class="done-check">✓</span>Stripe switches from test mode to live mode</li>
+          <li><span class="done-check">✓</span>Existing demo users can log in on the first attempt after cutover</li>
+          <li><span class="done-check">✓</span>Rollback plan documented and tested before cutover begins</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Cutover steps</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--green);">1</span><div class="step-body"><span class="step-title">Pre-cutover checklist</span> — document every environment variable, OAuth redirect URI, and Stripe config that differs between staging and live. Review with Spencer before cutover night.</div></li>
+          <li><span class="step-num" style="background:var(--green);">2</span><div class="step-body"><span class="step-title">Take a database snapshot</span> — captured immediately before any migration step runs.</div></li>
+          <li><span class="step-num" style="background:var(--green);">3</span><div class="step-body"><span class="step-title">Run account migration script on live DB</span> — execute the auth model migration against the production database; verify row counts before and after.</div></li>
+          <li><span class="step-num" style="background:var(--green);">4</span><div class="step-body"><span class="step-title">Update OAuth providers for live</span> — add live domain as authorised redirect URI in Google Cloud Console and Azure AD (Microsoft Entra ID); remove staging-only test URIs.</div></li>
+          <li><span class="step-num" style="background:var(--green);">5</span><div class="step-body"><span class="step-title">Switch Stripe to live mode</span> — replace staging test-mode API keys with live-mode keys; update webhook endpoint to live URL; confirm first live webhook event is received.</div></li>
+          <li><span class="step-num" style="background:var(--green);">6</span><div class="step-body"><span class="step-title">Smoke-test live environment</span> — email login, Google SSO, Microsoft SSO, project load, Stripe checkout. All must pass before declaring cutover complete.</div></li>
+          <li><span class="step-num" style="background:var(--green);">7</span><div class="step-body"><span class="step-title">Monitor for 30 minutes</span> — watch error logs post-cutover; rollback procedure ready if needed.</div></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Out of scope</div>
+      <div class="block-body">
+        <div class="scope-grid">
+          <span class="scope-out">✕ New feature development (cutover only)</span>
+          <span class="scope-out">✕ Pricing changes after launch</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</div><!-- /content -->
+</body>
+</html>
