@@ -545,7 +545,7 @@ export function Sidebar({
 
   return (
     <>
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 border-b h-14" style={{ background: "white", borderColor: vars.g200 }}>
+      <div className="md:hidden fixed left-0 right-0 z-50 flex items-center justify-between px-4 py-3 border-b h-14" style={{ background: "white", borderColor: vars.g200, top: "var(--banner-h, 0px)" }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-10" />
         <button onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg" style={{ color: vars.navy }}>
           {mobileOpen ? <X size={22} /> : <Menu size={22} />}
@@ -553,7 +553,7 @@ export function Sidebar({
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40 pt-14" onClick={() => setMobileOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
             <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
@@ -562,8 +562,8 @@ export function Sidebar({
       )}
 
       <aside
-        className="hidden md:flex flex-col border-r flex-shrink-0 h-screen sticky top-0 relative"
-        style={{ width: `${width}px`, borderColor: vars.g200, background: "white" }}
+        className="hidden md:flex flex-col border-r flex-shrink-0 sticky relative"
+        style={{ width: `${width}px`, borderColor: vars.g200, background: "white", top: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}
       >
         <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
         {/* Drag handle */}
