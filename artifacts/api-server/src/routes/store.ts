@@ -207,7 +207,7 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      // Enforce the 3-project limit for non-admin accounts on new projects only.
+      // Enforce the 2-project limit for non-admin accounts on new projects only.
       // Admins are never restricted. "user" is the legacy alias for "agency".
       if (existingOwner === undefined && req.account!.role !== "admin") {
         const [countRow] = await db
@@ -219,10 +219,10 @@ router.post(
               visible !== null ? inArray(projectsTable.owner, visible) : undefined,
             ),
           );
-        if ((countRow?.count ?? 0) >= 3) {
+        if ((countRow?.count ?? 0) >= 2) {
           res.status(403).json({
             error:
-              "You've reached the 3-project limit for agency accounts. Contact info@aiofusions.ai to add more projects.",
+              "You've reached the 2-project limit for agency accounts. Contact info@aiofusion.ai to add more projects.",
             limitReached: true,
           });
           return;
@@ -298,7 +298,7 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      // Enforce the 3-project limit for non-admin accounts on new projects only,
+      // Enforce the 2-project limit for non-admin accounts on new projects only,
       // matching the same guard on /upsert. The intake route also inserts a new
       // row when the project does not exist yet, so it must be gated the same way.
       if (existingOwner === undefined && req.account!.role !== "admin") {
@@ -311,10 +311,10 @@ router.post(
               visible !== null ? inArray(projectsTable.owner, visible) : undefined,
             ),
           );
-        if ((countRow?.count ?? 0) >= 3) {
+        if ((countRow?.count ?? 0) >= 2) {
           res.status(403).json({
             error:
-              "You've reached the 3-project limit for agency accounts. Contact info@aiofusions.ai to add more projects.",
+              "You've reached the 2-project limit for agency accounts. Contact info@aiofusion.ai to add more projects.",
             limitReached: true,
           });
           return;

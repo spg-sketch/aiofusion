@@ -193,7 +193,7 @@ export function GeorgeSupport({
         subject: ticketSubject.trim(),
         description: ticketDescription.trim(),
       };
-      if (anonMode && ticketEmail.trim()) body.email = ticketEmail.trim();
+      if (ticketEmail.trim()) body.email = ticketEmail.trim();
       if (ticketAttachment) body.attachmentUrl = ticketAttachment.dataUrl;
       const r = await fetch(endpoint, {
         method: "POST",
@@ -533,9 +533,9 @@ export function GeorgeSupport({
                 </p>
               </GeorgeBubble>
 
-              {/* My tickets CTA on greeting — hidden in anon/unauthenticated mode */}
+              {/* My tickets + direct raise-ticket CTAs on greeting */}
               {step.type === "greeting" && !anonMode && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {hasUpdate ? (
                     <button
                       onClick={() => void handleViewMyTickets()}
@@ -555,6 +555,26 @@ export function GeorgeSupport({
                       My tickets
                     </button>
                   )}
+                  <button
+                    onClick={() => setStep({ type: "ticket_form" })}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                    style={{ borderColor: vars.g200, color: navy }}
+                  >
+                    <Send size={13} />
+                    Raise a ticket
+                  </button>
+                </div>
+              )}
+              {step.type === "greeting" && anonMode && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStep({ type: "ticket_form" })}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border transition-all hover:bg-gray-50"
+                    style={{ borderColor: vars.g200, color: navy }}
+                  >
+                    <Send size={13} />
+                    Raise a ticket
+                  </button>
                 </div>
               )}
 
@@ -722,7 +742,7 @@ export function GeorgeSupport({
                   category={ticketCategory}
                   subject={ticketSubject}
                   description={ticketDescription}
-                  email={anonMode ? ticketEmail : undefined}
+                  email={ticketEmail}
                   attachment={ticketAttachment}
                   error={ticketError}
                   submitting={submitting}
@@ -730,7 +750,7 @@ export function GeorgeSupport({
                   onCategory={setTicketCategory}
                   onSubject={setTicketSubject}
                   onDescription={setTicketDescription}
-                  onEmail={anonMode ? setTicketEmail : undefined}
+                  onEmail={setTicketEmail}
                   onAttachment={setTicketAttachment}
                   onSubmit={handleSubmitTicket}
                   navy={navy}
@@ -977,13 +997,13 @@ function TicketForm({
         Submit a support ticket
       </p>
 
-      {/* Email — shown only in anon/pre-login mode */}
+      {/* Email — always shown so replies reach the right address */}
       {onEmail !== undefined && (
         <input
           type="email"
           value={email ?? ""}
           onChange={(e) => onEmail(e.target.value)}
-          placeholder="Your email (optional — so we can reply)"
+          placeholder="Your email address (so we can reply)"
           className="text-[12px] px-3 py-2 rounded-lg border outline-none focus:ring-1"
           style={{ borderColor: vars.g200, color: navy }}
         />

@@ -51,7 +51,7 @@ export async function seedSupportFaq(): Promise<void> {
     {
       category: "Getting Started",
       question: "Can I have more than one project?",
-      answer: "Yes. Agency accounts can manage up to 3 projects by default, with higher limits available on request. Admin accounts have no limit. Each project is a separate brand workspace with its own audits, content, and settings.",
+      answer: "Yes. Agency accounts can manage up to 2 projects by default, with higher limits available on request. Admin accounts have no limit. Each project is a separate brand workspace with its own audits, content, and settings.",
       keywords: "multiple projects, project limit, how many projects, agency projects",
       displayOrder: 50,
     },
