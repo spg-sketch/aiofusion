@@ -28,6 +28,7 @@ import {
   Loader2,
   Wand2,
   FileEdit,
+  AlertCircle,
 } from "lucide-react";
 import { TRADE_MEDIA_CATEGORIES } from "./tradeMediaCategories";
 import { markIntakeSaved, ensureDefaultIntakeMigrated, assertActiveProjectConsistencyFromCache } from "./lib/projectSync";
@@ -884,6 +885,7 @@ export default function IntakePage() {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).aiWebsite || ""; } catch { /* noop */ }
     return "";
   });
+  const [urlTouched, setUrlTouched] = useState(false);
   // The entity the user confirmed is theirs in the Earned Media entity-clarity
   // step. Set from the LLM Check page, not edited here; round-tripped through
   // state so saving Set-Up never wipes the user's confirmed identity.
@@ -1724,13 +1726,15 @@ export default function IntakePage() {
             <div className="flex-1">
               {(() => {
                 const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(aiWebsite.trim());
+                const showUrlError = urlTouched && aiWebsite.trim().length > 0 && !websiteValid;
                 return (
                   <>
                     <div className="relative w-full sm:max-w-md">
                       <input
                         value={aiWebsite}
-                        onChange={(e) => setAiWebsite(e.target.value)}
+                        onChange={(e) => { setAiWebsite(e.target.value); setUrlTouched(false); }}
                         onBlur={() => {
+                          setUrlTouched(true);
                           const hasQueries = llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
                           if (websiteValid && !hasQueries && !llmQueriesGenerating) {
                             generateLlmQueries(true);
@@ -1738,7 +1742,11 @@ export default function IntakePage() {
                         }}
                         placeholder="yourcompany.com"
                         className="w-full pl-4 pr-11 py-2.5 rounded-xl border-2 text-[14px] font-light outline-none focus:border-[#C8497A] transition-colors"
-                        style={{ borderColor: websiteValid ? "#15803D" : "rgba(16,43,54,0.15)", background: "white", color: "#102B36" }}
+                        style={{
+                          borderColor: websiteValid ? "#15803D" : showUrlError ? "#DC2626" : "rgba(16,43,54,0.15)",
+                          background: "white",
+                          color: "#102B36",
+                        }}
                       />
                       {websiteValid && (
                         <span
@@ -1750,6 +1758,12 @@ export default function IntakePage() {
                         </span>
                       )}
                     </div>
+                    {showUrlError && (
+                      <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#DC2626" }}>
+                        <AlertCircle size={13} strokeWidth={2.5} />
+                        That doesn&apos;t look like a valid URL — try something like yourcompany.com or https://yourcompany.com
+                      </p>
+                    )}
                     {websiteValid && (
                       <>
                         <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#15803D" }}>
