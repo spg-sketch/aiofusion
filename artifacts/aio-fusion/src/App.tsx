@@ -434,11 +434,11 @@ function App() {
 
   const beginCreateProject = () => requireSessionThen(() => {
     // Pre-flight limit check for non-admin accounts: if the visible project list
-    // is already at 3 or more, surface a friendly message rather than letting
+    // is already at 2 or more, surface a friendly message rather than letting
     // the user name a project that the server will then reject.
-    if (session && session.role !== "admin" && visibleProjects.length >= 3) {
+    if (session && session.role !== "admin" && visibleProjects.length >= 2) {
       window.alert(
-        "You've reached the 3-project limit for agency accounts.\n\nTo add more projects, contact info@aiofusions.ai.",
+        "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
       );
       return;
     }
@@ -485,7 +485,7 @@ function App() {
       setActiveClient(prev ?? null);
       window.alert(
         pushResult.error ??
-          "You've reached the 3-project limit for agency accounts.\n\nTo add more projects, contact info@aiofusions.ai.",
+          "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
       );
     }
   };
