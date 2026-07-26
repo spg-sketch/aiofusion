@@ -1043,7 +1043,10 @@ export default function IntakePage() {
 
   const handleAutoFill = async () => {
     const url = aiWebsite.trim();
-    if (!url) return;
+    if (!url) {
+      setAutoFillError("Please enter your website URL above before running auto-fill.");
+      return;
+    }
     const urlValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(url);
     if (!urlValid) {
       setUrlTouched(true);
