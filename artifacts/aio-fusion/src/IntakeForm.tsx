@@ -1740,7 +1740,7 @@ export default function IntakePage() {
                     <div className="relative w-full sm:max-w-md">
                       <input
                         value={aiWebsite}
-                        onChange={(e) => { setAiWebsite(e.target.value); setUrlTouched(false); }}
+                        onChange={(e) => { setAiWebsite(e.target.value); setUrlTouched(false); setAutoFillError(""); }}
                         onBlur={() => {
                           setUrlTouched(true);
                           const hasQueries = llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
