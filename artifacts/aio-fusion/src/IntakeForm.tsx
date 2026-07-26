@@ -1044,6 +1044,11 @@ export default function IntakePage() {
   const handleAutoFill = async () => {
     const url = aiWebsite.trim();
     if (!url) return;
+    const urlValid = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(url);
+    if (!urlValid) {
+      setUrlTouched(true);
+      return;
+    }
     setAutoFillError("");
     setAutoFillNotice("");
     setAutoFillLoading(true);
