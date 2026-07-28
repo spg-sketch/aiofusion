@@ -151,6 +151,13 @@ export async function ensureDefaultAdmin(): Promise<void> {
 // (comma-separated) are activated and promoted to admin at startup. This lets
 // an operator bootstrap their own SSO-created account (which otherwise lands
 // in pending_approval) without needing a password login to approve it.
+//
+// Safety: promotion only applies when the email belongs to a Google-verified
+// user (platform_users row with googleId set). A password signup can claim any
+// email without proving ownership, so it is never eligible — this closes the
+// obvious privilege-escalation path of registering a listed email first.
+// The promotion also syncs platform_companies and platform_memberships so the
+// newer company-based authorization layer agrees with the legacy account role.
 export async function ensureAutoApprovedAdmins(): Promise<void> {
   const raw = process.env.PLATFORM_AUTO_APPROVE_ADMIN_EMAILS;
   if (!raw) return;
@@ -159,14 +166,32 @@ export async function ensureAutoApprovedAdmins(): Promise<void> {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
   for (const email of emails) {
-    const result = await db
-      .update(platformAccountsTable)
-      .set({ status: "active", role: "admin" })
-      .where(sql`lower(${platformAccountsTable.email}) = ${email} and (${platformAccountsTable.status} <> 'active' or ${platformAccountsTable.role} <> 'admin')`)
-      .returning({ username: platformAccountsTable.username });
-    for (const row of result) {
-      console.log(`[platform-auth] auto-approved admin account: ${row.username} (${email})`);
-    }
+    // Require a Google-verified identity for this email.
+    const [user] = await db
+      .select({ id: platformUsersTable.id })
+      .from(platformUsersTable)
+      .where(sql`lower(${platformUsersTable.email}) = ${email} and ${platformUsersTable.googleId} is not null`)
+      .limit(1);
+    if (!user) continue;
+
+    await db.transaction(async (tx) => {
+      const promoted = await tx
+        .update(platformAccountsTable)
+        .set({ status: "active", role: "admin" })
+        .where(sql`lower(${platformAccountsTable.email}) = ${email} and (${platformAccountsTable.status} <> 'active' or ${platformAccountsTable.role} <> 'admin')`)
+        .returning({ username: platformAccountsTable.username });
+      for (const row of promoted) {
+        await tx
+          .update(platformCompaniesTable)
+          .set({ status: "active", role: "admin" })
+          .where(eq(platformCompaniesTable.slug, row.username));
+        await tx
+          .update(platformMembershipsTable)
+          .set({ role: "admin" })
+          .where(and(eq(platformMembershipsTable.companySlug, row.username), eq(platformMembershipsTable.userId, user.id)));
+        console.log(`[platform-auth] auto-approved admin account: ${row.username} (${email})`);
+      }
+    });
   }
 }
 

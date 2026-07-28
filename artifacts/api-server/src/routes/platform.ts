@@ -570,6 +570,9 @@ function getCanonicalHost(req: Request): string {
     const first = replitDomains.split(",")[0]!.trim();
     if (first) return first;
   }
+  // On staging, never trust request headers for the OAuth canonical host —
+  // fall through to the fixed staging domain instead.
+  if (isStaging) return "staging.aiofusion.ai";
   const host = req.get("x-forwarded-host") || req.get("host") || "";
   const hostname = host.split(":")[0];
   if (hostname) return hostname;
