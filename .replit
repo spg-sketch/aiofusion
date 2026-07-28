@@ -67,7 +67,6 @@ RESEND_FROM = "AIO Fusion Alerts <info@aiofusion.ai>"
 
 [userenv.production]
 CANONICAL_DOMAIN = "staging.aiofusion.ai"
-DEPLOYMENT_ENV = "staging"
 
 [nix]
 channel = "stable-25_05"
