@@ -66,7 +66,8 @@ timeoutMs = 20000
 RESEND_FROM = "AIO Fusion Alerts <info@aiofusion.ai>"
 
 [userenv.production]
-CANONICAL_DOMAIN = "www.aiofusion.ai"
+CANONICAL_DOMAIN = "staging.aiofusion.ai"
+DEPLOYMENT_ENV = "staging"
 
 [nix]
 channel = "stable-25_05"
