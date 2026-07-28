@@ -239,6 +239,10 @@
     flex-shrink: 0;
     margin-top: 1px;
   }
+  .done-check.is-done {
+    background: var(--green);
+    color: #FFFFFF;
+  }
 
   /* ── Steps list ── */
   .steps-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
@@ -477,13 +481,13 @@
       <div class="block-title">Done looks like</div>
       <div class="block-body">
         <ul class="done-list">
-          <li><span class="done-check">✓</span>A separate deployment exists at a staging subdomain (staging.aiofusion.ai)</li>
-          <li><span class="done-check">✓</span>Staging has its own PostgreSQL database - completely separate from production</li>
-          <li><span class="done-check">✓</span>Staging has its own environment variables; no secrets are shared with live</li>
-          <li><span class="done-check">✓</span>A seed script populates staging with test accounts: admin, agency/partner, and client roles</li>
-          <li><span class="done-check">✓</span>Google OAuth redirect URIs updated so Google SSO works on staging without affecting live</li>
+          <li><span class="done-check is-done">✓</span>A separate deployment exists at a staging subdomain (staging.aiofusion.ai)</li>
+          <li><span class="done-check is-done">✓</span>Staging has its own PostgreSQL database - completely separate from production</li>
+          <li><span class="done-check is-done">✓</span>Staging has its own environment variables; no secrets are shared with live</li>
+          <li><span class="done-check is-done">✓</span>A seed script populates staging with test accounts: admin, agency/partner, and client roles</li>
+          <li><span class="done-check is-done">✓</span>Google OAuth redirect URIs updated so Google SSO works on staging without affecting live</li>
           <li><span class="done-check">✓</span>Smoke test passes: login, Google SSO, and project loading all work on staging</li>
-          <li><span class="done-check">✓</span>Live demo confirmed unaffected</li>
+          <li><span class="done-check is-done">✓</span>Live demo confirmed unaffected</li>
         </ul>
       </div>
     </div>
