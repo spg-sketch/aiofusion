@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
+import { logger } from "../lib/logger";
 import {
   db,
   platformAccountsTable,
@@ -553,7 +554,16 @@ const OAUTH_LINK_COOKIE = "aio_oauth_link";
 // OAuth callback URL and session cookie domain are always on the domain users
 // actually browse to. Falls back to REPLIT_DOMAINS, then the request host.
 function getCanonicalHost(req: Request): string {
-  const canonical = process.env.CANONICAL_DOMAIN?.trim();
+  let canonical = process.env.CANONICAL_DOMAIN?.trim();
+  // Staging safety guard: a staging deployment must never use the production
+  // canonical domain (this happens when secrets are copied from the live
+  // deployment). Ignore any CANONICAL_DOMAIN that doesn't look like a staging
+  // host so OAuth callbacks/redirects stay on the staging domain.
+  const isStaging = (process.env.DEPLOYMENT_ENV ?? process.env.NODE_ENV) === "staging";
+  if (isStaging && canonical && !canonical.includes("staging")) {
+    logger.warn({ canonical }, "Ignoring non-staging CANONICAL_DOMAIN on staging deployment");
+    canonical = undefined;
+  }
   if (canonical) return canonical;
   const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
