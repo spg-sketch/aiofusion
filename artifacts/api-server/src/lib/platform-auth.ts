@@ -9,7 +9,7 @@ import {
   platformMembershipsTable,
   platformMetaTable,
 } from "@workspace/db";
-import { and, eq, ne, desc } from "drizzle-orm";
+import { and, eq, ne, desc, sql } from "drizzle-orm";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -143,6 +143,31 @@ export async function ensureDefaultAdmin(): Promise<void> {
     .update(platformAccountsTable)
     .set({ passwordHash: hashPassword(password) })
     .where(eq(platformAccountsTable.username, DEFAULT_ADMIN_USERNAME));
+
+  await ensureAutoApprovedAdmins();
+}
+
+// Accounts whose email is listed in PLATFORM_AUTO_APPROVE_ADMIN_EMAILS
+// (comma-separated) are activated and promoted to admin at startup. This lets
+// an operator bootstrap their own SSO-created account (which otherwise lands
+// in pending_approval) without needing a password login to approve it.
+export async function ensureAutoApprovedAdmins(): Promise<void> {
+  const raw = process.env.PLATFORM_AUTO_APPROVE_ADMIN_EMAILS;
+  if (!raw) return;
+  const emails = raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  for (const email of emails) {
+    const result = await db
+      .update(platformAccountsTable)
+      .set({ status: "active", role: "admin" })
+      .where(sql`lower(${platformAccountsTable.email}) = ${email} and (${platformAccountsTable.status} <> 'active' or ${platformAccountsTable.role} <> 'admin')`)
+      .returning({ username: platformAccountsTable.username });
+    for (const row of result) {
+      console.log(`[platform-auth] auto-approved admin account: ${row.username} (${email})`);
+    }
+  }
 }
 
 // --- Platform companies (workspace layer) -----------------------------------
