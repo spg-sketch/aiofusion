@@ -1,0 +1,27 @@
+kind = "video"
+previewPath = "/aio-fusion-promo/"
+title = "AIO Fusion Promo Video"
+version = "1.0.0"
+id = "artifacts/aio-fusion-promo"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/aio-fusion-promo/" ]
+localPort = 24362
+
+[services.development]
+run = "pnpm --filter @workspace/aio-fusion-promo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/aio-fusion-promo", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/aio-fusion-promo/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24362"
+BASE_PATH = "/aio-fusion-promo/"

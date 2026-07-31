@@ -185,3 +185,9 @@ id = "xuztEBNe0sMw264AIWkUw"
 uri = "file://aio-fusion-august-roadmap.pdf"
 type = "pdf"
 title = "AIO Fusion — August Roadmap & Architecture (v2)"
+
+[[outputs]]
+id = "dwoujI6kjL0YIklb9djA9"
+uri = "file://artifacts/aio-fusion-promo/public/audio/bg_music.mp3"
+type = "audio"
+title = "background music"
