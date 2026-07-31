@@ -29,4 +29,5 @@
 - [AIO Fusion LLM roster = ChatGPT+Claude only](aio-fusion-llm-roster-scope.md) — product scope excludes Perplexity/Gemini/other LLMs everywhere (UI, prompts, public/llms.txt, agents.md, robots.txt); grep sweep needed across all surfaces, not just app pages.
 - [AIO Fusion ReportPage real-data rewiring](aio-fusion-reportpage-real-data.md) — Executive Summary/GEO tabs were hardcoded demo numbers; now derived from loadSavedAudits/loadSavedDiagnostics; empty-state text required wherever no audit exists yet.
 - [AIO Fusion staging custom domain](aio-fusion-staging-domain.md) — A+TXT records only (no CNAME, conflicts with TXT); domain binds on next Republish; verify SSL with curl, panel status can be stale.
+- [AIO Fusion promo video artifact](aio-fusion-promo-video.md) — keep scaffold hooks.ts when merging subagent scenes; scaffold tsconfig lacked DOM lib; promo excluded from typecheck workflow.
 - [AIO Fusion fair usage policy](aio-fusion-fair-usage.md) — 50 actions/project/month for content-% ops only; audits (llm-check%) and llm-queries excluded (own 21-day lock); checkFairUsage() takes optional projectId; all content routes must send projectId in body.
