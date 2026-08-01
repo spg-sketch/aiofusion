@@ -1,132 +1,94 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
+// Scene 5 — Authority visualisation: left text + right image
 export function Scene5() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setPhase(1), 300),
-      setTimeout(() => setPhase(2), 1000),
-      setTimeout(() => setPhase(3), 1800),
+      setTimeout(() => setPhase(1), 200),
+      setTimeout(() => setPhase(2), 800),
+      setTimeout(() => setPhase(3), 1500),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
+  const stats = [
+    { value: "2 LLMs", label: "tracked in every audit" },
+    { value: "21-day", label: "visibility cycle" },
+    { value: "Real data", label: "no estimates, no guesses" },
+  ];
+
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-[rgb(var(--color-navy))] via-[#0d1524] to-[#0a1628]" />
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#060f1c] via-[#091525] to-[rgb(var(--color-navy))]" />
 
-      {/* Authority visualization image - prominent */}
       <motion.div
-        className="absolute right-[10vw] top-[15vh] w-[45vw]"
-        initial={{ opacity: 0, x: 100, scale: 0.85 }}
-        animate={phase >= 2 ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 100, scale: 0.85 }}
-        transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <img
-          src={`${import.meta.env.BASE_URL}images/authority-viz.png`}
-          alt="Authority"
-          className="w-full h-auto drop-shadow-2xl"
-        />
-        {/* Animated glow */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-[rgb(var(--color-gold))]/20 via-[rgb(var(--color-coral))]/10 to-transparent blur-3xl"
-          animate={{
-            opacity: [0.3, 0.6, 0.3],
-            scale: [1, 1.05, 1]
-          }}
-          transition={{
-            duration: 3,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-      </motion.div>
+        className="absolute bottom-[-10%] left-[-5%] w-[50vw] h-[50vw] rounded-full bg-[rgb(var(--color-teal))]"
+        style={{ filter: "blur(160px)" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.09 }}
+        transition={{ duration: 1.8 }}
+      />
 
-      {/* Left content */}
-      <div className="absolute left-[8vw] top-[18vh] max-w-[40vw]">
-        {/* Label */}
-        <motion.div
-          className="inline-block px-[1.5vw] py-[0.6vh] bg-[rgb(var(--color-gold))]/20 border border-[rgb(var(--color-gold))]/50 rounded-full mb-[2.5vh]"
-          initial={{ opacity: 0, x: -30 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : { opacity: 0, x: -30 }}
-          transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
+      {/* Left text */}
+      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] max-w-[50vw]">
+        <motion.p
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
+          initial={{ opacity: 0, x: -16 }}
+          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <span className="text-[1.2vw] font-body font-bold tracking-wider uppercase text-[rgb(var(--color-gold))]">
-            Measure Impact
-          </span>
-        </motion.div>
+          Proof, not promises
+        </motion.p>
 
-        {/* Headline */}
         <motion.h2
-          className="font-display text-[5.2vw] leading-[1.1] mb-[3.5vh] text-white"
-          initial={{ opacity: 0, y: 40 }}
-          animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+          className="font-display text-[4.8vw] leading-[1.1] text-white mb-[4vh]"
+          initial={{ opacity: 0, y: 28 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
-          Build your
+          Measure your
           <br />
-          <span className="text-[rgb(var(--color-gold))]">AI authority</span>
+          <span className="text-[rgb(var(--color-teal))]">AI authority</span>
         </motion.h2>
 
         {/* Stats */}
         <motion.div
-          className="space-y-[2.5vh]"
-          initial={{ opacity: 0, y: 30 }}
-          animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-[2vh]"
+          initial={{ opacity: 0, y: 16 }}
+          animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         >
-          {[
-            { metric: "Real-time", label: "visibility tracking" },
-            { metric: "Actionable", label: "optimization insights" },
-            { metric: "Competitive", label: "intelligence reports" }
-          ].map((stat, i) => (
+          {stats.map((s, i) => (
             <motion.div
               key={i}
-              className="flex items-baseline gap-[1vw]"
-              initial={{ opacity: 0, x: -20 }}
-              animate={phase >= 3 ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
-              transition={{
-                duration: 0.5,
-                ease: [0.16, 1, 0.3, 1],
-                delay: i * 0.12
-              }}
+              className="flex items-baseline gap-[1.2vw]"
+              initial={{ opacity: 0, x: -12 }}
+              animate={phase >= 3 ? { opacity: 1, x: 0 } : {}}
+              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: i * 0.12 }}
             >
-              <span className="text-[2.8vw] font-display font-bold text-[rgb(var(--color-gold))]">
-                {stat.metric}
-              </span>
-              <span className="text-[1.6vw] font-body font-light text-white/80">
-                {stat.label}
-              </span>
+              <span className="font-display text-[2.8vw] text-[rgb(var(--color-teal))]">{s.value}</span>
+              <span className="font-body text-[1.5vw] font-light text-white/60">{s.label}</span>
             </motion.div>
           ))}
         </motion.div>
       </div>
 
-      {/* Floating data particles */}
-      {[...Array(8)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-1.5 h-1.5 rounded-full bg-[rgb(var(--color-gold))]"
-          style={{
-            left: `${20 + i * 10}%`,
-            top: `${30 + (i % 4) * 15}%`,
-          }}
-          animate={{
-            y: [0, -20, 0],
-            opacity: [0.3, 0.8, 0.3],
-            scale: [1, 1.5, 1]
-          }}
-          transition={{
-            duration: 2.5,
-            repeat: Infinity,
-            delay: i * 0.2,
-            ease: "easeInOut"
-          }}
+      {/* Right: authority viz image */}
+      <motion.div
+        className="absolute right-[4vw] top-[8vh] w-[43vw]"
+        initial={{ opacity: 0, x: 50 }}
+        animate={phase >= 2 ? { opacity: 1, x: 0 } : {}}
+        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}images/authority-viz.png`}
+          alt="Authority visualisation"
+          className="w-full h-auto drop-shadow-2xl rounded-2xl"
         />
-      ))}
+      </motion.div>
     </div>
   );
 }

@@ -1,128 +1,90 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
+// Scene 6 — Final CTA: bold left-aligned close
 export function Scene6() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setPhase(1), 300),
-      setTimeout(() => setPhase(2), 900),
-      setTimeout(() => setPhase(3), 1600),
+      setTimeout(() => setPhase(1), 200),
+      setTimeout(() => setPhase(2), 800),
+      setTimeout(() => setPhase(3), 1500),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {/* Radial gradient background */}
-      <motion.div 
-        className="absolute inset-0"
-        style={{
-          background: 'radial-gradient(circle at center, rgb(var(--color-teal))/20 0%, rgb(var(--color-navy)) 60%)'
-        }}
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#060e1a] via-[#09152a] to-[rgb(var(--color-navy))]" />
+
+      {/* Warm glow behind CTA */}
+      <motion.div
+        className="absolute top-[20%] left-[30%] w-[55vw] h-[55vw] rounded-full bg-[rgb(var(--color-coral))]"
+        style={{ filter: "blur(180px)" }}
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
+        animate={{ opacity: 0.12 }}
+        transition={{ duration: 2 }}
+      />
+      <motion.div
+        className="absolute bottom-[10%] right-[10%] w-[35vw] h-[35vw] rounded-full bg-[rgb(var(--color-teal))]"
+        style={{ filter: "blur(150px)" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.09 }}
+        transition={{ duration: 2, delay: 0.4 }}
       />
 
-      {/* Logo - smaller, top position */}
-      <motion.div
-        className="absolute top-[15vh] left-0 right-0 flex justify-center"
-        initial={{ opacity: 0, y: -30 }}
-        animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: -30 }}
-        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <img
-          src={`${import.meta.env.BASE_URL}images/logo-color.png`}
-          alt="AIO Fusion"
-          className="w-[28vw] h-auto"
-        />
-      </motion.div>
-
-      {/* Main CTA */}
-      <div className="relative z-10 text-center">
-        <motion.h2
-          className="font-display text-[6vw] leading-[1.08] mb-[3vh] text-white"
-          initial={{ opacity: 0, scale: 0.9, y: 30 }}
-          animate={phase >= 2 ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.9, y: 30 }}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+      {/* Left-aligned CTA block */}
+      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] max-w-[68vw]">
+        <motion.p
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-coral))] mb-[2.5vh]"
+          initial={{ opacity: 0, x: -16 }}
+          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          Take control of your
+          Get started today
+        </motion.p>
+
+        <motion.h2
+          className="font-display text-[6vw] leading-[1.05] text-white mb-[4vh]"
+          initial={{ opacity: 0, y: 30 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+        >
+          Your brand belongs
           <br />
-          <span className="gradient-text">AI visibility today</span>
+          <em className="not-italic" style={{
+            background: "linear-gradient(120deg, rgb(var(--color-coral)), rgb(var(--color-gold)))",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}>
+            in the conversation.
+          </em>
         </motion.h2>
 
         <motion.p
-          className="text-[2.2vw] font-body font-light text-white/80 mb-[4vh]"
-          initial={{ opacity: 0, y: 20 }}
-          animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="font-body text-[1.9vw] font-light text-white/60 mb-[5vh]"
+          initial={{ opacity: 0, y: 16 }}
+          animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         >
-          Know how ChatGPT and Claude see your brand
+          Join the brands winning AI visibility.
         </motion.p>
 
-        {/* URL display */}
+        {/* URL pill */}
         <motion.div
-          className="inline-block"
-          initial={{ opacity: 0, scale: 0.85 }}
-          animate={phase >= 3 ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.85 }}
-          transition={{ 
-            duration: 0.7, 
-            ease: [0.34, 1.56, 0.64, 1],
-            delay: 0.2
-          }}
+          initial={{ opacity: 0, y: 14 }}
+          animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="relative group">
-            {/* Background glow */}
-            <div className="absolute -inset-2 bg-gradient-to-r from-[rgb(var(--color-coral))] via-[rgb(var(--color-teal))] to-[rgb(var(--color-coral))] rounded-2xl blur-xl opacity-40" />
-            
-            {/* URL container */}
-            <div className="relative bg-gradient-to-r from-white/10 to-white/5 backdrop-blur-md border border-white/20 rounded-2xl px-[3vw] py-[1.5vh]">
-              <span className="text-[2.5vw] font-body font-semibold tracking-wide text-white">
-                aiofusion.ai
-              </span>
-            </div>
+          <div className="inline-block bg-white/[0.06] border border-white/[0.14] rounded-xl px-[2.5vw] py-[1.4vh]">
+            <span className="font-body text-[2.2vw] font-semibold tracking-wide text-white">
+              aiofusion.ai
+            </span>
           </div>
         </motion.div>
       </div>
-
-      {/* Animated circles background */}
-      <motion.div
-        className="absolute top-[20%] left-[12%] w-[18vw] h-[18vw] rounded-full bg-[rgb(var(--color-coral))]/10 border border-[rgb(var(--color-coral))]/20"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <motion.div
-        className="absolute bottom-[18%] right-[10%] w-[22vw] h-[22vw] rounded-full bg-[rgb(var(--color-teal))]/10 border border-[rgb(var(--color-teal))]/20"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
-      />
-
-      {/* Pulsing accent orbs */}
-      <motion.div
-        className="absolute top-[25%] right-[20%] w-[12vw] h-[12vw] rounded-full bg-[rgb(var(--color-gold))]"
-        style={{ filter: 'blur(60px)' }}
-        animate={{
-          opacity: [0.1, 0.25, 0.1],
-          scale: [1, 1.15, 1]
-        }}
-        transition={{
-          duration: 3,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-      />
-
-      {/* Exit animation prep - scale down everything slightly near end */}
-      <motion.div
-        className="absolute inset-0 bg-[rgb(var(--color-navy))]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0 }}
-        transition={{ duration: 0.5, delay: 2.3 }}
-      />
     </div>
   );
 }

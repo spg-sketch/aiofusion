@@ -1,99 +1,85 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
+// Scene 1 — The problem: brand invisible to AI
 export function Scene1() {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     const timers = [
-      setTimeout(() => setPhase(1), 300),
-      setTimeout(() => setPhase(2), 900),
+      setTimeout(() => setPhase(1), 250),
+      setTimeout(() => setPhase(2), 800),
+      setTimeout(() => setPhase(3), 1400),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {/* Dark gradient background */}
-      <motion.div 
-        className="absolute inset-0 bg-gradient-to-br from-[rgb(var(--color-navy))] via-[#050a14] to-[rgb(var(--color-navy))]"
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#06101e] to-[rgb(var(--color-navy))]" />
+
+      {/* Glow */}
+      <motion.div
+        className="absolute top-[-10%] left-[-5%] w-[50vw] h-[50vw] rounded-full bg-[rgb(var(--color-coral))]"
+        style={{ filter: "blur(160px)" }}
         initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
+        animate={{ opacity: 0.1 }}
+        transition={{ duration: 1.5 }}
       />
 
-      {/* Grid pattern overlay */}
-      <div className="absolute inset-0 opacity-10"
-        style={{
-          backgroundImage: `linear-gradient(rgba(var(--color-teal), 0.3) 1px, transparent 1px),
-                           linear-gradient(90deg, rgba(var(--color-teal), 0.3) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
-
-      <div className="relative z-10 max-w-[80vw] text-center">
-        {/* Question mark icon */}
-        <motion.div
-          className="mb-[3vh] flex justify-center"
-          initial={{ opacity: 0, scale: 0.5, rotate: -20 }}
-          animate={phase >= 1 ? { opacity: 1, scale: 1, rotate: 0 } : { opacity: 0, scale: 0.5, rotate: -20 }}
-          transition={{ 
-            duration: 0.7, 
-            ease: [0.34, 1.56, 0.64, 1]
-          }}
+      {/* Left-aligned text block */}
+      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] pr-[8vw] max-w-[70vw]">
+        {/* Eyebrow */}
+        <motion.p
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-coral))] mb-[2.5vh]"
+          initial={{ opacity: 0, x: -16 }}
+          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="w-[8vw] h-[8vw] rounded-full border-4 border-[rgb(var(--color-coral))] flex items-center justify-center">
-            <span className="text-[5vw] font-display text-[rgb(var(--color-coral))]">?</span>
-          </div>
-        </motion.div>
+          The problem
+        </motion.p>
 
-        {/* Main headline */}
+        {/* Headline */}
         <motion.h1
-          className="font-display text-[5.5vw] leading-[1.1] mb-[2vh] text-white"
-          initial={{ opacity: 0, y: 30 }}
-          animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+          className="font-display text-[5.8vw] leading-[1.08] text-white mb-[3.5vh]"
+          initial={{ opacity: 0, y: 28 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
           Where is your brand
           <br />
-          <span className="gradient-text">in AI conversations?</span>
+          <em className="not-italic" style={{
+            background: "linear-gradient(120deg, rgb(var(--color-coral)), rgb(var(--color-teal)))",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}>
+            in AI conversations?
+          </em>
         </motion.h1>
 
-        {/* Subline */}
+        {/* Body */}
         <motion.p
-          className="text-[2vw] font-body font-light text-white/70 max-w-[60vw] mx-auto"
-          initial={{ opacity: 0, y: 20 }}
-          animate={phase >= 2 ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="font-body text-[1.9vw] font-light leading-[1.6] text-white/65"
+          initial={{ opacity: 0, y: 16 }}
+          animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         >
-          ChatGPT and Claude are answering millions of questions about your industry.
+          ChatGPT and Claude answer millions of questions
           <br />
+          about your industry every day.
+        </motion.p>
+
+        {/* Kicker */}
+        <motion.p
+          className="font-body text-[1.6vw] font-medium text-white/90 mt-[2vh]"
+          initial={{ opacity: 0, y: 12 }}
+          animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        >
           Are you even mentioned?
         </motion.p>
       </div>
-
-      {/* Floating particles */}
-      {[...Array(6)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-2 h-2 rounded-full bg-[rgb(var(--color-coral))]"
-          style={{
-            left: `${15 + i * 12}%`,
-            top: `${20 + (i % 3) * 20}%`,
-          }}
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ 
-            opacity: [0, 0.6, 0],
-            scale: [0, 1, 0],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            delay: i * 0.3,
-            ease: "easeInOut"
-          }}
-        />
-      ))}
     </div>
   );
 }

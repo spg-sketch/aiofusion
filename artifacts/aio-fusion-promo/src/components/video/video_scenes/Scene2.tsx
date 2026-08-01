@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
+// Scene 2 — AI assistants showcase: split layout, text left
 export function Scene2() {
   const [phase, setPhase] = useState(0);
 
@@ -8,52 +9,40 @@ export function Scene2() {
     const timers = [
       setTimeout(() => setPhase(1), 200),
       setTimeout(() => setPhase(2), 700),
-      setTimeout(() => setPhase(3), 1400),
+      setTimeout(() => setPhase(3), 1300),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-[#0a1628] via-[#0d1a2e] to-[rgb(var(--color-navy))]" />
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#071422] via-[#0a1628] to-[rgb(var(--color-navy))]" />
 
-      {/* AI chat interface image */}
+      {/* Teal glow right */}
       <motion.div
-        className="absolute left-[8vw] top-[20vh] w-[40vw]"
-        initial={{ opacity: 0, x: -100, rotateY: -15 }}
-        animate={phase >= 2 ? { opacity: 1, x: 0, rotateY: 0 } : { opacity: 0, x: -100, rotateY: -15 }}
-        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-        style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}
-      >
-        <img
-          src={`${import.meta.env.BASE_URL}images/ai-chat.png`}
-          alt="AI assistants"
-          className="w-full h-auto drop-shadow-2xl"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgb(var(--color-teal))]/10 to-transparent"
-          style={{ animation: 'gradient-shift 3s ease infinite', backgroundSize: '200% 100%' }}
-        />
-      </motion.div>
+        className="absolute top-[10%] right-[-8%] w-[45vw] h-[45vw] rounded-full bg-[rgb(var(--color-teal))]"
+        style={{ filter: "blur(140px)" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.1 }}
+        transition={{ duration: 1.5 }}
+      />
 
-      {/* Right content */}
-      <div className="absolute right-[8vw] top-[15vh] max-w-[42vw] text-left">
-        <motion.div
-          className="inline-block px-[1.5vw] py-[0.6vh] bg-[rgb(var(--color-coral))]/20 border border-[rgb(var(--color-coral))]/40 rounded-full mb-[2vh]"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={phase >= 1 ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.8 }}
-          transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
+      {/* Left text */}
+      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] max-w-[52vw]">
+        <motion.p
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
+          initial={{ opacity: 0, x: -16 }}
+          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <span className="text-[1.2vw] font-body font-semibold tracking-wide uppercase text-[rgb(var(--color-coral))]">
-            The Challenge
-          </span>
-        </motion.div>
+          The new search
+        </motion.p>
 
         <motion.h2
-          className="font-display text-[4.5vw] leading-[1.15] mb-[3vh] text-white"
-          initial={{ opacity: 0, y: 30 }}
-          animate={phase >= 1 ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
+          className="font-display text-[5vw] leading-[1.1] text-white mb-[3vh]"
+          initial={{ opacity: 0, y: 28 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
           ChatGPT & Claude
           <br />
@@ -61,10 +50,10 @@ export function Scene2() {
         </motion.h2>
 
         <motion.p
-          className="text-[1.8vw] font-body font-light leading-relaxed text-white/80"
-          initial={{ opacity: 0, y: 20 }}
-          animate={phase >= 3 ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="font-body text-[1.85vw] font-light leading-[1.65] text-white/65"
+          initial={{ opacity: 0, y: 16 }}
+          animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         >
           Your competitors appear in AI answers.
           <br />
@@ -72,20 +61,32 @@ export function Scene2() {
         </motion.p>
       </div>
 
-      {/* Decorative scan lines */}
+      {/* Right: AI chat image */}
       <motion.div
-        className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[rgb(var(--color-teal))] to-transparent"
-        style={{ top: '35%' }}
-        initial={{ opacity: 0, scaleX: 0 }}
-        animate={phase >= 2 ? { opacity: 0.6, scaleX: 1 } : { opacity: 0, scaleX: 0 }}
+        className="absolute right-[5vw] top-[12vh] w-[40vw]"
+        initial={{ opacity: 0, x: 60 }}
+        animate={phase >= 2 ? { opacity: 1, x: 0 } : {}}
+        transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}images/ai-chat.png`}
+          alt="AI chat interface"
+          className="w-full h-auto drop-shadow-2xl rounded-2xl"
+        />
+        {/* Subtle shimmer overlay */}
+        <motion.div
+          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[rgb(var(--color-teal))]/10 via-transparent to-transparent"
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </motion.div>
+
+      {/* Horizontal accent line */}
+      <motion.div
+        className="absolute bottom-[30%] left-[9vw] right-[48vw] h-px bg-gradient-to-r from-[rgb(var(--color-teal))]/60 to-transparent"
+        initial={{ scaleX: 0, originX: 0 }}
+        animate={phase >= 3 ? { scaleX: 1 } : {}}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-      />
-      <motion.div
-        className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[rgb(var(--color-coral))] to-transparent"
-        style={{ top: '65%' }}
-        initial={{ opacity: 0, scaleX: 0 }}
-        animate={phase >= 2 ? { opacity: 0.4, scaleX: 1 } : { opacity: 0, scaleX: 0 }}
-        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
       />
     </div>
   );
