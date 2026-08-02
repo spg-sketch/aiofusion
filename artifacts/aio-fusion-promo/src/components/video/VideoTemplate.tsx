@@ -38,50 +38,21 @@ interface SceneMotion {
   style?: React.CSSProperties;
 }
 
+// All scenes share simple fade in (0.5s) / instant fade out (0.18s).
+// This prevents scenes from bleeding through each other during transitions.
+const ENTER: TargetAndTransition = { opacity: 1 };
+const ENTER_TRANSITION: Transition = { duration: 0.5, ease: [0.16, 1, 0.3, 1] };
+const EXIT: TargetAndTransition = { opacity: 0 };
+const EXIT_TRANSITION: Transition = { duration: 0.18, ease: "easeIn" };
+
 const SCENE_MOTION: Record<string, SceneMotion> = {
-  opening: {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0, scale: 0.95 },
-    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
-  },
-  problem: {
-    initial: { opacity: 0, x: 100 },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: -100 },
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
-  },
-  assistants: {
-    initial: { opacity: 0, scale: 1.1 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.9 },
-    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-  },
-  solution: {
-    initial: { opacity: 0, rotateY: -15 },
-    animate: { opacity: 1, rotateY: 0 },
-    exit: { opacity: 0, rotateY: 15 },
-    transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] },
-    style: { transformStyle: "preserve-3d", perspective: "1000px" },
-  },
-  features: {
-    initial: { opacity: 0, y: 100 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -100 },
-    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
-  },
-  authority: {
-    initial: { opacity: 0, scale: 0.85, rotate: -3 },
-    animate: { opacity: 1, scale: 1, rotate: 0 },
-    exit: { opacity: 0, scale: 1.15, rotate: 3 },
-    transition: { duration: 1, ease: [0.16, 1, 0.3, 1] },
-  },
-  cta: {
-    initial: { opacity: 0, scale: 1.2 },
-    animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.8 },
-    transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] },
-  },
+  opening:    { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  problem:    { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  assistants: { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  solution:   { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  features:   { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  authority:  { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
+  cta:        { initial: { opacity: 0 }, animate: ENTER, exit: EXIT, transition: ENTER_TRANSITION },
 };
 
 const SCENE_START_SEC: Record<string, number> = (() => {
@@ -153,7 +124,7 @@ export default function VideoTemplate({
 
       {/* Scene container with AnimatePresence */}
       <div className="relative w-full h-full">
-        <AnimatePresence mode="sync">
+        <AnimatePresence mode="wait">
           {SceneComponent && sceneMotion && (
             <motion.div
               key={currentSceneKey}
