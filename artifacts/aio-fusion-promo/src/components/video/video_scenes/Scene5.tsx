@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
-// Scene 5 — Authority / proof: left text, no overlapping image
+// Scene 5 — Authority / proof: centred stats layout
 export function Scene5() {
   const [phase, setPhase] = useState(0);
 
@@ -32,30 +32,32 @@ export function Scene5() {
         transition={{ duration: 1.8 }}
       />
 
-      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] pr-[14vw]">
+      {/* Centred content */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-center px-[8vw] text-center">
         <motion.p
-          className="font-body text-[1vw] font-semibold tracking-[0.22em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
-          initial={{ opacity: 0, x: -16 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
+          initial={{ opacity: 0, y: -10 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
           Proof, not promises
         </motion.p>
 
         <motion.h2
-          className="font-display leading-[1.1] text-white mb-[4.5vh]"
-          style={{ fontSize: "clamp(2rem, 4.5vw, 5.5rem)" }}
+          className="font-display leading-[1.1] text-white mb-[5vh] max-w-[65vw]"
+          style={{ fontSize: "clamp(2.2rem, 4.8vw, 6rem)" }}
           initial={{ opacity: 0, y: 24 }}
           animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
           Measure your
           <br />
-          <span className="text-[rgb(var(--color-teal))]">AI authority</span>
+          <span style={{ color: "rgb(var(--color-teal))" }}>AI authority</span>
         </motion.h2>
 
+        {/* Stat row — horizontally spaced */}
         <motion.div
-          className="flex flex-col gap-[2.5vh]"
+          className="flex items-start justify-center gap-[5vw] max-w-[75vw]"
           initial={{ opacity: 0 }}
           animate={phase >= 3 ? { opacity: 1 } : {}}
           transition={{ duration: 0.5 }}
@@ -63,18 +65,23 @@ export function Scene5() {
           {stats.map((s, i) => (
             <motion.div
               key={i}
-              className="flex items-baseline gap-[1.5vw]"
-              initial={{ opacity: 0, x: -12 }}
-              animate={phase >= 3 ? { opacity: 1, x: 0 } : {}}
+              className="flex flex-col items-center gap-[0.6vh]"
+              initial={{ opacity: 0, y: 14 }}
+              animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: i * 0.13 }}
             >
               <span
-                className="font-display text-[rgb(var(--color-teal))]"
-                style={{ fontSize: "clamp(1.4rem, 2.6vw, 3.2rem)" }}
+                className="font-display"
+                style={{ fontSize: "clamp(1.5rem, 2.8vw, 3.5rem)", color: "rgb(var(--color-teal))" }}
               >
                 {s.value}
               </span>
-              <span className="font-body text-[1.4vw] font-light text-white/60">{s.label}</span>
+              <span
+                className="font-body font-light text-white/60"
+                style={{ fontSize: "clamp(0.75rem, 1.2vw, 1.5rem)" }}
+              >
+                {s.label}
+              </span>
             </motion.div>
           ))}
         </motion.div>

@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
-// Scene 3 — The solution: left text only (image removed to avoid overlap)
+// Scene 3 — The solution: centred layout
 export function Scene3() {
   const [phase, setPhase] = useState(0);
 
@@ -32,30 +32,31 @@ export function Scene3() {
         transition={{ duration: 1.8 }}
       />
 
-      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] pr-[14vw]">
+      {/* Centred content */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-center px-[8vw] text-center">
         <motion.p
-          className="font-body text-[1vw] font-semibold tracking-[0.22em] uppercase text-[rgb(var(--color-gold))] mb-[2.5vh]"
-          initial={{ opacity: 0, x: -16 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-gold))] mb-[2.5vh]"
+          initial={{ opacity: 0, y: -10 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
           The solution
         </motion.p>
 
         <motion.h2
-          className="font-display leading-[1.1] text-white mb-[4vh]"
-          style={{ fontSize: "clamp(2rem, 4.5vw, 5.5rem)" }}
+          className="font-display leading-[1.1] text-white mb-[4vh] max-w-[68vw]"
+          style={{ fontSize: "clamp(2.2rem, 4.8vw, 6rem)" }}
           initial={{ opacity: 0, y: 24 }}
           animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
           Win your place
           <br />
-          <span className="text-[rgb(var(--color-gold))]">in AI answers</span>
+          <span style={{ color: "rgb(var(--color-gold))" }}>in AI answers</span>
         </motion.h2>
 
         <motion.div
-          className="flex flex-col gap-[2vh]"
+          className="flex flex-col items-center gap-[1.8vh] max-w-[55vw]"
           initial={{ opacity: 0 }}
           animate={phase >= 3 ? { opacity: 1 } : {}}
           transition={{ duration: 0.5 }}
@@ -64,12 +65,18 @@ export function Scene3() {
             <motion.div
               key={i}
               className="flex items-center gap-[1.2vw]"
-              initial={{ opacity: 0, x: -12 }}
-              animate={phase >= 3 ? { opacity: 1, x: 0 } : {}}
+              initial={{ opacity: 0, y: 10 }}
+              animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: i * 0.12 }}
             >
-              <span className="w-[0.45vw] h-[0.45vw] rounded-full bg-[rgb(var(--color-gold))] flex-shrink-0" />
-              <p className="font-body text-[1.65vw] font-light leading-[1.5] text-white/80">
+              <span
+                className="w-[0.45vw] h-[0.45vw] rounded-full flex-shrink-0"
+                style={{ background: "rgb(var(--color-gold))" }}
+              />
+              <p
+                className="font-body font-light leading-[1.5] text-white/80"
+                style={{ fontSize: "clamp(0.9rem, 1.6vw, 2rem)" }}
+              >
                 {text}
               </p>
             </motion.div>

@@ -1,7 +1,12 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
-// Scene 2 — The new search: text only, no image overlap
+// Scene 2 — AI is the new search: ChatGPT & Claude are where buyers go (centred layout)
+const assistants = [
+  { name: "ChatGPT", colour: "rgb(var(--color-teal))" },
+  { name: "Claude", colour: "rgb(var(--color-coral))" },
+];
+
 export function Scene2() {
   const [phase, setPhase] = useState(0);
 
@@ -9,7 +14,7 @@ export function Scene2() {
     const timers = [
       setTimeout(() => setPhase(1), 250),
       setTimeout(() => setPhase(2), 800),
-      setTimeout(() => setPhase(3), 1400),
+      setTimeout(() => setPhase(3), 1350),
     ];
     return () => timers.forEach(t => clearTimeout(t));
   }, []);
@@ -23,52 +28,72 @@ export function Scene2() {
         style={{ filter: "blur(160px)" }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 0.1 }}
-        transition={{ duration: 1.5 }}
+        transition={{ duration: 1.8 }}
       />
 
-      {/* Full-width left-aligned block — no image competing for space */}
-      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] pr-[12vw]">
+      {/* Centred content */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-center px-[8vw] text-center">
         <motion.p
-          className="font-body text-[1vw] font-semibold tracking-[0.22em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
-          initial={{ opacity: 0, x: -16 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-teal))] mb-[2.5vh]"
+          initial={{ opacity: 0, y: -10 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
           The new search
         </motion.p>
 
-        {/* Two-line headline that fits without wrapping per word */}
         <motion.h2
-          className="font-display leading-[1.1] text-white mb-[3.5vh]"
-          style={{ fontSize: "clamp(2rem, 4.2vw, 5rem)" }}
+          className="font-display leading-[1.1] text-white mb-[4vh] max-w-[70vw]"
+          style={{ fontSize: "clamp(2.2rem, 5vw, 6.5rem)" }}
           initial={{ opacity: 0, y: 24 }}
           animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         >
-          ChatGPT & Claude
+          AI assistants are
           <br />
-          <span className="text-[rgb(var(--color-teal))]">answer without you</span>
+          <em className="not-italic" style={{
+            background: "linear-gradient(120deg, rgb(var(--color-teal)), rgb(var(--color-coral)))",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}>
+            where buyers go now
+          </em>
         </motion.h2>
 
-        <motion.p
-          className="font-body text-[1.7vw] font-light leading-[1.7] text-white/65 mb-[2vh]"
+        {/* Pill badges for ChatGPT and Claude */}
+        <motion.div
+          className="flex items-center justify-center gap-[2.5vw] mb-[4vh]"
           initial={{ opacity: 0, y: 16 }}
           animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          Your competitors appear in AI answers.
-          <br />
-          Your brand is invisible.
-        </motion.p>
+          {assistants.map((a) => (
+            <div
+              key={a.name}
+              className="bg-white/[0.05] border border-white/[0.1] rounded-full px-[2.2vw] py-[0.9vh]"
+              style={{ borderColor: `${a.colour}40` }}
+            >
+              <span
+                className="font-body font-semibold"
+                style={{ fontSize: "clamp(0.9rem, 1.6vw, 2rem)", color: a.colour }}
+              >
+                {a.name}
+              </span>
+            </div>
+          ))}
+        </motion.div>
 
-        {/* Accent line */}
-        <motion.div
-          className="h-px bg-gradient-to-r from-[rgb(var(--color-teal))]/60 to-transparent mt-[2vh]"
-          style={{ width: "40vw" }}
-          initial={{ scaleX: 0, originX: 0 }}
-          animate={phase >= 3 ? { scaleX: 1 } : {}}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        />
+        <motion.p
+          className="font-body font-light leading-[1.6] text-white/65 max-w-[52vw]"
+          style={{ fontSize: "clamp(0.9rem, 1.65vw, 2rem)" }}
+          initial={{ opacity: 0, y: 14 }}
+          animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        >
+          Buyers ask AI for recommendations before they ever visit your website.
+          If you're not in the answer — you don't exist.
+        </motion.p>
       </div>
     </div>
   );

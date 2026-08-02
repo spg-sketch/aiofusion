@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
-// Scene 1 — The problem: brand invisible to AI
+// Scene 1 — The problem: brand invisible to AI (centred layout)
 export function Scene1() {
   const [phase, setPhase] = useState(0);
 
@@ -18,7 +18,6 @@ export function Scene1() {
     <div className="absolute inset-0 overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-[#06101e] to-[rgb(var(--color-navy))]" />
 
-      {/* Glow */}
       <motion.div
         className="absolute top-[-10%] left-[-5%] w-[50vw] h-[50vw] rounded-full bg-[rgb(var(--color-coral))]"
         style={{ filter: "blur(160px)" }}
@@ -27,21 +26,20 @@ export function Scene1() {
         transition={{ duration: 1.5 }}
       />
 
-      {/* Left-aligned text block */}
-      <div className="relative z-10 h-full flex flex-col justify-center pl-[9vw] pr-[8vw] max-w-[70vw]">
-        {/* Eyebrow */}
+      {/* Centred content */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-center px-[8vw] text-center">
         <motion.p
           className="font-body text-[1.1vw] font-semibold tracking-[0.2em] uppercase text-[rgb(var(--color-coral))] mb-[2.5vh]"
-          initial={{ opacity: 0, x: -16 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          initial={{ opacity: 0, y: -10 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
           The problem
         </motion.p>
 
-        {/* Headline */}
         <motion.h1
-          className="font-display text-[5.8vw] leading-[1.08] text-white mb-[3.5vh]"
+          className="font-display leading-[1.08] text-white mb-[3.5vh] max-w-[70vw]"
+          style={{ fontSize: "clamp(2.4rem, 5.5vw, 7rem)" }}
           initial={{ opacity: 0, y: 28 }}
           animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
@@ -58,21 +56,20 @@ export function Scene1() {
           </em>
         </motion.h1>
 
-        {/* Body */}
         <motion.p
-          className="font-body text-[1.9vw] font-light leading-[1.6] text-white/65"
+          className="font-body font-light leading-[1.6] text-white/65 max-w-[55vw]"
+          style={{ fontSize: "clamp(1rem, 1.8vw, 2.2rem)" }}
           initial={{ opacity: 0, y: 16 }}
           animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
         >
           ChatGPT and Claude answer millions of questions
-          <br />
           about your industry every day.
         </motion.p>
 
-        {/* Kicker */}
         <motion.p
-          className="font-body text-[1.6vw] font-medium text-white/90 mt-[2vh]"
+          className="font-body font-semibold text-white/90 mt-[2.5vh]"
+          style={{ fontSize: "clamp(0.9rem, 1.6vw, 2rem)" }}
           initial={{ opacity: 0, y: 12 }}
           animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}

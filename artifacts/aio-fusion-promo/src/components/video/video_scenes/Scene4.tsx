@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 
-// Scene 4 — The platform: header top-left, 2×2 grid below
+// Scene 4 — The platform: centred header + 2×2 grid below
 const features = [
   { label: "LLM Visibility Checks", detail: "See exactly how you appear in ChatGPT & Claude" },
   { label: "Competitor Analysis", detail: "Know who's winning the AI conversation" },
@@ -32,21 +32,19 @@ export function Scene4() {
         transition={{ duration: 1.5 }}
       />
 
-      {/* Tight layout: eyebrow + headline on top, grid below — all inside safe inset */}
-      <div className="relative z-10 h-full flex flex-col justify-center px-[9vw] py-[5vh]">
-        {/* Eyebrow */}
+      {/* Centred layout */}
+      <div className="relative z-10 h-full flex flex-col items-center justify-center px-[8vw] py-[4vh] text-center">
         <motion.p
-          className="font-body text-[1vw] font-semibold tracking-[0.22em] uppercase text-[rgb(var(--color-coral))] mb-[1.5vh]"
-          initial={{ opacity: 0, x: -14 }}
-          animate={phase >= 1 ? { opacity: 1, x: 0 } : {}}
+          className="font-body text-[1.1vw] font-semibold tracking-[0.22em] uppercase text-[rgb(var(--color-coral))] mb-[1.5vh]"
+          initial={{ opacity: 0, y: -10 }}
+          animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
         >
           The platform
         </motion.p>
 
-        {/* Headline — smaller so it fits on two lines */}
         <motion.h2
-          className="font-display leading-[1.08] text-white mb-[3vh]"
+          className="font-display leading-[1.08] text-white mb-[3vh] max-w-[65vw]"
           style={{ fontSize: "clamp(1.8rem, 3.8vw, 4.8rem)" }}
           initial={{ opacity: 0, y: 20 }}
           animate={phase >= 1 ? { opacity: 1, y: 0 } : {}}
@@ -66,9 +64,9 @@ export function Scene4() {
           </em>
         </motion.h2>
 
-        {/* 2×2 grid — reduced padding so cards don't clip */}
+        {/* 2×2 grid — centred, max-width so it never bleeds edge */}
         <motion.div
-          className="grid grid-cols-2 gap-[1.4vw]"
+          className="grid grid-cols-2 gap-[1.4vw] w-full max-w-[75vw]"
           initial={{ opacity: 0, y: 22 }}
           animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
@@ -76,15 +74,21 @@ export function Scene4() {
           {features.map((f, i) => (
             <motion.div
               key={i}
-              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-[1.8vw] py-[1.4vh]"
+              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-[2vw] py-[1.6vh] text-left"
               initial={{ opacity: 0, y: 16 }}
               animate={phase >= 2 ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: i * 0.09 }}
             >
-              <p className="font-body text-[1.4vw] font-semibold text-white mb-[0.5vh]">
+              <p
+                className="font-body font-semibold text-white mb-[0.5vh]"
+                style={{ fontSize: "clamp(0.85rem, 1.35vw, 1.7rem)" }}
+              >
                 {f.label}
               </p>
-              <p className="font-body text-[1.1vw] font-light text-white/55 leading-[1.5]">
+              <p
+                className="font-body font-light text-white/55 leading-[1.5]"
+                style={{ fontSize: "clamp(0.75rem, 1.05vw, 1.3rem)" }}
+              >
                 {f.detail}
               </p>
             </motion.div>
