@@ -344,6 +344,47 @@ async function completeMfaLogin(
   });
 }
 
+// Redirect-based variant of finishLoginOrChallenge for the OAuth callbacks.
+// SSO logins are browser redirects (not JSON), so when an MFA challenge is
+// required the short-lived pending token is handed to the frontend via query
+// params (`oauth_status=mfa`) instead of a JSON body. The token alone grants
+// nothing — a valid TOTP (or recovery) code is still required to get a session.
+async function finishOauthLoginOrChallenge(
+  req: Request,
+  res: Response,
+  origin: string,
+  identity: LoginIdentity,
+): Promise<void> {
+  const isMaster = normalizeRole(identity.role) === "admin";
+  let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
+  try {
+    mfa = await getMfaState(identity.username);
+  } catch { /* non-fatal: fall through to challenge rules below */ }
+
+  if (mfa?.enabled || isMaster) {
+    const mode: "enroll" | "verify" = mfa?.enabled ? "verify" : "enroll";
+    const mfaToken = createMfaPendingToken({
+      u: identity.username,
+      uid: identity.userId,
+      cid: identity.activeCompanyId,
+      role: identity.role,
+      needsSetup: identity.needsSetup || undefined,
+      mode,
+    });
+    res.redirect(`${origin}/?oauth_status=mfa&mfa_mode=${mode}&mfa_token=${encodeURIComponent(mfaToken)}`);
+    return;
+  }
+
+  const sid = await createPlatformSession(
+    identity.username,
+    makeIpHint(req.ip),
+    identity.userId,
+    identity.activeCompanyId,
+  );
+  setPlatformCookie(res, sid);
+  res.redirect(`${origin}/?oauth_status=ok${identity.needsSetup ? "&needs_setup=true" : ""}`);
+}
+
 function clientIp(req: Request): string | undefined {
   return (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
     ?? req.socket.remoteAddress ?? undefined;
@@ -1309,11 +1350,14 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
             // Non-fatal.
             userId = existingUser.id;
           }
-          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
-          setPlatformCookie(res, sid);
           const oauthCo = activeCompanyId ? await getCompanyBySlug(account.username) : null;
-          const oauthSuffix = (oauthCo?.setupComplete === false) ? "&needs_setup=true" : "";
-          res.redirect(`${origin}/?oauth_status=ok${oauthSuffix}`);
+          await finishOauthLoginOrChallenge(req, res, origin, {
+            username: account.username,
+            role: account.role,
+            userId,
+            activeCompanyId,
+            needsSetup: oauthCo?.setupComplete === false,
+          });
           return;
         }
       }
@@ -1354,11 +1398,14 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       } catch {
         // Non-fatal.
       }
-      const sid = await createPlatformSession(existing.username, makeIpHint(req.ip), userId, activeCompanyId);
-      setPlatformCookie(res, sid);
       const legacyOauthCo = activeCompanyId ? await getCompanyBySlug(existing.username) : null;
-      const legacyOauthSuffix = (legacyOauthCo?.setupComplete === false) ? "&needs_setup=true" : "";
-      res.redirect(`${origin}/?oauth_status=ok${legacyOauthSuffix}`);
+      await finishOauthLoginOrChallenge(req, res, origin, {
+        username: existing.username,
+        role: existing.role,
+        userId,
+        activeCompanyId,
+        needsSetup: legacyOauthCo?.setupComplete === false,
+      });
       return;
     }
     // No account — register a new pending one from the Google profile
@@ -1414,10 +1461,14 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
     if (newActiveCompanyId) {
       try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
     }
-    const newSid = await createPlatformSession(username, makeIpHint(req.ip), newUserId, newActiveCompanyId);
-    setPlatformCookie(res, newSid);
     void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: displayName, username, method: "google" });
-    res.redirect(`${origin}/?oauth_status=ok&needs_setup=true`);
+    await finishOauthLoginOrChallenge(req, res, origin, {
+      username,
+      role: "agency",
+      userId: newUserId,
+      activeCompanyId: newActiveCompanyId,
+      needsSetup: true,
+    });
   } catch (err) {
     console.error("Google OAuth callback error:", err);
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
@@ -1532,10 +1583,14 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
             await linkMicrosoftId(userId, microsoftId);
             const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byMsId.id; }
-          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
-          setPlatformCookie(res, sid);
           const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
-          res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+          await finishOauthLoginOrChallenge(req, res, origin, {
+            username: account.username,
+            role: account.role,
+            userId,
+            activeCompanyId,
+            needsSetup: co?.setupComplete === false,
+          });
           return;
         }
       }
@@ -1556,10 +1611,14 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
             userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
             const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byEmail.id; }
-          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
-          setPlatformCookie(res, sid);
           const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
-          res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+          await finishOauthLoginOrChallenge(req, res, origin, {
+            username: account.username,
+            role: account.role,
+            userId,
+            activeCompanyId,
+            needsSetup: co?.setupComplete === false,
+          });
           return;
         }
       }
@@ -1576,10 +1635,14 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
         await linkMicrosoftId(userId, microsoftId);
         const co = await getCompanyBySlug(legacyMs.username); activeCompanyId = co?.id;
       } catch { /* non-fatal */ }
-      const sid = await createPlatformSession(legacyMs.username, makeIpHint(req.ip), userId, activeCompanyId);
-      setPlatformCookie(res, sid);
       const co = activeCompanyId ? await getCompanyBySlug(legacyMs.username) : null;
-      res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+      await finishOauthLoginOrChallenge(req, res, origin, {
+        username: legacyMs.username,
+        role: legacyMs.role,
+        userId,
+        activeCompanyId,
+        needsSetup: co?.setupComplete === false,
+      });
       return;
     }
 
@@ -1599,10 +1662,14 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
     } catch { /* non-fatal */ }
     if (newUserId) { try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ } }
     if (newActiveCompanyId) { try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ } }
-    const newSid = await createPlatformSession(username, makeIpHint(req.ip), newUserId, newActiveCompanyId);
-    setPlatformCookie(res, newSid);
     void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: displayName, username, method: "microsoft" });
-    res.redirect(`${origin}/?oauth_status=ok&needs_setup=true`);
+    await finishOauthLoginOrChallenge(req, res, origin, {
+      username,
+      role: "agency",
+      userId: newUserId,
+      activeCompanyId: newActiveCompanyId,
+      needsSetup: true,
+    });
   } catch (err) {
     console.error("Microsoft OAuth callback error:", err);
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);

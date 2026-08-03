@@ -141,7 +141,17 @@ function PlatformHomePage({
       }
       return;
     }
-    if (status === "suspended") {
+    if (status === "mfa") {
+      // SSO login needs a two-factor step: the callback redirected here with a
+      // short-lived pending token instead of a session. Show the MFA panel.
+      const mfaToken = params.get("mfa_token") ?? "";
+      const mfaMode = params.get("mfa_mode") ?? "verify";
+      if (mfaToken) {
+        setMfaChallenge({ mfaToken, enroll: mfaMode === "enroll" });
+      } else {
+        setLoginError("Two-factor sign-in could not be started. Please try again.");
+      }
+    } else if (status === "suspended") {
       setLoginError("Your account has been suspended. Please contact support.");
     } else if (status === "error") {
       const msg = params.get("oauth_msg") ?? "unknown";

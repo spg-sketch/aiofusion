@@ -10,7 +10,9 @@ description: How two-factor login works — mandatory for master (admin) account
 - Login two-step: after a correct password the server returns a stateless HMAC token (`mfaToken`, 10-min TTL, signed with SESSION_SECRET) instead of a session; `/platform/mfa/verify` or `/mfa/enable` exchanges it for the cookie. Both login branches (platform_users + legacy) go through `finishLoginOrChallenge`.
 - Master = `role === "admin"` (normalizeRole). Masters: forced enrolment on first login, cannot disable. Others: opt-in via `MfaSecuritySection` on PlatformHomePage signed-in card.
 - Recovery codes: 10 single-use, sha256-hashed; shown exactly once at enrolment.
-- **How to apply:** SSO logins (Google/Microsoft) bypass this — they never hit `finishLoginOrChallenge`; adding MFA to SSO would need the same challenge in the OAuth callbacks.
+- SSO logins (Google/Microsoft) are now challenged too: the OAuth callbacks route every session-issuing branch through a redirect variant of the challenge (`finishOauthLoginOrChallenge`) that hands the pending token to the frontend via `/?oauth_status=mfa&mfa_mode=verify|enroll&mfa_token=...`; PlatformHomePage's oauth-redirect effect turns that into the same `MfaLoginStep` panel. The token in the URL grants nothing without a valid code.
+- OAuth-callback tests: stub `globalThis.fetch` for the Google token/userinfo endpoints (pass everything else through the real fetch) and call the callback with `redirect: "manual"` plus the `aio_oauth_state` cookie.
+- react-qr-code 2.2.0 ships class typings incompatible with React 19 JSX; re-typed as `React.FC` at the import site in MfaPanels.
 - E2E-test with a disposable seeded admin row; note shell `$`-expansion mangles scrypt hashes when inlining them into `psql "$..."` commands — use execFileSync args.
 - Admin MFA reset: POST `/platform/accounts/reset-mfa` (canManage-guarded, no self-reset, logged `mfa_admin_reset`); UI action in Users admin ⋮ menu.
 - react-qr-code's class typings break under React 19 JSX types — MfaPanels casts the import to a function-component signature.
