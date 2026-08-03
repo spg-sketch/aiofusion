@@ -16,3 +16,5 @@ description: How two-factor login works — mandatory for master (admin) account
 - E2E-test with a disposable seeded admin row; note shell `$`-expansion mangles scrypt hashes when inlining them into `psql "$..."` commands — use execFileSync args.
 - Admin MFA reset: POST `/platform/accounts/reset-mfa` (canManage-guarded, no self-reset, logged `mfa_admin_reset`); UI action in Users admin ⋮ menu.
 - react-qr-code's class typings break under React 19 JSX types — MfaPanels casts the import to a function-component signature.
+
+- SSO→MFA redirect (oauth_status=mfa&mfa_token=...) hit the App.tsx URL-param-wipe race: params must be captured in App state (oauthRedirectParams prop → PlatformHomePage) before history-sync strips them. Any NEW redirect query param needs the same capture-in-App treatment.
