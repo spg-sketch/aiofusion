@@ -20,6 +20,9 @@ export type AdminAction =
   | "account_approve"
   | "account_reject"
   | "master_owner_set"
+  | "mfa_enabled"
+  | "mfa_disabled"
+  | "mfa_recovery_code_used"
   | "switch_to_master";
 
 export async function logAdminEvent(

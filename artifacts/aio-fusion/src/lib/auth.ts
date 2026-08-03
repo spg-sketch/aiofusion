@@ -303,26 +303,30 @@ async function runMigrationIfNeeded(role: Role): Promise<void> {
   }
 }
 
-// Verify credentials on the server. On success the server sets the session
-// cookie; we mirror the session, run the one-time migration if this is the
-// admin's first sign-in, then refresh the cached account list.
+export type MfaChallenge = { mfaToken: string; enroll: boolean };
 export async function serverLogin(
   username: string,
   password: string,
-): Promise<{ ok: true; session: Session; needsSetup?: boolean } | { ok: false; error: string }> {
+): Promise<LoginResult> {
   const u = username.trim();
   if (!u || !password) return { ok: false, error: "Enter a username and password." };
   const { ok, json } = await postJson("/api/platform/login", { username: u, password });
+  if (ok && typeof json?.mfaToken === "string" && (json.mfaRequired || json.mfaEnrollRequired)) {
+    return { ok: false, mfa: { mfaToken: json.mfaToken, enroll: json.mfaEnrollRequired === true } };
+  }
   if (!ok || !json?.account) {
     return { ok: false, error: json?.error || "Incorrect username or password." };
   }
+  return finishLogin(json);
+}
+
+async function finishLogin(json: any): Promise<{ ok: true; session: Session; needsSetup?: boolean }> {
   const session: Session = { username: json.account.username, role: json.account.role };
   setSession(session);
   await runMigrationIfNeeded(session.role);
   await refreshAccountsCache();
   return { ok: true, session, needsSetup: json.needsSetup === true };
 }
-
 export async function serverLogout(): Promise<void> {
   await postJson("/api/platform/logout");
   clearSession();
@@ -749,4 +753,67 @@ export async function serverRevokeSession(
   } catch {
     return { ok: false, error: "Failed to revoke session." };
   }
+}
+
+export async function serverMfaEnable(
+  code: string,
+  mfaToken?: string,
+): Promise<
+  | { ok: true; recoveryCodes: string[]; session?: Session; needsSetup?: boolean }
+  | { ok: false; error: string }
+> {
+  const { ok, json } = await postJson("/api/platform/mfa/enable", { code, ...(mfaToken ? { mfaToken } : {}) });
+  if (!ok) return { ok: false, error: json?.error || "Could not enable two-factor authentication." };
+  const recoveryCodes: string[] = Array.isArray(json?.recoveryCodes) ? json.recoveryCodes : [];
+  if (json?.account) {
+    const done = await finishLogin(json);
+    return { ok: true, recoveryCodes, session: done.session, needsSetup: done.needsSetup };
+  }
+  return { ok: true, recoveryCodes };
+}
+
+export async function serverMfaStatus(): Promise<
+  { ok: true; enabled: boolean; required: boolean; recoveryCodesRemaining: number } | { ok: false; error: string }
+> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/mfa/status`, { credentials: "include" });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok) return { ok: false, error: json?.error || "Could not load two-factor status." };
+    return {
+      ok: true,
+      enabled: json?.enabled === true,
+      required: json?.required === true,
+      recoveryCodesRemaining: typeof json?.recoveryCodesRemaining === "number" ? json.recoveryCodesRemaining : 0,
+    };
+  } catch {
+    return { ok: false, error: "Could not load two-factor status." };
+  }
+}
+
+export type LoginResult =
+  | { ok: true; session: Session; needsSetup?: boolean }
+  | { ok: false; mfa: MfaChallenge }
+  | { ok: false; error: string };
+
+export async function serverMfaVerify(
+  mfaToken: string,
+  code: string,
+): Promise<{ ok: true; session: Session; needsSetup?: boolean } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/mfa/verify", { mfaToken, code });
+  if (!ok || !json?.account) return { ok: false, error: json?.error || "That code is not valid." };
+  return finishLogin(json);
+}
+
+export async function serverMfaSetup(
+  mfaToken?: string,
+): Promise<{ ok: true; secret: string; otpauthUrl: string } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/mfa/setup", mfaToken ? { mfaToken } : {});
+  if (!ok || !json?.secret) return { ok: false, error: json?.error || "Could not start two-factor setup." };
+  return { ok: true, secret: json.secret, otpauthUrl: json.otpauthUrl };
+}
+
+export async function serverMfaDisable(code: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/mfa/disable", { code });
+  if (!ok) return { ok: false, error: json?.error || "Could not disable two-factor authentication." };
+  return { ok: true };
 }

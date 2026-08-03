@@ -10,7 +10,8 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 function PlatformHomePage({
@@ -49,6 +50,7 @@ function PlatformHomePage({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(initialNotice ?? null);
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
   const [showSessions, setShowSessions] = useState(false);
   const [mySessions, setMySessions] = useState<SessionInfo[] | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -603,6 +605,18 @@ function PlatformHomePage({
                   </div>
                 </form>
               </>
+            ) : mfaChallenge ? (
+              /* --- MFA CHALLENGE (second sign-in step) --- */
+              <MfaLoginStep
+                challenge={mfaChallenge}
+                onCancel={() => { setMfaChallenge(null); setLoginError(null); }}
+                onSuccess={(mfaSession, needsSetup) => {
+                  setMfaChallenge(null);
+                  setUsername("");
+                  onLoginSuccess(mfaSession);
+                  if (needsSetup) onNeedsSetup?.();
+                }}
+              />
             ) : (
               /* --- SIGN-IN FORM --- */
               <>
@@ -670,6 +684,9 @@ function PlatformHomePage({
                         setPassword("");
                         onLoginSuccess(result.session);
                         if (result.needsSetup) onNeedsSetup?.();
+                      } else if ("mfa" in result) {
+                        setPassword("");
+                        setMfaChallenge(result.mfa);
                       } else {
                         setLoginError(result.error);
                       }
@@ -886,6 +903,9 @@ function PlatformHomePage({
               )}
             </div>
 
+            {/* TWO-FACTOR AUTHENTICATION - status + opt-in management */}
+            <MfaSecuritySection session={session} />
+
             {/* DANGER ZONE - self-serve account deletion (GDPR right to erasure) */}
             <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
               <button
@@ -1014,5 +1034,6 @@ function PlatformHomePage({
     </div>
   );
 }
+
 
 export { PlatformHomePage };

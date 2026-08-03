@@ -62,6 +62,19 @@ import {
   incrementSessionVersion,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import {
+  getMfaState,
+  saveMfaState,
+  clearMfaState,
+  generateTotpSecret,
+  verifyTotp,
+  buildOtpauthUrl,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  consumeRecoveryCode,
+  createMfaPendingToken,
+  verifyMfaPendingToken,
+} from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, getAppBaseUrl } from "../lib/notify-email";
@@ -246,6 +259,96 @@ router.get("/platform/status", async (_req: Request, res: Response) => {
   }
 });
 
+// --- MFA (TOTP) ---------------------------------------------------------------
+//
+// Master (admin) accounts MUST use two-factor login: enrolment is forced on
+// their first login and a code is required on every subsequent login. Other
+// accounts may opt in. After a correct password, when a challenge is needed the
+// login endpoint returns a short-lived signed token instead of a session; the
+// /platform/mfa/verify (or /enable, during enrolment) endpoint exchanges it for
+// a real session once the code checks out.
+
+interface LoginIdentity {
+  username: string;
+  role: string;
+  userId?: string;
+  activeCompanyId?: string;
+  needsSetup: boolean;
+}
+
+// Decide whether to issue a session immediately or return an MFA challenge.
+async function finishLoginOrChallenge(
+  res: Response,
+  identity: LoginIdentity,
+  rawIp: string | undefined,
+): Promise<void> {
+  const isMaster = normalizeRole(identity.role) === "admin";
+  let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
+  try {
+    mfa = await getMfaState(identity.username);
+  } catch { /* non-fatal: fall through to challenge rules below */ }
+
+  if (mfa?.enabled) {
+    const mfaToken = createMfaPendingToken({
+      u: identity.username,
+      uid: identity.userId,
+      cid: identity.activeCompanyId,
+      role: identity.role,
+      needsSetup: identity.needsSetup || undefined,
+      mode: "verify",
+    });
+    res.json({ mfaRequired: true, mfaToken });
+    return;
+  }
+
+  if (isMaster) {
+    // Mandatory enrolment: no session until a TOTP secret is confirmed.
+    const mfaToken = createMfaPendingToken({
+      u: identity.username,
+      uid: identity.userId,
+      cid: identity.activeCompanyId,
+      role: identity.role,
+      needsSetup: identity.needsSetup || undefined,
+      mode: "enroll",
+    });
+    res.json({ mfaEnrollRequired: true, mfaToken });
+    return;
+  }
+
+  const sid = await createPlatformSession(
+    identity.username,
+    makeIpHint(rawIp),
+    identity.userId,
+    identity.activeCompanyId,
+  );
+  setPlatformCookie(res, sid);
+  res.json({
+    account: { username: identity.username, role: identity.role },
+    ...(identity.needsSetup ? { needsSetup: true } : {}),
+  });
+}
+
+// Issue the real session after a successful MFA code check during login.
+async function completeMfaLogin(
+  res: Response,
+  payload: { u: string; uid?: string; cid?: string; role: string; needsSetup?: boolean },
+  rawIp: string | undefined,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  const sid = await createPlatformSession(payload.u, makeIpHint(rawIp), payload.uid, payload.cid);
+  setPlatformCookie(res, sid);
+  res.json({
+    account: { username: payload.u, role: payload.role },
+    ...(payload.needsSetup ? { needsSetup: true } : {}),
+    ...(extra ?? {}),
+  });
+}
+
+function clientIp(req: Request): string | undefined {
+  return (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+    ?? req.socket.remoteAddress ?? undefined;
+}
+
 router.post("/platform/login", loginLimiter, async (req: Request, res: Response) => {
   try {
     // Accept either a username or an email in the `username` field so that
@@ -288,14 +391,18 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           const company = await getCompanyBySlug(acct.username);
           activeCompanyId = company?.id;
         } catch { /* non-fatal */ }
-        const sid = await createPlatformSession(acct.username, makeIpHint(rawIp), newUser.id, activeCompanyId);
-        setPlatformCookie(res, sid);
         let loginNeedsSetup = false;
         try {
           const loginCo = await getCompanyBySlug(acct.username);
           if (loginCo?.setupComplete === false) loginNeedsSetup = true;
         } catch { /* non-fatal */ }
-        res.json({ account: { username: acct.username, role: acct.role }, ...(loginNeedsSetup ? { needsSetup: true } : {}) });
+        await finishLoginOrChallenge(res, {
+          username: acct.username,
+          role: acct.role,
+          userId: newUser.id,
+          activeCompanyId,
+          needsSetup: loginNeedsSetup,
+        }, rawIp ?? undefined);
         return;
       }
     }
@@ -343,16 +450,196 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
         // Non-fatal: session still works, userId/activeCompanyId just won't be set.
       }
     }
-    const sid = await createPlatformSession(account.username, makeIpHint(rawIp), userId, activeCompanyId);
-    setPlatformCookie(res, sid);
     let legacyNeedsSetup = false;
     try {
       const legacyCo = await getCompanyBySlug(account.username);
       if (legacyCo?.setupComplete === false) legacyNeedsSetup = true;
     } catch { /* non-fatal */ }
-    res.json({ account: { username: account.username, role: account.role }, ...(legacyNeedsSetup ? { needsSetup: true } : {}) });
+    await finishLoginOrChallenge(res, {
+      username: account.username,
+      role: account.role,
+      userId,
+      activeCompanyId,
+      needsSetup: legacyNeedsSetup,
+    }, rawIp ?? undefined);
   } catch {
     res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// --- MFA endpoints ------------------------------------------------------------
+
+// Begin (or restart) TOTP enrolment. Accepts EITHER a pending login token in
+// `mfaToken` (mandatory enrolment for masters during login) OR an authenticated
+// session (opt-in enrolment for everyone else). Generates a fresh secret stored
+// unconfirmed; nothing changes for login until /platform/mfa/enable confirms it.
+router.post("/platform/mfa/setup", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    let username: string | null = null;
+    const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
+    if (token) {
+      const payload = verifyMfaPendingToken(token);
+      if (!payload || payload.mode !== "enroll") {
+        res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
+        return;
+      }
+      username = payload.u;
+    } else if (req.account) {
+      username = req.account.username;
+    }
+    if (!username) {
+      res.status(401).json({ error: "Sign in first to set up two-factor authentication." });
+      return;
+    }
+    const existing = await getMfaState(username);
+    if (existing?.enabled) {
+      res.status(409).json({ error: "Two-factor authentication is already enabled on this account." });
+      return;
+    }
+    const secret = generateTotpSecret();
+    await saveMfaState(username, { secret, enabled: false, recoveryHashes: [] });
+    const acc = await getAccount(normUsername(username));
+    const label = acc?.email || username;
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ secret, otpauthUrl: buildOtpauthUrl(secret, label) });
+  } catch {
+    res.status(500).json({ error: "Could not start two-factor setup" });
+  }
+});
+
+// Confirm enrolment with a first TOTP code. Enables MFA and returns the
+// single-use recovery codes (shown exactly once). When called with a pending
+// login token (mandatory master enrolment), also issues the session.
+router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
+    let username: string | null = null;
+    let pending: ReturnType<typeof verifyMfaPendingToken> = null;
+    if (token) {
+      pending = verifyMfaPendingToken(token);
+      if (!pending || pending.mode !== "enroll") {
+        res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
+        return;
+      }
+      username = pending.u;
+    } else if (req.account) {
+      username = req.account.username;
+    }
+    if (!username) {
+      res.status(401).json({ error: "Sign in first to set up two-factor authentication." });
+      return;
+    }
+    const state = await getMfaState(username);
+    if (!state) {
+      res.status(400).json({ error: "Two-factor setup has not been started. Scan the QR code first." });
+      return;
+    }
+    if (state.enabled) {
+      res.status(409).json({ error: "Two-factor authentication is already enabled." });
+      return;
+    }
+    if (!verifyTotp(state.secret, code)) {
+      res.status(401).json({ error: "That code is not valid. Check your authenticator app and try again." });
+      return;
+    }
+    const recoveryCodes = generateRecoveryCodes();
+    await saveMfaState(username, {
+      secret: state.secret,
+      enabled: true,
+      recoveryHashes: recoveryCodes.map(hashRecoveryCode),
+    });
+    await logAdminEvent({ username }, "mfa_enabled", username, "account");
+    if (pending) {
+      await completeMfaLogin(res, pending, clientIp(req), { recoveryCodes });
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true, recoveryCodes });
+  } catch {
+    res.status(500).json({ error: "Could not enable two-factor authentication" });
+  }
+});
+
+// Second login step: verify a TOTP code (or a single-use recovery code) against
+// the pending login token, then issue the real session.
+router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
+    const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+    const pending = verifyMfaPendingToken(token);
+    if (!pending || pending.mode !== "verify") {
+      res.status(401).json({ error: "Your sign-in session expired. Please sign in again." });
+      return;
+    }
+    if (!code) {
+      res.status(400).json({ error: "Enter the 6-digit code from your authenticator app." });
+      return;
+    }
+    const state = await getMfaState(pending.u);
+    if (!state?.enabled) {
+      // MFA was disabled between password check and this call — let them in.
+      await completeMfaLogin(res, pending, clientIp(req));
+      return;
+    }
+    if (verifyTotp(state.secret, code)) {
+      await completeMfaLogin(res, pending, clientIp(req));
+      return;
+    }
+    // Fall back to recovery codes (single-use).
+    const remaining = consumeRecoveryCode(state, code);
+    if (remaining !== null) {
+      await saveMfaState(pending.u, { ...state, recoveryHashes: remaining });
+      await logAdminEvent({ username: pending.u }, "mfa_recovery_code_used", pending.u, "account");
+      await completeMfaLogin(res, pending, clientIp(req), { recoveryCodesRemaining: remaining.length });
+      return;
+    }
+    res.status(401).json({ error: "That code is not valid. Try again, or use a recovery code." });
+  } catch {
+    res.status(500).json({ error: "Could not verify the code" });
+  }
+});
+
+// Current MFA status for the signed-in account.
+router.get("/platform/mfa/status", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    const state = await getMfaState(account.username);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      enabled: state?.enabled === true,
+      required: normalizeRole(account.role) === "admin",
+      recoveryCodesRemaining: state?.enabled ? state.recoveryHashes.length : 0,
+    });
+  } catch {
+    res.status(500).json({ error: "Could not load two-factor status" });
+  }
+});
+
+// Turn MFA off. Requires a currently-valid TOTP code, and is refused for master
+// (admin) accounts — MFA is mandatory for them.
+router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    if (normalizeRole(account.role) === "admin") {
+      res.status(403).json({ error: "Two-factor authentication is mandatory for master accounts and cannot be disabled." });
+      return;
+    }
+    const state = await getMfaState(account.username);
+    if (!state?.enabled) {
+      res.status(400).json({ error: "Two-factor authentication is not enabled." });
+      return;
+    }
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    if (!verifyTotp(state.secret, code) && consumeRecoveryCode(state, code) === null) {
+      res.status(401).json({ error: "Enter a valid code from your authenticator app to turn this off." });
+      return;
+    }
+    await clearMfaState(account.username);
+    await logAdminEvent({ username: account.username }, "mfa_disabled", account.username, "account");
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Could not disable two-factor authentication" });
   }
 });
 

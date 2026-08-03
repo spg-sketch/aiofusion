@@ -84,6 +84,7 @@
   "dependencies": {
     "@workspace/replit-auth-web": "workspace:*",
     "docx": "^9.6.1",
-    "file-saver": "^2.0.5"
+    "file-saver": "^2.0.5",
+    "react-qr-code": "^2.2.0"
   }
 }
