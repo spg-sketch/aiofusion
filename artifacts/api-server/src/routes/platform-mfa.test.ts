@@ -361,6 +361,23 @@ describe("MFA login flow", () => {
     expect(good.status).toBe(200);
     expect(good.json.account?.username).toBe(MASTER);
     expect(good.setCookie).toMatch(/aio_sid=/);
+    // The OAuth MFA handoff cookie is cleared server-side (single-use).
+    expect(good.setCookie).toMatch(/aio_oauth_mfa_token=;/);
+  });
+
+  it("clears the OAuth MFA handoff cookie on verify failure and on enable", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
+    const login = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
+    const bad = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login.json.mfaToken, code: "000000" });
+    expect(bad.status).toBe(401);
+    expect(bad.setCookie).toMatch(/aio_oauth_mfa_token=;/);
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    const setup = await post(baseUrl, "/api/platform/mfa/setup", {});
+    const enable = await post(baseUrl, "/api/platform/mfa/enable", { code: totpCode(setup.json.secret) });
+    expect(enable.status).toBe(200);
+    expect(enable.setCookie).toMatch(/aio_oauth_mfa_token=;/);
   });
 
   it("accepts a recovery code exactly once", async () => {

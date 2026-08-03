@@ -578,6 +578,10 @@ router.post("/platform/mfa/setup", loginLimiter, async (req: Request, res: Respo
 // login token (mandatory master enrolment), also issues the session.
 router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Response) => {
   try {
+    // Defense in depth: the OAuth MFA handoff cookie is single-use. The
+    // frontend clears it after reading, but clear it server-side too so it
+    // never lingers once the two-factor step completes (success or failure).
+    res.clearCookie(OAUTH_MFA_TOKEN_COOKIE, { path: "/" });
     const code = typeof req.body?.code === "string" ? req.body.code : "";
     const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
     let username: string | null = null;
@@ -631,6 +635,9 @@ router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Resp
 // the pending login token, then issue the real session.
 router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Response) => {
   try {
+    // Defense in depth: clear the single-use OAuth MFA handoff cookie whether
+    // or not verification succeeds (the frontend also clears it after reading).
+    res.clearCookie(OAUTH_MFA_TOKEN_COOKIE, { path: "/" });
     const token = typeof req.body?.mfaToken === "string" ? req.body.mfaToken : "";
     const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
     const pending = verifyMfaPendingToken(token);
