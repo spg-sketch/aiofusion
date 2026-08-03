@@ -31,3 +31,4 @@
 - [AIO Fusion staging custom domain](aio-fusion-staging-domain.md) — A+TXT records only (no CNAME, conflicts with TXT); domain binds on next Republish; verify SSL with curl, panel status can be stale.
 - [AIO Fusion promo video artifact](aio-fusion-promo-video.md) — keep scaffold hooks.ts when merging subagent scenes; scaffold tsconfig lacked DOM lib; promo excluded from typecheck workflow.
 - [AIO Fusion fair usage policy](aio-fusion-fair-usage.md) — 50 actions/project/month for content-% ops only; audits (llm-check%) and llm-queries excluded (own 21-day lock); checkFairUsage() takes optional projectId; all content routes must send projectId in body.
+- [AIO Fusion login/SSO overhaul Steps 1–4](aio-fusion-login-sso-overhaul.md) — schema v2 columns, session_version fast revocation, pending_approval gate removed; PGlite DDL + cookie name `aio_sid` pitfalls; Steps 5–8 still pending.
