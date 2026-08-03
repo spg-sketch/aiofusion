@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { db, platformMetaTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 
 // TOTP two-factor authentication (RFC 6238, HMAC-SHA1, 30s step, 6 digits)
 // implemented on node's crypto so no external dependency is needed.
@@ -52,6 +52,27 @@ export async function saveMfaState(username: string, state: MfaState): Promise<v
     .insert(platformMetaTable)
     .values({ key: mfaKey(username), value })
     .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+// Usernames (normalised) of all accounts with MFA fully enabled. Used by the
+// admin accounts list so it can badge enrolled accounts without N queries.
+export async function getMfaEnabledSet(): Promise<Set<string>> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${MFA_PREFIX}%`));
+  const enabled = new Set<string>();
+  for (const row of rows) {
+    try {
+      const obj = JSON.parse(row.value ?? "") as Partial<MfaState>;
+      if (obj.enabled === true && typeof obj.secret === "string" && obj.secret) {
+        enabled.add(row.key.slice(MFA_PREFIX.length));
+      }
+    } catch {
+      /* ignore malformed rows */
+    }
+  }
+  return enabled;
 }
 
 export async function clearMfaState(username: string): Promise<void> {

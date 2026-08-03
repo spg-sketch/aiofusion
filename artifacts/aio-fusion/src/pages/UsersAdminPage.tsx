@@ -510,6 +510,9 @@ function UsersAdminPage({
         return;
       }
       alert(`Two-factor login has been reset for '${username}'.`);
+      // Re-pull accounts from the server so the "2FA on" badge and the
+      // reset menu item disappear immediately rather than on next page load.
+      await refreshAccountsCache();
       refresh();
     })();
   };
@@ -620,6 +623,15 @@ function UsersAdminPage({
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: u.role === "admin" ? ink : accentSoft, color: u.role === "admin" ? paper : accent }}>
                     {roleLabel(u.role)}
                   </span>
+                  {u.mfaEnabled && (
+                    <span
+                      title="Two-factor login is enabled on this account"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]"
+                      style={{ background: "#e6f4ea", color: "#1e7e46" }}
+                    >
+                      <ShieldCheck size={10} /> 2FA on
+                    </span>
+                  )}
                   <span className="text-[11px] font-light truncate" style={{ color: vars.g500 }}>
                     {[
                       hasDisplayName ? u.username : null,
@@ -694,7 +706,7 @@ function UsersAdminPage({
                     >
                       <KeyRound size={13} /> Reset password
                     </button>
-                    {!isMe && (
+                    {!isMe && u.mfaEnabled && (
                       <button
                         onClick={() => { setManageMenuUser(null); handleResetMfa(u.username); }}
                         title="Clear this account's two-factor login so they can sign in with just their password"

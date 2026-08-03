@@ -29,6 +29,8 @@ export type User = {
   parent?: string;
   // Soft-deactivated accounts are hidden from the active list and cannot log in.
   archived?: boolean;
+  // Whether the account has two-factor login (TOTP) fully enabled.
+  mfaEnabled?: boolean;
   // Optional cap on the number of client seats an agency account may create.
   seatCap?: number | null;
 };
@@ -242,7 +244,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -275,6 +277,7 @@ function cacheAccounts(accounts: ServerAccount[]): void {
     ...(a.displayName ? { displayName: a.displayName } : {}),
     ...(a.parent ? { parent: a.parent } : {}),
     ...(a.archived ? { archived: true } : {}),
+    ...(a.mfaEnabled ? { mfaEnabled: true } : {}),
   }));
   saveUsers(users);
 }

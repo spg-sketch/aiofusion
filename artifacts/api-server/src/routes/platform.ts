@@ -64,6 +64,7 @@ import {
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   getMfaState,
+  getMfaEnabledSet,
   saveMfaState,
   clearMfaState,
   generateTotpSecret,
@@ -88,6 +89,7 @@ function publicAccount(
   row: { username: string; role: string; parent: string | null },
   displayName?: string,
   archived?: boolean,
+  mfaEnabled?: boolean,
 ) {
   return {
     username: row.username,
@@ -95,6 +97,7 @@ function publicAccount(
     parent: row.parent ?? undefined,
     ...(displayName ? { displayName } : {}),
     ...(archived ? { archived: true } : {}),
+    ...(mfaEnabled ? { mfaEnabled: true } : {}),
   };
 }
 
@@ -2220,10 +2223,19 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
-      const [names, archivedSet] = await Promise.all([getDisplayNames(), getArchivedSet()]);
+      const [names, archivedSet, mfaSet] = await Promise.all([
+        getDisplayNames(),
+        getArchivedSet(),
+        getMfaEnabledSet(),
+      ]);
       res.json({
         accounts: filtered.map((r) =>
-          publicAccount(r, names.get(normUsername(r.username)), archivedSet.has(normUsername(r.username))),
+          publicAccount(
+            r,
+            names.get(normUsername(r.username)),
+            archivedSet.has(normUsername(r.username)),
+            mfaSet.has(normUsername(r.username)),
+          ),
         ),
       });
     } catch {

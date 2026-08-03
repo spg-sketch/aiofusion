@@ -470,6 +470,21 @@ describe("MFA login flow", () => {
     expect(login.setCookie).toMatch(/aio_sid=/);
   });
 
+  it("GET /platform/accounts flags MFA-enabled accounts with mfaEnabled", async () => {
+    const secret = generateTotpSecret();
+    // Enabled MFA -> flagged; enrolment-started-but-unconfirmed -> not flagged.
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+    await saveMfaState(MASTER, { secret, enabled: false, recoveryHashes: [] });
+
+    actorOverride = { username: MASTER, role: "admin" };
+    const res = await fetch(`${baseUrl}/api/platform/accounts`);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { accounts: Array<{ username: string; mfaEnabled?: boolean }> };
+    const byName = new Map(json.accounts.map((a) => [a.username.toLowerCase(), a]));
+    expect(byName.get(AGENCY)?.mfaEnabled).toBe(true);
+    expect(byName.get(MASTER)?.mfaEnabled).toBeUndefined();
+  });
+
   it("master accounts cannot disable MFA; non-masters can with a valid code", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
