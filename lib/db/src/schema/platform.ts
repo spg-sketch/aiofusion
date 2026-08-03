@@ -189,6 +189,17 @@ export const platformEmailVerificationsTable = pgTable("platform_email_verificat
   usedAt: timestamp("used_at", { withTimezone: true }),
 });
 
+// Single-use password reset tokens. Created when a user requests a reset
+// email; consumed when the new password is set. 1-hour expiry.
+export const platformPasswordResetsTable = pgTable("platform_password_resets", {
+  token: varchar("token", { length: 64 }).primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => platformUsersTable.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
 // A tiny key/value table for one-off platform flags (e.g. whether the one-time
 // migration of browser-stored accounts has already run).
 export const platformMetaTable = pgTable("platform_meta", {

@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 function PlatformHomePage({
@@ -28,6 +28,7 @@ function PlatformHomePage({
   onTokenUsage,
   onOpenGeorge,
   initialNotice,
+  resetToken: resetTokenProp,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -43,6 +44,7 @@ function PlatformHomePage({
   onTokenUsage: () => void;
   onOpenGeorge?: () => void;
   initialNotice?: string;
+  resetToken?: string | null;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -72,6 +74,56 @@ function PlatformHomePage({
   const [verificationEmail, setVerificationEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+
+  // Forgot / reset password
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(resetTokenProp ?? null);
+  const [resetPassword1, setResetPassword1] = useState("");
+  const [resetPassword2, setResetPassword2] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState(false);
+
+  // Arriving from a password-reset email link (/?reset_token=...): the token
+  // is captured by App.tsx before its history sync strips the query string and
+  // handed down as a prop. Also read the URL directly as a fallback, and clean
+  // the token out of the URL so it never lingers in history.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("reset_token");
+    if (!token) return;
+    setResetToken(token);
+    params.delete("reset_token");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
+  }, []);
+
+  const handleForgotPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (forgotLoading || !forgotEmail.trim()) return;
+    setForgotLoading(true);
+    void serverForgotPassword(forgotEmail.trim())
+      .then(() => setForgotSent(true))
+      .finally(() => setForgotLoading(false));
+  };
+
+  const handleResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    if (resetPassword1.length < 8) { setResetError("Password must be at least 8 characters."); return; }
+    if (resetPassword1 !== resetPassword2) { setResetError("Passwords do not match."); return; }
+    if (!resetToken) { setResetError("This reset link is invalid. Please request a new one."); return; }
+    setResetLoading(true);
+    void serverResetPassword(resetToken, resetPassword1)
+      .then((r) => {
+        if (!r.ok) { setResetError(r.error); return; }
+        setResetDone(true);
+      })
+      .finally(() => setResetLoading(false));
+  };
 
   // Handle Google OAuth redirect back to this page
   useEffect(() => {
@@ -227,7 +279,164 @@ function PlatformHomePage({
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
 
-            {signupAwaitingVerification ? (
+            {resetToken ? (
+              /* --- RESET PASSWORD (from email link) --- */
+              <div className="max-w-md mx-auto py-4">
+                {resetDone ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
+                      <CheckCircle2 size={28} color="white" />
+                    </div>
+                    <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                      Password updated
+                    </h2>
+                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                      Your password has been changed and you've been signed out everywhere.
+                      Sign in with your new password to continue.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setResetToken(null); setResetDone(false); setResetPassword1(""); setResetPassword2(""); }}
+                      className="flex items-center justify-center gap-2 mx-auto px-8 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      <LogIn size={16} /> Sign in
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
+                        <KeyRound size={28} color="white" />
+                      </div>
+                      <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                        Choose a new password
+                      </h2>
+                      <p className="text-[14px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                        Enter a new password for your account. Once saved, you'll be signed
+                        out of all devices and can sign in with the new password.
+                      </p>
+                    </div>
+                    <form onSubmit={handleResetPassword} className="flex flex-col gap-3">
+                      <div className="relative">
+                        <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+                        <input
+                          type="password"
+                          value={resetPassword1}
+                          onChange={(e) => setResetPassword1(e.target.value)}
+                          placeholder="New password (min 8 characters)"
+                          autoComplete="new-password"
+                          required
+                          className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                          style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }}
+                        />
+                      </div>
+                      <div className="relative">
+                        <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+                        <input
+                          type="password"
+                          value={resetPassword2}
+                          onChange={(e) => setResetPassword2(e.target.value)}
+                          placeholder="Confirm new password"
+                          autoComplete="new-password"
+                          required
+                          className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                          style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }}
+                        />
+                      </div>
+                      {resetError && (
+                        <p className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.3)" }}>
+                          {resetError}
+                        </p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={resetLoading}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                        style={{ background: accent }}
+                      >
+                        {resetLoading ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                        {resetLoading ? "Saving…" : "Set new password"}
+                      </button>
+                    </form>
+                    <button
+                      type="button"
+                      onClick={() => { setResetToken(null); setResetError(null); }}
+                      className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
+                      style={{ color: "rgba(255,255,255,0.5)" }}
+                    >
+                      ← Back to sign in
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : showForgotPassword ? (
+              /* --- FORGOT PASSWORD --- */
+              <div className="max-w-md mx-auto py-4 text-center">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
+                  <KeyRound size={28} color="white" />
+                </div>
+                <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                  Forgot your password?
+                </h2>
+                {forgotSent ? (
+                  <>
+                    <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                      If an account exists for <strong>{forgotEmail.trim()}</strong>, we've sent
+                      a password reset link. It can be used once and expires in 1 hour —
+                      check your inbox (and spam folder).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(false); setForgotSent(false); setForgotEmail(""); }}
+                      className="text-[13px] hover:opacity-70 transition-opacity block mx-auto"
+                      style={{ color: "rgba(255,255,255,0.5)" }}
+                    >
+                      ← Back to sign in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[14px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>
+                      Enter the email address for your account and we'll send you a link
+                      to reset your password.
+                    </p>
+                    <form onSubmit={handleForgotPassword} className="flex flex-col gap-3">
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+                        <input
+                          type="email"
+                          value={forgotEmail}
+                          onChange={(e) => setForgotEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          autoComplete="email"
+                          required
+                          className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                          style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: accent }}
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={forgotLoading || !forgotEmail.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                        style={{ background: accent }}
+                      >
+                        {forgotLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                        {forgotLoading ? "Sending…" : "Send reset link"}
+                      </button>
+                    </form>
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(false); setForgotEmail(""); }}
+                      className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
+                      style={{ color: "rgba(255,255,255,0.5)" }}
+                    >
+                      ← Back to sign in
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : signupAwaitingVerification ? (
               /* --- EMAIL VERIFICATION PENDING --- */
               <div className="text-center py-4">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
@@ -493,6 +702,16 @@ function PlatformHomePage({
                         style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
                       />
                     </div>
+                  </div>
+                  <div className="flex justify-end -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(true); setLoginError(null); }}
+                      className="text-[13px] hover:opacity-70 transition-opacity"
+                      style={{ color: "rgba(255,255,255,0.6)" }}
+                    >
+                      Forgot password?
+                    </button>
                   </div>
                   {loginError && (
                     <p className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.25)" }}>

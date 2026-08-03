@@ -602,6 +602,13 @@ function App() {
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
 
+  // Token from a password-reset email link (/?reset_token=...). Captured once
+  // on load, before the history-sync effect rewrites the URL and drops the
+  // query string, then handed to PlatformHomePage as a prop.
+  const [passwordResetToken] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("reset_token"),
+  );
+
   // Navigate to the platform-home view when returning from a Google OAuth
   // redirect (e.g. /?oauth_status=ok), an impersonation exit, or a
   // switch-to-master reload. The session cookie is already set by the server;
@@ -614,6 +621,7 @@ function App() {
       params.has("oauth_status") ||
       params.has("needs_setup") ||
       params.has("verify_status") ||
+      params.has("reset_token") ||
       params.has("aio_exit_impersonation") ||
       params.has("aio_switched_master")
     ) {
@@ -840,6 +848,7 @@ function App() {
           onBackToLanding={() => goHome()}
           onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
           initialNotice={sessionExpiredNotice}
+          resetToken={passwordResetToken}
         />
         {!session && (
           <GeorgeSupport

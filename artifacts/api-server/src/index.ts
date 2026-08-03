@@ -10,6 +10,7 @@ import { ensureSupportEmailFailedColumn } from "./lib/ensure-support-email-faile
 import { ensureContactSubmissionsTable } from "./lib/ensure-contact-submissions-table";
 import { ensurePlatformSchemaV2 } from "./lib/ensure-platform-schema-v2";
 import { ensurePlatformSchemaV3 } from "./lib/ensure-platform-schema-v3";
+import { ensurePasswordResetsTable } from "./lib/ensure-password-resets-table";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
@@ -136,6 +137,10 @@ app.listen(port, (err) => {
 
   ensurePlatformSchemaV3().catch((err) => {
     logger.error({ err }, "Failed to apply platform schema v3 additions");
+  });
+
+  ensurePasswordResetsTable().catch((err) => {
+    logger.error({ err }, "Failed to ensure platform_password_resets table");
   });
 
   pruneExpiredSessions().catch((err) => {

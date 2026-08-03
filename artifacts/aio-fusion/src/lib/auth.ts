@@ -611,6 +611,26 @@ export async function serverResendVerification(
   return { ok: true };
 }
 
+// Request a password reset email. The server always responds { ok: true }
+// whether or not the address is registered (no account enumeration).
+export async function serverForgotPassword(
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/forgot-password", { email });
+  if (!ok) return { ok: false, error: json?.error || "Something went wrong. Please try again." };
+  return { ok: true };
+}
+
+// Complete a password reset using the single-use token from the email link.
+export async function serverResetPassword(
+  token: string,
+  password: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/reset-password", { token, password });
+  if (!ok) return { ok: false, error: json?.error || "Password reset failed. Please try again." };
+  return { ok: true };
+}
+
 // After email verification + Google/Microsoft SSO signup, the user must choose
 // their account type (Agency/Partner vs Client). This calls the setup endpoint.
 export async function serverSetAccountType(

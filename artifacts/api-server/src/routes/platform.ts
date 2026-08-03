@@ -21,6 +21,7 @@ import {
   auditLocksTable,
   adminEventsTable,
   platformEmailVerificationsTable,
+  platformPasswordResetsTable,
 } from "@workspace/db";
 import { and, count, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
 import {
@@ -58,11 +59,12 @@ import {
   linkMicrosoftId,
   type Role,
   getCompanyBySlug,
+  incrementSessionVersion,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, getAppBaseUrl } from "../lib/notify-email";
 
 const router: IRouter = Router();
 
@@ -539,6 +541,112 @@ router.post("/platform/resend-verification", loginLimiter, async (req: Request, 
     logger.error({ err }, "resend-verification: unexpected error (non-fatal)");
   }
   res.json({ ok: true });
+});
+
+// --- Password reset ----------------------------------------------------------
+
+// Request a password reset link. Always returns { ok: true } with the same
+// timing-safe shape whether or not the email is registered, so the endpoint
+// cannot be used to enumerate accounts. The token is single-use, 1-hour expiry.
+router.post("/platform/forgot-password", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (email) {
+      const user = await getUserByEmail(email);
+      if (user) {
+        // Invalidate any previously issued tokens for this user.
+        await db
+          .delete(platformPasswordResetsTable)
+          .where(eq(platformPasswordResetsTable.userId, user.id));
+        const token = crypto.randomBytes(32).toString("hex");
+        await db.insert(platformPasswordResetsTable).values({
+          token,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+        });
+        const resetUrl = `${getAppBaseUrl()}/?reset_token=${token}`;
+        void sendPasswordResetEmail({ toEmail: email, toName: user.name || email, resetUrl });
+      }
+    }
+  } catch (err) {
+    // Never leak errors that could reveal whether the address exists.
+    logger.error({ err }, "forgot-password: unexpected error (non-fatal)");
+  }
+  res.json({ ok: true });
+});
+
+// Complete a password reset: validate the single-use token, set the new
+// password, and bump session_version so every existing session is revoked.
+router.post("/platform/reset-password", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (!token) {
+      res.status(400).json({ error: "This reset link is invalid. Please request a new one." });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ error: "Password must be at least 8 characters." });
+      return;
+    }
+    // Consume the token atomically: the conditional UPDATE only succeeds for a
+    // token that is still unused and unexpired, so two concurrent requests can
+    // never both pass validation (single-use guarantee under concurrency).
+    const consumed = await db
+      .update(platformPasswordResetsTable)
+      .set({ usedAt: new Date() })
+      .where(and(
+        eq(platformPasswordResetsTable.token, token),
+        sql`${platformPasswordResetsTable.usedAt} IS NULL`,
+        sql`${platformPasswordResetsTable.expiresAt} > now()`,
+      ))
+      .returning({ userId: platformPasswordResetsTable.userId });
+    const row = consumed[0];
+    if (!row) {
+      res.status(400).json({ error: "This reset link is invalid or has expired. Please request a new one." });
+      return;
+    }
+
+    const ph = hashPassword(password);
+    await db
+      .update(platformUsersTable)
+      .set({ passwordHash: ph })
+      .where(eq(platformUsersTable.id, row.userId));
+
+    // Keep the legacy platform_accounts credential store in sync so slug-based
+    // logins keep working with the new password.
+    const memberships = await db
+      .select({ companySlug: platformMembershipsTable.companySlug, role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, row.userId));
+    for (const mem of memberships) {
+      if (mem.role === "owner" || mem.role === "admin") {
+        await db
+          .update(platformAccountsTable)
+          .set({ passwordHash: ph })
+          .where(eq(platformAccountsTable.username, mem.companySlug));
+      }
+    }
+
+    // Revoke every existing session: bump session_version (fast-path rejection
+    // for user-linked sessions), delete session rows by userId, AND delete by
+    // each associated company slug — legacy sessions carry user_id = NULL and
+    // skip the version check, so they must be removed by username too.
+    await incrementSessionVersion(row.userId);
+    await db
+      .delete(platformSessionsTable)
+      .where(eq(platformSessionsTable.userId, row.userId));
+    for (const mem of memberships) {
+      await db
+        .delete(platformSessionsTable)
+        .where(eq(platformSessionsTable.username, normUsername(mem.companySlug)));
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "reset-password: unexpected error");
+    res.status(500).json({ error: "Password reset failed. Please try again." });
+  }
 });
 
 // Set account type after signup (Agency/Partner vs Client). Requires a session.

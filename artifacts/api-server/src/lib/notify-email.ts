@@ -76,6 +76,59 @@ export async function sendVerificationEmail(opts: {
   }
 }
 
+export async function sendPasswordResetEmail(opts: {
+  toEmail: string;
+  toName: string;
+  resetUrl: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — password reset email not sent");
+    return;
+  }
+
+  const subject = `Reset your AIO Fusion password`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `We received a request to reset the password for your AIO Fusion account.`,
+    `Click the link below to choose a new password:`,
+    ``,
+    opts.resetUrl,
+    ``,
+    `This link can be used once and expires in 1 hour. If you didn't request a`,
+    `password reset, you can safely ignore this email — your password will not change.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Reset Your Password",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        We received a request to reset your AIO Fusion password.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Click the button below to choose a new password. This link can be used
+        <strong>once</strong> and expires in <strong>1 hour</strong>.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you didn't request a password reset, you can safely ignore this email —
+        your password will not change.
+      </p>
+    `,
+    cta: { text: "Reset password", href: opts.resetUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: password reset email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send password reset email (non-fatal)");
+  }
+}
+
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;

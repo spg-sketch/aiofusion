@@ -146,6 +146,12 @@ vi.mock("@workspace/db", async () => {
       expires_at   timestamptz NOT NULL,
       used_at      timestamptz
     );
+    CREATE TABLE IF NOT EXISTS platform_password_resets (
+      token        varchar(64) PRIMARY KEY,
+      user_id      uuid NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+      expires_at   timestamptz NOT NULL,
+      used_at      timestamptz
+    );
     CREATE TABLE IF NOT EXISTS admin_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       actor_id varchar,
@@ -177,6 +183,8 @@ vi.mock("@workspace/db", async () => {
     tokenUsageTable: schema.tokenUsageTable,
     auditLocksTable: schema.auditLocksTable,
     adminEventsTable: schema.adminEventsTable,
+    platformEmailVerificationsTable: schema.platformEmailVerificationsTable,
+    platformPasswordResetsTable: schema.platformPasswordResetsTable,
   };
 });
 
@@ -219,7 +227,14 @@ vi.mock("../lib/notify-email", () => ({
   sendSupportTicketAlert: () => Promise.resolve(),
   sendSupportTicketAck: () => Promise.resolve(),
   sendVerificationEmail: () => Promise.resolve(),
+  sendPasswordResetEmail: (...args: unknown[]) => {
+    passwordResetEmails.push(args[0] as { toEmail: string; toName: string; resetUrl: string });
+    return Promise.resolve();
+  },
 }));
+
+// Captured sendPasswordResetEmail calls (hoisted so the mock factory sees it).
+const passwordResetEmails = vi.hoisted(() => [] as { toEmail: string; toName: string; resetUrl: string }[]);
 
 import {
   db,
@@ -977,5 +992,225 @@ describe("GET /api/platform/auth/google/callback", () => {
       .from(platformSessionsTable)
       .where(eq(platformSessionsTable.username, ACCOUNT_SLUG));
     expect(sessions.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Password reset flow
+// ---------------------------------------------------------------------------
+describe("POST /api/platform/forgot-password + reset-password", () => {
+  let server: Server;
+  let baseUrl: string;
+  const EMAIL = "reset-test@example.com";
+  const OLD_PASSWORD = "oldpassword123!";
+  const NEW_PASSWORD = "newpassword456!";
+  const USERNAME = "reset-test-agency";
+  let userId: string;
+
+  beforeEach(async () => {
+    passwordResetEmails.length = 0;
+    const ph = hashPassword(OLD_PASSWORD);
+    await db.insert(platformAccountsTable).values({
+      username: USERNAME,
+      passwordHash: ph,
+      role: "agency",
+      status: "active",
+      email: EMAIL,
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: USERNAME, role: "agency", status: "active", email: EMAIL })
+      .returning({ id: platformCompaniesTable.id });
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({ email: EMAIL, name: "Reset Tester", passwordHash: ph, emailVerified: true })
+      .returning({ id: platformUsersTable.id });
+    userId = user.id;
+    await db.insert(platformMembershipsTable).values({
+      userId,
+      companyId: company.id,
+      companySlug: USERNAME,
+      role: "owner",
+    });
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
+    vi.unstubAllGlobals();
+  });
+
+  async function requestReset(email: string) {
+    return fetch(`${baseUrl}/api/platform/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async function getIssuedToken(): Promise<string> {
+    const { platformPasswordResetsTable } = (await import("@workspace/db")) as any;
+    const rows = await db
+      .select()
+      .from(platformPasswordResetsTable)
+      .where(eq(platformPasswordResetsTable.userId, userId));
+    expect(rows.length).toBe(1);
+    return rows[0].token as string;
+  }
+
+  it("returns the identical response whether or not the email exists", async () => {
+    const known = await requestReset(EMAIL);
+    const unknown = await requestReset("nobody-here@example.com");
+    expect(known.status).toBe(200);
+    expect(unknown.status).toBe(200);
+    const knownBody = await known.json();
+    const unknownBody = await unknown.json();
+    expect(knownBody).toEqual({ ok: true });
+    expect(unknownBody).toEqual(knownBody);
+    // Email only actually sent for the registered address.
+    expect(passwordResetEmails.length).toBe(1);
+    expect(passwordResetEmails[0].toEmail).toBe(EMAIL);
+    expect(passwordResetEmails[0].resetUrl).toContain("reset_token=");
+  });
+
+  it("resets the password with a valid token, revokes sessions, and blocks token reuse", async () => {
+    // Sign in first so there's a live session to revoke.
+    const loginRes = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: OLD_PASSWORD }),
+    });
+    expect(loginRes.status).toBe(200);
+
+    await requestReset(EMAIL);
+    const token = await getIssuedToken();
+
+    const resetRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: NEW_PASSWORD }),
+    });
+    expect(resetRes.status).toBe(200);
+    expect(await resetRes.json()).toEqual({ ok: true });
+
+    // All sessions revoked and session_version bumped.
+    const sessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, USERNAME));
+    expect(sessions.length).toBe(0);
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, userId));
+    expect(user.sessionVersion).toBe(1);
+
+    // Old password no longer works; new one does (email + legacy slug login).
+    const oldLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: OLD_PASSWORD }),
+    });
+    expect(oldLogin.status).toBe(401);
+    const newLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: NEW_PASSWORD }),
+    });
+    expect(newLogin.status).toBe(200);
+    const slugLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: USERNAME, password: NEW_PASSWORD }),
+    });
+    expect(slugLogin.status).toBe(200);
+
+    // Single use: the same token is rejected the second time.
+    const reuse = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: "anotherpassword789!" }),
+    });
+    expect(reuse.status).toBe(400);
+  });
+
+  it("only lets one of two concurrent requests consume the same token", async () => {
+    await requestReset(EMAIL);
+    const token = await getIssuedToken();
+
+    const attempt = (password: string) =>
+      fetch(`${baseUrl}/api/platform/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+    const [a, b] = await Promise.all([attempt("concurrentpass1!"), attempt("concurrentpass2!")]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 400]);
+  });
+
+  it("revokes legacy sessions (user_id = NULL) bound to the account slug", async () => {
+    // Legacy session created before the users table existed: no userId, so the
+    // session_version fast-path check is skipped for it.
+    await db.insert(platformSessionsTable).values({
+      sid: "legacy-reset-session-sid",
+      username: USERNAME,
+      userId: null,
+      sessionVersion: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await requestReset(EMAIL);
+    const token = await getIssuedToken();
+    const resetRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: NEW_PASSWORD }),
+    });
+    expect(resetRes.status).toBe(200);
+
+    const sessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, USERNAME));
+    expect(sessions.length).toBe(0);
+  });
+
+  it("rejects expired tokens and short passwords", async () => {
+    await requestReset(EMAIL);
+    const token = await getIssuedToken();
+
+    // Too-short password.
+    const shortRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: "short" }),
+    });
+    expect(shortRes.status).toBe(400);
+
+    // Force-expire the token.
+    const { platformPasswordResetsTable } = (await import("@workspace/db")) as any;
+    await db
+      .update(platformPasswordResetsTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(platformPasswordResetsTable.token, token));
+    const expiredRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: NEW_PASSWORD }),
+    });
+    expect(expiredRes.status).toBe(400);
+
+    // Bogus token.
+    const bogusRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "not-a-real-token", password: NEW_PASSWORD }),
+    });
+    expect(bogusRes.status).toBe(400);
   });
 });

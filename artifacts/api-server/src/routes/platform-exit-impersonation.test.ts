@@ -195,6 +195,7 @@ vi.mock("../lib/admin-events", () => ({
 vi.mock("../lib/notify-email", () => ({
   sendNewSignupAlert: () => Promise.resolve(),
   sendApprovalEmail: () => Promise.resolve(),
+  sendPasswordResetEmail: () => Promise.resolve(),
 }));
 
 vi.mock("../middleware/platform-auth", () => ({
