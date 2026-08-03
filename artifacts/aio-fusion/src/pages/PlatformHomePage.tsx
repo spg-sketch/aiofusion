@@ -489,26 +489,25 @@ function PlatformHomePage({
                       {loginError}
                     </p>
                   )}
-                  <button
-                    type="submit"
-                    className="self-center w-full sm:w-auto sm:min-w-[220px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 mt-1"
-                    style={{ background: accent }}
-                  >
-                    <LogIn size={16} /> Sign in
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 mt-1">
+                    <button
+                      type="submit"
+                      className="w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
+                      style={{ background: accent }}
+                    >
+                      <LogIn size={16} /> Sign in
+                    </button>
+                    <span className="text-[12px] font-semibold uppercase tracking-[0.16em]" style={{ color: "rgba(255,255,255,0.5)" }}>or</span>
+                    <button
+                      type="button"
+                      onClick={() => { setShowSignup(true); setLoginError(null); }}
+                      className="w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] transition-all hover:-translate-y-0.5 hover:shadow-lg border"
+                      style={{ color: "white", borderColor: "rgba(255,255,255,0.4)", background: "transparent" }}
+                    >
+                      Create an account <ArrowRight size={14} />
+                    </button>
+                  </div>
                 </form>
-
-                {/* Create account + George help */}
-                <div className="mt-5 pt-5 flex items-center justify-between" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-                  <span className="text-[14px]" style={{ color: "rgba(255,255,255,0.6)" }}>New to AIO Fusion?</span>
-                  <button
-                    onClick={() => { setShowSignup(true); setLoginError(null); }}
-                    className="flex items-center gap-1.5 text-[14px] font-semibold hover:opacity-80 transition-opacity"
-                    style={{ color: "white" }}
-                  >
-                    Create an account <ArrowRight size={14} />
-                  </button>
-                </div>
                 {onOpenGeorge && (
                   <div className="mt-3 flex justify-center">
                     <button
