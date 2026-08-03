@@ -22,6 +22,7 @@ export type AdminAction =
   | "master_owner_set"
   | "mfa_enabled"
   | "mfa_disabled"
+  | "mfa_admin_reset"
   | "mfa_recovery_code_used"
   | "switch_to_master";
 

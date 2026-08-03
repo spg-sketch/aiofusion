@@ -7,10 +7,10 @@ import {
   Lightbulb, ClipboardPaste, Upload, Calendar, Check, Save, Circle, Zap, Mail, Shield, Eye, Building2,
   ArrowLeft, LogOut, Trash2, KeyRound, Users, Activity, Play, ChevronUp, Menu, X, LogIn,
   Link as LinkIcon, Image as ImageIcon, Repeat, TrendingDown, FolderOpen, List as ListIcon, Clock,
-  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical,
+  Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical, ShieldOff,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetMfa, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
@@ -499,6 +499,21 @@ function UsersAdminPage({
     })();
   };
 
+  // Clear a locked-out user's two-factor setup so they can sign in with just
+  // their password and re-enrol. Destructive for their MFA state, so confirm.
+  const handleResetMfa = (username: string) => {
+    if (!confirm(`Reset two-factor login for '${username}'? They will be able to sign in with just their password and will need to set up two-factor again.`)) return;
+    void (async () => {
+      const result = await serverResetMfa(username);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      alert(`Two-factor login has been reset for '${username}'.`);
+      refresh();
+    })();
+  };
+
   const handleSavePassword = (e: React.FormEvent) => {
     e.preventDefault();
     setPwError(null);
@@ -679,6 +694,16 @@ function UsersAdminPage({
                     >
                       <KeyRound size={13} /> Reset password
                     </button>
+                    {!isMe && (
+                      <button
+                        onClick={() => { setManageMenuUser(null); handleResetMfa(u.username); }}
+                        title="Clear this account's two-factor login so they can sign in with just their password"
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
+                        style={{ color: ink }}
+                      >
+                        <ShieldOff size={13} /> Reset two-factor
+                      </button>
+                    )}
                     {!isMe && (
                       <button
                         onClick={() => { setManageMenuUser(null); setRoleUser(u.username); setRoleValue((u.role as LocalRole) || "agency"); setRoleError(null); }}

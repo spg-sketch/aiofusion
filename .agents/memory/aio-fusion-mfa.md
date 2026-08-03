@@ -12,3 +12,5 @@ description: How two-factor login works — mandatory for master (admin) account
 - Recovery codes: 10 single-use, sha256-hashed; shown exactly once at enrolment.
 - **How to apply:** SSO logins (Google/Microsoft) bypass this — they never hit `finishLoginOrChallenge`; adding MFA to SSO would need the same challenge in the OAuth callbacks.
 - E2E-test with a disposable seeded admin row; note shell `$`-expansion mangles scrypt hashes when inlining them into `psql "$..."` commands — use execFileSync args.
+- Admin MFA reset: POST `/platform/accounts/reset-mfa` (canManage-guarded, no self-reset, logged `mfa_admin_reset`); UI action in Users admin ⋮ menu.
+- react-qr-code's class typings break under React 19 JSX types — MfaPanels casts the import to a function-component signature.

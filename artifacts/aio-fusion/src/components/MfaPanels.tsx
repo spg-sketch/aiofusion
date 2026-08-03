@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import QRCode from "react-qr-code";
+import QRCodeImport from "react-qr-code";
+
+// react-qr-code ships class-component typings that are incompatible with the
+// React 19 JSX element type; cast to a plain function-component signature.
+const QRCode = QRCodeImport as unknown as (props: {
+  value: string;
+  size?: number;
+  bgColor?: string;
+  fgColor?: string;
+  level?: string;
+  style?: React.CSSProperties;
+}) => React.ReactElement;
 import { Loader2, ShieldCheck, KeyRound, Copy, Check } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import {

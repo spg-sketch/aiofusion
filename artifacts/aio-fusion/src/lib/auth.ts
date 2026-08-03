@@ -524,6 +524,16 @@ export async function serverArchiveUser(
   return { ok: true };
 }
 
+// Clear a locked-out user's two-factor login state so they can sign in with
+// their password and re-enrol. Admin/manager-only (enforced server-side).
+export async function serverResetMfa(
+  username: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/reset-mfa", { username });
+  if (!ok) return { ok: false, error: json?.error || "Failed to reset two-factor login." };
+  return { ok: true };
+}
+
 export async function serverChangePassword(
   username: string,
   newPassword: string,

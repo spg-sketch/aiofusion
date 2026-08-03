@@ -2076,6 +2076,56 @@ router.post(
   },
 );
 
+// Reset (clear) a target account's two-factor login state so a user who lost
+// both their authenticator device and recovery codes can sign in again with
+// just their password. Guarded by the same canManage hierarchy as other
+// account-management actions; actors cannot reset their own MFA here (they
+// should use the normal disable flow, which re-verifies a TOTP code). Master
+// (admin-role) targets automatically re-enter forced enrolment on next login.
+router.post(
+  "/platform/accounts/reset-mfa",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(req.body?.username);
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (target === normUsername(actor.username)) {
+        res.status(400).json({ error: "You cannot reset your own two-factor login here. Use the security settings instead." });
+        return;
+      }
+      if (!(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot reset two-factor login for this account." });
+        return;
+      }
+      const state = await getMfaState(target);
+      if (!state) {
+        res.status(400).json({ error: "This account does not have two-factor login set up." });
+        return;
+      }
+      await clearMfaState(target);
+      void logAdminEvent(
+        { username: actor.username, id: actor.userId },
+        "mfa_admin_reset",
+        target,
+        "account",
+        { targetRole: existing.role },
+      );
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to reset two-factor login" });
+    }
+  },
+);
+
 // Delete an account. Admins may delete anyone (except the last admin); a normal
 // account may delete its descendants. An account cannot delete itself here.
 router.post(

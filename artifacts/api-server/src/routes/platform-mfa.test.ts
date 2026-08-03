@@ -409,6 +409,41 @@ describe("MFA login flow", () => {
     expect(sj.required).toBe(false);
   });
 
+  it("admin can reset a locked-out user's MFA; self-reset and non-managers are rejected", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+    await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
+
+    // Non-manager (agency) cannot reset the master's MFA.
+    actorOverride = { username: AGENCY, role: "agency" };
+    const denied = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: MASTER });
+    expect(denied.status).toBe(403);
+
+    // Actor cannot reset their own MFA via the admin endpoint.
+    actorOverride = { username: MASTER, role: "admin" };
+    const self = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: MASTER });
+    expect(self.status).toBe(400);
+
+    // Admin resets the agency's MFA; state is cleared and password-only login works again.
+    const ok = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
+    expect(ok.status).toBe(200);
+    expect(await getMfaState(AGENCY)).toBeNull();
+
+    // Resetting again fails: nothing to clear.
+    const again = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
+    expect(again.status).toBe(400);
+
+    // Unknown target -> 404.
+    const missing = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: "no-such-user" });
+    expect(missing.status).toBe(404);
+
+    actorOverride = null;
+    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    expect(login.status).toBe(200);
+    expect(login.json.account?.username).toBe(AGENCY);
+    expect(login.setCookie).toMatch(/aio_sid=/);
+  });
+
   it("master accounts cannot disable MFA; non-masters can with a valid code", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
