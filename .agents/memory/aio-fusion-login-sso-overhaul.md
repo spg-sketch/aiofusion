@@ -1,39 +1,54 @@
 ---
-name: AIO Fusion login/SSO overhaul — session revocation + signup changes
-description: Key decisions from Steps 1–4 of the login/SSO overhaul; covers schema additions, fast-path session revocation, and removal of the pending_approval gate.
+name: AIO Fusion login/SSO overhaul
+description: Schema, API, and frontend patterns for email verification, account type selection, and Microsoft SSO (task #382).
 ---
 
-## What was done (Steps 1–4)
+# AIO Fusion login/SSO overhaul — Steps 1–8 complete
 
-**Step 1 — Schema additions** (`lib/db/src/schema/platform.ts`):
-- `platform_users`: `session_version integer NOT NULL DEFAULT 0`, `microsoft_id varchar(255) UNIQUE`
-- `platform_sessions`: `session_version integer` (nullable; null = legacy, skip check)
-- `platform_companies`: `free_access boolean NOT NULL DEFAULT false`, `billing_email varchar(255)`, `vat_number varchar(64)`, `display_name varchar(128)`
+## Schema v3 (ensurePlatformSchemaV3)
+- `platform_users.email_verified` — nullable bool. NULL=legacy/SSO (treated as verified), false=unverified new password signup, true=verified.
+- `platform_companies.setup_complete` — nullable bool. NULL=legacy (skip setup screen), false=new account needs to choose type, true=done.
+- `platform_email_verifications` — token (PK, 64 char hex), user_id FK, expires_at, used_at. Single-use, consumed on click.
 
-**Step 2 — Session revocation** (`artifacts/api-server/src/lib/platform-auth.ts`):
-- `incrementSessionVersion(userId)` — exported; call on password change, revocation, suspension
-- `createPlatformSession` now reads `platform_users.session_version` and stamps it on the session row
-- `getPlatformSessionAccount` checks version mismatch after expiry check; `row.sessionVersion != null` guards legacy sessions
-- Migration: `ensure-platform-schema-v2.ts` (registered fire-and-forget in `index.ts`)
+**Why:** Nullable columns mean no migration needed for existing accounts; NULL is always treated as "already done" for legacy users.
 
-**Why:** `null` session_version on a session row = legacy (pre-revocation) session, skip check. Loose `!= null` in the check treats `undefined` the same as null, so pre-existing test sessions without the field also skip the check cleanly.
+## Email verification flow (password signup only)
+1. `POST /platform/signup` → creates account, inserts token, sends email via `sendVerificationEmail()`, returns `{ needsVerification: true, email }` (NO session cookie).
+2. User clicks link → `GET /platform/verify-email?token=xxx` → marks token used, sets emailVerified=true, sets setupComplete=false on company, issues session cookie, redirects to `/?needs_setup=true`.
+3. On error/expiry → redirects to `/?verify_status=expired` or `expired|invalid|error` → PlatformHomePage detects and shows resend UI.
+4. `POST /platform/resend-verification` always returns ok (never reveals email existence). loginLimiter applies.
 
-**Steps 3+4 — Remove pending_approval gate:**
-- Password signup (`POST /platform/signup`): now creates `status: "active"`, creates session + sets cookie, returns `{ ok: true, username, role: "agency" }`
-- Google OAuth new-user registration: `status: "active"` + session cookie + redirect to `/?oauth_status=ok` (not `pending`)
-- Login endpoint: removed `pending_approval` 403 blocks from both new-path and legacy-path
-- Frontend `serverSignUp` in `auth.ts`: now returns `{ ok: true; session: Session }` — caller gets a session back and calls `onLoginSuccess(session)` directly
-- PlatformHomePage: removed "pending approval" holding screen; signup now goes straight to dashboard
+## Account type selection
+- `AccountTypeSelectPage` is a full-page gate rendered in App.tsx when `needsSetup && session && !authLoading`.
+- `setNeedsSetup(true)` is triggered by: `?needs_setup=true` URL param (OAuth/verify redirect), `bootstrapAuth()` returning `needsSetup: true` (setupComplete===false in /platform/me), `onNeedsSetup()` callback on PlatformHomePage (when login returns needsSetup:true).
+- `POST /platform/setup/account-type` sets role on both platform_accounts and platform_companies, sets setupComplete=true.
+- Agency and client are the only valid accountType values.
 
-**How to apply:**
-- PGlite test setups in route tests need ALL new columns in their `CREATE TABLE` DDL (see `platform-login-signup.test.ts`, `platform-exit-impersonation.test.ts`, `platform-users.test.ts`). Keep them in sync with the schema file whenever schema changes happen.
-- `db.update().set().where().returning()` chain is used by `incrementSessionVersion`; the platform-auth mock in unit tests supports this pattern via its `usersById` map.
-- Cookie name is `aio_sid` (not `aio_platform_session`); check for `aio_sid=` in Set-Cookie headers in tests.
-- Test `res.headers.getSetCookie?.()` (not `.get("set-cookie")`) to get ALL Set-Cookie headers as an array — needed when the server sets multiple cookies (e.g. clearing oauth state + setting session).
+## Microsoft Entra ID SSO
+- Routes: `GET /platform/auth/microsoft`, `GET /platform/auth/microsoft/callback`.
+- State stored in `aio_ms_state` cookie (httpOnly, secure, sameSite:lax, 10min).
+- Token endpoint: `https://login.microsoftonline.com/common/oauth2/v2.0/token`.
+- User info: `https://graph.microsoft.com/v1.0/me` (uses access_token, not id_token).
+- Email field: `profile.mail || profile.userPrincipalName`.
+- Env vars: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` — NOT YET SET in production/staging. Without them, routes return `?oauth_status=error&oauth_msg=microsoft_not_configured`.
+- Identity resolution order: by microsoftId → by email in platform_users → by email in platform_accounts (legacy) → create new.
+- `linkMicrosoftId()` in platform-auth.ts handles attaching microsoftId to existing users.
 
-## Remaining plan steps
+## Email URL helper
+- `getAppBaseUrl()` in notify-email.ts reads `CANONICAL_DOMAIN` env var. Falls back to `https://www.aiofusion.ai`.
+- **Must set `CANONICAL_DOMAIN=staging.aiofusion.ai` on the staging deployment** so verification links point to staging, not prod.
+- In dev: RESEND_API_KEY not set → no emails sent → URL doesn't matter.
 
-- **Step 5**: Email verification — send verification email on signup; gate certain actions on verified status
-- **Step 6**: Account type selection screen — after signup, route user to choose agency/client type before dashboard
-- **Step 7**: Google SSO first-time flow fix — largely resolved by Step 4 (new Google users now `active` immediately); may need polish
-- **Step 8**: Microsoft Entra ID SSO — `microsoft_id` column pre-added in Step 1; OAuth flow to build
+## Key files
+- `lib/db/src/schema/platform.ts` — emailVerified + setupComplete columns, platformEmailVerificationsTable
+- `artifacts/api-server/src/lib/ensure-platform-schema-v3.ts` — idempotent migration
+- `artifacts/api-server/src/routes/platform.ts` — all new routes
+- `artifacts/api-server/src/lib/platform-auth.ts` — getUserByMicrosoftId, linkMicrosoftId
+- `artifacts/api-server/src/lib/notify-email.ts` — sendVerificationEmail, getAppBaseUrl
+- `artifacts/aio-fusion/src/lib/auth.ts` — serverSignUp (needsVerification), serverResendVerification, serverSetAccountType, bootstrapAuth (returns {session, needsSetup})
+- `artifacts/aio-fusion/src/pages/AccountTypeSelectPage.tsx` — new full-page component
+- `artifacts/aio-fusion/src/pages/PlatformHomePage.tsx` — verification pending screen, Google+Microsoft SSO buttons, onNeedsSetup prop
+- `artifacts/aio-fusion/src/App.tsx` — needsSetup state, AccountTypeSelectPage gate
+
+## PGlite test note
+If route tests are added for the new routes, the verify-email token lookup uses `platformEmailVerificationsTable` which requires schema v3 to be applied in the test fixture.
