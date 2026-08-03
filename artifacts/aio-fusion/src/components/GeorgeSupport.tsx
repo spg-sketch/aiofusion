@@ -363,7 +363,7 @@ export function GeorgeSupport({
                 ? "My Tickets"
                 : step.type === "ticket_detail" || step.type === "ticket_detail_loading"
                 ? "Ticket Thread"
-                : "George"}
+                : "GEOrge"}
             </p>
             <p className="text-[11px] opacity-70">GEO Support Assistant</p>
           </div>
@@ -528,7 +528,7 @@ export function GeorgeSupport({
               {/* George greeting bubble */}
               <GeorgeBubble>
                 <p className="text-[14px] leading-relaxed" style={{ color: navy }}>
-                  Hi{userName ? ` ${userName}` : ""}! I'm <strong>George</strong> — your GEO support assistant.{" "}
+                  Hi{userName ? ` ${userName}` : ""}! I'm <strong>GEOrge</strong> — your GEO support assistant.{" "}
                   What can I help you with today?
                 </p>
               </GeorgeBubble>
@@ -1105,12 +1105,12 @@ export function GeorgeTriggerButton({
   return (
     <button
       onClick={onClick}
-      title="Ask George — Support Assistant"
+      title="Ask GEOrge — Support Assistant"
       className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all hover:brightness-110 active:scale-95"
       style={{ background: accent, color: "white" }}
     >
       <MessageCircle size={15} />
-      <span>Ask George</span>
+      <span>Ask GEOrge</span>
       {hasUpdate && (
         <span
           className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"

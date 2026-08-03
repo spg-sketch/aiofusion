@@ -883,7 +883,7 @@ function FaqManager({ navy, accent, teal }: { navy: string; accent: string; teal
             <input
               value={editingEntry.keywords ?? ""}
               onChange={(e) => setEditingEntry((p) => ({ ...p!, keywords: e.target.value }))}
-              placeholder="Keywords — comma separated, help George find this entry"
+              placeholder="Keywords — comma separated, help GEOrge find this entry"
               className="text-[13px] px-3 py-2 rounded-lg border outline-none"
               style={{ borderColor: vars.g200, color: navy }}
             />

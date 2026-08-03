@@ -518,7 +518,7 @@ function PlatformHomePage({
                       style={{ color: "rgba(255,255,255,0.55)" }}
                     >
                       <HelpCircle size={14} />
-                      Need help? Ask George
+                      Need help? Ask GEOrge
                     </button>
                   </div>
                 )}

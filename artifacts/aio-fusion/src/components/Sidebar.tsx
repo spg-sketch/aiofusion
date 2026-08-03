@@ -237,7 +237,7 @@ function SidebarContent({
             style={{ background: vars.accent ?? "#C8497A", color: "white" }}
           >
             <MessageCircle size={15} />
-            <span>Ask George — Support</span>
+            <span>Ask GEOrge — Support</span>
             {georgeHasUpdate && (
               <span
                 className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
