@@ -11,6 +11,7 @@ import { ensureContactSubmissionsTable } from "./lib/ensure-contact-submissions-
 import { ensurePlatformSchemaV2 } from "./lib/ensure-platform-schema-v2";
 import { ensurePlatformSchemaV3 } from "./lib/ensure-platform-schema-v3";
 import { ensurePasswordResetsTable } from "./lib/ensure-password-resets-table";
+import { cleanupExpiredTokens } from "./lib/cleanup-expired-tokens";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
@@ -147,6 +148,10 @@ app.listen(port, (err) => {
     logger.error({ err }, "Failed to prune expired sessions on startup");
   });
 
+  cleanupExpiredTokens().catch((err) => {
+    logger.error({ err }, "Failed to clean up expired token rows on startup");
+  });
+
   seedSupportFaq().catch((err) => {
     logger.error({ err }, "Failed to seed support FAQ (non-fatal)");
   });
@@ -167,6 +172,9 @@ app.listen(port, (err) => {
   setInterval(() => {
     pruneExpiredSessions().catch((err) => {
       logger.error({ err }, "Failed to prune expired sessions (scheduled)");
+    });
+    cleanupExpiredTokens().catch((err) => {
+      logger.error({ err }, "Failed to clean up expired token rows (scheduled)");
     });
   }, PRUNE_INTERVAL_MS).unref();
 });

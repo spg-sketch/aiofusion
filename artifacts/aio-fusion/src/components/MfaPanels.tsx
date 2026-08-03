@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement, type CSSProperties } from "react";
 import QRCodeImport from "react-qr-code";
 
 // react-qr-code ships class-component typings that are incompatible with the
@@ -9,8 +9,8 @@ const QRCode = QRCodeImport as unknown as (props: {
   bgColor?: string;
   fgColor?: string;
   level?: string;
-  style?: React.CSSProperties;
-}) => React.ReactElement;
+  style?: CSSProperties;
+}) => ReactElement;
 import { Loader2, ShieldCheck, KeyRound, Copy, Check } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import {
