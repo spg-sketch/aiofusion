@@ -77,7 +77,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -2449,6 +2449,32 @@ router.post(
         return;
       }
       await clearMfaState(target);
+      // Security alert to the affected user (fail-soft: never blocks the reset).
+      // The recipient must be the workspace OWNER (or the canonical account
+      // contact email) — never an arbitrary/latest team member, who could
+      // otherwise intercept a security notice meant for the account holder.
+      void (async () => {
+        try {
+          const [ownerRow] = await db
+            .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+            .from(platformMembershipsTable)
+            .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+            .where(and(
+              eq(platformMembershipsTable.companySlug, target),
+              eq(platformMembershipsTable.role, "owner"),
+            ))
+            .orderBy(platformMembershipsTable.createdAt)
+            .limit(1);
+          const toEmail = ownerRow?.email || existing.email;
+          if (!toEmail) {
+            logger.warn({ target }, "reset-mfa: no owner/account email on record — security alert not sent");
+            return;
+          }
+          await sendMfaAdminResetEmail({ toEmail, toName: ownerRow?.name || target });
+        } catch (err) {
+          logger.warn({ err, target }, "reset-mfa: failed to send security alert (non-fatal)");
+        }
+      })();
       void logAdminEvent(
         { username: actor.username, id: actor.userId },
         "mfa_admin_reset",

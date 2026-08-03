@@ -76,6 +76,63 @@ export async function sendVerificationEmail(opts: {
   }
 }
 
+export async function sendMfaAdminResetEmail(opts: {
+  toEmail: string;
+  toName: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — MFA admin reset alert not sent");
+    return;
+  }
+
+  const securityUrl = `${getAppBaseUrl()}/`;
+  const subject = `Security alert: two-factor login was reset on your AIO Fusion account`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `An administrator has reset the two-factor login on your AIO Fusion account.`,
+    `Two-factor authentication is now turned off, which means your account is`,
+    `protected by your password alone until you set it up again.`,
+    ``,
+    `We recommend re-enabling two-factor login from your security settings as`,
+    `soon as possible.`,
+    ``,
+    `If you did not request this reset, contact your administrator or the AIO`,
+    `Fusion team immediately.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Security Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        An administrator has reset the two-factor login on your AIO Fusion account.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Two-factor authentication is now <strong>turned off</strong>, which means your
+        account is protected by your password alone until you set it up again.
+        We recommend re-enabling two-factor login from your security settings as
+        soon as possible.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did not request this reset, contact your administrator or the
+        AIO Fusion team immediately.
+      </p>
+    `,
+    cta: { text: "Open AIO Fusion", href: securityUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: MFA admin reset alert sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send MFA admin reset alert (non-fatal)");
+  }
+}
+
 export async function sendTeamInviteEmail(opts: {
   toEmail: string;
   companyName: string;

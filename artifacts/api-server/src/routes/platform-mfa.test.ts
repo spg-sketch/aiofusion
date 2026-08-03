@@ -48,6 +48,7 @@ vi.mock("@workspace/db", async () => {
       company_id uuid NOT NULL REFERENCES platform_companies(id) ON DELETE CASCADE,
       company_slug varchar(64) NOT NULL,
       role varchar NOT NULL DEFAULT 'owner',
+      project_access text,
       created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, company_id)
     );
@@ -205,8 +206,11 @@ vi.mock("../middleware/platform-auth", () => ({
 }));
 
 // Prevent real emails firing during tests — all notify-email functions are no-ops
+const sendMfaAdminResetEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("../lib/notify-email", () => ({
   getAppBaseUrl: () => "https://test.example.com",
+  sendMfaAdminResetEmail: sendMfaAdminResetEmailMock,
+  sendPasswordResetEmail: () => Promise.resolve(),
   sendNewSignupAlert: () => Promise.resolve(),
   sendApprovalEmail: () => Promise.resolve(),
   sendSpikeAlert: () => Promise.resolve(),
@@ -224,12 +228,13 @@ vi.mock("../lib/notify-email", () => ({
 import {
   db,
   platformUsersTable,
+  platformMembershipsTable,
   platformAccountsTable,
   platformSessionsTable,
   platformMetaTable,
 } from "@workspace/db";
 import { eq, like } from "drizzle-orm";
-import { hashPassword } from "../lib/platform-auth";
+import { hashPassword, ensurePlatformUser } from "../lib/platform-auth";
 import { totpCode, getMfaState, saveMfaState, generateTotpSecret, hashRecoveryCode } from "../lib/mfa";
 import platformRouter from "./platform";
 
@@ -287,7 +292,7 @@ describe("MFA login flow", () => {
     const ph = hashPassword(PASSWORD);
     await db.insert(platformAccountsTable).values([
       { username: MASTER, passwordHash: ph, role: "admin", status: "active" },
-      { username: AGENCY, passwordHash: ph, role: "agency", status: "active" },
+      { username: AGENCY, passwordHash: ph, role: "agency", status: "active", email: "mfa-agency@example.com" },
     ]);
     ({ server, baseUrl } = await startServer());
   });
@@ -299,7 +304,9 @@ describe("MFA login flow", () => {
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
     }
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa:%"));
-    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, "mfa@example.com"));
+    for (const e of ["mfa@example.com", "mfa-owner@example.com", "mfa-member@example.com"]) {
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
+    }
   });
 
   it("forces TOTP enrolment on first master login (no session issued)", async () => {
@@ -424,10 +431,29 @@ describe("MFA login flow", () => {
     const self = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: MASTER });
     expect(self.status).toBe(400);
 
+    // Seed a workspace owner plus a LATER non-owner team member: the security
+    // alert must go to the owner, never an arbitrary/latest member. Clear any
+    // memberships left behind by earlier logins so the scenario is exact.
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    await ensurePlatformUser({ email: "mfa-owner@example.com", name: "Agency Owner", companyUsername: AGENCY, membershipRole: "owner", companyRole: "agency", companyStatus: "active" });
+    await ensurePlatformUser({ email: "mfa-member@example.com", name: "Agency Member", companyUsername: AGENCY, membershipRole: "content", companyRole: "agency", companyStatus: "active" });
+
     // Admin resets the agency's MFA; state is cleared and password-only login works again.
+    sendMfaAdminResetEmailMock.mockClear();
     const ok = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
     expect(ok.status).toBe(200);
     expect(await getMfaState(AGENCY)).toBeNull();
+
+    // The workspace owner gets a fire-and-forget security alert email — not
+    // the more recently added non-owner member.
+    await vi.waitFor(() => {
+      expect(sendMfaAdminResetEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ toEmail: "mfa-owner@example.com" }),
+      );
+    });
+    expect(sendMfaAdminResetEmailMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "mfa-member@example.com" }),
+    );
 
     // Resetting again fails: nothing to clear.
     const again = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
@@ -569,6 +595,10 @@ describe("OAuth SSO MFA challenge handoff", () => {
       { username: GOOGLE_MASTER, passwordHash: ph, role: "admin", status: "active", email: MASTER_EMAIL },
       { username: GOOGLE_AGENCY, passwordHash: ph, role: "agency", status: "active", email: AGENCY_EMAIL },
     ]);
+    // Seed platform_users + memberships so the callback resolves these
+    // identities to the seeded workspaces instead of creating new accounts.
+    await ensurePlatformUser({ email: MASTER_EMAIL, name: "OAuth Master", companyUsername: GOOGLE_MASTER, companyRole: "admin", companyStatus: "active" });
+    await ensurePlatformUser({ email: AGENCY_EMAIL, name: "OAuth Agency", companyUsername: GOOGLE_AGENCY, companyRole: "agency", companyStatus: "active" });
     ({ server, baseUrl } = await startServer());
   });
 
@@ -611,6 +641,7 @@ describe("OAuth SSO MFA challenge handoff", () => {
   it("challenges an MFA-enabled non-master SSO login via cookie; token completes /mfa/verify", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(GOOGLE_AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
     stubGoogle(AGENCY_EMAIL);
     const r = await runCallback();
     expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
@@ -620,6 +651,8 @@ describe("OAuth SSO MFA challenge handoff", () => {
     expect(token).toBeTruthy();
     expect(r.setCookies.join("; ")).not.toMatch(/aio_sid=/);
 
+    const bad = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: "000000" });
+    expect(bad.status).toBe(401);
     const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
     expect(good.status).toBe(200);
     expect(good.json.account?.username).toBe(GOOGLE_AGENCY);
