@@ -11,7 +11,7 @@ const QRCode = QRCodeImport as unknown as (props: {
   level?: string;
   style?: CSSProperties;
 }) => ReactElement;
-import { Loader2, ShieldCheck, KeyRound, Copy, Check } from "lucide-react";
+import { Loader2, ShieldCheck, KeyRound, Copy, Check, AlertTriangle } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import {
   type Session,
@@ -116,6 +116,8 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
   const [secret, setSecret] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [pendingLogin, setPendingLogin] = useState<{ session: Session; needsSetup: boolean } | null>(null);
+  // Set (to the remaining count) after a successful recovery-code login.
+  const [recoveryWarning, setRecoveryWarning] = useState<number | null>(null);
 
   useEffect(() => {
     if (!challenge.enroll) return;
@@ -141,10 +143,53 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         })
       : serverMfaVerify(challenge.mfaToken, entered).then((r) => {
           if (!r.ok) { setError(r.error); return; }
+          if (typeof r.recoveryCodesRemaining === "number") {
+            // A recovery code was consumed — warn about the shrinking supply
+            // before letting them into the app.
+            setRecoveryWarning(r.recoveryCodesRemaining);
+            setPendingLogin({ session: r.session, needsSetup: r.needsSetup === true });
+            return;
+          }
           onSuccess(r.session, r.needsSetup === true);
         });
     void action.finally(() => setBusy(false));
   };
+
+  // Recovery-code login — warn about the shrinking supply before entering the app.
+  if (recoveryWarning !== null && pendingLogin) {
+    const low = recoveryWarning <= 3;
+    return (
+      <div className="rounded-2xl p-6 bg-white">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle size={18} style={{ color: low ? vars.red : "#C8497A" }} />
+          <h3 className="text-[16px] font-bold" style={{ color: "#0a1628" }}>You signed in with a recovery code</h3>
+        </div>
+        <p
+          className="text-[14px] font-semibold mb-2"
+          style={{ color: low ? vars.red : "#0a1628" }}
+        >
+          {recoveryWarning === 0
+            ? "You have no recovery codes left."
+            : `Only ${recoveryWarning} recovery code${recoveryWarning === 1 ? "" : "s"} left.`}
+        </p>
+        <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+          Recovery codes are single-use. {low
+            ? "If you run out and lose access to your authenticator app, you could be locked out of your account. "
+            : ""}
+          Generate a fresh set with the <strong>Regenerate</strong> button in the Two-factor authentication
+          section of your account settings.
+        </p>
+        <button
+          type="button"
+          onClick={() => onSuccess(pendingLogin.session, pendingLogin.needsSetup)}
+          className="px-7 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110"
+          style={{ background: "#C8497A" }}
+        >
+          Continue to AIO Fusion
+        </button>
+      </div>
+    );
+  }
 
   // Enrolment complete — show recovery codes before entering the app.
   if (recoveryCodes && pendingLogin) {
@@ -369,7 +414,11 @@ export function MfaSecuritySection({ session }: { session: Session }) {
         )}
       </div>
       {status.enabled && (
-        <p className="mt-2 text-[12px] font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
+        <p
+          className={`mt-2 text-[12px] ${status.recoveryCodesRemaining <= 3 ? "font-semibold" : "font-light"}`}
+          style={{ color: status.recoveryCodesRemaining <= 3 ? "#ff8a8a" : "rgba(255,255,255,0.6)" }}
+        >
+          {status.recoveryCodesRemaining <= 3 && <AlertTriangle size={12} className="inline mr-1 -mt-0.5" />}
           {status.recoveryCodesRemaining} recovery code{status.recoveryCodesRemaining === 1 ? "" : "s"} remaining.
           {!regenerating && !recoveryCodes && (
             <>

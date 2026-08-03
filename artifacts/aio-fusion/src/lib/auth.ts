@@ -836,10 +836,17 @@ export type LoginResult =
 export async function serverMfaVerify(
   mfaToken: string,
   code: string,
-): Promise<{ ok: true; session: Session; needsSetup?: boolean } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; session: Session; needsSetup?: boolean; recoveryCodesRemaining?: number }
+  | { ok: false; error: string }
+> {
   const { ok, json } = await postJson("/api/platform/mfa/verify", { mfaToken, code });
   if (!ok || !json?.account) return { ok: false, error: json?.error || "That code is not valid." };
-  return finishLogin(json);
+  const done = await finishLogin(json);
+  // Present only when a recovery code (not a TOTP code) was used for this login.
+  const recoveryCodesRemaining =
+    typeof json?.recoveryCodesRemaining === "number" ? json.recoveryCodesRemaining : undefined;
+  return recoveryCodesRemaining === undefined ? done : { ...done, recoveryCodesRemaining };
 }
 
 export async function serverMfaSetup(
