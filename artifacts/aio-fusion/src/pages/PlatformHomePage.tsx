@@ -397,8 +397,18 @@ function PlatformHomePage({
             ) : (
               /* --- SIGN-IN FORM --- */
               <>
-                <h2 className="text-[24px] font-bold mb-1" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in</h2>
-                <p className="text-[14px] font-light mb-6" style={{ color: "rgba(255,255,255,0.65)" }}>
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <h2 className="text-[24px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Sign in</h2>
+                  <button
+                    type="button"
+                    onClick={() => { setShowSignup(true); setLoginError(null); }}
+                    className="flex items-center gap-1.5 text-[14px] font-semibold hover:opacity-80 transition-opacity mt-1"
+                    style={{ color: "white" }}
+                  >
+                    or Create an account <ArrowRight size={14} />
+                  </button>
+                </div>
+                <p className="text-[14px] mb-6" style={{ color: "white" }}>
                   Welcome back — sign in to manage your projects.
                 </p>
 
@@ -435,7 +445,7 @@ function PlatformHomePage({
                 {/* Divider */}
                 <div className="flex items-center gap-3 mb-5">
                   <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
-                  <span className="text-[12px] font-light" style={{ color: "rgba(255,255,255,0.45)" }}>or sign in with email</span>
+                  <span className="text-[12px]" style={{ color: "white" }}>or sign in with email</span>
                   <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
                 </div>
 
@@ -489,24 +499,13 @@ function PlatformHomePage({
                       {loginError}
                     </p>
                   )}
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 mt-1">
-                    <button
-                      type="submit"
-                      className="w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110"
-                      style={{ background: accent }}
-                    >
-                      <LogIn size={16} /> Sign in
-                    </button>
-                    <span className="text-[12px] font-semibold uppercase tracking-[0.16em]" style={{ color: "rgba(255,255,255,0.5)" }}>or</span>
-                    <button
-                      type="button"
-                      onClick={() => { setShowSignup(true); setLoginError(null); }}
-                      className="w-full sm:w-auto sm:min-w-[200px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] transition-all hover:-translate-y-0.5 hover:shadow-lg border"
-                      style={{ color: "white", borderColor: "rgba(255,255,255,0.4)", background: "transparent" }}
-                    >
-                      Create an account <ArrowRight size={14} />
-                    </button>
-                  </div>
+                  <button
+                    type="submit"
+                    className="self-center w-full sm:w-auto sm:min-w-[220px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 mt-1"
+                    style={{ background: accent }}
+                  >
+                    <LogIn size={16} /> Sign in
+                  </button>
                 </form>
                 {onOpenGeorge && (
                   <div className="mt-3 flex justify-center">
@@ -514,7 +513,7 @@ function PlatformHomePage({
                       type="button"
                       onClick={onOpenGeorge}
                       className="flex items-center gap-1.5 text-[13px] hover:opacity-80 transition-opacity"
-                      style={{ color: "rgba(255,255,255,0.55)" }}
+                      style={{ color: "white" }}
                     >
                       <HelpCircle size={14} />
                       Need help? Ask GEOrge
