@@ -23,7 +23,7 @@ import {
   platformEmailVerificationsTable,
   platformPasswordResetsTable,
 } from "@workspace/db";
-import { and, count, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, like, lte, ne, sql } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -974,6 +974,129 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
   } catch (err) {
     logger.error({ err }, "reset-password: unexpected error");
     res.status(500).json({ error: "Password reset failed. Please try again." });
+  }
+});
+
+// Change password for a signed-in user: verify the current password, set the
+// new one in BOTH credential stores (platform_users + legacy platform_accounts),
+// and revoke every other session while keeping the current one alive.
+router.post("/platform/change-password", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+    const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+    if (!currentPassword) {
+      res.status(400).json({ error: "Enter your current password." });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: "New password must be at least 8 characters." });
+      return;
+    }
+
+    const actor = req.account!;
+    const username = normUsername(actor.username);
+    const currentSid = getPlatformSessionId(req);
+
+    // Verify the current password. Prefer the platform_users hash (primary
+    // store); fall back to the legacy platform_accounts hash for legacy
+    // sessions or users without a password hash yet (e.g. SSO-only would fail
+    // verification here, which is correct — they have no current password).
+    let userRow: { id: string; passwordHash: string | null } | undefined;
+    if (actor.userId) {
+      const rows = await db
+        .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, actor.userId))
+        .limit(1);
+      userRow = rows[0];
+    }
+    let verified = false;
+    if (userRow?.passwordHash) {
+      verified = verifyPassword(currentPassword, userRow.passwordHash);
+    } else {
+      const account = await getAccount(username);
+      verified = !!account && verifyPassword(currentPassword, account.passwordHash);
+    }
+    if (!verified) {
+      res.status(401).json({ error: "Your current password is incorrect." });
+      return;
+    }
+
+    const ph = hashPassword(newPassword);
+
+    if (userRow) {
+      await db
+        .update(platformUsersTable)
+        .set({ passwordHash: ph })
+        .where(eq(platformUsersTable.id, userRow.id));
+
+      // Keep the legacy platform_accounts credential store in sync so
+      // slug-based logins keep working with the new password.
+      const memberships = await db
+        .select({ companySlug: platformMembershipsTable.companySlug, role: platformMembershipsTable.role })
+        .from(platformMembershipsTable)
+        .where(eq(platformMembershipsTable.userId, userRow.id));
+      for (const mem of memberships) {
+        if (mem.role === "owner" || mem.role === "admin") {
+          await db
+            .update(platformAccountsTable)
+            .set({ passwordHash: ph })
+            .where(eq(platformAccountsTable.username, mem.companySlug));
+        }
+      }
+
+      // Revoke every OTHER session but keep this one: bump session_version,
+      // re-stamp the current session row with the new version so it survives
+      // the fast-path check, then delete the rest by userId AND by each
+      // associated slug (legacy sessions carry user_id = NULL and skip the
+      // version check, so they must be removed by username too).
+      const newVersion = await incrementSessionVersion(userRow.id);
+      if (currentSid) {
+        await db
+          .update(platformSessionsTable)
+          .set({ sessionVersion: newVersion })
+          .where(eq(platformSessionsTable.sid, currentSid));
+      }
+      await db
+        .delete(platformSessionsTable)
+        .where(and(
+          eq(platformSessionsTable.userId, userRow.id),
+          currentSid ? ne(platformSessionsTable.sid, currentSid) : sql`true`,
+        ));
+      for (const mem of memberships) {
+        await db
+          .delete(platformSessionsTable)
+          .where(and(
+            eq(platformSessionsTable.username, normUsername(mem.companySlug)),
+            currentSid ? ne(platformSessionsTable.sid, currentSid) : sql`true`,
+          ));
+      }
+    } else {
+      // Legacy session without a linked platform_users row: update the legacy
+      // account store, and sync any platform_users row that shares its email
+      // so both credential stores stay consistent.
+      await db
+        .update(platformAccountsTable)
+        .set({ passwordHash: ph })
+        .where(eq(platformAccountsTable.username, username));
+      const account = await getAccount(username);
+      if (account?.email) {
+        const emailUser = await getUserByEmail(account.email);
+        if (emailUser) {
+          await db
+            .update(platformUsersTable)
+            .set({ passwordHash: ph })
+            .where(eq(platformUsersTable.id, emailUser.id));
+        }
+      }
+      if (currentSid) await revokeOtherSessions(username, currentSid);
+    }
+
+    logger.info({ username }, "change-password: password changed");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "change-password: unexpected error");
+    res.status(500).json({ error: "Failed to change password. Please try again." });
   }
 });
 

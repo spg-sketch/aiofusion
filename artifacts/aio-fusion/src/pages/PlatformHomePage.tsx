@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
@@ -56,6 +56,13 @@ function PlatformHomePage({
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [changeCurrentPassword, setChangeCurrentPassword] = useState("");
+  const [changeNewPassword1, setChangeNewPassword1] = useState("");
+  const [changeNewPassword2, setChangeNewPassword2] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordDone, setChangePasswordDone] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -229,6 +236,24 @@ function PlatformHomePage({
         setMySessions((prev) => prev ? prev.filter((s) => s.sid !== sid) : prev);
       })
       .finally(() => setRevokingSession(null));
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError(null);
+    if (!changeCurrentPassword) { setChangePasswordError("Enter your current password."); return; }
+    if (changeNewPassword1.length < 8) { setChangePasswordError("New password must be at least 8 characters."); return; }
+    if (changeNewPassword1 !== changeNewPassword2) { setChangePasswordError("New passwords do not match."); return; }
+    setChangePasswordLoading(true);
+    void serverChangeMyPassword(changeCurrentPassword, changeNewPassword1)
+      .then((r) => {
+        if (!r.ok) { setChangePasswordError(r.error); return; }
+        setChangePasswordDone(true);
+        setChangeCurrentPassword("");
+        setChangeNewPassword1("");
+        setChangeNewPassword2("");
+      })
+      .finally(() => setChangePasswordLoading(false));
   };
 
   const handleDeleteAccount = (e: React.FormEvent) => {
@@ -915,6 +940,87 @@ function PlatformHomePage({
 
             {/* TWO-FACTOR AUTHENTICATION - status + opt-in management */}
             <MfaSecuritySection session={session} />
+
+            {/* CHANGE PASSWORD - proactive credential change for signed-in users */}
+            <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
+              <button
+                onClick={() => {
+                  setShowChangePassword((v) => !v);
+                  setChangePasswordError(null);
+                  setChangePasswordDone(false);
+                  setChangeCurrentPassword("");
+                  setChangeNewPassword1("");
+                  setChangeNewPassword2("");
+                }}
+                className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity text-white"
+              >
+                <KeyRound size={15} />
+                {showChangePassword ? "Hide Change Password" : "Change Password"}
+              </button>
+              {showChangePassword && (
+                <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
+                  {changePasswordDone ? (
+                    <div className="flex items-center gap-2 text-[14px] font-medium" style={{ color: "#86efac" }}>
+                      <CheckCircle2 size={16} /> Password changed. Other devices have been signed out.
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
+                        Enter your current password, then choose a new one (at least 8 characters).
+                        You will stay signed in here, but every other device will be signed out.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Current password</label>
+                          <input
+                            type="password"
+                            autoComplete="current-password"
+                            value={changeCurrentPassword}
+                            onChange={(e) => setChangeCurrentPassword(e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>New password</label>
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            value={changeNewPassword1}
+                            onChange={(e) => setChangeNewPassword1(e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Confirm new password</label>
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            value={changeNewPassword2}
+                            onChange={(e) => setChangeNewPassword2(e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                          />
+                        </div>
+                      </div>
+                      {changePasswordError && (
+                        <p className="mt-3 text-[13px] font-medium" style={{ color: "#fca5a5" }}>{changePasswordError}</p>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={changePasswordLoading}
+                        className="mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                        style={{ background: accent }}
+                      >
+                        {changePasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                        Change Password
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+            </div>
 
             {/* DANGER ZONE - self-serve account deletion (GDPR right to erasure) */}
             <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>

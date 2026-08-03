@@ -645,8 +645,14 @@ export async function serverResetPassword(
   return { ok: true };
 }
 
-// After email verification + Google/Microsoft SSO signup, the user must choose
-// their account type (Agency/Partner vs Client). This calls the setup endpoint.
+export async function serverChangeMyPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/change-password", { currentPassword, newPassword });
+  if (!ok) return { ok: false, error: json?.error || "Failed to change password. Please try again." };
+  return { ok: true };
+}
 export async function serverSetAccountType(
   accountType: "agency" | "client",
 ): Promise<{ ok: true; role: string } | { ok: false; error: string }> {

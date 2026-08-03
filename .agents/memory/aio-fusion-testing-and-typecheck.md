@@ -16,3 +16,6 @@ Vitest is the test runner. `pnpm --filter @workspace/api-server run test` (node 
 - `pnpm run typecheck:libs` must run first (builds lib/* project refs) or api-server/aio-fusion typecheck reports phantom "no exported member" errors from `@workspace/db` / `@workspace/api-zod`.
 - Even after building libs, these remain broken on main: `api-server/src/routes/diagnostic.ts` (`Property 'score'/'findings'/'recommendations' does not exist on type '{}'`) and `lib/replit-auth-web/src/use-auth.ts` (`Property 'env' does not exist on ImportMeta`).
 - **Why:** so a future agent isn't alarmed by these and doesn't attribute them to new changes.
+
+- **react-qr-code bundled d.ts breaks under @types/react 19** (TS2607/TS2786 on `<QRCode>`): its ambient class-component declaration clashes; fix by casting the default import to a function-component type in MfaPanels.tsx — `pnpm dedupe` does NOT fix this one.
+- **Change-password route tests**: the shared test app in platform-login-signup.test.ts injects `req.account = null`; authed routes need a per-suite server that resolves the sid (cookie or Bearer) via getPlatformSessionAccount.

@@ -245,7 +245,7 @@ import {
   platformSessionsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { hashPassword, getPrimaryMembership } from "../lib/platform-auth";
+import { hashPassword, getPrimaryMembership, getPlatformSessionId, getPlatformSessionAccount } from "../lib/platform-auth";
 import platformRouter from "./platform";
 
 // ---------------------------------------------------------------------------
@@ -1212,5 +1212,203 @@ describe("POST /api/platform/forgot-password + reset-password", () => {
       body: JSON.stringify({ token: "not-a-real-token", password: NEW_PASSWORD }),
     });
     expect(bogusRes.status).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/platform/change-password — signed-in credential change
+// ---------------------------------------------------------------------------
+describe("POST /api/platform/change-password", () => {
+  let server: Server;
+  let baseUrl: string;
+  const EMAIL = "change-test@example.com";
+  const OLD_PASSWORD = "oldpassword123!";
+  const NEW_PASSWORD = "newpassword456!";
+  const USERNAME = "change-test-agency";
+  let userId: string;
+
+  // The shared buildApp injects req.account = null, but change-password needs
+  // a real signed-in account — so this suite resolves the session cookie /
+  // Bearer sid like production's resolvePlatformAccount does.
+  async function startAuthedServer(): Promise<{ server: Server; baseUrl: string }> {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use(async (req: any, _res: any, next: any) => {
+      const sid = getPlatformSessionId(req);
+      req.account = sid ? await getPlatformSessionAccount(sid) : null;
+      next();
+    });
+    app.use("/api", platformRouter);
+    return new Promise((resolve) => {
+      const s = app.listen(0, () => {
+        resolve({ server: s, baseUrl: `http://127.0.0.1:${(s.address() as AddressInfo).port}` });
+      });
+    });
+  }
+
+  beforeEach(async () => {
+    const ph = hashPassword(OLD_PASSWORD);
+    await db.insert(platformAccountsTable).values({
+      username: USERNAME,
+      passwordHash: ph,
+      role: "agency",
+      status: "active",
+      email: EMAIL,
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: USERNAME, role: "agency", status: "active", email: EMAIL })
+      .returning({ id: platformCompaniesTable.id });
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({ email: EMAIL, name: "Change Tester", passwordHash: ph, emailVerified: true })
+      .returning({ id: platformUsersTable.id });
+    userId = user.id;
+    await db.insert(platformMembershipsTable).values({
+      userId,
+      companyId: company.id,
+      companySlug: USERNAME,
+      role: "owner",
+    });
+    ({ server, baseUrl } = await startAuthedServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
+    vi.unstubAllGlobals();
+  });
+
+  async function loginAndGetSid(password = OLD_PASSWORD): Promise<string> {
+    const res = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password }),
+    });
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    const m = /aio_sid=([^;]+)/.exec(setCookie);
+    expect(m).not.toBeNull();
+    return m![1];
+  }
+
+  async function changePassword(sid: string, body: Record<string, unknown>) {
+    return fetch(`${baseUrl}/api/platform/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sid}` },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("changes the password, keeps the current session, and revokes the others", async () => {
+    const otherSid = await loginAndGetSid();
+    const currentSid = await loginAndGetSid();
+
+    const res = await changePassword(currentSid, {
+      currentPassword: OLD_PASSWORD,
+      newPassword: NEW_PASSWORD,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+
+    // Current session survives with the bumped version; the other is gone.
+    const sessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, USERNAME));
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].sid).toBe(currentSid);
+    expect(sessions[0].sid).not.toBe(otherSid);
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, userId));
+    expect(user.sessionVersion).toBe(1);
+    expect(sessions[0].sessionVersion).toBe(1);
+
+    // The surviving session still authenticates.
+    const stillAuthed = await changePassword(currentSid, {
+      currentPassword: NEW_PASSWORD,
+      newPassword: "yetanotherpass789!",
+    });
+    expect(stillAuthed.status).toBe(200);
+
+    // Old password no longer works; latest one does (email + legacy slug login).
+    const oldLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: OLD_PASSWORD }),
+    });
+    expect(oldLogin.status).toBe(401);
+    const newLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: "yetanotherpass789!" }),
+    });
+    expect(newLogin.status).toBe(200);
+    const slugLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: USERNAME, password: "yetanotherpass789!" }),
+    });
+    expect(slugLogin.status).toBe(200);
+  });
+
+  it("rejects a wrong current password and leaves credentials untouched", async () => {
+    const sid = await loginAndGetSid();
+    const res = await changePassword(sid, {
+      currentPassword: "not-the-password",
+      newPassword: NEW_PASSWORD,
+    });
+    expect(res.status).toBe(401);
+
+    // Old password still works; session untouched.
+    const login = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: OLD_PASSWORD }),
+    });
+    expect(login.status).toBe(200);
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, userId));
+    expect(user.sessionVersion).toBe(0);
+  });
+
+  it("rejects a missing current password and a too-short new password", async () => {
+    const sid = await loginAndGetSid();
+    const missing = await changePassword(sid, { newPassword: NEW_PASSWORD });
+    expect(missing.status).toBe(400);
+    const short = await changePassword(sid, { currentPassword: OLD_PASSWORD, newPassword: "short" });
+    expect(short.status).toBe(400);
+  });
+
+  it("also revokes legacy sessions (user_id = NULL) bound to the account slug", async () => {
+    const sid = await loginAndGetSid();
+    await db.insert(platformSessionsTable).values({
+      sid: "legacy-change-session-sid",
+      username: USERNAME,
+      userId: null,
+      sessionVersion: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await changePassword(sid, {
+      currentPassword: OLD_PASSWORD,
+      newPassword: NEW_PASSWORD,
+    });
+    expect(res.status).toBe(200);
+
+    const sessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(eq(platformSessionsTable.username, USERNAME));
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].sid).toBe(sid);
   });
 });
