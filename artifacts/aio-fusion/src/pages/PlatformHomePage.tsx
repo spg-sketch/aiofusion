@@ -458,29 +458,31 @@ function PlatformHomePage({
                   }}
                   className="flex flex-col gap-3"
                 >
-                  <div className="relative">
-                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Email or username"
-                      autoComplete="username"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
-                      style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
-                    />
-                  </div>
-                  <div className="relative">
-                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Password"
-                      autoComplete="current-password"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
-                      style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Email or username"
+                        autoComplete="username"
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                        style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
+                      />
+                    </div>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: vars.g400 }} />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Password"
+                        autoComplete="current-password"
+                        className="w-full pl-10 pr-4 py-3 rounded-xl border text-[15px] focus:outline-none focus:ring-2 transition-all"
+                        style={{ background: "white", borderColor: vars.g200, color: ink, ["--tw-ring-color" as any]: vars.teal }}
+                      />
+                    </div>
                   </div>
                   {loginError && (
                     <p className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.25)" }}>
@@ -489,7 +491,7 @@ function PlatformHomePage({
                   )}
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 mt-1"
+                    className="self-center w-full sm:w-auto sm:min-w-[220px] flex items-center justify-center gap-2 px-10 py-3.5 rounded-xl text-[14px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 mt-1"
                     style={{ background: accent }}
                   >
                     <LogIn size={16} /> Sign in
