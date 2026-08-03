@@ -158,9 +158,17 @@ function PlatformHomePage({
       return;
     }
     if (status === "mfa") {
-      // SSO login needs a two-factor step: the callback redirected here with a
-      // short-lived pending token instead of a session. Show the MFA panel.
-      const mfaToken = params.get("mfa_token") ?? "";
+      // SSO login needs a two-factor step: the callback set a short-lived
+      // cookie holding the pending token (kept out of the URL so it never
+      // lands in browser history or logs). Read it once, clear it, and show
+      // the MFA panel.
+      const cookieName = "aio_oauth_mfa_token";
+      const match = document.cookie
+        .split("; ")
+        .find((c) => c.startsWith(`${cookieName}=`));
+      const mfaToken = match ? decodeURIComponent(match.slice(cookieName.length + 1)) : "";
+      // Clear the cookie immediately — it is single-use.
+      document.cookie = `${cookieName}=; path=/; max-age=0`;
       const mfaMode = params.get("mfa_mode") ?? "verify";
       if (mfaToken) {
         setMfaChallenge({ mfaToken, enroll: mfaMode === "enroll" });

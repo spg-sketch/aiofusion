@@ -514,18 +514,21 @@ describe("TOTP + token primitives", () => {
 });
 
 // ---------------------------------------------------------------------------
-// SSO logins route through the MFA challenge (redirect variant)
+// OAuth SSO logins that need MFA: the pending token is handed over via a
+// short-lived cookie (never a query param), keeping it out of the address
+// bar, browser history, and proxy/access logs.
 // ---------------------------------------------------------------------------
 
-describe("SSO MFA challenge (Google callback)", () => {
+const GOOGLE_MASTER = "oauth-master";
+const GOOGLE_AGENCY = "oauth-agency";
+const MASTER_EMAIL = "oauth-master@example.com";
+const AGENCY_EMAIL = "oauth-agency@example.com";
+const STATE = "test-oauth-state";
+const MFA_COOKIE = "aio_oauth_mfa_token";
+
+describe("OAuth SSO MFA challenge handoff", () => {
   let server: Server;
   let baseUrl: string;
-
-  const GOOGLE_MASTER = "oauth-master";
-  const GOOGLE_AGENCY = "oauth-agency";
-  const MASTER_EMAIL = "oauth-master@example.com";
-  const AGENCY_EMAIL = "oauth-agency@example.com";
-  const STATE = "test-oauth-state";
 
   const realFetch = globalThis.fetch;
 
@@ -542,13 +545,19 @@ describe("SSO MFA challenge (Google callback)", () => {
     }) as typeof fetch;
   }
 
-  async function runCallback(): Promise<{ status: number; location: URL; setCookie: string }> {
+  async function runCallback(): Promise<{ status: number; location: URL; setCookies: string[] }> {
     const res = await realFetch(
       `${baseUrl}/api/platform/auth/google/callback?code=abc&state=${STATE}`,
       { redirect: "manual", headers: { cookie: `aio_oauth_state=${STATE}` } },
     );
     const loc = res.headers.get("location") ?? "";
-    return { status: res.status, location: new URL(loc, baseUrl), setCookie: res.headers.get("set-cookie") ?? "" };
+    return { status: res.status, location: new URL(loc, baseUrl), setCookies: res.headers.getSetCookie() };
+  }
+
+  function mfaCookieValue(setCookies: string[]): string | null {
+    const c = setCookies.find((s) => s.startsWith(`${MFA_COOKIE}=`) && !s.startsWith(`${MFA_COOKIE}=;`));
+    if (!c) return null;
+    return decodeURIComponent(c.slice(MFA_COOKIE.length + 1).split(";")[0]!);
   }
 
   beforeEach(async () => {
@@ -578,46 +587,67 @@ describe("SSO MFA challenge (Google callback)", () => {
     }
   });
 
-  it("redirects a master SSO login to MFA enrolment instead of issuing a session", async () => {
+  it("hands a master SSO enrolment token over via cookie, never the URL", async () => {
     stubGoogle(MASTER_EMAIL);
     const r = await runCallback();
     expect(r.status).toBeGreaterThanOrEqual(300);
     expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
     expect(r.location.searchParams.get("mfa_mode")).toBe("enroll");
-    expect(r.location.searchParams.get("mfa_token")).toBeTruthy();
-    expect(r.setCookie).not.toMatch(/aio_sid=/);
+    // The token must NOT appear in the redirect URL...
+    expect(r.location.searchParams.get("mfa_token")).toBeNull();
+    // ...it is delivered in a short-lived, non-httpOnly cookie instead.
+    const token = mfaCookieValue(r.setCookies);
+    expect(token).toBeTruthy();
+    const mfaCookie = r.setCookies.find((s) => s.startsWith(`${MFA_COOKIE}=`))!;
+    expect(mfaCookie).not.toMatch(/httponly/i);
+    expect(mfaCookie).toMatch(/max-age=600/i);
+    // The pending token is genuine and carries the right identity.
+    const { verifyMfaPendingToken } = await import("../lib/mfa");
+    expect(verifyMfaPendingToken(token!)?.u).toBe(GOOGLE_MASTER);
+    // No session is issued at this point.
+    expect(r.setCookies.join("; ")).not.toMatch(/aio_sid=/);
   });
 
-  it("issues a session directly for a non-master without MFA", async () => {
-    stubGoogle(AGENCY_EMAIL);
-    const r = await runCallback();
-    expect(r.status).toBeGreaterThanOrEqual(300);
-    expect(r.location.searchParams.get("oauth_status")).toBe("ok");
-    expect(r.setCookie).toMatch(/aio_sid=/);
-  });
-
-  it("challenges an MFA-enabled non-master SSO login too", async () => {
+  it("challenges an MFA-enabled non-master SSO login via cookie; token completes /mfa/verify", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(GOOGLE_AGENCY, { secret, enabled: true, recoveryHashes: [] });
     stubGoogle(AGENCY_EMAIL);
     const r = await runCallback();
     expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
     expect(r.location.searchParams.get("mfa_mode")).toBe("verify");
-    expect(r.setCookie).not.toMatch(/aio_sid=/);
+    expect(r.location.searchParams.get("mfa_token")).toBeNull();
+    const token = mfaCookieValue(r.setCookies);
+    expect(token).toBeTruthy();
+    expect(r.setCookies.join("; ")).not.toMatch(/aio_sid=/);
+
+    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
+    expect(good.status).toBe(200);
+    expect(good.json.account?.username).toBe(GOOGLE_AGENCY);
+    expect(good.setCookie).toMatch(/aio_sid=/);
   });
 
-  it("challenges an MFA-enabled master with verify mode; token completes login via /mfa/verify", async () => {
+  it("challenges an MFA-enabled master with verify mode; cookie token completes login via /mfa/verify", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(GOOGLE_MASTER, { secret, enabled: true, recoveryHashes: [] });
     stubGoogle(MASTER_EMAIL);
     const r = await runCallback();
     expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
     expect(r.location.searchParams.get("mfa_mode")).toBe("verify");
-    const token = r.location.searchParams.get("mfa_token")!;
+    expect(r.location.searchParams.get("mfa_token")).toBeNull();
+    const token = mfaCookieValue(r.setCookies);
+    expect(token).toBeTruthy();
 
     const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
     expect(good.status).toBe(200);
     expect(good.json.account?.username).toBe(GOOGLE_MASTER);
     expect(good.setCookie).toMatch(/aio_sid=/);
+  });
+
+  it("issues a session directly for a non-master without MFA (no token cookie)", async () => {
+    stubGoogle(AGENCY_EMAIL);
+    const r = await runCallback();
+    expect(r.location.searchParams.get("oauth_status")).toBe("ok");
+    expect(mfaCookieValue(r.setCookies)).toBeNull();
+    expect(r.setCookies.join("; ")).toMatch(/aio_sid=/);
   });
 });

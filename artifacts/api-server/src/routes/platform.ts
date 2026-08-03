@@ -352,11 +352,18 @@ async function completeMfaLogin(
   });
 }
 
+// Cookie used to hand the short-lived MFA pending token to the frontend after
+// an OAuth redirect. Deliberately NOT httpOnly: the frontend reads it once and
+// clears it. This keeps the token out of the address bar, browser history, and
+// proxy/access logs. The token alone grants nothing without a valid TOTP code.
+export const OAUTH_MFA_TOKEN_COOKIE = "aio_oauth_mfa_token";
+
 // Redirect-based variant of finishLoginOrChallenge for the OAuth callbacks.
 // SSO logins are browser redirects (not JSON), so when an MFA challenge is
-// required the short-lived pending token is handed to the frontend via query
-// params (`oauth_status=mfa`) instead of a JSON body. The token alone grants
-// nothing — a valid TOTP (or recovery) code is still required to get a session.
+// required the short-lived pending token is handed to the frontend via a
+// short-lived cookie (`oauth_status=mfa` signals the frontend to read it)
+// instead of a JSON body. The token alone grants nothing — a valid TOTP
+// (or recovery) code is still required to get a session.
 async function finishOauthLoginOrChallenge(
   req: Request,
   res: Response,
@@ -379,7 +386,14 @@ async function finishOauthLoginOrChallenge(
       needsSetup: identity.needsSetup || undefined,
       mode,
     });
-    res.redirect(`${origin}/?oauth_status=mfa&mfa_mode=${mode}&mfa_token=${encodeURIComponent(mfaToken)}`);
+    res.cookie(OAUTH_MFA_TOKEN_COOKIE, mfaToken, {
+      httpOnly: false, // frontend must read it once, then clear it
+      secure: true,
+      sameSite: "lax",
+      maxAge: 10 * 60 * 1000,
+      path: "/",
+    });
+    res.redirect(`${origin}/?oauth_status=mfa&mfa_mode=${mode}`);
     return;
   }
 

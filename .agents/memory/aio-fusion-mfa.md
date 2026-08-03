@@ -18,3 +18,8 @@ description: How two-factor login works — mandatory for master (admin) account
 - react-qr-code's class typings break under React 19 JSX types — MfaPanels casts the import to a function-component signature.
 
 - SSO→MFA redirect (oauth_status=mfa&mfa_token=...) hit the App.tsx URL-param-wipe race: params must be captured in App state (oauthRedirectParams prop → PlatformHomePage) before history-sync strips them. Any NEW redirect query param needs the same capture-in-App treatment.
+
+## OAuth MFA token handoff (Aug 2026)
+- SSO MFA pending token now handed to frontend via short-lived non-httpOnly cookie `aio_oauth_mfa_token` (10 min, path=/), redirect carries only `?oauth_status=mfa&mfa_mode=...`. Frontend reads once + clears in PlatformHomePage oauth effect.
+- **Why:** keep token out of address bar / browser history / proxy logs.
+- platform-mfa.test.ts was scrambled by an earlier bad merge (interleaved test bodies); rebuilt from last good git version + a separate "OAuth SSO MFA challenge handoff" describe block using res.headers.getSetCookie().
