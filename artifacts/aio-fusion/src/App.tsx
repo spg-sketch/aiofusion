@@ -613,6 +613,15 @@ function App() {
   const [passwordResetToken] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get("reset_token"),
   );
+  // OAuth/verification redirect params (/?oauth_status=mfa&mfa_token=... etc).
+  // Captured once on load, before the history-sync effect rewrites the URL and
+  // drops the query string, then handed to PlatformHomePage as a prop. Without
+  // this, the MFA challenge token from an SSO login is lost and the user just
+  // sees the plain sign-in form again.
+  const [oauthRedirectParams, setOauthRedirectParams] = useState<string | null>(() => {
+    const s = window.location.search;
+    return /(?:^|[?&])(?:oauth_status|link_google|verify_status)=/.test(s) ? s : null;
+  });
 
   // Navigate to the platform-home view when returning from a Google OAuth
   // redirect (e.g. /?oauth_status=ok), an impersonation exit, or a
@@ -862,6 +871,8 @@ function App() {
       <>
         <PlatformHomePage
           session={session}
+          oauthRedirectParams={oauthRedirectParams}
+          onOauthParamsConsumed={() => setOauthRedirectParams(null)}
           onLoginSuccess={(s) => {
             setSessionExpiredNotice(undefined);
             setGeorgeAnonOpen(false);

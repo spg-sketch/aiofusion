@@ -30,6 +30,8 @@ function PlatformHomePage({
   onOpenGeorge,
   initialNotice,
   resetToken: resetTokenProp,
+  oauthRedirectParams,
+  onOauthParamsConsumed,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -46,6 +48,10 @@ function PlatformHomePage({
   onOpenGeorge?: () => void;
   initialNotice?: string;
   resetToken?: string | null;
+  /** Initial URL query string captured by App before the history-sync effect
+   *  strips it — the OAuth/MFA/verification redirect params live here. */
+  oauthRedirectParams?: string | null;
+  onOauthParamsConsumed?: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -136,10 +142,13 @@ function PlatformHomePage({
 
   // Handle Google OAuth redirect back to this page
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    // Prefer the query string App captured on load — the history-sync effect
+    // in App.tsx strips the URL params before this lazy page mounts.
+    const params = new URLSearchParams(oauthRedirectParams ?? window.location.search);
     const status = params.get("oauth_status");
     const linkGoogle = params.get("link_google");
-    if (!status && !linkGoogle) return;
+    if (!status && !linkGoogle && !params.get("verify_status")) return;
+    onOauthParamsConsumed?.();
     // Clean the OAuth params from the URL without a reload
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
     if (linkGoogle) {
