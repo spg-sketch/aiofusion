@@ -402,10 +402,10 @@ function PlatformHomePage({
                   <button
                     type="button"
                     onClick={() => { setShowSignup(true); setLoginError(null); }}
-                    className="flex items-center gap-1.5 text-[14px] font-semibold hover:opacity-80 transition-opacity mt-1"
-                    style={{ color: "white" }}
+                    className="flex items-center gap-2 text-[24px] font-bold hover:opacity-80 transition-opacity"
+                    style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}
                   >
-                    or Create an account <ArrowRight size={14} />
+                    Create an account <ArrowRight size={20} />
                   </button>
                 </div>
                 <p className="text-[14px] mb-6" style={{ color: "white" }}>
@@ -445,7 +445,7 @@ function PlatformHomePage({
                 {/* Divider */}
                 <div className="flex items-center gap-3 mb-5">
                   <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
-                  <span className="text-[12px]" style={{ color: "white" }}>or sign in with email</span>
+                  <span className="text-[15px]" style={{ color: "white" }}>or sign in with email</span>
                   <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
                 </div>
 
