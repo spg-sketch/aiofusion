@@ -29,8 +29,12 @@ const mock = vi.hoisted(() => {
   type SessionRow = {
     sid: string; username: string; userId: string | null; activeCompanyId: string | null;
     expiresAt: Date; ipHint: string | null; createdAt: Date;
+    sessionVersion?: number | null;
   };
   const sessionRows = new Map<string, SessionRow>();
+
+  // For session_version checks: userId → { sessionVersion }
+  const usersById = new Map<string, { id: string; sessionVersion: number }>();
 
   type FullAccountRow = {
     username: string; passwordHash: string; role: string; parent: string | null;
@@ -54,7 +58,11 @@ const mock = vi.hoisted(() => {
             where: (pred: { __eq?: string }) => ({
               limit: () => {
                 const val = pred.__eq;
-                const row = val ? usersByEmail.get(val) : undefined;
+                if (!val) return Promise.resolve([]);
+                // Support lookup by id (for session_version checks) and by email.
+                const byId = usersById.get(val);
+                if (byId) return Promise.resolve([byId]);
+                const row = usersByEmail.get(val);
                 return Promise.resolve(row ? [row] : []);
               },
             }),
@@ -157,10 +165,33 @@ const mock = vi.hoisted(() => {
       },
     }),
     delete: () => ({ where: () => Promise.resolve() }),
-    update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    update: (table: unknown) => ({
+      set: (values: Record<string, unknown>) => ({
+        where: (pred: { __eq?: string }) => {
+          const tbl = table as { __table?: string };
+          const returning = (_proj?: unknown) => {
+            if (tbl.__table === "platform_users") {
+              const id = pred.__eq;
+              const userRow = id ? usersById.get(id) : undefined;
+              if (userRow) {
+                // sessionVersion is expressed as a sql template object (increment).
+                // Treat any non-numeric value as +1 so the mock simulates the DB.
+                const newVer = typeof values.sessionVersion === "number"
+                  ? values.sessionVersion
+                  : (userRow.sessionVersion ?? 0) + 1;
+                userRow.sessionVersion = newVer;
+                return Promise.resolve([{ sessionVersion: newVer }]);
+              }
+            }
+            return Promise.resolve([]);
+          };
+          return Object.assign(Promise.resolve(undefined), { returning });
+        },
+      }),
+    }),
   };
 
-  return { accountRows, usersByEmail, companiesBySlug, companiesById, memberships, sessionRows, fullAccountRows, db };
+  return { accountRows, usersByEmail, usersById, companiesBySlug, companiesById, memberships, sessionRows, fullAccountRows, db };
 });
 
 vi.mock("@workspace/db", () => ({
@@ -194,6 +225,7 @@ import {
   canCreateSubAccounts,
   ensurePlatformUser,
   getPlatformSessionAccount,
+  incrementSessionVersion,
 } from "./platform-auth";
 
 // ---------------------------------------------------------------------------
@@ -708,6 +740,87 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
 
     const result = await getPlatformSessionAccount("new-path-pending-sid");
     expect(result).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // session_version revocation (fast-path, no session DELETE required)
+  // ---------------------------------------------------------------------------
+
+  it("returns null when the user's session_version has been incremented since the session was issued", async () => {
+    const companyId = "co-version-stale";
+    mock.companiesById.set(companyId, {
+      id: companyId, slug: "stale-version-co", role: "agency",
+      parentSlug: null, maxSeats: null, status: "active",
+    });
+    // User is at version 2; session was issued at version 1.
+    mock.usersById.set("user-stale-v1", { id: "user-stale-v1", sessionVersion: 2 });
+    mock.sessionRows.set("stale-version-sid", {
+      sid: "stale-version-sid", username: "stale-version-co",
+      userId: "user-stale-v1", activeCompanyId: companyId,
+      expiresAt: FUTURE, ipHint: null, createdAt: new Date(),
+      sessionVersion: 1, // issued at v1, but user is now v2
+    });
+
+    const result = await getPlatformSessionAccount("stale-version-sid");
+    expect(result).toBeNull();
+  });
+
+  it("passes through a session whose version matches the user's current version", async () => {
+    const companyId = "co-version-ok";
+    mock.companiesById.set(companyId, {
+      id: companyId, slug: "ok-version-co", role: "agency",
+      parentSlug: null, maxSeats: null, status: "active",
+    });
+    // User and session both at version 3.
+    mock.usersById.set("user-ok-v3", { id: "user-ok-v3", sessionVersion: 3 });
+    mock.sessionRows.set("ok-version-sid", {
+      sid: "ok-version-sid", username: "ok-version-co",
+      userId: "user-ok-v3", activeCompanyId: companyId,
+      expiresAt: FUTURE, ipHint: null, createdAt: new Date(),
+      sessionVersion: 3,
+    });
+
+    const result = await getPlatformSessionAccount("ok-version-sid");
+    expect(result).not.toBeNull();
+    expect(result!.username).toBe("ok-version-co");
+  });
+
+  it("skips the version check for sessions with null sessionVersion (legacy sessions)", async () => {
+    const companyId = "co-legacy-nocheck";
+    mock.companiesById.set(companyId, {
+      id: companyId, slug: "legacy-nocheck-co", role: "agency",
+      parentSlug: null, maxSeats: null, status: "active",
+    });
+    // Even if we have a user with a version, null sessionVersion on session skips the check.
+    mock.usersById.set("user-legacy-v5", { id: "user-legacy-v5", sessionVersion: 5 });
+    mock.sessionRows.set("legacy-null-version-sid", {
+      sid: "legacy-null-version-sid", username: "legacy-nocheck-co",
+      userId: "user-legacy-v5", activeCompanyId: companyId,
+      expiresAt: FUTURE, ipHint: null, createdAt: new Date(),
+      sessionVersion: null, // legacy — skip version check
+    });
+
+    const result = await getPlatformSessionAccount("legacy-null-version-sid");
+    expect(result).not.toBeNull();
+    expect(result!.username).toBe("legacy-nocheck-co");
+  });
+
+  // ---------------------------------------------------------------------------
+  // incrementSessionVersion (fast-path revocation trigger)
+  // ---------------------------------------------------------------------------
+
+  it("increments the session_version for a user and returns the new value", async () => {
+    mock.usersById.set("user-incr-test", { id: "user-incr-test", sessionVersion: 0 });
+    const newVersion = await incrementSessionVersion("user-incr-test");
+    expect(newVersion).toBe(1);
+    expect(mock.usersById.get("user-incr-test")!.sessionVersion).toBe(1);
+  });
+
+  it("calling incrementSessionVersion twice yields version 2", async () => {
+    mock.usersById.set("user-double-incr", { id: "user-double-incr", sessionVersion: 0 });
+    await incrementSessionVersion("user-double-incr");
+    const v2 = await incrementSessionVersion("user-double-incr");
+    expect(v2).toBe(2);
   });
 
   it("returns null for a new-path session when the legacy platform_accounts row is suspended (even if company row is active)", async () => {

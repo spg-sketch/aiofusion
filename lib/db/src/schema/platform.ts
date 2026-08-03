@@ -1,4 +1,4 @@
-import { integer, pgTable, primaryKey, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 // Platform accounts are the AIO Fusion application logins (an agency and the
 // client sub-accounts it creates). They are separate from the Replit Auth
@@ -44,17 +44,24 @@ export const platformAccountsTable = pgTable("platform_accounts", {
 // (platform_users) from the workspace they belong to, and lets a user belong
 // to multiple workspaces.
 //
-//  - `id`        Stable UUID; referenced by memberships and sessions.
-//  - `slug`      The canonical lowercased slug (= platform_accounts.username).
-//                Unique, used for URL paths and store keys so existing data
-//                is compatible without migration.
-//  - `role`      "admin" | "agency" | "client" | "user" — mirrors
-//                platform_accounts.role for workspace-level access rules.
-//  - `parentSlug` The parent company's slug (mirrors platform_accounts.parent).
-//  - `maxSeats`  Optional seat cap for agency accounts.
-//  - `email`     Contact email for the company.
-//  - `website`   Company website URL.
-//  - `status`    "active" | "pending_approval" | "suspended".
+//  - `id`           Stable UUID; referenced by memberships and sessions.
+//  - `slug`         The canonical lowercased slug (= platform_accounts.username).
+//                   Unique, used for URL paths and store keys so existing data
+//                   is compatible without migration.
+//  - `role`         "admin" | "agency" | "client" | "user" — mirrors
+//                   platform_accounts.role for workspace-level access rules.
+//  - `parentSlug`   The parent company's slug (mirrors platform_accounts.parent).
+//  - `maxSeats`     Optional seat cap for agency accounts.
+//  - `email`        Primary contact email for the company.
+//  - `billingEmail` Separate billing contact — invoices sent here. Defaults to
+//                   `email` if null.
+//  - `vatNumber`    VAT registration number, shown on Stripe invoices.
+//  - `website`      Company website URL.
+//  - `displayName`  Human-readable company name (e.g. "Acme PR Agency"). Replaces
+//                   the platform_meta "account:profile:" pattern for new accounts.
+//  - `freeAccess`   When true, bypasses the payment gate entirely. Set by master
+//                   admins for beta/demo accounts.
+//  - `status`       "active" | "pending_approval" | "suspended".
 export const platformCompaniesTable = pgTable("platform_companies", {
   id: uuid("id").primaryKey().defaultRandom(),
   slug: varchar("slug", { length: 64 })
@@ -65,7 +72,11 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   parentSlug: varchar("parent_slug", { length: 64 }),
   maxSeats: integer("max_seats"),
   email: varchar("email", { length: 255 }),
+  billingEmail: varchar("billing_email", { length: 255 }),
+  vatNumber: varchar("vat_number", { length: 64 }),
   website: varchar("website", { length: 512 }),
+  displayName: varchar("display_name", { length: 128 }),
+  freeAccess: boolean("free_access").notNull().default(false),
   status: varchar("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -74,18 +85,25 @@ export const platformCompaniesTable = pgTable("platform_companies", {
 
 // Individual human users, separate from company/agency accounts.
 //
-//  - `id`           UUID primary key, issued by the database.
-//  - `email`        Unique email address; the primary login identifier.
-//  - `name`         Display name (full name or preferred name).
-//  - `passwordHash` scrypt hash, NULL for users who only sign in via Google.
-//  - `googleId`     Google sub (subject) from OAuth userinfo; NULL if not linked.
-//  - `createdAt`    When the user registered.
+//  - `id`              UUID primary key, issued by the database.
+//  - `email`           Unique email address; the primary login identifier.
+//  - `name`            Display name (full name or preferred name).
+//  - `passwordHash`    scrypt hash, NULL for users who only sign in via SSO.
+//  - `googleId`        Google sub (subject) from OAuth; NULL if not linked.
+//  - `microsoftId`     Microsoft Entra ID oid from OIDC; NULL if not linked.
+//  - `sessionVersion`  Incremented on password change, access revocation, etc.
+//                      Sessions carry the version at creation time; a mismatch
+//                      causes immediate rejection without touching the session
+//                      table. This is the fast-path revocation mechanism.
+//  - `createdAt`       When the user registered.
 export const platformUsersTable = pgTable("platform_users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).unique(),
   name: varchar("name", { length: 128 }),
   passwordHash: text("password_hash"),
   googleId: varchar("google_id", { length: 255 }).unique(),
+  microsoftId: varchar("microsoft_id", { length: 255 }).unique(),
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -97,9 +115,12 @@ export const platformUsersTable = pgTable("platform_users", {
 //  - `companyId`   References platform_companies.id (stable UUID).
 //  - `companySlug` Denormalised slug for fast lookups without joining companies.
 //  - `role`        The user's role within this company:
-//                    "owner"  — created the account; full control.
-//                    "admin"  — platform-wide admin (only for the admin account).
-//                    "member" — future team member invite.
+//                    "owner"   — created the account; full control incl. billing.
+//                    "admin"   — full access excl. billing; can manage team.
+//                    "billing" — billing & invoices only; no project/content access.
+//                    "content" — assigned projects + content tools; no admin.
+//                    "viewer"  — assigned projects, read-only; no content tools.
+//                    Legacy value "member" treated as "content".
 export const platformMembershipsTable = pgTable(
   "platform_memberships",
   {
@@ -129,6 +150,12 @@ export const platformMembershipsTable = pgTable(
 //  - `activeCompanyId`  platform_companies.id of the active workspace; NULL
 //                       for legacy sessions. Enables multi-company context
 //                       switching without a new login.
+//  - `sessionVersion`   The platform_users.session_version at session creation.
+//                       NULL = legacy session (version check skipped). If the
+//                       user's current session_version exceeds this value, the
+//                       session is immediately rejected — this is how password
+//                       changes and access revocations propagate without
+//                       requiring a session table DELETE.
 //  - `ipHint`           First two octets of the login IP, stored coarsely so
 //                       the sessions list can show approximate origin.
 export const platformSessionsTable = pgTable("platform_sessions", {
@@ -136,6 +163,7 @@ export const platformSessionsTable = pgTable("platform_sessions", {
   username: varchar("username").notNull(),
   userId: uuid("user_id"),
   activeCompanyId: uuid("active_company_id"),
+  sessionVersion: integer("session_version"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -161,3 +189,7 @@ export type PlatformUserRow = typeof platformUsersTable.$inferSelect;
 export type InsertPlatformUser = typeof platformUsersTable.$inferInsert;
 
 export type PlatformMembershipRow = typeof platformMembershipsTable.$inferSelect;
+
+// Canonical 5-role membership enum (the varchar column accepts any string for
+// forward-compat; these are the only values the application logic understands).
+export type MembershipRole = "owner" | "admin" | "billing" | "content" | "viewer";

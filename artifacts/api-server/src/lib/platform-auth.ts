@@ -580,10 +580,25 @@ export type SessionInfo = {
   userName?: string | null;
 };
 
+// Increment the session_version counter for a user. Call this on any event
+// that should immediately invalidate all of the user's existing sessions:
+// password change, email change, access revocation, account suspension.
+// The next request with an old session will be rejected by getPlatformSessionAccount.
+export async function incrementSessionVersion(userId: string): Promise<number> {
+  const [row] = await db
+    .update(platformUsersTable)
+    .set({ sessionVersion: sql`${platformUsersTable.sessionVersion} + 1` })
+    .where(eq(platformUsersTable.id, userId))
+    .returning({ sessionVersion: platformUsersTable.sessionVersion });
+  return row?.sessionVersion ?? 0;
+}
+
 // Create a new session for the given username.
 // Single-session enforcement: all existing sessions for this account are
 // revoked before issuing the new one. This ensures a stolen session token is
 // invalidated on the next login, and prevents token accumulation over time.
+// The current session_version is stamped on the session so that any subsequent
+// incrementSessionVersion call immediately invalidates it.
 export async function createPlatformSession(
   username: string,
   ipHint?: string | null,
@@ -596,12 +611,28 @@ export async function createPlatformSession(
     .delete(platformSessionsTable)
     .where(eq(platformSessionsTable.username, u));
 
+  // Stamp the user's current session_version so stale sessions can be detected.
+  let sessionVersion: number | null = null;
+  if (userId) {
+    try {
+      const [userRow] = await db
+        .select({ sessionVersion: platformUsersTable.sessionVersion })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, userId))
+        .limit(1);
+      sessionVersion = userRow?.sessionVersion ?? null;
+    } catch {
+      // Non-fatal — version stamping fails gracefully; session behaves as legacy.
+    }
+  }
+
   const sid = crypto.randomBytes(32).toString("hex");
   await db.insert(platformSessionsTable).values({
     sid,
     username: u,
     userId: userId ?? null,
     activeCompanyId: activeCompanyId ?? null,
+    sessionVersion,
     expiresAt: new Date(Date.now() + PLATFORM_SESSION_TTL),
     ipHint: ipHint ?? null,
   });
@@ -626,6 +657,26 @@ export async function getPlatformSessionAccount(
   if (row.expiresAt < new Date()) {
     await deletePlatformSession(sid);
     return null;
+  }
+
+  // Fast-path revocation: if session_version is set on the session, verify it
+  // matches the user's current version. A mismatch means something revoked
+  // access (password change, removal, suspension) after this session was issued.
+  // NULL session_version = legacy session (pre-revocation mechanism) — skip check.
+  if (row.userId != null && row.sessionVersion != null) {
+    try {
+      const [userRow] = await db
+        .select({ sessionVersion: platformUsersTable.sessionVersion })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, row.userId))
+        .limit(1);
+      if (userRow != null && userRow.sessionVersion !== row.sessionVersion) {
+        await deletePlatformSession(row.sid);
+        return null;
+      }
+    } catch {
+      // Non-fatal — skip version check on error; other guards still apply.
+    }
   }
 
   // When the session was created by the new auth path, resolve company role

@@ -8,6 +8,7 @@ import { ensurePlatformCompanyCascade } from "./lib/ensure-platform-company-casc
 import { ensurePlannerContentColumns } from "./lib/ensure-planner-content-columns";
 import { ensureSupportEmailFailedColumn } from "./lib/ensure-support-email-failed-column";
 import { ensureContactSubmissionsTable } from "./lib/ensure-contact-submissions-table";
+import { ensurePlatformSchemaV2 } from "./lib/ensure-platform-schema-v2";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
@@ -126,6 +127,10 @@ app.listen(port, (err) => {
 
   ensureContactSubmissionsTable().catch((err) => {
     logger.error({ err }, "Failed to ensure contact_submissions table");
+  });
+
+  ensurePlatformSchemaV2().catch((err) => {
+    logger.error({ err }, "Failed to apply platform schema v2 additions");
   });
 
   pruneExpiredSessions().catch((err) => {
