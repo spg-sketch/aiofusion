@@ -270,10 +270,10 @@ async function stopServer(server: Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-async function post(baseUrl: string, path: string, body: unknown) {
+async function post(baseUrl: string, path: string, body: unknown, cookie?: string) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
     body: JSON.stringify(body),
   });
   return { status: res.status, json: (await res.json()) as any, setCookie: res.headers.get("set-cookie") };
@@ -303,7 +303,7 @@ describe("MFA login flow", () => {
       await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, u));
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
     }
-    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa:%"));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa%"));
     for (const e of ["mfa@example.com", "mfa-owner@example.com", "mfa-member@example.com"]) {
       await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
     }
@@ -548,6 +548,142 @@ describe("MFA login flow", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Trusted devices ("remember this device for 30 days")
+// ---------------------------------------------------------------------------
+
+function extractTrustCookie(setCookie: string | null): string {
+  const m = (setCookie ?? "").match(/aio_mfa_trust=([^;,\s]+)/);
+  return m ? `aio_mfa_trust=${decodeURIComponent(m[1])}` : "";
+}
+
+describe("MFA trusted devices", () => {
+  let server: Server;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    actorOverride = null;
+    const ph = hashPassword(PASSWORD);
+    await db.insert(platformAccountsTable).values([
+      { username: AGENCY, passwordHash: ph, role: "agency", status: "active" },
+    ]);
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, AGENCY));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, AGENCY));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa%"));
+  });
+
+  it("verify with trustDevice sets a signed cookie that skips the next challenge", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    const login1 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    expect(login1.json.mfaRequired).toBe(true);
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login1.json.mfaToken,
+      code: totpCode(secret),
+      trustDevice: true,
+    });
+    expect(verify.status).toBe(200);
+    expect(verify.setCookie).toMatch(/aio_mfa_trust=/);
+    expect(verify.setCookie).toMatch(/aio_sid=/);
+    const trustCookie = extractTrustCookie(verify.setCookie);
+    expect(trustCookie).not.toBe("");
+
+    // Next login with the trusted-device cookie skips the challenge entirely.
+    const login2 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD }, trustCookie);
+    expect(login2.status).toBe(200);
+    expect(login2.json.mfaRequired).toBeUndefined();
+    expect(login2.json.account?.username).toBe(AGENCY);
+    expect(login2.setCookie).toMatch(/aio_sid=/);
+  });
+
+  it("does not set a trust cookie without the opt-in flag, and a forged cookie is ignored", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    const login1 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login1.json.mfaToken,
+      code: totpCode(secret),
+    });
+    expect(verify.status).toBe(200);
+    expect(verify.setCookie ?? "").not.toMatch(/aio_mfa_trust=/);
+
+    const forged = Buffer.from(JSON.stringify({ u: AGENCY, d: "fake", exp: Date.now() + 60000 })).toString("base64url");
+    const login2 = await post(
+      baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD },
+      `aio_mfa_trust=${forged}.not-a-real-signature`,
+    );
+    expect(login2.json.mfaRequired).toBe(true);
+  });
+
+  it("trusted devices can be listed and revoked; revoked cookie requires a code again", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    const login1 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login1.json.mfaToken,
+      code: totpCode(secret),
+      trustDevice: true,
+    });
+    const trustCookie = extractTrustCookie(verify.setCookie);
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    const list = await fetch(`${baseUrl}/api/platform/mfa/trusted-devices`, { headers: { cookie: trustCookie } });
+    const lj = (await list.json()) as any;
+    expect(list.status).toBe(200);
+    expect(lj.devices.length).toBe(1);
+    expect(lj.devices[0].current).toBe(true);
+
+    const del = await fetch(`${baseUrl}/api/platform/mfa/trusted-devices/${lj.devices[0].id}`, {
+      method: "DELETE",
+      headers: { cookie: trustCookie },
+    });
+    expect(del.status).toBe(200);
+
+    // Revoking an unknown device 404s.
+    const delAgain = await fetch(`${baseUrl}/api/platform/mfa/trusted-devices/${lj.devices[0].id}`, { method: "DELETE" });
+    expect(delAgain.status).toBe(404);
+
+    // The cookie is still validly signed but the device is off the list -> challenge again.
+    actorOverride = null;
+    const login2 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD }, trustCookie);
+    expect(login2.json.mfaRequired).toBe(true);
+  });
+
+  it("disabling MFA clears the trusted-device list", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    const login1 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login1.json.mfaToken,
+      code: totpCode(secret),
+      trustDevice: true,
+    });
+    const trustCookie = extractTrustCookie(verify.setCookie);
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    const off = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
+    expect(off.status).toBe(200);
+
+    const { listTrustedDevices } = await import("../lib/mfa");
+    expect(await listTrustedDevices(AGENCY)).toEqual([]);
+
+    // Re-enable MFA: the stale cookie must not skip the challenge.
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+    actorOverride = null;
+    const login2 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD }, trustCookie);
+    expect(login2.json.mfaRequired).toBe(true);
+  });
+});
+
 describe("TOTP + token primitives", () => {
   it("verifyTotp accepts the current and adjacent step codes only", async () => {
     const { verifyTotp } = await import("../lib/mfa");
@@ -569,6 +705,19 @@ describe("TOTP + token primitives", () => {
     expect(verifyMfaPendingToken(`${forgedBody}.${token.split(".")[1]}`)).toBeNull();
     expect(verifyMfaPendingToken(body!)).toBeNull();
   });
+  it("trusted-device tokens are device- and user-bound and expire", async () => {
+    const { createTrustedDeviceToken, verifyTrustedDeviceToken } = await import("../lib/mfa");
+    const good = createTrustedDeviceToken("someone", "device-1", Date.now() + 60_000);
+    expect(verifyTrustedDeviceToken(good)?.u).toBe("someone");
+    expect(verifyTrustedDeviceToken(good)?.d).toBe("device-1");
+
+    const expired = createTrustedDeviceToken("someone", "device-1", Date.now() - 1_000);
+    expect(verifyTrustedDeviceToken(expired)).toBeNull();
+
+    const tampered = good.slice(0, -2) + "aa";
+    expect(verifyTrustedDeviceToken(tampered)).toBeNull();
+  });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -643,7 +792,7 @@ describe("OAuth SSO MFA challenge handoff", () => {
       await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, u));
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
     }
-    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa:%"));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa%"));
     for (const e of [MASTER_EMAIL, AGENCY_EMAIL]) {
       await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
     }

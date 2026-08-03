@@ -232,6 +232,7 @@ export function createMfaPendingToken(payload: Omit<MfaPendingPayload, "exp">): 
   return `${body}.${sign(body)}`;
 }
 
+export const TRUSTED_DEVICE_COOKIE = "aio_mfa_trust";
 export function verifyMfaPendingToken(token: string): MfaPendingPayload | null {
   if (typeof token !== "string") return null;
   const dot = token.lastIndexOf(".");
@@ -251,4 +252,121 @@ export function verifyMfaPendingToken(token: string): MfaPendingPayload | null {
   } catch {
     return null;
   }
+}
+
+export function verifyTrustedDeviceToken(token: string): TrustedDeviceTokenPayload | null {
+  if (typeof token !== "string") return null;
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = sign(`td:${body}`);
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString()) as TrustedDeviceTokenPayload;
+    if (typeof payload.u !== "string" || !payload.u) return null;
+    if (typeof payload.d !== "string" || !payload.d) return null;
+    if (typeof payload.exp !== "number" || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+interface TrustedDeviceTokenPayload {
+  /** account username */
+  u: string;
+  /** device id */
+  d: string;
+  exp: number;
+}
+
+const trustedKey = (username: string) => `${TRUSTED_PREFIX}${username.trim().toLowerCase()}`;
+
+export async function clearTrustedDevices(username: string): Promise<void> {
+  await db.delete(platformMetaTable).where(eq(platformMetaTable.key, trustedKey(username)));
+}
+
+export const TRUSTED_DEVICE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export async function addTrustedDevice(username: string, label: string): Promise<{ device: TrustedDevice; cookieValue: string }> {
+  const now = Date.now();
+  const device: TrustedDevice = {
+    id: crypto.randomBytes(16).toString("hex"),
+    label: (label || "Unknown device").slice(0, 160),
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + TRUSTED_DEVICE_TTL_MS).toISOString(),
+  };
+  const existing = await listTrustedDevices(username); // also prunes expired
+  await saveTrustedDevices(username, [...existing, device]);
+  return { device, cookieValue: createTrustedDeviceToken(username, device.id, now + TRUSTED_DEVICE_TTL_MS) };
+}
+
+export async function listTrustedDevices(username: string): Promise<TrustedDevice[]> {
+  const [row] = await db
+    .select()
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, trustedKey(username)))
+    .limit(1);
+  if (!row?.value) return [];
+  try {
+    const arr = JSON.parse(row.value);
+    if (!Array.isArray(arr)) return [];
+    const now = Date.now();
+    return arr.filter((d): d is TrustedDevice =>
+      d && typeof d.id === "string" && typeof d.expiresAt === "string" && Date.parse(d.expiresAt) > now,
+    ).map((d) => ({
+      id: d.id,
+      label: typeof d.label === "string" ? d.label : "Unknown device",
+      createdAt: typeof d.createdAt === "string" ? d.createdAt : new Date(0).toISOString(),
+      expiresAt: d.expiresAt,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function createTrustedDeviceToken(username: string, deviceId: string, expMs: number): string {
+  const payload: TrustedDeviceTokenPayload = { u: username.trim().toLowerCase(), d: deviceId, exp: expMs };
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${body}.${sign(`td:${body}`)}`;
+}
+
+export async function isTrustedDevice(username: string, cookieValue: string | undefined): Promise<boolean> {
+  if (!cookieValue) return false;
+  const payload = verifyTrustedDeviceToken(cookieValue);
+  if (!payload || payload.u !== username.trim().toLowerCase()) return false;
+  try {
+    const devices = await listTrustedDevices(username);
+    return devices.some((d) => d.id === payload.d);
+  } catch {
+    return false;
+  }
+}
+
+export interface TrustedDevice {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+async function saveTrustedDevices(username: string, devices: TrustedDevice[]): Promise<void> {
+  const value = JSON.stringify(devices);
+  await db
+    .insert(platformMetaTable)
+    .values({ key: trustedKey(username), value })
+    .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+const TRUSTED_PREFIX = "account:mfa-trusted:";
+
+export async function revokeTrustedDevice(username: string, deviceId: string): Promise<boolean> {
+  const devices = await listTrustedDevices(username);
+  const remaining = devices.filter((d) => d.id !== deviceId);
+  if (remaining.length === devices.length) return false;
+  await saveTrustedDevices(username, remaining);
+  return true;
 }

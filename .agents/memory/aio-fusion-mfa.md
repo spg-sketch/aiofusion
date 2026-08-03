@@ -15,10 +15,11 @@ description: How two-factor login works — mandatory for master (admin) account
 - react-qr-code 2.2.0 ships class typings incompatible with React 19 JSX; re-typed as `React.FC` at the import site in MfaPanels.
 - E2E-test with a disposable seeded admin row; note shell `$`-expansion mangles scrypt hashes when inlining them into `psql "$..."` commands — use execFileSync args.
 - Admin MFA reset: POST `/platform/accounts/reset-mfa` (canManage-guarded, no self-reset, logged `mfa_admin_reset`); UI action in Users admin ⋮ menu.
+- Trusted devices ("remember for 30 days"): opt-in at `/mfa/verify` (`trustDevice: true`) sets signed cookie `aio_mfa_trust` (HMAC, user+device-bound) AND records the device in platform_meta `account:mfa-trusted:<username>` — the cookie only skips the challenge while the device id is still on the stored list, so server-side revocation works despite the stateless cookie. Enrolment can never be skipped. List/revoke via `/mfa/trusted-devices`; disable + admin reset clear the whole list. Both password (`finishLoginOrChallenge`, extra cookie param) and OAuth (`finishOauthLoginOrChallenge`) honour it.
+- The platform-mfa test file was once corrupted by a bad task merge (test bodies interleaved between two suites, undefined vars); if MFA tests fail with ReferenceErrors, suspect merge damage, not the code.
 - react-qr-code's class typings break under React 19 JSX types — MfaPanels casts the import to a function-component signature.
 
 - SSO→MFA redirect (oauth_status=mfa&mfa_token=...) hit the App.tsx URL-param-wipe race: params must be captured in App state (oauthRedirectParams prop → PlatformHomePage) before history-sync strips them. Any NEW redirect query param needs the same capture-in-App treatment.
-
 ## OAuth MFA token handoff (Aug 2026)
 - SSO MFA pending token now handed to frontend via short-lived non-httpOnly cookie `aio_oauth_mfa_token` (10 min, path=/), redirect carries only `?oauth_status=mfa&mfa_mode=...`. Frontend reads once + clears in PlatformHomePage oauth effect.
 - **Why:** keep token out of address bar / browser history / proxy logs.

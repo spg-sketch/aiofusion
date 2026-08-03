@@ -16,12 +16,15 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp";
 import {
   type Session,
   type MfaChallenge,
+  type TrustedDevice,
   serverMfaSetup,
   serverMfaEnable,
   serverMfaVerify,
   serverMfaStatus,
   serverMfaDisable,
   serverMfaRegenerateRecoveryCodes,
+  serverMfaTrustedDevices,
+  serverMfaRevokeTrustedDevice,
 } from "../lib/auth";
 import { vars } from "../marketing/vars";
 
@@ -109,6 +112,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
   const [code, setCode] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Enrolment state
@@ -141,7 +145,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
             setPendingLogin({ session: r.session, needsSetup: r.needsSetup === true });
           }
         })
-      : serverMfaVerify(challenge.mfaToken, entered).then((r) => {
+      : serverMfaVerify(challenge.mfaToken, entered, trustDevice).then((r) => {
           if (!r.ok) { setError(r.error); return; }
           if (typeof r.recoveryCodesRemaining === "number") {
             // A recovery code was consumed — warn about the shrinking supply
@@ -259,6 +263,22 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
         />
       )}
 
+      {!challenge.enroll && (
+        <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={trustDevice}
+            onChange={(e) => setTrustDevice(e.target.checked)}
+            disabled={busy}
+            className="h-4 w-4 rounded cursor-pointer"
+            style={{ accentColor: "#C8497A" }}
+          />
+          <span className="text-[13px] font-light" style={{ color: vars.g500 }}>
+            Trust this device for 30 days — skip the code on this browser
+          </span>
+        </label>
+      )}
+
       {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
@@ -313,12 +333,31 @@ export function MfaSecuritySection({ session }: { session: Session }) {
   // Regenerate recovery codes
   const [regenerating, setRegenerating] = useState(false);
   const [regenCode, setRegenCode] = useState("");
+  // Trusted devices
+  const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   useEffect(() => {
     void serverMfaStatus().then((r) => {
-      if (r.ok) setStatus({ enabled: r.enabled, required: r.required, recoveryCodesRemaining: r.recoveryCodesRemaining });
+      if (r.ok) {
+        setStatus({ enabled: r.enabled, required: r.required, recoveryCodesRemaining: r.recoveryCodesRemaining });
+        if (r.enabled) {
+          void serverMfaTrustedDevices().then((t) => {
+            if (t.ok) setTrustedDevices(t.devices);
+          });
+        }
+      }
     });
   }, [session.username]);
+
+  const revokeDevice = (id: string) => {
+    if (revokingId) return;
+    setRevokingId(id);
+    void serverMfaRevokeTrustedDevice(id).then((r) => {
+      if (r.ok) setTrustedDevices((ds) => ds.filter((d) => d.id !== id));
+      else setError(r.error);
+    }).finally(() => setRevokingId(null));
+  };
 
   const startEnroll = () => {
     setError(null);
@@ -353,6 +392,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
       setDisabling(false);
       setDisableCode("");
       setStatus((s) => s ? { ...s, enabled: false, recoveryCodesRemaining: 0 } : s);
+      setTrustedDevices([]);
     }).finally(() => setBusy(false));
   };
 
@@ -434,6 +474,42 @@ export function MfaSecuritySection({ session }: { session: Session }) {
             </>
           )}
         </p>
+      )}
+
+      {status.enabled && trustedDevices.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: "rgba(255,255,255,0.7)" }}>
+            Trusted devices (skip the code)
+          </p>
+          <div className="space-y-2">
+            {trustedDevices.map((d) => (
+              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-white truncate max-w-[420px]">
+                    {d.label}
+                    {d.current && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.1em]" style={{ background: "rgba(34,197,94,0.25)", color: "#B6F2CB" }}>
+                        This device
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px] font-light" style={{ color: "rgba(255,255,255,0.55)" }}>
+                    Trusted until {new Date(d.expiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => revokeDevice(d.id)}
+                  disabled={revokingId !== null}
+                  className="text-[11px] font-semibold underline underline-offset-2 hover:opacity-70 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.7)" }}
+                >
+                  {revokingId === d.id ? "Removing…" : "Remove"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {(enrolling || recoveryCodes || disabling || regenerating) && (

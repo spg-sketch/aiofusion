@@ -75,6 +75,14 @@ import {
   consumeRecoveryCode,
   createMfaPendingToken,
   verifyMfaPendingToken,
+  TRUSTED_DEVICE_COOKIE,
+  TRUSTED_DEVICE_TTL_MS,
+  isTrustedDevice,
+  addTrustedDevice,
+  listTrustedDevices,
+  revokeTrustedDevice,
+  clearTrustedDevices,
+  verifyTrustedDeviceToken,
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
@@ -292,6 +300,7 @@ async function finishLoginOrChallenge(
   res: Response,
   identity: LoginIdentity,
   rawIp: string | undefined,
+  trustedDeviceCookie?: string,
 ): Promise<void> {
   const isMaster = normalizeRole(identity.role) === "admin";
   let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
@@ -300,6 +309,22 @@ async function finishLoginOrChallenge(
   } catch { /* non-fatal: fall through to challenge rules below */ }
 
   if (mfa?.enabled) {
+    // "Remember this device": a validly signed, unrevoked trusted-device cookie
+    // lets this browser skip the code until it expires or is revoked.
+    if (await isTrustedDevice(identity.username, trustedDeviceCookie)) {
+      const sid = await createPlatformSession(
+        identity.username,
+        makeIpHint(rawIp),
+        identity.userId,
+        identity.activeCompanyId,
+      );
+      setPlatformCookie(res, sid);
+      res.json({
+        account: { username: identity.username, role: identity.role },
+        ...(identity.needsSetup ? { needsSetup: true } : {}),
+      });
+      return;
+    }
     const mfaToken = createMfaPendingToken({
       u: identity.username,
       uid: identity.userId,
@@ -381,6 +406,22 @@ async function finishOauthLoginOrChallenge(
 
   if (mfa?.enabled || isMaster) {
     const mode: "enroll" | "verify" = mfa?.enabled ? "verify" : "enroll";
+    // Trusted device: skip the code for verify-mode challenges only (mandatory
+    // enrolment can never be skipped).
+    if (mode === "verify" && await isTrustedDevice(
+      identity.username,
+      (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE],
+    )) {
+      const sid = await createPlatformSession(
+        identity.username,
+        makeIpHint(req.ip),
+        identity.userId,
+        identity.activeCompanyId,
+      );
+      setPlatformCookie(res, sid);
+      res.redirect(`${origin}/?oauth_status=ok${identity.needsSetup ? "&needs_setup=true" : ""}`);
+      return;
+    }
     const mfaToken = createMfaPendingToken({
       u: identity.username,
       uid: identity.userId,
@@ -468,7 +509,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           userId: newUser.id,
           activeCompanyId,
           needsSetup: loginNeedsSetup,
-        }, rawIp ?? undefined);
+        }, rawIp ?? undefined, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE]);
         return;
       }
     }
@@ -527,7 +568,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       userId,
       activeCompanyId,
       needsSetup: legacyNeedsSetup,
-    }, rawIp ?? undefined);
+    }, rawIp ?? undefined, (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE]);
   } catch {
     res.status(500).json({ error: "Login failed" });
   }
@@ -655,7 +696,25 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       await completeMfaLogin(res, pending, clientIp(req));
       return;
     }
+    // "Trust this device for 30 days": on success, register the device and set
+    // a signed, device-bound cookie so future logins here skip the code.
+    const trustThisDevice = async () => {
+      if (req.body?.trustDevice !== true) return;
+      try {
+        const label = (req.headers["user-agent"] as string | undefined)?.slice(0, 160) || "Unknown device";
+        const { cookieValue } = await addTrustedDevice(pending.u, label);
+        res.cookie(TRUSTED_DEVICE_COOKIE, cookieValue, {
+          httpOnly: true,
+          secure: true,
+          sameSite: "lax",
+          path: "/",
+          maxAge: TRUSTED_DEVICE_TTL_MS,
+        });
+        await logAdminEvent({ username: pending.u }, "mfa_device_trusted", pending.u, "account");
+      } catch { /* non-fatal: login still completes without the trusted cookie */ }
+    };
     if (verifyTotp(state.secret, code)) {
+      await trustThisDevice();
       await completeMfaLogin(res, pending, clientIp(req));
       return;
     }
@@ -664,6 +723,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
     if (remaining !== null) {
       await saveMfaState(pending.u, { ...state, recoveryHashes: remaining });
       await logAdminEvent({ username: pending.u }, "mfa_recovery_code_used", pending.u, "account");
+      await trustThisDevice();
       await completeMfaLogin(res, pending, clientIp(req), { recoveryCodesRemaining: remaining.length });
       return;
     }
@@ -709,6 +769,8 @@ router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, r
       return;
     }
     await clearMfaState(account.username);
+    try { await clearTrustedDevices(account.username); } catch { /* non-fatal */ }
+    res.clearCookie(TRUSTED_DEVICE_COOKIE, { path: "/" });
     await logAdminEvent({ username: account.username }, "mfa_disabled", account.username, "account");
     res.json({ ok: true });
   } catch {
@@ -743,6 +805,54 @@ router.post("/platform/mfa/recovery-codes", requirePlatformAuth, async (req: Req
     res.json({ ok: true, recoveryCodes });
   } catch {
     res.status(500).json({ error: "Could not regenerate recovery codes" });
+  }
+});
+
+// --- Trusted devices (skip the two-factor code on remembered browsers) --------
+
+// List this account's trusted devices; flags the one matching the current
+// browser's cookie so the UI can label it "this device".
+router.get("/platform/mfa/trusted-devices", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    const devices = await listTrustedDevices(account.username);
+    const cookie = (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE];
+    const payload = cookie ? verifyTrustedDeviceToken(cookie) : null;
+    const currentId = payload && payload.u === normUsername(account.username) ? payload.d : null;
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      devices: devices.map((d) => ({
+        id: d.id,
+        label: d.label,
+        createdAt: d.createdAt,
+        expiresAt: d.expiresAt,
+        current: d.id === currentId,
+      })),
+    });
+  } catch {
+    res.status(500).json({ error: "Could not load trusted devices" });
+  }
+});
+
+// Revoke a trusted device. Subsequent logins from that browser will require a
+// code again, even though its cookie has not expired.
+router.delete("/platform/mfa/trusted-devices/:id", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    const id = typeof req.params.id === "string" ? req.params.id : "";
+    const removed = await revokeTrustedDevice(account.username, id);
+    if (!removed) {
+      res.status(404).json({ error: "That device is no longer on your trusted list." });
+      return;
+    }
+    // If the revoked device is this browser, drop its cookie too.
+    const cookie = (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE];
+    const payload = cookie ? verifyTrustedDeviceToken(cookie) : null;
+    if (payload && payload.d === id) res.clearCookie(TRUSTED_DEVICE_COOKIE, { path: "/" });
+    await logAdminEvent({ username: account.username }, "mfa_device_revoked", account.username, "account");
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Could not remove the trusted device" });
   }
 });
 
@@ -2468,6 +2578,7 @@ router.post(
         return;
       }
       await clearMfaState(target);
+      try { await clearTrustedDevices(target); } catch { /* non-fatal */ }
       // Security alert to the affected user (fail-soft: never blocks the reset).
       // The recipient must be the workspace OWNER (or the canonical account
       // contact email) — never an arbitrary/latest team member, who could

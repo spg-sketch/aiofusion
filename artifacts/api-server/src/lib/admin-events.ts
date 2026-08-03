@@ -23,6 +23,8 @@ export type AdminAction =
   | "mfa_enabled"
   | "mfa_disabled"
   | "mfa_admin_reset"
+  | "mfa_device_trusted"
+  | "mfa_device_revoked"
   | "mfa_recovery_code_used"
   | "mfa_recovery_codes_regenerated"
   | "switch_to_master"

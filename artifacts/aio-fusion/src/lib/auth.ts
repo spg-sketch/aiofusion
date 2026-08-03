@@ -836,11 +836,12 @@ export type LoginResult =
 export async function serverMfaVerify(
   mfaToken: string,
   code: string,
+  trustDevice?: boolean,
 ): Promise<
   | { ok: true; session: Session; needsSetup?: boolean; recoveryCodesRemaining?: number }
   | { ok: false; error: string }
 > {
-  const { ok, json } = await postJson("/api/platform/mfa/verify", { mfaToken, code });
+  const { ok, json } = await postJson("/api/platform/mfa/verify", { mfaToken, code, ...(trustDevice ? { trustDevice: true } : {}) });
   if (!ok || !json?.account) return { ok: false, error: json?.error || "That code is not valid." };
   const done = await finishLogin(json);
   // Present only when a recovery code (not a TOTP code) was used for this login.
@@ -849,6 +850,13 @@ export async function serverMfaVerify(
   return recoveryCodesRemaining === undefined ? done : { ...done, recoveryCodesRemaining };
 }
 
+export type TrustedDevice = {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+};
 export async function serverMfaSetup(
   mfaToken?: string,
 ): Promise<{ ok: true; secret: string; otpauthUrl: string } | { ok: false; error: string }> {
@@ -978,5 +986,32 @@ export async function serverGetInviteInfo(token: string): Promise<{ ok: boolean;
     return { ok: true, invite: json as InviteInfo };
   } catch {
     return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverMfaTrustedDevices(): Promise<
+  { ok: true; devices: TrustedDevice[] } | { ok: false; error: string }
+> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/mfa/trusted-devices`, { credentials: "include" });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok) return { ok: false, error: json?.error || "Could not load trusted devices." };
+    return { ok: true, devices: Array.isArray(json?.devices) ? json.devices : [] };
+  } catch {
+    return { ok: false, error: "Could not load trusted devices." };
+  }
+}
+
+export async function serverMfaRevokeTrustedDevice(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/mfa/trusted-devices/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok) return { ok: false, error: json?.error || "Could not remove the trusted device." };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not remove the trusted device." };
   }
 }
