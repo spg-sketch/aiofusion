@@ -24,6 +24,7 @@ vi.mock("@workspace/db", async () => {
       google_id varchar(255) UNIQUE,
       microsoft_id varchar(255) UNIQUE,
       session_version integer NOT NULL DEFAULT 0,
+      email_verified boolean,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_companies (
@@ -39,6 +40,7 @@ vi.mock("@workspace/db", async () => {
       display_name varchar(128),
       free_access boolean NOT NULL DEFAULT false,
       status varchar NOT NULL DEFAULT 'active',
+      setup_complete boolean,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
@@ -138,6 +140,12 @@ vi.mock("@workspace/db", async () => {
       created_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS platform_email_verifications (
+      token        varchar(64) PRIMARY KEY,
+      user_id      uuid NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+      expires_at   timestamptz NOT NULL,
+      used_at      timestamptz
+    );
     CREATE TABLE IF NOT EXISTS admin_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       actor_id varchar,
@@ -198,6 +206,7 @@ vi.mock("../middleware/platform-auth", () => ({
 
 // Prevent real emails firing during tests — all notify-email functions are no-ops
 vi.mock("../lib/notify-email", () => ({
+  getAppBaseUrl: () => "https://test.example.com",
   sendNewSignupAlert: () => Promise.resolve(),
   sendApprovalEmail: () => Promise.resolve(),
   sendSpikeAlert: () => Promise.resolve(),
@@ -209,6 +218,7 @@ vi.mock("../lib/notify-email", () => ({
   sendEnquiryConfirmation: () => Promise.resolve(),
   sendSupportTicketAlert: () => Promise.resolve(),
   sendSupportTicketAck: () => Promise.resolve(),
+  sendVerificationEmail: () => Promise.resolve(),
 }));
 
 import {
@@ -478,7 +488,7 @@ describe("POST /api/platform/signup", () => {
     return { status: res.status, body: await res.json() as Record<string, unknown>, setCookies: res.headers.getSetCookie?.() ?? [] };
   }
 
-  it("returns 201 with username and role, and sets a session cookie", async () => {
+  it("returns 201 with needsVerification:true and email (no session cookie)", async () => {
     const { status, body, setCookies } = await signup({
       name: "Alice Agency",
       email: EMAIL,
@@ -487,10 +497,10 @@ describe("POST /api/platform/signup", () => {
     });
     expect(status).toBe(201);
     expect(body.ok).toBe(true);
-    expect(typeof body.username).toBe("string");
-    expect(body.role).toBe("agency");
-    // Server must set a session cookie so the user is immediately logged in.
-    expect(setCookies.some((c) => c.startsWith("aio_sid="))).toBe(true);
+    // Email verification is now required — no immediate session.
+    expect(body.needsVerification).toBe(true);
+    expect(body.email).toBe(EMAIL);
+    expect(setCookies.some((c) => c.startsWith("aio_sid="))).toBe(false);
   });
 
   it("creates a platform_accounts row with status active (no approval gate)", async () => {
@@ -512,14 +522,20 @@ describe("POST /api/platform/signup", () => {
   });
 
   it("creates a platform_users row linked to the new account", async () => {
-    const { body } = await signup({
+    await signup({
       name: "Carol Company",
       email: EMAIL,
       companyName: "Carol Inc",
       password: "supersecure123",
     });
 
-    const username = body.username as string;
+    // Look up the company slug from the accounts table (body no longer returns it).
+    const accounts = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    expect(accounts.length).toBe(1);
+    const username = accounts[0]!.username;
 
     const users = await db
       .select()

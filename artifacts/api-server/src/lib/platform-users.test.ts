@@ -23,6 +23,7 @@ vi.mock("@workspace/db", async () => {
       google_id varchar(255) UNIQUE,
       microsoft_id varchar(255) UNIQUE,
       session_version integer NOT NULL DEFAULT 0,
+      email_verified boolean,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_companies (
@@ -38,6 +39,7 @@ vi.mock("@workspace/db", async () => {
       display_name varchar(128),
       free_access boolean NOT NULL DEFAULT false,
       status varchar NOT NULL DEFAULT 'active',
+      setup_complete boolean,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_memberships (
