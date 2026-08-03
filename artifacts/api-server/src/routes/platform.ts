@@ -692,6 +692,36 @@ router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, r
   }
 });
 
+// Replace recovery codes with 10 fresh ones. Requires MFA to be enabled and a
+// currently-valid TOTP code (recovery codes are NOT accepted here — a stolen
+// recovery code must not be able to mint fresh ones). Returns the new codes
+// exactly once; all previously-issued codes stop working immediately.
+router.post("/platform/mfa/recovery-codes", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    const state = await getMfaState(account.username);
+    if (!state?.enabled) {
+      res.status(400).json({ error: "Two-factor authentication is not enabled." });
+      return;
+    }
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    if (!verifyTotp(state.secret, code)) {
+      res.status(401).json({ error: "Enter a valid code from your authenticator app to regenerate recovery codes." });
+      return;
+    }
+    const recoveryCodes = generateRecoveryCodes();
+    await saveMfaState(account.username, {
+      ...state,
+      recoveryHashes: recoveryCodes.map(hashRecoveryCode),
+    });
+    await logAdminEvent({ username: account.username }, "mfa_recovery_codes_regenerated", account.username, "account");
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true, recoveryCodes });
+  } catch {
+    res.status(500).json({ error: "Could not regenerate recovery codes" });
+  }
+});
+
 // --- Self-serve sign-up (public, no auth required) --------------------------
 //
 // Creates a new active agency account and logs the user in immediately.

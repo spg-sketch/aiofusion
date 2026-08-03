@@ -24,6 +24,7 @@ export type AdminAction =
   | "mfa_disabled"
   | "mfa_admin_reset"
   | "mfa_recovery_code_used"
+  | "mfa_recovery_codes_regenerated"
   | "switch_to_master"
   | "team_invite_sent"
   | "team_member_removed";

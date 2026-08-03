@@ -34,4 +34,5 @@
 - [AIO Fusion team invites + membership roles](aio-fusion-team-invites.md) — 5-tier member roles ride on the session; createPlatformSession revokes per user_id NOT per slug; blockReadOnlyMembers must stay path-scoped.
 - [AIO Fusion password reset](aio-fusion-password-reset.md) — passwords live in BOTH platform_users and legacy platform_accounts (sync both); App.tsx history-sync wipes URL query params before lazy pages mount, capture email-link params in App state.
 - [AIO Fusion login/SSO overhaul Steps 1–4](aio-fusion-login-sso-overhaul.md) — schema v2 columns, session_version fast revocation, pending_approval gate removed; PGlite DDL + cookie name `aio_sid` pitfalls; Steps 5–8 still pending.
+- [Scrambled semantic-merge test files](aio-fusion-scrambled-merge-tests.md) — if a rebase-conflict file fails tests, the incoming main version may itself be spliced/broken; rebuild from last coherent commit.
 - [AIO Fusion MFA (TOTP)](aio-fusion-mfa.md) — state in platform_meta not platform_users (legacy admin has no users row); stateless HMAC pending-token login two-step; SSO logins bypass MFA.

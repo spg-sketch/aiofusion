@@ -21,6 +21,7 @@ import {
   serverMfaVerify,
   serverMfaStatus,
   serverMfaDisable,
+  serverMfaRegenerateRecoveryCodes,
 } from "../lib/auth";
 import { vars } from "../marketing/vars";
 
@@ -264,6 +265,9 @@ export function MfaSecuritySection({ session }: { session: Session }) {
   // Disable
   const [disabling, setDisabling] = useState(false);
   const [disableCode, setDisableCode] = useState("");
+  // Regenerate recovery codes
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenCode, setRegenCode] = useState("");
 
   useEffect(() => {
     void serverMfaStatus().then((r) => {
@@ -304,6 +308,19 @@ export function MfaSecuritySection({ session }: { session: Session }) {
       setDisabling(false);
       setDisableCode("");
       setStatus((s) => s ? { ...s, enabled: false, recoveryCodesRemaining: 0 } : s);
+    }).finally(() => setBusy(false));
+  };
+
+  const confirmRegenerate = () => {
+    if (busy || regenCode.length < 6) return;
+    setError(null);
+    setBusy(true);
+    void serverMfaRegenerateRecoveryCodes(regenCode).then((r) => {
+      if (!r.ok) { setError(r.error); return; }
+      setRegenerating(false);
+      setRegenCode("");
+      setRecoveryCodes(r.recoveryCodes);
+      setStatus((s) => s ? { ...s, recoveryCodesRemaining: r.recoveryCodes.length } : s);
     }).finally(() => setBusy(false));
   };
 
@@ -354,10 +371,23 @@ export function MfaSecuritySection({ session }: { session: Session }) {
       {status.enabled && (
         <p className="mt-2 text-[12px] font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
           {status.recoveryCodesRemaining} recovery code{status.recoveryCodesRemaining === 1 ? "" : "s"} remaining.
+          {!regenerating && !recoveryCodes && (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={() => { setRegenerating(true); setDisabling(false); setError(null); }}
+                className="font-semibold underline underline-offset-2 hover:opacity-70"
+                style={{ color: "rgba(255,255,255,0.85)" }}
+              >
+                Regenerate
+              </button>
+            </>
+          )}
         </p>
       )}
 
-      {(enrolling || recoveryCodes || disabling) && (
+      {(enrolling || recoveryCodes || disabling || regenerating) && (
         <div className="mt-4 rounded-xl p-5 bg-white">
           {recoveryCodes ? (
             <RecoveryCodesBlock codes={recoveryCodes} doneLabel="Done" onDone={() => setRecoveryCodes(null)} />
@@ -390,6 +420,28 @@ export function MfaSecuritySection({ session }: { session: Session }) {
                   {busy && <Loader2 size={13} className="animate-spin" />} Verify & enable
                 </button>
                 <button type="button" onClick={() => { setEnrolling(false); setCode(""); setError(null); }} className="text-[12px] font-semibold hover:opacity-70" style={{ color: vars.g400 }}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : regenerating ? (
+            <>
+              <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g500 }}>
+                Enter the 6-digit code from your authenticator app to generate 10 fresh recovery codes. Your old recovery codes will stop working immediately.
+              </p>
+              <div className="mb-4"><OtpBoxes value={regenCode} onChange={setRegenCode} onComplete={confirmRegenerate} disabled={busy} /></div>
+              {error && <p className="text-[13px] font-semibold mb-3" style={{ color: vars.red }}>{error}</p>}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={confirmRegenerate}
+                  disabled={busy || regenCode.length < 6}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:brightness-110 disabled:opacity-50"
+                  style={{ background: "#C8497A" }}
+                >
+                  {busy && <Loader2 size={13} className="animate-spin" />} Regenerate codes
+                </button>
+                <button type="button" onClick={() => { setRegenerating(false); setRegenCode(""); setError(null); }} className="text-[12px] font-semibold hover:opacity-70" style={{ color: vars.g400 }}>
                   Cancel
                 </button>
               </div>

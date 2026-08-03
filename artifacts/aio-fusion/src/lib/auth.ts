@@ -847,6 +847,15 @@ export async function serverMfaSetup(
   return { ok: true, secret: json.secret, otpauthUrl: json.otpauthUrl };
 }
 
+export async function serverMfaRegenerateRecoveryCodes(
+  code: string,
+): Promise<{ ok: true; recoveryCodes: string[] } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/mfa/recovery-codes", { code });
+  if (!ok || !Array.isArray(json?.recoveryCodes)) {
+    return { ok: false, error: json?.error || "Could not regenerate recovery codes." };
+  }
+  return { ok: true, recoveryCodes: json.recoveryCodes };
+}
 export async function serverMfaDisable(code: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/mfa/disable", { code });
   if (!ok) return { ok: false, error: json?.error || "Could not disable two-factor authentication." };

@@ -282,36 +282,28 @@ describe("MFA login flow", () => {
   let server: Server;
   let baseUrl: string;
 
-  const realFetch = globalThis.fetch;
-
   beforeEach(async () => {
     actorOverride = null;
     const ph = hashPassword(PASSWORD);
     await db.insert(platformAccountsTable).values([
-      { username: GOOGLE_MASTER, passwordHash: ph, role: "admin", status: "active", email: MASTER_EMAIL },
-      { username: GOOGLE_AGENCY, passwordHash: ph, role: "agency", status: "active", email: AGENCY_EMAIL },
+      { username: MASTER, passwordHash: ph, role: "admin", status: "active" },
+      { username: AGENCY, passwordHash: ph, role: "agency", status: "active" },
     ]);
     ({ server, baseUrl } = await startServer());
   });
 
   afterEach(async () => {
-    globalThis.fetch = realFetch;
-    delete process.env.GOOGLE_CLIENT_ID;
-    delete process.env.GOOGLE_CLIENT_SECRET;
     await stopServer(server);
-    for (const u of [GOOGLE_MASTER, GOOGLE_AGENCY]) {
+    for (const u of [MASTER, AGENCY]) {
       await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, u));
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
     }
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa:%"));
-    for (const e of [MASTER_EMAIL, AGENCY_EMAIL]) {
-      await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
-    }
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, "mfa@example.com"));
   });
 
-  it("redirects a master SSO login to MFA enrolment instead of issuing a session", async () => {
-    stubGoogle(MASTER_EMAIL);
-    const r = await runCallback();
+  it("forces TOTP enrolment on first master login (no session issued)", async () => {
+    const r = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
     expect(r.status).toBe(200);
     expect(r.json.mfaEnrollRequired).toBe(true);
     expect(typeof r.json.mfaToken).toBe("string");
@@ -320,15 +312,15 @@ describe("MFA login flow", () => {
   });
 
   it("completes master enrolment: setup -> enable issues session + recovery codes", async () => {
-    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
-    const token = r.location.searchParams.get("mfa_token")!;
+    const login = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
+    const token = login.json.mfaToken as string;
 
-    const setup = await post(baseUrl, "/api/platform/mfa/setup", {});
+    const setup = await post(baseUrl, "/api/platform/mfa/setup", { mfaToken: token });
     expect(setup.status).toBe(200);
     expect(setup.json.otpauthUrl).toContain("otpauth://totp/");
-    const secret = generateTotpSecret();
+    const secret = setup.json.secret as string;
 
-    const enable = await post(baseUrl, "/api/platform/mfa/enable", { code: totpCode(setup.json.secret) });
+    const enable = await post(baseUrl, "/api/platform/mfa/enable", { mfaToken: token, code: totpCode(secret) });
     expect(enable.status).toBe(200);
     expect(enable.json.account?.username).toBe(MASTER);
     expect(Array.isArray(enable.json.recoveryCodes)).toBe(true);
@@ -340,68 +332,65 @@ describe("MFA login flow", () => {
   });
 
   it("rejects enrolment confirmation with a wrong code", async () => {
-    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
-    const token = r.location.searchParams.get("mfa_token")!;
+    const login = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
+    const token = login.json.mfaToken as string;
     await post(baseUrl, "/api/platform/mfa/setup", { mfaToken: token });
-    const enable = await post(baseUrl, "/api/platform/mfa/enable", { code: totpCode(setup.json.secret) });
+    const enable = await post(baseUrl, "/api/platform/mfa/enable", { mfaToken: token, code: "000000" });
     expect(enable.status).toBe(401);
   });
 
   it("requires TOTP verification on subsequent master logins", async () => {
     const secret = generateTotpSecret();
-    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
-    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
+
+    const login = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
     expect(login.json.mfaRequired).toBe(true);
     expect(login.setCookie ?? "").not.toMatch(/aio_sid=/);
 
-    const bad = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: "000000" });
+    const bad = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login.json.mfaToken, code: "123456" });
     expect(bad.status).toBe(401);
-    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
+
+    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login.json.mfaToken, code: totpCode(secret) });
     expect(good.status).toBe(200);
-    expect(good.json.account?.username).toBe(GOOGLE_MASTER);
+    expect(good.json.account?.username).toBe(MASTER);
     expect(good.setCookie).toMatch(/aio_sid=/);
   });
 
-  it("challenges an MFA-enabled non-master SSO login too", async () => {
+  it("accepts a recovery code exactly once", async () => {
     const secret = generateTotpSecret();
     const recovery = "ABCD-EFGH";
     await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [hashRecoveryCode(recovery)] });
 
     const login1 = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
-    const ok = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
+    const ok = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login1.json.mfaToken, code: recovery });
     expect(ok.status).toBe(200);
     expect(ok.json.recoveryCodesRemaining).toBe(0);
 
     const login2 = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
-    const again = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
+    const again = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login2.json.mfaToken, code: recovery });
     expect(again.status).toBe(401);
   });
 
   it("rejects a tampered pending token", async () => {
-    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const login = await post(baseUrl, "/api/platform/login", { username: MASTER, password: PASSWORD });
     const tampered = (login.json.mfaToken as string).slice(0, -2) + "aa";
-    const r = await runCallback();
-    expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
-    expect(r.location.searchParams.get("mfa_mode")).toBe("verify");
-    expect(r.setCookie).not.toMatch(/aio_sid=/);
+    const r = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: tampered, code: "123456" });
+    expect(r.status).toBe(401);
   });
 
-  it("issues a session directly for a non-master without MFA", async () => {
-    stubGoogle(AGENCY_EMAIL);
-    const r = await runCallback();
-    expect(r.status).toBeGreaterThanOrEqual(300);
-    expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
-    expect(r.location.searchParams.get("mfa_mode")).toBe("enroll");
-    expect(r.location.searchParams.get("mfa_token")).toBeTruthy();
-    expect(r.setCookie).not.toMatch(/aio_sid=/);
+  it("non-master login without MFA gets a session directly", async () => {
+    const r = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    expect(r.status).toBe(200);
+    expect(r.json.account?.username).toBe(AGENCY);
+    expect(r.setCookie).toMatch(/aio_sid=/);
   });
 
-  it("challenges an MFA-enabled master with verify mode; token completes login via /mfa/verify", async () => {
+  it("non-master with MFA enabled is challenged on login", async () => {
     const secret = generateTotpSecret();
     await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
     const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
     expect(login.json.mfaRequired).toBe(true);
-    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
+    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: login.json.mfaToken, code: totpCode(secret) });
     expect(good.status).toBe(200);
     expect(good.json.account?.username).toBe(AGENCY);
   });
@@ -422,11 +411,12 @@ describe("MFA login flow", () => {
 
   it("admin can reset a locked-out user's MFA; self-reset and non-managers are rejected", async () => {
     const secret = generateTotpSecret();
-    await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
     await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+    await saveMfaState(MASTER, { secret, enabled: true, recoveryHashes: [] });
 
-    actorOverride = { username: MASTER, role: "admin" };
-    const denied = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
+    // Non-manager (agency) cannot reset the master's MFA.
+    actorOverride = { username: AGENCY, role: "agency" };
+    const denied = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: MASTER });
     expect(denied.status).toBe(403);
 
     // Actor cannot reset their own MFA via the admin endpoint.
@@ -435,7 +425,7 @@ describe("MFA login flow", () => {
     expect(self.status).toBe(400);
 
     // Admin resets the agency's MFA; state is cleared and password-only login works again.
-    const ok = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
+    const ok = await post(baseUrl, "/api/platform/accounts/reset-mfa", { username: AGENCY });
     expect(ok.status).toBe(200);
     expect(await getMfaState(AGENCY)).toBeNull();
 
@@ -470,6 +460,34 @@ describe("MFA login flow", () => {
     expect(ok.status).toBe(200);
     expect(await getMfaState(AGENCY)).toBeNull();
   });
+
+  it("regenerates recovery codes with a valid TOTP; old codes stop working", async () => {
+    const secret = generateTotpSecret();
+    const oldCode = "ABCD-EFGH";
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [hashRecoveryCode(oldCode)] });
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    // Recovery codes are not accepted as the confirmation code.
+    const viaRecovery = await post(baseUrl, "/api/platform/mfa/recovery-codes", { code: oldCode });
+    expect(viaRecovery.status).toBe(401);
+    const wrong = await post(baseUrl, "/api/platform/mfa/recovery-codes", { code: "000000" });
+    expect(wrong.status).toBe(401);
+
+    const ok = await post(baseUrl, "/api/platform/mfa/recovery-codes", { code: totpCode(secret) });
+    expect(ok.status).toBe(200);
+    expect(ok.json.recoveryCodes.length).toBe(10);
+
+    const state = await getMfaState(AGENCY);
+    expect(state?.recoveryHashes.length).toBe(10);
+    expect(state?.recoveryHashes).not.toContain(hashRecoveryCode(oldCode));
+    expect(state?.recoveryHashes).toContain(hashRecoveryCode(ok.json.recoveryCodes[0]));
+  });
+
+  it("refuses regeneration when MFA is not enabled", async () => {
+    actorOverride = { username: AGENCY, role: "agency" };
+    const r = await post(baseUrl, "/api/platform/mfa/recovery-codes", { code: "000000" });
+    expect(r.status).toBe(400);
+  });
 });
 
 describe("TOTP + token primitives", () => {
@@ -486,20 +504,30 @@ describe("TOTP + token primitives", () => {
 
   it("pending tokens expire and fail on payload tampering", async () => {
     const { createMfaPendingToken, verifyMfaPendingToken } = await import("../lib/mfa");
-    const token = r.location.searchParams.get("mfa_token")!;
+    const token = createMfaPendingToken({ u: "x", role: "admin", mode: "verify" });
     expect(verifyMfaPendingToken(token)?.u).toBe("x");
     const [body] = token.split(".");
     const forgedBody = Buffer.from(JSON.stringify({ u: "admin", role: "admin", mode: "verify", exp: Date.now() + 60000 })).toString("base64url");
-    expect(r.location.searchParams.get("oauth_status")).toBe("ok");
-    expect(r.setCookie).toMatch(/aio_sid=/);
+    expect(verifyMfaPendingToken(`${forgedBody}.${token.split(".")[1]}`)).toBeNull();
+    expect(verifyMfaPendingToken(body!)).toBeNull();
   });
 });
 
-  const GOOGLE_AGENCY = "oauth-agency";
+// ---------------------------------------------------------------------------
+// SSO logins route through the MFA challenge (redirect variant)
+// ---------------------------------------------------------------------------
 
+describe("SSO MFA challenge (Google callback)", () => {
+  let server: Server;
+  let baseUrl: string;
+
+  const GOOGLE_MASTER = "oauth-master";
+  const GOOGLE_AGENCY = "oauth-agency";
+  const MASTER_EMAIL = "oauth-master@example.com";
+  const AGENCY_EMAIL = "oauth-agency@example.com";
   const STATE = "test-oauth-state";
 
-  const AGENCY_EMAIL = "oauth-agency@example.com";
+  const realFetch = globalThis.fetch;
 
   function stubGoogle(email: string) {
     globalThis.fetch = (async (input: any, init?: any) => {
@@ -523,6 +551,73 @@ describe("TOTP + token primitives", () => {
     return { status: res.status, location: new URL(loc, baseUrl), setCookie: res.headers.get("set-cookie") ?? "" };
   }
 
-  const MASTER_EMAIL = "oauth-master@example.com";
+  beforeEach(async () => {
+    actorOverride = null;
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    const ph = hashPassword(PASSWORD);
+    await db.insert(platformAccountsTable).values([
+      { username: GOOGLE_MASTER, passwordHash: ph, role: "admin", status: "active", email: MASTER_EMAIL },
+      { username: GOOGLE_AGENCY, passwordHash: ph, role: "agency", status: "active", email: AGENCY_EMAIL },
+    ]);
+    ({ server, baseUrl } = await startServer());
+  });
 
-  const GOOGLE_MASTER = "oauth-master";
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    await stopServer(server);
+    for (const u of [GOOGLE_MASTER, GOOGLE_AGENCY]) {
+      await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, u));
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
+    }
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa:%"));
+    for (const e of [MASTER_EMAIL, AGENCY_EMAIL]) {
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
+    }
+  });
+
+  it("redirects a master SSO login to MFA enrolment instead of issuing a session", async () => {
+    stubGoogle(MASTER_EMAIL);
+    const r = await runCallback();
+    expect(r.status).toBeGreaterThanOrEqual(300);
+    expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
+    expect(r.location.searchParams.get("mfa_mode")).toBe("enroll");
+    expect(r.location.searchParams.get("mfa_token")).toBeTruthy();
+    expect(r.setCookie).not.toMatch(/aio_sid=/);
+  });
+
+  it("issues a session directly for a non-master without MFA", async () => {
+    stubGoogle(AGENCY_EMAIL);
+    const r = await runCallback();
+    expect(r.status).toBeGreaterThanOrEqual(300);
+    expect(r.location.searchParams.get("oauth_status")).toBe("ok");
+    expect(r.setCookie).toMatch(/aio_sid=/);
+  });
+
+  it("challenges an MFA-enabled non-master SSO login too", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(GOOGLE_AGENCY, { secret, enabled: true, recoveryHashes: [] });
+    stubGoogle(AGENCY_EMAIL);
+    const r = await runCallback();
+    expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
+    expect(r.location.searchParams.get("mfa_mode")).toBe("verify");
+    expect(r.setCookie).not.toMatch(/aio_sid=/);
+  });
+
+  it("challenges an MFA-enabled master with verify mode; token completes login via /mfa/verify", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(GOOGLE_MASTER, { secret, enabled: true, recoveryHashes: [] });
+    stubGoogle(MASTER_EMAIL);
+    const r = await runCallback();
+    expect(r.location.searchParams.get("oauth_status")).toBe("mfa");
+    expect(r.location.searchParams.get("mfa_mode")).toBe("verify");
+    const token = r.location.searchParams.get("mfa_token")!;
+
+    const good = await post(baseUrl, "/api/platform/mfa/verify", { mfaToken: token, code: totpCode(secret) });
+    expect(good.status).toBe(200);
+    expect(good.json.account?.username).toBe(GOOGLE_MASTER);
+    expect(good.setCookie).toMatch(/aio_sid=/);
+  });
+});
