@@ -567,18 +567,21 @@ export async function serverSelfDeleteAccount(
   return { ok: true };
 }
 
-// Self-serve sign-up. Creates a pending_approval agency account. Returns a
-// special status value so the caller can show the right holding screen.
+// Self-serve sign-up. Creates an active agency account, logs the user in
+// immediately (server sets the session cookie), and returns the new session.
 export async function serverSignUp(data: {
   name: string;
   email: string;
   companyName: string;
   website?: string;
   password: string;
-}): Promise<{ ok: true; status: "pending_approval" } | { ok: false; error: string }> {
+}): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/signup", data);
   if (!ok) return { ok: false, error: json?.error || "Sign-up failed. Please try again." };
-  return { ok: true, status: "pending_approval" };
+  const session: Session = { username: json.username, role: json.role ?? "agency" };
+  setSession(session);
+  await refreshAccountsCache();
+  return { ok: true, session };
 }
 
 export type PendingAccount = {

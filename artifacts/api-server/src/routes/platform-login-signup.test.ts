@@ -475,11 +475,11 @@ describe("POST /api/platform/signup", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    return { status: res.status, body: await res.json() as Record<string, unknown> };
+    return { status: res.status, body: await res.json() as Record<string, unknown>, setCookies: res.headers.getSetCookie?.() ?? [] };
   }
 
-  it("returns 201 with username and pending_approval status", async () => {
-    const { status, body } = await signup({
+  it("returns 201 with username and role, and sets a session cookie", async () => {
+    const { status, body, setCookies } = await signup({
       name: "Alice Agency",
       email: EMAIL,
       companyName: "Alice Corp",
@@ -488,10 +488,12 @@ describe("POST /api/platform/signup", () => {
     expect(status).toBe(201);
     expect(body.ok).toBe(true);
     expect(typeof body.username).toBe("string");
-    expect(body.status).toBe("pending_approval");
+    expect(body.role).toBe("agency");
+    // Server must set a session cookie so the user is immediately logged in.
+    expect(setCookies.some((c) => c.startsWith("aio_sid="))).toBe(true);
   });
 
-  it("creates a platform_accounts row with status pending_approval", async () => {
+  it("creates a platform_accounts row with status active (no approval gate)", async () => {
     await signup({
       name: "Bob Builder",
       email: EMAIL,
@@ -505,7 +507,7 @@ describe("POST /api/platform/signup", () => {
       .where(eq(platformAccountsTable.email, EMAIL));
 
     expect(accounts.length).toBe(1);
-    expect(accounts[0]!.status).toBe("pending_approval");
+    expect(accounts[0]!.status).toBe("active");
     expect(accounts[0]!.role).toBe("agency");
   });
 
@@ -742,8 +744,9 @@ describe("GET /api/platform/auth/google/callback", () => {
     expect(users[0]!.googleId).toBe(GOOGLE_ID);
   });
 
-  it("redirects to /?oauth_status=pending for a brand-new Google sign-up (no account)", async () => {
-    // No account in the DB — this is a first-time Google user.
+  it("registers and immediately logs in a brand-new Google sign-up (redirects to oauth_status=ok)", async () => {
+    // No account in the DB — this is a first-time Google user. They should be
+    // created as active and redirected to oauth_status=ok, not oauth_status=pending.
     vi.stubGlobal(
       "fetch",
       makeFetchStub(
@@ -758,7 +761,11 @@ describe("GET /api/platform/auth/google/callback", () => {
       headers: { Cookie: `aio_oauth_state=${OAUTH_STATE}` },
     });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location") ?? "").toContain("oauth_status=pending");
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("oauth_status=ok");
+    // Must set a session cookie so the user is immediately logged in.
+    const allCookies = res.headers.getSetCookie?.() ?? [];
+    expect(allCookies.some((c) => c.startsWith("aio_sid="))).toBe(true);
 
     // Cleanup the auto-created account row.
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.email, "brand-new@example.com"));

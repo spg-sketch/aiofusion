@@ -80,10 +80,7 @@ function PlatformHomePage({
       }
       return;
     }
-    if (status === "pending") {
-      setSignupDone(true);
-      setShowSignup(false);
-    } else if (status === "suspended") {
+    if (status === "suspended") {
       setLoginError("Your account has been suspended. Please contact support.");
     } else if (status === "error") {
       const msg = params.get("oauth_msg") ?? "unknown";
@@ -114,7 +111,7 @@ function PlatformHomePage({
       password: signupPassword,
     }).then((r) => {
       if (r.ok) {
-        setSignupDone(true);
+        onLoginSuccess(r.session);
       } else {
         setSignupError(r.error);
       }
@@ -202,30 +199,7 @@ function PlatformHomePage({
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
 
-            {/* Pending approval success screen */}
-            {signupDone ? (
-              <div className="flex flex-col items-center text-center py-6 gap-5">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.15)" }}>
-                  <CheckCircle2 size={32} color="white" />
-                </div>
-                <div>
-                  <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Application received</h2>
-                  <p className="text-[15px] font-light max-w-lg leading-[1.7]" style={{ color: "rgba(255,255,255,0.85)" }}>
-                    Thanks for signing up. Your account is now <strong style={{ color: "white" }}>pending approval</strong> — we'll review your application and you'll receive an email once it's been approved.
-                  </p>
-                  <p className="text-[13px] mt-3 font-light" style={{ color: "rgba(255,255,255,0.6)" }}>
-                    Keep an eye on your inbox — we'll email you as soon as your account is ready.
-                  </p>
-                </div>
-                <button
-                  onClick={() => { setSignupDone(false); setShowSignup(false); }}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110"
-                  style={{ background: accent, color: "white" }}
-                >
-                  <LogIn size={15} /> Back to sign in
-                </button>
-              </div>
-            ) : showSignup ? (
+            {showSignup ? (
               /* --- SIGN-UP FORM --- */
               <>
                 <div className="flex items-center justify-between mb-6">
@@ -235,7 +209,7 @@ function PlatformHomePage({
                     </div>
                     <div>
                       <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>Create an account</h2>
-                      <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Fill in your details and we'll review your application.</p>
+                      <p className="text-[14px] font-light" style={{ color: "rgba(255,255,255,0.75)" }}>Fill in your details to get started straight away.</p>
                     </div>
                   </div>
                   <button
@@ -356,9 +330,7 @@ function PlatformHomePage({
                         setPassword("");
                         onLoginSuccess(result.session);
                       } else {
-                        setLoginError(result.error === "pending_approval"
-                          ? "Your account is pending approval. You'll be notified once it's been reviewed."
-                          : result.error);
+                        setLoginError(result.error);
                       }
                     })();
                   }}

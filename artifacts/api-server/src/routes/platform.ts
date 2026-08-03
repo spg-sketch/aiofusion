@@ -270,7 +270,6 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           res.status(403).json({ error: "This account has been archived. Contact your administrator." });
           return;
         }
-        if (acct.status === "pending_approval") { res.status(403).json({ error: "pending_approval" }); return; }
         if (acct.status === "suspended") { res.status(403).json({ error: "This account has been suspended. Contact your administrator." }); return; }
         let activeCompanyId: string | undefined;
         try {
@@ -300,11 +299,6 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       .limit(1);
     if (archivedRow?.value === "true") {
       res.status(403).json({ error: "This account has been archived. Contact your administrator." });
-      return;
-    }
-    // Block accounts that haven't been approved yet.
-    if (account.status === "pending_approval") {
-      res.status(403).json({ error: "pending_approval" });
       return;
     }
     if (account.status === "suspended") {
@@ -342,9 +336,9 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
 
 // --- Self-serve sign-up (public, no auth required) --------------------------
 //
-// Creates a new agency account with status=pending_approval. The account
-// cannot log in until an admin approves it. A username is auto-derived from
-// the company name; the owner contacts us via email listed on the record.
+// Creates a new active agency account and logs the user in immediately.
+// A username is auto-derived from the company name; the admin receives an
+// email notification of the new sign-up via sendNewSignupAlert.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -396,7 +390,7 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       role: "agency",
       email,
       website: website || null,
-      status: "pending_approval",
+      status: "active",
     });
 
     await db
@@ -405,18 +399,26 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: displayNameValue } });
 
     // Create the human user record and link it to the new company account.
+    let userId: string | undefined;
+    let activeCompanyId: string | undefined;
     try {
-      await ensurePlatformUser({
+      userId = await ensurePlatformUser({
         email,
         name,
         passwordHash: ph,
         companyUsername: username,
         membershipRole: "owner",
       });
+      const company = await getCompanyBySlug(username);
+      activeCompanyId = company?.id;
     } catch {
-      // Non-fatal: the platform_accounts row already exists so login will work;
-      // the user row will be backfilled at next server restart.
+      // Non-fatal: the platform_accounts row already exists so login will work.
     }
+
+    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+      ?? req.socket.remoteAddress;
+    const sid = await createPlatformSession(username, makeIpHint(rawIp), userId, activeCompanyId);
+    setPlatformCookie(res, sid);
 
     void sendNewSignupAlert({
       name,
@@ -425,7 +427,7 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       username,
       method: "password",
     });
-    res.status(201).json({ ok: true, username, status: "pending_approval" });
+    res.status(201).json({ ok: true, username, role: "agency" });
   } catch (err) {
     console.error("[signup]", err);
     res.status(500).json({ error: "Sign-up failed. Please try again." });
@@ -847,7 +849,7 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       username,
       passwordHash: hashPassword(crypto.randomBytes(32).toString("hex")),
       role: "agency",
-      status: "pending_approval",
+      status: "active",
       email: userInfo.email,
       website: null,
     });
@@ -858,18 +860,24 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       target: platformMetaTable.key,
       set: { value: JSON.stringify({ displayName, ownerName: displayName }) },
     });
-    // Create the human user record for this Google sign-up.
+    // Create the human user record for this Google sign-up and start a session.
+    let newUserId: string | undefined;
+    let newActiveCompanyId: string | undefined;
     try {
-      await ensurePlatformUser({
+      newUserId = await ensurePlatformUser({
         email: userInfo.email,
         name: displayName,
         googleId: googleId || null,
         companyUsername: username,
         membershipRole: "owner",
       });
+      const company = await getCompanyBySlug(username);
+      newActiveCompanyId = company?.id;
     } catch {
       // Non-fatal.
     }
+    const newSid = await createPlatformSession(username, makeIpHint(req.ip), newUserId, newActiveCompanyId);
+    setPlatformCookie(res, newSid);
     void sendNewSignupAlert({
       name: displayName,
       email: userInfo.email,
@@ -877,7 +885,7 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       username,
       method: "google",
     });
-    res.redirect(`${origin}/?oauth_status=pending`);
+    res.redirect(`${origin}/?oauth_status=ok`);
   } catch (err) {
     console.error("Google OAuth callback error:", err);
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
