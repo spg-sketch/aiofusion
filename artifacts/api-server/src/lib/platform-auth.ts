@@ -296,6 +296,25 @@ export async function linkGoogleId(userId: string, googleId: string): Promise<vo
     .where(eq(platformUsersTable.id, userId));
 }
 
+// Find a user by Microsoft Entra ID oid.
+export async function getUserByMicrosoftId(microsoftId: string): Promise<typeof platformUsersTable.$inferSelect | null> {
+  if (!microsoftId) return null;
+  const [row] = await db
+    .select()
+    .from(platformUsersTable)
+    .where(eq(platformUsersTable.microsoftId, microsoftId))
+    .limit(1);
+  return row ?? null;
+}
+
+// Link a Microsoft id to an existing user.
+export async function linkMicrosoftId(userId: string, microsoftId: string): Promise<void> {
+  await db
+    .update(platformUsersTable)
+    .set({ microsoftId })
+    .where(eq(platformUsersTable.id, userId));
+}
+
 // Create a platform_users row, ensure a platform_companies row, and link them
 // via a membership. Returns the user id. Idempotent on email.
 export async function ensurePlatformUser(opts: {

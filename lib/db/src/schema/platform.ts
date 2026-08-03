@@ -78,6 +78,10 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   displayName: varchar("display_name", { length: 128 }),
   freeAccess: boolean("free_access").notNull().default(false),
   status: varchar("status").notNull().default("active"),
+  //  setupComplete — NULL for legacy accounts (skip setup screen), false for
+  //  new organic signups that haven't chosen Agency/Partner vs Client yet,
+  //  true once the account type has been selected.
+  setupComplete: boolean("setup_complete"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -104,6 +108,9 @@ export const platformUsersTable = pgTable("platform_users", {
   googleId: varchar("google_id", { length: 255 }).unique(),
   microsoftId: varchar("microsoft_id", { length: 255 }).unique(),
   sessionVersion: integer("session_version").notNull().default(0),
+  //  emailVerified — NULL for legacy/SSO accounts (treated as verified),
+  //  false for password signups pending verification, true once confirmed.
+  emailVerified: boolean("email_verified"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -169,6 +176,17 @@ export const platformSessionsTable = pgTable("platform_sessions", {
     .defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   ipHint: varchar("ip_hint"),
+});
+
+// Single-use email verification tokens. Created on password signup; consumed
+// when the user clicks the link. Expired or used tokens are cleaned up lazily.
+export const platformEmailVerificationsTable = pgTable("platform_email_verifications", {
+  token: varchar("token", { length: 64 }).primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => platformUsersTable.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
 });
 
 // A tiny key/value table for one-off platform flags (e.g. whether the one-time

@@ -20,6 +20,7 @@ import {
   tokenUsageTable,
   auditLocksTable,
   adminEventsTable,
+  platformEmailVerificationsTable,
 } from "@workspace/db";
 import { and, count, desc, eq, gte, ilike, like, lte, sql } from "drizzle-orm";
 import {
@@ -53,13 +54,15 @@ import {
   getUserByCompanySlug,
   getPrimaryMembership,
   linkGoogleId,
+  getUserByMicrosoftId,
+  linkMicrosoftId,
   type Role,
   getCompanyBySlug,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, getAppBaseUrl } from "../lib/notify-email";
 
 const router: IRouter = Router();
 
@@ -202,21 +205,28 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   }
   let googleLinked = false;
   let masterOwner = false;
+  let emailVerified: boolean | null = null;
+  let setupComplete: boolean | null = null;
   if (req.account) {
     try {
       const acc = await getAccount(normUsername(req.account.username));
       if (acc?.email) {
         const u = await getUserByEmail(acc.email);
         googleLinked = !!(u?.googleId);
+        emailVerified = u?.emailVerified ?? null;
       }
     } catch { /* non-fatal */ }
     try {
       masterOwner = await isMasterOwner(req.account.username);
     } catch { /* non-fatal */ }
+    try {
+      const co = await getCompanyBySlug(normUsername(req.account.username));
+      setupComplete = co?.setupComplete ?? null;
+    } catch { /* non-fatal */ }
   }
   const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
   res.setHeader("Cache-Control", "no-store");
-  res.json({ account: accountWithGoogle, impersonating, masterOwner });
+  res.json({ account: accountWithGoogle, impersonating, masterOwner, emailVerified, setupComplete });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.
@@ -278,7 +288,12 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
         } catch { /* non-fatal */ }
         const sid = await createPlatformSession(acct.username, makeIpHint(rawIp), newUser.id, activeCompanyId);
         setPlatformCookie(res, sid);
-        res.json({ account: { username: acct.username, role: acct.role } });
+        let loginNeedsSetup = false;
+        try {
+          const loginCo = await getCompanyBySlug(acct.username);
+          if (loginCo?.setupComplete === false) loginNeedsSetup = true;
+        } catch { /* non-fatal */ }
+        res.json({ account: { username: acct.username, role: acct.role }, ...(loginNeedsSetup ? { needsSetup: true } : {}) });
         return;
       }
     }
@@ -328,7 +343,12 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     }
     const sid = await createPlatformSession(account.username, makeIpHint(rawIp), userId, activeCompanyId);
     setPlatformCookie(res, sid);
-    res.json({ account: { username: account.username, role: account.role } });
+    let legacyNeedsSetup = false;
+    try {
+      const legacyCo = await getCompanyBySlug(account.username);
+      if (legacyCo?.setupComplete === false) legacyNeedsSetup = true;
+    } catch { /* non-fatal */ }
+    res.json({ account: { username: account.username, role: account.role }, ...(legacyNeedsSetup ? { needsSetup: true } : {}) });
   } catch {
     res.status(500).json({ error: "Login failed" });
   }
@@ -415,22 +435,134 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       // Non-fatal: the platform_accounts row already exists so login will work.
     }
 
-    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
-      ?? req.socket.remoteAddress;
-    const sid = await createPlatformSession(username, makeIpHint(rawIp), userId, activeCompanyId);
-    setPlatformCookie(res, sid);
+    // New password signup: require email verification before creating a session.
+    // The user gets a 24-hour link; clicking it creates their session and routes
+    // them to the account-type selection screen.
+    const verifyToken = crypto.randomBytes(32).toString("hex");
+    if (userId) {
+      try {
+        await db.insert(platformEmailVerificationsTable).values({
+          token: verifyToken,
+          userId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        });
+        await db
+          .update(platformUsersTable)
+          .set({ emailVerified: false })
+          .where(eq(platformUsersTable.id, userId));
+      } catch (err) {
+        logger.error({ err }, "signup: failed to create verification token");
+      }
+    }
 
-    void sendNewSignupAlert({
-      name,
-      email,
-      companyName,
-      username,
-      method: "password",
-    });
-    res.status(201).json({ ok: true, username, role: "agency" });
+    const verifyUrl = `${getAppBaseUrl()}/api/platform/verify-email?token=${verifyToken}`;
+    void sendVerificationEmail({ toEmail: email, toName: name, verifyUrl });
+    void sendNewSignupAlert({ name, email, companyName, username, method: "password" });
+    res.status(201).json({ ok: true, needsVerification: true, email });
   } catch (err) {
     console.error("[signup]", err);
     res.status(500).json({ error: "Sign-up failed. Please try again." });
+  }
+});
+
+// --- Email verification -----------------------------------------------------
+
+router.get("/platform/verify-email", async (req: Request, res: Response) => {
+  const origin = getFrontendOrigin(req);
+  const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+  if (!token) { res.redirect(`${origin}/?verify_status=invalid`); return; }
+  try {
+    const [row] = await db
+      .select()
+      .from(platformEmailVerificationsTable)
+      .where(eq(platformEmailVerificationsTable.token, token))
+      .limit(1);
+    if (!row || row.usedAt || row.expiresAt < new Date()) {
+      res.redirect(`${origin}/?verify_status=expired`);
+      return;
+    }
+    // Mark token consumed
+    await db
+      .update(platformEmailVerificationsTable)
+      .set({ usedAt: new Date() })
+      .where(eq(platformEmailVerificationsTable.token, token));
+    // Mark user verified
+    await db
+      .update(platformUsersTable)
+      .set({ emailVerified: true })
+      .where(eq(platformUsersTable.id, row.userId));
+    // Resolve the company that owns this user
+    const [mem] = await db
+      .select({ companySlug: platformMembershipsTable.companySlug, companyId: platformMembershipsTable.companyId })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, row.userId))
+      .limit(1);
+    if (!mem) { res.redirect(`${origin}/?verify_status=error`); return; }
+    // Mark the company as needing account-type selection (new signup gate)
+    await db
+      .update(platformCompaniesTable)
+      .set({ setupComplete: false })
+      .where(eq(platformCompaniesTable.id, mem.companyId));
+    // Issue the first session
+    const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+      ?? req.socket.remoteAddress;
+    const sid = await createPlatformSession(mem.companySlug, makeIpHint(rawIp), row.userId, mem.companyId);
+    setPlatformCookie(res, sid);
+    res.redirect(`${origin}/?needs_setup=true`);
+  } catch (err) {
+    logger.error({ err }, "verify-email: unexpected error");
+    res.redirect(`${origin}/?verify_status=error`);
+  }
+});
+
+// Always returns ok — never reveal whether an email address is registered.
+router.post("/platform/resend-verification", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (email) {
+      const user = await getUserByEmail(email);
+      if (user && user.emailVerified !== true) {
+        await db
+          .delete(platformEmailVerificationsTable)
+          .where(eq(platformEmailVerificationsTable.userId, user.id));
+        const token = crypto.randomBytes(32).toString("hex");
+        await db.insert(platformEmailVerificationsTable).values({
+          token,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        });
+        const verifyUrl = `${getAppBaseUrl()}/api/platform/verify-email?token=${token}`;
+        void sendVerificationEmail({ toEmail: email, toName: user.name || email, verifyUrl });
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, "resend-verification: unexpected error (non-fatal)");
+  }
+  res.json({ ok: true });
+});
+
+// Set account type after signup (Agency/Partner vs Client). Requires a session.
+router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const accountType = typeof req.body?.accountType === "string" ? req.body.accountType : "";
+    if (accountType !== "agency" && accountType !== "client") {
+      res.status(400).json({ error: "accountType must be 'agency' or 'client'." });
+      return;
+    }
+    const username = normUsername(req.account!.username);
+    await db
+      .update(platformAccountsTable)
+      .set({ role: accountType })
+      .where(eq(platformAccountsTable.username, username));
+    await db
+      .update(platformCompaniesTable)
+      .set({ role: accountType, setupComplete: true })
+      .where(eq(platformCompaniesTable.slug, username));
+    logger.info({ username, accountType }, "setup/account-type: role set");
+    res.json({ ok: true, role: accountType });
+  } catch (err) {
+    logger.error({ err }, "setup/account-type: unexpected error");
+    res.status(500).json({ error: "Failed to set account type." });
   }
 });
 
@@ -784,7 +916,9 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
           }
           const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
           setPlatformCookie(res, sid);
-          res.redirect(`${origin}/?oauth_status=ok`);
+          const oauthCo = activeCompanyId ? await getCompanyBySlug(account.username) : null;
+          const oauthSuffix = (oauthCo?.setupComplete === false) ? "&needs_setup=true" : "";
+          res.redirect(`${origin}/?oauth_status=ok${oauthSuffix}`);
           return;
         }
       }
@@ -827,7 +961,9 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       }
       const sid = await createPlatformSession(existing.username, makeIpHint(req.ip), userId, activeCompanyId);
       setPlatformCookie(res, sid);
-      res.redirect(`${origin}/?oauth_status=ok`);
+      const legacyOauthCo = activeCompanyId ? await getCompanyBySlug(existing.username) : null;
+      const legacyOauthSuffix = (legacyOauthCo?.setupComplete === false) ? "&needs_setup=true" : "";
+      res.redirect(`${origin}/?oauth_status=ok${legacyOauthSuffix}`);
       return;
     }
     // No account — register a new pending one from the Google profile
@@ -876,18 +1012,204 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
     } catch {
       // Non-fatal.
     }
+    // New Google SSO user: email already verified; show account-type selector.
+    if (newUserId) {
+      try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ }
+    }
+    if (newActiveCompanyId) {
+      try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
+    }
     const newSid = await createPlatformSession(username, makeIpHint(req.ip), newUserId, newActiveCompanyId);
     setPlatformCookie(res, newSid);
-    void sendNewSignupAlert({
-      name: displayName,
-      email: userInfo.email,
-      companyName: displayName,
-      username,
-      method: "google",
-    });
-    res.redirect(`${origin}/?oauth_status=ok`);
+    void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: displayName, username, method: "google" });
+    res.redirect(`${origin}/?oauth_status=ok&needs_setup=true`);
   } catch (err) {
     console.error("Google OAuth callback error:", err);
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
+  }
+});
+
+// --- Microsoft OAuth (Entra ID) — mirrors the Google flow exactly -----------
+
+const MICROSOFT_AUTH_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+const MICROSOFT_TOKEN_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const MICROSOFT_GRAPH_ME = "https://graph.microsoft.com/v1.0/me";
+const MS_STATE_COOKIE = "aio_ms_state";
+
+router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const origin = getFrontendOrigin(req);
+  if (!clientId) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=microsoft_not_configured`);
+    return;
+  }
+  const action = typeof req.query.action === "string" ? req.query.action : "login";
+  const state = `${action}:${crypto.randomBytes(16).toString("hex")}`;
+  const redirect_uri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri,
+    scope: "openid profile email User.Read",
+    state,
+    response_mode: "query",
+  });
+  res.cookie(MS_STATE_COOKIE, state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000 });
+  res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
+});
+
+router.get("/platform/auth/microsoft/callback", async (req: Request, res: Response) => {
+  const origin = getFrontendOrigin(req);
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=microsoft_not_configured`);
+    return;
+  }
+  try {
+    const { code, state, error: oauthError } = req.query as Record<string, string>;
+    if (oauthError || !code) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${oauthError ?? "no_code"}`);
+      return;
+    }
+    const storedState = (req.cookies as Record<string, string>)?.[MS_STATE_COOKIE] ?? "";
+    res.clearCookie(MS_STATE_COOKIE);
+    if (!storedState || storedState !== state) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=state_mismatch`);
+      return;
+    }
+    const action = (state as string).split(":")[0] ?? "login";
+    const redirect_uri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
+
+    // Exchange code for access token
+    const tokenResp = await fetch(MICROSOFT_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code, grant_type: "authorization_code", redirect_uri, scope: "openid profile email User.Read" }).toString(),
+    });
+    if (!tokenResp.ok) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=token_exchange_failed`); return; }
+    const tokenData = (await tokenResp.json()) as { access_token?: string };
+    if (!tokenData.access_token) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_access_token`); return; }
+
+    // Fetch Microsoft profile
+    const graphResp = await fetch(MICROSOFT_GRAPH_ME, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
+    if (!graphResp.ok) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=graph_failed`); return; }
+    const profile = (await graphResp.json()) as { id?: string; displayName?: string; mail?: string; userPrincipalName?: string };
+    const microsoftId = profile.id ?? "";
+    if (!microsoftId) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_microsoft_id`); return; }
+    const msEmail = ((profile.mail || profile.userPrincipalName) ?? "").toLowerCase();
+    if (!msEmail || !EMAIL_RE.test(msEmail)) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`); return; }
+    const displayName = profile.displayName || msEmail.split("@")[0];
+
+    // --- Link action: attach Microsoft to the current session account --------
+    if (action === "link") {
+      if (!req.account) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_signed_in`); return; }
+      const conflictUser = await getUserByMicrosoftId(microsoftId);
+      if (conflictUser) {
+        const acc = await getAccount(normUsername(req.account.username));
+        if (conflictUser.email !== (acc?.email ?? "").toLowerCase()) {
+          res.redirect(`${origin}/?oauth_status=error&oauth_msg=microsoft_already_linked`);
+          return;
+        }
+      }
+      const acc = await getAccount(normUsername(req.account.username));
+      if (acc?.email) {
+        const u = await getUserByEmail(acc.email);
+        if (u) await linkMicrosoftId(u.id, microsoftId);
+      }
+      res.redirect(`${origin}/?oauth_status=linked_microsoft`);
+      return;
+    }
+
+    // --- Login / signup action ------------------------------------------------
+    // Step 1: look up by Microsoft ID (fastest path for returning users)
+    const byMsId = await getUserByMicrosoftId(microsoftId);
+    if (byMsId) {
+      const membership = await getPrimaryMembership(byMsId.id);
+      if (membership) {
+        const account = await getAccount(membership.companySlug);
+        if (account) {
+          if (account.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
+          if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+          let userId: string | undefined; let activeCompanyId: string | undefined;
+          try {
+            userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
+            await linkMicrosoftId(userId, microsoftId);
+            const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
+          } catch { userId = byMsId.id; }
+          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
+          setPlatformCookie(res, sid);
+          const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
+          res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+          return;
+        }
+      }
+    }
+
+    // Step 2: look up by email in platform_users (link Microsoft to existing account)
+    const byEmail = msEmail ? await getUserByEmail(msEmail) : null;
+    if (byEmail) {
+      await linkMicrosoftId(byEmail.id, microsoftId);
+      const membership = await getPrimaryMembership(byEmail.id);
+      if (membership) {
+        const account = await getAccount(membership.companySlug);
+        if (account) {
+          if (account.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
+          if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+          let userId: string | undefined; let activeCompanyId: string | undefined;
+          try {
+            userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
+            const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
+          } catch { userId = byEmail.id; }
+          const sid = await createPlatformSession(account.username, makeIpHint(req.ip), userId, activeCompanyId);
+          setPlatformCookie(res, sid);
+          const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
+          res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+          return;
+        }
+      }
+    }
+
+    // Step 3: look up by email in platform_accounts (legacy accounts)
+    const [legacyMs] = await db.select().from(platformAccountsTable).where(ilike(platformAccountsTable.email, msEmail)).limit(1);
+    if (legacyMs) {
+      if (legacyMs.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
+      if (legacyMs.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
+      let userId: string | undefined; let activeCompanyId: string | undefined;
+      try {
+        userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: legacyMs.username, membershipRole: legacyMs.role === "admin" ? "admin" : "owner", companyRole: legacyMs.role, companyStatus: legacyMs.status });
+        await linkMicrosoftId(userId, microsoftId);
+        const co = await getCompanyBySlug(legacyMs.username); activeCompanyId = co?.id;
+      } catch { /* non-fatal */ }
+      const sid = await createPlatformSession(legacyMs.username, makeIpHint(req.ip), userId, activeCompanyId);
+      setPlatformCookie(res, sid);
+      const co = activeCompanyId ? await getCompanyBySlug(legacyMs.username) : null;
+      res.redirect(`${origin}/?oauth_status=ok${(co?.setupComplete === false) ? "&needs_setup=true" : ""}`);
+      return;
+    }
+
+    // Step 4: brand new user
+    const emailDomain = msEmail.split("@")[1] ?? "";
+    let baseSlug = (emailDomain.split(".")[0] ?? "user").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 24);
+    if (!baseSlug || !USERNAME_RE.test(baseSlug)) baseSlug = "user";
+    let username = baseSlug;
+    for (let i = 1; ; i++) { if (!(await getAccount(username))) break; username = `${baseSlug}-${i}`; }
+    await db.insert(platformAccountsTable).values({ username, passwordHash: hashPassword(crypto.randomBytes(32).toString("hex")), role: "agency", status: "active", email: msEmail, website: null });
+    await db.insert(platformMetaTable).values({ key: `account:profile:${username}`, value: JSON.stringify({ displayName, ownerName: displayName }) }).onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify({ displayName, ownerName: displayName }) } });
+    let newUserId: string | undefined; let newActiveCompanyId: string | undefined;
+    try {
+      newUserId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: username, membershipRole: "owner" });
+      await linkMicrosoftId(newUserId, microsoftId);
+      const co = await getCompanyBySlug(username); newActiveCompanyId = co?.id;
+    } catch { /* non-fatal */ }
+    if (newUserId) { try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ } }
+    if (newActiveCompanyId) { try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ } }
+    const newSid = await createPlatformSession(username, makeIpHint(req.ip), newUserId, newActiveCompanyId);
+    setPlatformCookie(res, newSid);
+    void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: displayName, username, method: "microsoft" });
+    res.redirect(`${origin}/?oauth_status=ok&needs_setup=true`);
+  } catch (err) {
+    console.error("Microsoft OAuth callback error:", err);
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=unexpected`);
   }
 });

@@ -23,6 +23,7 @@ import {
   type SessionInfo,
 } from "./lib/auth";
 import { vars } from "./marketing/vars";
+import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import {
   ChevronRight,
@@ -372,7 +373,7 @@ function App() {
       // Server session has expired mid-use. Re-check with /api/platform/me;
       // if it confirms the session is gone, clear local state and redirect
       // to the login screen so the user can re-authenticate.
-      const s = await bootstrapAuth();
+      const { session: s } = await bootstrapAuth();
       setSessionState(s);
       return;
     }
@@ -403,8 +404,9 @@ function App() {
     // cached account list. Then sync the shared store so this login sees every
     // project it may see, on every device. Local-only projects are pushed up.
     void (async () => {
-      const s = await bootstrapAuth();
+      const { session: s, needsSetup: bootNeedsSetup } = await bootstrapAuth();
       setSessionState(s);
+      if (bootNeedsSetup) setNeedsSetup(true);
       setAuthLoading(false);
       await migrateLocalStorageContentToServer();
       await initContentStore();
@@ -499,6 +501,9 @@ function App() {
   // state is still provisional (localStorage only) and may not yet reflect the
   // real cookie state.
   const [authLoading, setAuthLoading] = useState(true);
+  // True when the user is signed in but hasn't chosen Agency/Partner vs Client yet
+  // (new organic signups via password or SSO).
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -607,10 +612,15 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     if (
       params.has("oauth_status") ||
+      params.has("needs_setup") ||
+      params.has("verify_status") ||
       params.has("aio_exit_impersonation") ||
       params.has("aio_switched_master")
     ) {
       setView("platform-home");
+    }
+    if (params.has("needs_setup")) {
+      setNeedsSetup(true);
     }
     if (params.has("aio_session_expired")) {
       setSessionExpiredNotice(
@@ -714,6 +724,7 @@ function App() {
   const handleSignOut = () => {
     void serverLogout();
     setSessionState(null);
+    setNeedsSetup(false);
     setActiveClient(null);
     setView("landing");
     window.scrollTo(0, 0);
@@ -760,6 +771,22 @@ function App() {
   const enterPlatform = () => setView("platform-home");
 
   const isAuthed = !!session;
+
+  // Account type selection — full-page gate for brand-new signups (password or
+  // SSO) that haven't chosen Agency/Partner vs Client yet. Intercepts all views.
+  if (needsSetup && session && !authLoading) {
+    return (
+      <AccountTypeSelectPage
+        onComplete={(role) => {
+          setNeedsSetup(false);
+          setSessionState({ username: session.username, role });
+          void refreshAccountsCache();
+        }}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
   if (view === "landing") {
     return <LandingPageC onLogin={enterPlatform} onNavigate={goToView} isAuthed={isAuthed} />;
   }
@@ -802,6 +829,7 @@ function App() {
             void initContentStore().then(() => resyncProjects());
           }}
           onSignOut={handleSignOut}
+          onNeedsSetup={() => setNeedsSetup(true)}
           onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
           onManageSubAccounts={() => requireSessionThen(() => setView("sub-accounts"))}
           onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); setView("token-usage"); } }}

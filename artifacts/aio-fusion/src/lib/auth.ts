@@ -309,7 +309,7 @@ async function runMigrationIfNeeded(role: Role): Promise<void> {
 export async function serverLogin(
   username: string,
   password: string,
-): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
+): Promise<{ ok: true; session: Session; needsSetup?: boolean } | { ok: false; error: string }> {
   const u = username.trim();
   if (!u || !password) return { ok: false, error: "Enter a username and password." };
   const { ok, json } = await postJson("/api/platform/login", { username: u, password });
@@ -320,7 +320,7 @@ export async function serverLogin(
   setSession(session);
   await runMigrationIfNeeded(session.role);
   await refreshAccountsCache();
-  return { ok: true, session };
+  return { ok: true, session, needsSetup: json.needsSetup === true };
 }
 
 export async function serverLogout(): Promise<void> {
@@ -331,17 +331,24 @@ export async function serverLogout(): Promise<void> {
 // Reconcile the local session with the server on app load. Validates the
 // session cookie, runs the one-time account migration if an admin is signed in
 // and it has not happened yet, then refreshes the cached account list. Returns
-// the authoritative session (or null). The migration must never run before the
-// server has confirmed an admin session (the endpoint is admin-only).
-export async function bootstrapAuth(): Promise<Session | null> {
+// the authoritative session and whether account setup is still pending.
+export async function bootstrapAuth(): Promise<{ session: Session | null; needsSetup?: boolean }> {
   let session: Session | null = null;
+  let needsSetup = false;
   try {
     const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
     if (meResp.ok) {
-      const me = (await meResp.json()) as { account?: ServerAccount | null; impersonating?: Impersonation | null };
+      const me = (await meResp.json()) as {
+        account?: ServerAccount | null;
+        impersonating?: Impersonation | null;
+        setupComplete?: boolean | null;
+      };
       if (me.account) {
         session = { username: me.account.username, role: me.account.role };
         setSession(session);
+        // setupComplete === false (not null, not true) means the user signed up
+        // but hasn't chosen Agency/Partner vs Client yet.
+        if (me.setupComplete === false) needsSetup = true;
       } else {
         clearSession();
       }
@@ -355,7 +362,7 @@ export async function bootstrapAuth(): Promise<Session | null> {
     await runMigrationIfNeeded(session.role);
     await refreshAccountsCache();
   }
-  return session;
+  return { session, needsSetup };
 }
 
 // Fetch the current impersonation state (null when not viewing as another
@@ -567,21 +574,51 @@ export async function serverSelfDeleteAccount(
   return { ok: true };
 }
 
-// Self-serve sign-up. Creates an active agency account, logs the user in
-// immediately (server sets the session cookie), and returns the new session.
+// Self-serve sign-up.
+// Returns one of three shapes:
+//  - needsVerification=true  → no session yet; user must click the email link
+//  - session present         → logged in immediately (SSO path or future skip)
+//  - error                   → something went wrong
 export async function serverSignUp(data: {
   name: string;
   email: string;
   companyName: string;
   website?: string;
   password: string;
-}): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; session: Session; needsVerification?: false }
+  | { ok: true; needsVerification: true; email: string }
+  | { ok: false; error: string }
+> {
   const { ok, json } = await postJson("/api/platform/signup", data);
   if (!ok) return { ok: false, error: json?.error || "Sign-up failed. Please try again." };
+  if (json?.needsVerification) {
+    return { ok: true, needsVerification: true, email: json.email ?? data.email };
+  }
+  // Fallback: auto-login path (kept for forward compat)
   const session: Session = { username: json.username, role: json.role ?? "agency" };
   setSession(session);
   await refreshAccountsCache();
   return { ok: true, session };
+}
+
+// Resend the email verification link to the given address.
+export async function serverResendVerification(
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/resend-verification", { email });
+  if (!ok) return { ok: false, error: json?.error || "Failed to resend. Please try again." };
+  return { ok: true };
+}
+
+// After email verification + Google/Microsoft SSO signup, the user must choose
+// their account type (Agency/Partner vs Client). This calls the setup endpoint.
+export async function serverSetAccountType(
+  accountType: "agency" | "client",
+): Promise<{ ok: true; role: string } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/setup/account-type", { accountType });
+  if (!ok) return { ok: false, error: json?.error || "Failed to set account type." };
+  return { ok: true, role: json?.role ?? accountType };
 }
 
 export type PendingAccount = {

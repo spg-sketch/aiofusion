@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 function PlatformHomePage({
@@ -21,6 +21,7 @@ function PlatformHomePage({
   onBackToLanding,
   session,
   onLoginSuccess,
+  onNeedsSetup,
   onSignOut,
   onManageUsers,
   onManageSubAccounts,
@@ -35,6 +36,7 @@ function PlatformHomePage({
   onBackToLanding: () => void;
   session: LocalSession | null;
   onLoginSuccess: (s: LocalSession) => void;
+  onNeedsSetup?: () => void;
   onSignOut: () => void;
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
@@ -65,6 +67,11 @@ function PlatformHomePage({
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState<string | null>(null);
   const [signupDone, setSignupDone] = useState(false);
+  // Email verification pending (password signup only)
+  const [signupAwaitingVerification, setSignupAwaitingVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   // Handle Google OAuth redirect back to this page
   useEffect(() => {
@@ -97,6 +104,16 @@ function PlatformHomePage({
       setLoginError(friendly[msg] ?? `Google sign-in failed (${msg}). Please try again or sign in with your password.`);
     }
     // status === "ok": session cookie set by server; App.tsx's session loader picks it up automatically
+
+    // Verification link errors — redirect back to the verification-pending screen
+    const verifyStatus = params.get("verify_status");
+    if (verifyStatus === "expired") {
+      setLoginError("Your verification link has expired. Request a new one below.");
+      setSignupAwaitingVerification(true);
+    } else if (verifyStatus === "invalid" || verifyStatus === "error") {
+      setLoginError("This verification link is invalid. Please request a new one.");
+      setSignupAwaitingVerification(true);
+    }
   }, []);
 
   const handleSignup = (e: React.FormEvent) => {
@@ -110,12 +127,23 @@ function PlatformHomePage({
       website: signupWebsite || undefined,
       password: signupPassword,
     }).then((r) => {
-      if (r.ok) {
-        onLoginSuccess(r.session);
-      } else {
-        setSignupError(r.error);
+      if (!r.ok) { setSignupError(r.error); return; }
+      if (r.needsVerification) {
+        setVerificationEmail(r.email);
+        setSignupAwaitingVerification(true);
+        return;
       }
+      onLoginSuccess(r.session);
     }).finally(() => setSignupLoading(false));
+  };
+
+  const handleResendVerification = () => {
+    if (resendLoading) return;
+    setResendLoading(true);
+    setResendSent(false);
+    void serverResendVerification(verificationEmail)
+      .then(() => { setResendSent(true); })
+      .finally(() => setResendLoading(false));
   };
 
   const loadMySessions = () => {
@@ -199,7 +227,70 @@ function PlatformHomePage({
         {!session ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
 
-            {showSignup ? (
+            {signupAwaitingVerification ? (
+              /* --- EMAIL VERIFICATION PENDING --- */
+              <div className="text-center py-4">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
+                  <Mail size={28} color="white" />
+                </div>
+                <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                  {verificationEmail ? "Check your inbox" : "Verification link expired"}
+                </h2>
+                {verificationEmail ? (
+                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                    We've sent a verification link to <strong>{verificationEmail}</strong>.
+                    Click it to finish creating your account.
+                  </p>
+                ) : (
+                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                    Your link has expired. Enter your email below to get a new one.
+                  </p>
+                )}
+                <p className="text-[13.5px] mb-6" style={{ color: "rgba(255,255,255,0.5)" }}>
+                  Didn't receive the email? Check your spam folder, then use the button below.
+                </p>
+                {loginError && (
+                  <p className="text-[13px] font-semibold text-center py-2 px-3 rounded-xl mb-5" style={{ color: "white", background: "rgba(220,38,38,0.3)" }}>
+                    {loginError}
+                  </p>
+                )}
+                {!verificationEmail && (
+                  <div className="mb-4 max-w-xs mx-auto">
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      onChange={(e) => setVerificationEmail(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border text-[14px] focus:outline-none"
+                      style={{ background: "white", borderColor: "transparent", color: "#0a1628" }}
+                    />
+                  </div>
+                )}
+                {resendSent ? (
+                  <p className="text-[13px] text-center py-3 rounded-xl mb-4 flex items-center justify-center gap-2" style={{ color: "white", background: "rgba(255,255,255,0.12)" }}>
+                    <CheckCircle2 size={14} /> New link sent! Check your inbox.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendLoading || !verificationEmail}
+                    className="flex items-center justify-center gap-2 mx-auto px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10 disabled:opacity-40"
+                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                  >
+                    {resendLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    Resend verification email
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setSignupAwaitingVerification(false); setShowSignup(false); setLoginError(null); setResendSent(false); }}
+                  className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
+                  style={{ color: "rgba(255,255,255,0.5)" }}
+                >
+                  ← Back to sign in
+                </button>
+              </div>
+            ) : showSignup ? (
               /* --- SIGN-UP FORM --- */
               <>
                 <div className="flex items-center justify-between mb-6">
@@ -220,22 +311,37 @@ function PlatformHomePage({
                     ← Sign in instead
                   </button>
                 </div>
-                {/* Sign up with Google */}
+                {/* Sign up with Google / Microsoft */}
                 <div className="mb-5">
-                  <a
-                    href={`${apiBase()}/api/platform/auth/google`}
-                    className="flex items-center justify-center gap-3 w-full px-6 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md"
-                    style={{ background: "white", color: "#0a1628" }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                    Sign up with Google
-                  </a>
-                  <div className="flex items-center gap-3 mt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                    <a
+                      href={`${apiBase()}/api/platform/auth/google`}
+                      className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      style={{ background: "white", color: "#0a1628" }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      Google
+                    </a>
+                    <a
+                      href={`${apiBase()}/api/platform/auth/microsoft`}
+                      className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      style={{ background: "white", color: "#0a1628" }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+                        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                      </svg>
+                      Microsoft
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-3">
                     <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
                     <span className="text-[12px] font-light" style={{ color: "rgba(255,255,255,0.55)" }}>or fill in your details below</span>
                     <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
@@ -296,20 +402,35 @@ function PlatformHomePage({
                   Welcome back — sign in to manage your projects.
                 </p>
 
-                {/* Google — primary CTA */}
-                <a
-                  href={`${apiBase()}/api/platform/auth/google`}
-                  className="flex items-center justify-center gap-3 w-full px-6 py-3.5 rounded-xl text-[15px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg border mb-5"
-                  style={{ background: "white", color: "#3c4043", borderColor: "#dadce0" }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                  </svg>
-                  Continue with Google
-                </a>
+                {/* SSO — Google + Microsoft */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                  <a
+                    href={`${apiBase()}/api/platform/auth/google`}
+                    className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg border"
+                    style={{ background: "white", color: "#3c4043", borderColor: "#dadce0" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    Google
+                  </a>
+                  <a
+                    href={`${apiBase()}/api/platform/auth/microsoft`}
+                    className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg border"
+                    style={{ background: "white", color: "#0a1628", borderColor: "#e2e8f0" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" aria-hidden="true">
+                      <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                      <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                      <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                      <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+                    </svg>
+                    Microsoft
+                  </a>
+                </div>
 
                 {/* Divider */}
                 <div className="flex items-center gap-3 mb-5">
@@ -329,6 +450,7 @@ function PlatformHomePage({
                         setUsername("");
                         setPassword("");
                         onLoginSuccess(result.session);
+                        if (result.needsSetup) onNeedsSetup?.();
                       } else {
                         setLoginError(result.error);
                       }

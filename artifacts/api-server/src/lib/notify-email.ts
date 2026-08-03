@@ -18,12 +18,70 @@ function fromAddress(): string {
   return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
 }
 
+// Returns the canonical base URL for this deployment so email links always
+// point to the right environment (staging vs. live).
+export function getAppBaseUrl(): string {
+  const canonical = process.env.CANONICAL_DOMAIN?.trim();
+  if (canonical) return `https://${canonical}`;
+  return "https://www.aiofusion.ai";
+}
+
+export async function sendVerificationEmail(opts: {
+  toEmail: string;
+  toName: string;
+  verifyUrl: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — verification email not sent");
+    return;
+  }
+
+  const subject = `Verify your AIO Fusion email address`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `Thanks for creating an AIO Fusion account. Click the link below to verify your email address:`,
+    ``,
+    opts.verifyUrl,
+    ``,
+    `This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Verify Your Email",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Thanks for creating an AIO Fusion account.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Click the button below to verify your email address and complete your signup.
+        This link expires in <strong>24 hours</strong>.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you didn't create an account, you can safely ignore this email.
+      </p>
+    `,
+    cta: { text: "Verify email address", href: opts.verifyUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: verification email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send verification email (non-fatal)");
+  }
+}
+
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;
   companyName: string;
   username: string;
-  method: "password" | "google";
+  method: "password" | "google" | "microsoft";
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -31,38 +89,35 @@ export async function sendNewSignupAlert(opts: {
     return;
   }
 
-  const subject = `[AIO Fusion] New account application — ${opts.companyName}`;
+  const methodLabel = opts.method === "google" ? "Google OAuth" : opts.method === "microsoft" ? "Microsoft SSO" : "Email & password";
+  const adminPanel = getAppBaseUrl();
+
+  const subject = `[AIO Fusion] New signup — ${opts.companyName}`;
   const text = [
-    `A new account application has been received.`,
+    `A new account has been registered.`,
     ``,
     `Name:         ${opts.name}`,
     `Email:        ${opts.email}`,
     `Company:      ${opts.companyName}`,
     `Username:     ${opts.username}`,
-    `Sign-up via:  ${opts.method === "google" ? "Google OAuth" : "Email & password"}`,
+    `Sign-up via:  ${methodLabel}`,
     ``,
-    `The account is currently pending approval. Log in to the admin panel to`,
-    `review and approve or reject the application.`,
-    ``,
-    `Admin panel: https://www.aiofusion.ai`,
+    `Admin panel: ${adminPanel}`,
   ].join("\n");
 
   const html = buildEmailHtml({
     label: "New Signup",
     bodyHtml: `
-      <p style="margin: 0 0 16px 0;">A new account application has been received and is awaiting approval.</p>
+      <p style="margin: 0 0 16px 0;">A new account has been registered.</p>
       ${buildDataRows([
         ["Name", opts.name],
         ["Email", opts.email],
         ["Company", opts.companyName],
         ["Username", opts.username],
-        ["Sign-up via", opts.method === "google" ? "Google OAuth" : "Email & password"],
+        ["Sign-up via", methodLabel],
       ])}
-      <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
-        Log in to the admin panel to review and approve or reject the application.
-      </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: adminPanel },
   });
 
   try {

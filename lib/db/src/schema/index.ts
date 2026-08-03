@@ -28,3 +28,5 @@ export * from "./admin-events";
 export * from "./token-usage";
 export * from "./support";
 export * from "./contact-submissions";
+// Re-export platform (already included above via "./platform") — the
+// platformEmailVerificationsTable is exported from that file.
