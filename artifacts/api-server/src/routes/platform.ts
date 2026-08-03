@@ -78,6 +78,7 @@ import {
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, getAppBaseUrl } from "../lib/notify-email";
+import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
 
@@ -239,7 +240,14 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       setupComplete = co?.setupComplete ?? null;
     } catch { /* non-fatal */ }
   }
-  const accountWithGoogle = req.account ? { ...req.account, googleLinked } : null;
+  const accountWithGoogle = req.account
+    ? {
+        ...req.account,
+        googleLinked,
+        membershipRole: req.account.membershipRole ?? null,
+        projectAccess: req.account.projectAccess ?? null,
+      }
+    : null;
   res.setHeader("Cache-Control", "no-store");
   res.json({ account: accountWithGoogle, impersonating, masterOwner, emailVerified, setupComplete });
 });
@@ -1241,6 +1249,65 @@ const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 const OAUTH_STATE_COOKIE = "aio_oauth_state";
 const OAUTH_LINK_COOKIE = "aio_oauth_link";
+// Carries a pending team-invite token across the SSO round-trip so the
+// callback can attach the signed-in user to the inviting workspace instead of
+// creating a fresh account.
+const INVITE_COOKIE = "aio_invite";
+
+function setInviteCookie(res: Response, token: string): void {
+  res.cookie(INVITE_COOKIE, token, {
+    httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/",
+  });
+}
+
+// If the SSO round-trip carried a team-invite token, consume it for this
+// email + SSO identity. Returns a redirect path when the invite flow handled
+// the sign-in (success or a terminal invite error), or null to fall through to
+// the normal SSO resolution.
+async function handleSsoInvite(
+  req: Request,
+  res: Response,
+  profile: { email: string; name: string; googleId?: string; microsoftId?: string },
+): Promise<string | null> {
+  const token = (req.cookies as Record<string, string>)?.[INVITE_COOKIE] ?? "";
+  if (!token) return null;
+  res.clearCookie(INVITE_COOKIE, { path: "/" });
+  const invite = await getValidInvite(token);
+  if (!invite) return `/?oauth_status=error&oauth_msg=invite_invalid`;
+  if (invite.email.toLowerCase() !== profile.email.toLowerCase()) {
+    // The invite is bound to a specific email address; a different SSO account
+    // must not be able to claim it.
+    return `/?oauth_status=error&oauth_msg=invite_email_mismatch`;
+  }
+
+  // Resolve or create the user row for this email and attach the SSO identity.
+  let user = await getUserByEmail(profile.email);
+  if (!user) {
+    const [created] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: profile.email.toLowerCase(),
+        name: profile.name || null,
+        googleId: profile.googleId || null,
+        microsoftId: profile.microsoftId || null,
+        emailVerified: true,
+      })
+      .returning();
+    user = created!;
+  } else {
+    if (profile.googleId && !user.googleId) await linkGoogleId(user.id, profile.googleId);
+    if (profile.microsoftId && !user.microsoftId) await linkMicrosoftId(user.id, profile.microsoftId);
+  }
+
+  const ok = await consumeInvite(invite, user.id);
+  if (!ok) return `/?oauth_status=error&oauth_msg=invite_invalid`;
+
+  // Invited users skip account-type selection: session goes straight into the
+  // inviting workspace.
+  const sid = await createPlatformSession(invite.companySlug, makeIpHint(req.ip), user.id, invite.companyId);
+  setPlatformCookie(res, sid);
+  return `/?oauth_status=ok`;
+}
 
 // Returns the canonical host for this deployment.
 // CANONICAL_DOMAIN (e.g. "www.aiofusion.ai") takes highest priority so the
@@ -1299,6 +1366,10 @@ router.get("/platform/auth/google", (req: Request, res: Response) => {
     maxAge: 10 * 60 * 1000,
     path: "/",
   });
+  // Team invite flow: carry the invite token across the OAuth round-trip.
+  if (typeof req.query.invite === "string" && req.query.invite.trim()) {
+    setInviteCookie(res, req.query.invite.trim());
+  }
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: getGoogleCallbackUrl(req),
@@ -1426,6 +1497,20 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       }
       res.redirect(`${origin}/?link_google=ok`);
       return;
+    }
+
+    // --- Team invite flow: attach this Google identity to the inviting
+    // workspace instead of resolving/creating an account of their own.
+    {
+      const inviteRedirect = await handleSsoInvite(req, res, {
+        email: userInfo.email,
+        name: userInfo.name || userInfo.given_name || userInfo.email.split("@")[0],
+        googleId: googleId || undefined,
+      });
+      if (inviteRedirect) {
+        res.redirect(`${origin}${inviteRedirect}`);
+        return;
+      }
     }
 
     // --- User-first identity resolution ------------------------------------
@@ -1624,6 +1709,10 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
     response_mode: "query",
   });
   res.cookie(MS_STATE_COOKIE, state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000 });
+  // Team invite flow: carry the invite token across the OAuth round-trip.
+  if (typeof req.query.invite === "string" && req.query.invite.trim()) {
+    setInviteCookie(res, req.query.invite.trim());
+  }
   res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
@@ -1688,6 +1777,20 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
       }
       res.redirect(`${origin}/?oauth_status=linked_microsoft`);
       return;
+    }
+
+    // --- Team invite flow: attach this Microsoft identity to the inviting
+    // workspace instead of resolving/creating an account of their own.
+    {
+      const inviteRedirect = await handleSsoInvite(req, res, {
+        email: msEmail,
+        name: displayName,
+        microsoftId,
+      });
+      if (inviteRedirect) {
+        res.redirect(`${origin}${inviteRedirect}`);
+        return;
+      }
     }
 
     // --- Login / signup action ------------------------------------------------

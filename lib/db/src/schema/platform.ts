@@ -139,12 +139,41 @@ export const platformMembershipsTable = pgTable(
       .references(() => platformCompaniesTable.id, { onDelete: "cascade" }),
     companySlug: varchar("company_slug", { length: 64 }).notNull(),
     role: varchar("role").notNull().default("owner"),
+    //  projectAccess — JSON array of project ids this member may see/work on.
+    //  NULL = all projects in the workspace (owner/admin/billing default).
+    //  Only meaningful for "content" and "viewer" members.
+    projectAccess: text("project_access"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.companyId] })],
 );
+
+// Single-use team invitations. An Agency/Partner owner or admin invites a
+// colleague by email with a pre-assigned membership role and (optionally) a
+// set of accessible project ids. Consumed when the invitee sets a password or
+// signs in with Google/Microsoft SSO via the invite link.
+export const platformInvitationsTable = pgTable("platform_invitations", {
+  token: varchar("token", { length: 64 }).primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => platformCompaniesTable.id, { onDelete: "cascade" }),
+  companySlug: varchar("company_slug", { length: 64 }).notNull(),
+  role: varchar("role").notNull().default("viewer"),
+  //  JSON array of project ids; NULL = all projects.
+  projectAccess: text("project_access"),
+  invitedByUserId: uuid("invited_by_user_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PlatformInvitationRow = typeof platformInvitationsTable.$inferSelect;
 
 // Server-issued sessions for platform accounts. Kept separate from the OIDC
 // `sessions` table so the two auth systems never interfere. The session id is a

@@ -195,6 +195,10 @@ const ContactSubmissionsAdminPage = lazy(() =>
 const SubAccountsPage = lazy(() =>
   import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }))
 );
+
+const InviteAcceptPage = lazy(() =>
+  import("./pages/InviteAcceptPage").then((m) => ({ default: m.InviteAcceptPage }))
+);
 const GuidancePage = lazy(() =>
   import("./pages/GuidancePage").then((m) => ({ default: m.GuidancePage }))
 );
@@ -285,10 +289,6 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
   }
   return appBase() + (VIEW_TO_SLUG[v] ?? "");
 }
-
-
-
-
 
 
 function App() {
@@ -602,6 +602,11 @@ function App() {
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
 
+  // Team invite token from /?invite=<token> — captured once on mount (the
+  // history-sync effect rewrites the URL soon after).
+  const [inviteToken] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("invite"),
+  );
   // Token from a password-reset email link (/?reset_token=...). Captured once
   // on load, before the history-sync effect rewrites the URL and drops the
   // query string, then handed to PlatformHomePage as a prop.
@@ -779,6 +784,33 @@ function App() {
   const enterPlatform = () => setView("platform-home");
 
   const isAuthed = !!session;
+
+  // Team-invite landing page (/?invite=<token>) — full-page gate, shown before
+  // any auth flow. The invitee sets a password or continues with SSO, then the
+  // page reloads into the workspace dashboard (no account-type selection).
+  if (inviteToken) {
+    return (
+      <Suspense fallback={null}>
+        <InviteAcceptPage
+          token={inviteToken}
+          onAccepted={() => {
+            // Full reload so the fresh session cookie drives bootstrapAuth;
+            // oauth_status=ok routes straight to the platform home view.
+            window.location.replace(`${import.meta.env.BASE_URL}?oauth_status=ok`);
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  // Billing team members see invoices/billing only — no project data or tools.
+  if (session?.membershipRole === "billing" && !authLoading) {
+    return (
+      <Suspense fallback={null}>
+        <BillingOnlyPage workspace={session.username} onSignOut={handleSignOut} />
+      </Suspense>
+    );
+  }
 
   // Account type selection — full-page gate for brand-new signups (password or
   // SSO) that haven't chosen Agency/Partner vs Client yet. Intercepts all views.
@@ -1107,3 +1139,7 @@ function App() {
 }
 
 export default App;
+
+const BillingOnlyPage = lazy(() =>
+  import("./pages/BillingOnlyPage").then((m) => ({ default: m.BillingOnlyPage }))
+);

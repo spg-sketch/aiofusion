@@ -24,7 +24,9 @@ export type AdminAction =
   | "mfa_disabled"
   | "mfa_admin_reset"
   | "mfa_recovery_code_used"
-  | "switch_to_master";
+  | "switch_to_master"
+  | "team_invite_sent"
+  | "team_member_removed";
 
 export async function logAdminEvent(
   actor: AdminActor,

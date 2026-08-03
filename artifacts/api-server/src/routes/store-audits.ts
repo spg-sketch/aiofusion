@@ -3,8 +3,20 @@ import { db, savedAuditsTable, savedDiagnosticsTable, savedContentGeoTable, save
 import { and, eq, isNull } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+import { memberProjectGate, inAssignedScope } from "../lib/member-guards";
 
 const router: IRouter = Router();
+
+// Membership role gate: billing members blocked, viewers read-only, and
+// project-scoped members restricted to their assigned projects.
+router.use("/store/projects/:id", memberProjectGate);
+router.use("/store/projects/:id", (req, res, next) => {
+  if (req.account && !inAssignedScope(req, String(req.params.id ?? ""))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
 
 async function visibleOwners(req: Request): Promise<string[] | null> {
   return getVisibleUsernames(req.account!);

@@ -16,6 +16,7 @@ import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
+import { TeamSection } from "./TeamSection";
 function SubAccountsPage({
   session,
   onBack,
@@ -254,6 +255,11 @@ function SubAccountsPage({
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
           )}
         </div>
+
+        {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
+        {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin") && (
+          <TeamSection />
+        )}
 
         {/* ADD CLIENT ACCOUNT */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>

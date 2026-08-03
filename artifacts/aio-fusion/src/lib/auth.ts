@@ -36,9 +36,14 @@ export type User = {
 export type Session = {
   username: string;
   role: Role;
+  // Fine-grained team membership role within the workspace (owner/admin/
+  // billing/content/viewer). Undefined = full access (legacy/owner session).
+  membershipRole?: MembershipRole | null;
+  // Project ids this member may see; null/undefined = all projects.
+  projectAccess?: string[] | null;
 };
 
-// Present when an admin is currently "viewing as" this account for support.
+export type MembershipRole = "owner" | "admin" | "billing" | "content" | "viewer";
 export type Impersonation = { by: string; byRole?: string };
 
 const USERS_KEY = "aio.auth.users.v3";
@@ -348,7 +353,16 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
         setupComplete?: boolean | null;
       };
       if (me.account) {
-        session = { username: me.account.username, role: me.account.role };
+        const acct = me.account as ServerAccount & {
+          membershipRole?: MembershipRole | null;
+          projectAccess?: string[] | null;
+        };
+        session = {
+          username: acct.username,
+          role: acct.role,
+          membershipRole: acct.membershipRole ?? null,
+          projectAccess: acct.projectAccess ?? null,
+        };
         setSession(session);
         // setupComplete === false (not null, not true) means the user signed up
         // but hasn't chosen Agency/Partner vs Client yet.
@@ -574,10 +588,15 @@ export async function serverSetSeatCap(
   }
 }
 
-// Self-serve "delete my account and data" (GDPR right to erasure). Requires
-// the caller's own password as a confirmation step. On success the server has
-// hard-deleted the account and everything it owns, and cleared the session
-// cookie, so we clear the local cache too.
+export type TeamMember = {
+  userId: string;
+  email: string | null;
+  name: string | null;
+  role: MembershipRole;
+  projectAccess: string[] | null;
+  createdAt: string;
+  isSelf: boolean;
+};
 export async function serverSelfDeleteAccount(
   password: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -832,4 +851,113 @@ export async function serverMfaDisable(code: string): Promise<{ ok: true } | { o
   const { ok, json } = await postJson("/api/platform/mfa/disable", { code });
   if (!ok) return { ok: false, error: json?.error || "Could not disable two-factor authentication." };
   return { ok: true };
+}
+
+export type TeamInvite = {
+  token: string;
+  email: string;
+  role: MembershipRole;
+  projectAccess: string[] | null;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type TeamOverview = {
+  members: TeamMember[];
+  invites: TeamInvite[];
+  seatLimit: number;
+  seatsUsed: number;
+};
+
+export async function serverInviteTeamMember(data: {
+  email: string;
+  role: MembershipRole;
+  projectIds?: string[] | null;
+}): Promise<{ ok: boolean; error?: string; limitReached?: boolean }> {
+  const { ok, json } = await postJson("/api/platform/team/invite", data);
+  return { ok, error: json?.error, limitReached: json?.limitReached };
+}
+
+export async function serverAcceptInvite(data: {
+  token: string;
+  name?: string;
+  password?: string;
+}): Promise<{ ok: boolean; session?: Session; error?: string }> {
+  const { ok, json } = await postJson("/api/platform/invite/accept", data);
+  if (!ok) return { ok: false, error: json?.error ?? "Failed to accept invitation." };
+  const session: Session = {
+    username: json?.account?.username ?? "",
+    role: (json?.account?.role ?? "agency") as Role,
+    membershipRole: json?.account?.membershipRole ?? null,
+  };
+  setSession(session);
+  return { ok: true, session };
+}
+
+export type InviteInfo = {
+  email: string;
+  companyName: string;
+  role: MembershipRole;
+  roleLabel: string;
+  existingUser: boolean;
+};
+
+export async function serverUpdateTeamMember(
+  userId: string,
+  updates: { role?: MembershipRole; projectIds?: string[] | null },
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/team/members/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(updates),
+    });
+    const json = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, error: json?.error };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverGetTeam(): Promise<{ ok: boolean; team?: TeamOverview; error?: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/team`, { credentials: "include" });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to load team." };
+    return { ok: true, team: json as TeamOverview };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverSetTeamSeatLimit(
+  username: string,
+  seats: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const { ok, json } = await postJson("/api/platform/team/seat-limit", { username, seats });
+  return { ok, error: json?.error };
+}
+
+export async function serverRemoveTeamMember(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const { ok, json } = await postJson(`/api/platform/team/members/${encodeURIComponent(userId)}/remove`);
+  return { ok, error: json?.error };
+}
+
+export async function serverRevokeTeamInvite(token: string): Promise<{ ok: boolean; error?: string }> {
+  const { ok, json } = await postJson(`/api/platform/team/invites/${encodeURIComponent(token)}/revoke`);
+  return { ok, error: json?.error };
+}
+
+export async function serverGetInviteInfo(token: string): Promise<{ ok: boolean; invite?: InviteInfo; error?: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/invite/${encodeURIComponent(token)}`, {
+      credentials: "include",
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Invitation not found." };
+    return { ok: true, invite: json as InviteInfo };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
 }

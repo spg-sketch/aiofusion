@@ -86,6 +86,27 @@ export async function resolvePlatformAccount(
   next();
 }
 
+// Block read-only team members (viewer) and billing members from AI action
+// routes (audits, content generation, AI assist). Signed-out requests pass
+// through so the routers' own auth handling still applies.
+export function blockReadOnlyMembers(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const role = req.account?.membershipRole;
+  if (role === "viewer" || role === "billing") {
+    res.status(403).json({
+      error:
+        role === "billing"
+          ? "Billing members don't have access to this feature."
+          : "Your role is read-only. Ask an account owner or admin for edit access.",
+    });
+    return;
+  }
+  next();
+}
+
 export function requirePlatformAuth(
   req: Request,
   res: Response,

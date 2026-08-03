@@ -2,8 +2,18 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, projectsTable, projectSnapshotsTable } from "@workspace/db";
 import { and, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { getVisibleUsernames, normUsername, getAccount } from "../lib/platform-auth";
+import {
+  getVisibleUsernames,
+  normUsername,
+  getAccount,
+} from "../lib/platform-auth";
 import { intakeIsEmpty, dataIsEmpty } from "../lib/intake-guards";
+import {
+  guardProjectRead,
+  guardProjectWrite,
+  assignedProjectIds,
+  inAssignedScope,
+} from "../lib/member-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
 
@@ -90,6 +100,7 @@ async function visibleOwners(req: Request): Promise<string[] | null> {
   return getVisibleUsernames(req.account!);
 }
 
+
 function canSee(owner: string | null | undefined, visible: string[] | null): boolean {
   if (visible === null) return true; // admin
   return visible.includes(normUsername(owner));
@@ -122,6 +133,8 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
+      if (!guardProjectRead(req, res)) return;
+      const assigned = assignedProjectIds(req);
       const visible = await visibleOwners(req);
       const rows = await db
         .select({
@@ -138,7 +151,9 @@ router.get(
         })
         .from(projectsTable);
 
-      const mine = rows.filter((r) => canSee(r.owner, visible));
+      const mine = rows.filter(
+        (r) => canSee(r.owner, visible) && (assigned === null || assigned.includes(r.id)),
+      );
       const projects = mine
         .filter((r) => !r.deletedAt)
         .map((r) => ({ id: r.id, name: r.name, data: r.data, logo: r.logo, updatedAt: r.updatedAt }));
@@ -160,6 +175,11 @@ router.get(
       const id = String(req.params.id || "").trim();
       if (!id) {
         res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      if (!guardProjectRead(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(404).json({ error: "Not found" });
         return;
       }
       const rows = await db
@@ -199,6 +219,11 @@ router.post(
       const { id, name, data, logo } = req.body ?? {};
       if (!id || typeof id !== "string") {
         res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      if (!guardProjectWrite(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(403).json({ error: "You don't have access to this project." });
         return;
       }
       const visible = await visibleOwners(req);
@@ -290,6 +315,11 @@ router.post(
       const { id, intake, name, data } = req.body ?? {};
       if (!id || typeof id !== "string") {
         res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      if (!guardProjectWrite(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(403).json({ error: "You don't have access to this project." });
         return;
       }
       const visible = await visibleOwners(req);
@@ -402,6 +432,11 @@ router.post(
         res.status(400).json({ error: "Missing new owner" });
         return;
       }
+      if (!guardProjectWrite(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(403).json({ error: "You don't have access to this project." });
+        return;
+      }
       const visible = await visibleOwners(req);
       const existingOwner = await getOwner(id);
       if (existingOwner === undefined) {
@@ -463,6 +498,11 @@ router.post(
         res.status(400).json({ error: "Missing project id" });
         return;
       }
+      if (!guardProjectWrite(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(403).json({ error: "You don't have access to this project." });
+        return;
+      }
       const visible = await visibleOwners(req);
       const existingOwner = await getOwner(id);
       if (existingOwner === undefined) {
@@ -514,6 +554,11 @@ router.get(
       const id = String(req.params.id || "").trim();
       if (!id) {
         res.status(400).json({ error: "Missing project id" });
+        return;
+      }
+      if (!guardProjectRead(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(404).json({ error: "Project not found." });
         return;
       }
       const visible = await visibleOwners(req);
@@ -570,6 +615,11 @@ router.post(
       const snapId = Number(snapshotId);
       if (!Number.isInteger(snapId) || snapId <= 0) {
         res.status(400).json({ error: "Missing snapshot id" });
+        return;
+      }
+      if (!guardProjectWrite(req, res)) return;
+      if (!inAssignedScope(req, id)) {
+        res.status(403).json({ error: "You don't have access to this project." });
         return;
       }
       const visible = await visibleOwners(req);

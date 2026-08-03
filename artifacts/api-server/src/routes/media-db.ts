@@ -2,10 +2,15 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import { memberProjectGate } from "../lib/member-guards";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
 
 const router: IRouter = Router();
+
+// Membership role gate for the media database: billing members are blocked
+// entirely, viewers may only issue reads.
+router.use(["/store/media-categories", "/store/media-db"], memberProjectGate);
 
 async function visibleAccounts(req: Request): Promise<string[] | null> {
   return getVisibleUsernames(req.account!);

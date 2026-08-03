@@ -48,6 +48,7 @@ vi.mock("@workspace/db", async () => {
       company_id uuid NOT NULL REFERENCES platform_companies(id) ON DELETE CASCADE,
       company_slug varchar(64) NOT NULL,
       role varchar NOT NULL DEFAULT 'owner',
+      project_access text,
       created_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, company_id)
     );

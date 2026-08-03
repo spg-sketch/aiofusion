@@ -16,6 +16,7 @@ import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
+import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -85,6 +86,36 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// Schema migrations that request handlers depend on (membership columns,
+// invitations table, ...) must be complete before the server accepts traffic —
+// otherwise a request arriving during rollout can hit a missing column/table.
+// Each step is idempotent; a failure is logged and startup continues so a
+// transient DB hiccup can't hard-lock deploys of otherwise-healthy code.
+async function runStartupMigrations(): Promise<void> {
+  const steps: Array<[string, () => Promise<unknown>]> = [
+    ["audit_locks table", ensureAuditLocksTable],
+    ["saved audit tables", ensureSavedAuditTables],
+    ["platform_companies cascade FK", ensurePlatformCompanyCascade],
+    ["planner content columns", ensurePlannerContentColumns],
+    ["support tickets email_failed column", ensureSupportEmailFailedColumn],
+    ["contact_submissions table", ensureContactSubmissionsTable],
+    ["platform schema v2 additions", ensurePlatformSchemaV2],
+    ["platform schema v3 additions", ensurePlatformSchemaV3],
+    ["platform schema v4 additions", ensurePlatformSchemaV4],
+    ["platform_password_resets table", ensurePasswordResetsTable],
+  ];
+  for (const [label, step] of steps) {
+    try {
+      await step();
+    } catch (err) {
+      logger.error({ err }, `Failed to ensure ${label}`);
+    }
+  }
+}
+
+// Block the port until the schema is ready so no request can race the DDL.
+await runStartupMigrations();
+
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
@@ -106,42 +137,6 @@ app.listen(port, (err) => {
   // Idempotent — gated by a platform_meta flag, safe to call on every restart.
   backfillPlatformUsers().catch((err) => {
     logger.error({ err }, "Failed to backfill platform users (non-fatal)");
-  });
-
-  ensureAuditLocksTable().catch((err) => {
-    logger.error({ err }, "Failed to ensure audit_locks table");
-  });
-
-  ensureSavedAuditTables().catch((err) => {
-    logger.error({ err }, "Failed to ensure saved audit tables");
-  });
-
-  ensurePlatformCompanyCascade().catch((err) => {
-    logger.error({ err }, "Failed to ensure platform_companies cascade FK");
-  });
-
-  ensurePlannerContentColumns().catch((err) => {
-    logger.error({ err }, "Failed to ensure planner content columns");
-  });
-
-  ensureSupportEmailFailedColumn().catch((err) => {
-    logger.error({ err }, "Failed to ensure support tickets email_failed column");
-  });
-
-  ensureContactSubmissionsTable().catch((err) => {
-    logger.error({ err }, "Failed to ensure contact_submissions table");
-  });
-
-  ensurePlatformSchemaV2().catch((err) => {
-    logger.error({ err }, "Failed to apply platform schema v2 additions");
-  });
-
-  ensurePlatformSchemaV3().catch((err) => {
-    logger.error({ err }, "Failed to apply platform schema v3 additions");
-  });
-
-  ensurePasswordResetsTable().catch((err) => {
-    logger.error({ err }, "Failed to ensure platform_password_resets table");
   });
 
   pruneExpiredSessions().catch((err) => {

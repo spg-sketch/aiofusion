@@ -9,7 +9,7 @@ import {
   platformMembershipsTable,
   platformMetaTable,
 } from "@workspace/db";
-import { and, eq, ne, desc, sql } from "drizzle-orm";
+import { and, eq, ne, desc, sql, isNull } from "drizzle-orm";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -37,6 +37,59 @@ export interface PlatformAccount {
   activeCompanyId?: string;
   /** Email address, if stored on the account. May be undefined for legacy sessions. */
   email?: string | null;
+  /**
+   * The user's membership role within the active workspace:
+   * owner | admin | billing | content | viewer. Undefined for legacy sessions
+   * (treated as owner — full access, backward compatible).
+   */
+  membershipRole?: MembershipRole;
+  /**
+   * Project ids this member may see/work on. null/undefined = all projects.
+   * Only ever set for content/viewer members.
+   */
+  projectAccess?: string[] | null;
+}
+
+// --- Membership roles (per-user, within a workspace) -------------------------
+
+export type MembershipRole = "owner" | "admin" | "billing" | "content" | "viewer";
+
+// Normalise a stored membership role. Legacy "member" behaves like "content";
+// anything unknown falls back to "viewer" (least privilege).
+export function normalizeMembershipRole(role: unknown): MembershipRole {
+  if (role === "owner" || role === "admin" || role === "billing" || role === "content" || role === "viewer") {
+    return role;
+  }
+  if (role === "member") return "content";
+  return "viewer";
+}
+
+// Whether this member may manage the team (invite/remove members, change roles).
+export function canManageTeam(account: PlatformAccount): boolean {
+  const r = account.membershipRole;
+  return r === undefined || r === "owner" || r === "admin";
+}
+
+// Whether this member may access project data at all (billing members may not).
+export function canAccessProjects(account: PlatformAccount): boolean {
+  return account.membershipRole !== "billing";
+}
+
+// Whether this member may write/modify project data (viewers and billing may not).
+export function canWriteProjects(account: PlatformAccount): boolean {
+  const r = account.membershipRole;
+  return r !== "viewer" && r !== "billing";
+}
+
+// Parse the JSON project_access column. Returns null (= all projects) when the
+// value is missing or malformed.
+export function parseProjectAccess(raw: string | null | undefined): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((v): v is string => typeof v === "string");
+  } catch { /* fall through */ }
+  return null;
 }
 
 // Normalise an arbitrary stored/incoming role string to a known Role. The
@@ -625,10 +678,25 @@ export async function createPlatformSession(
   activeCompanyId?: string | null,
 ): Promise<string> {
   const u = normUsername(username);
-  // Revoke all existing sessions for this account before issuing a new one.
-  await db
-    .delete(platformSessionsTable)
-    .where(eq(platformSessionsTable.username, u));
+  // Revoke this user's existing sessions before issuing a new one. Multiple
+  // team members share the same workspace username (slug), so revocation must
+  // be scoped per human user — deleting by username alone would sign out every
+  // other member of the team. Legacy sessions without a userId fall back to
+  // the old per-account behaviour (restricted to other userless sessions).
+  if (userId) {
+    await db
+      .delete(platformSessionsTable)
+      .where(eq(platformSessionsTable.userId, userId));
+  } else {
+    await db
+      .delete(platformSessionsTable)
+      .where(
+        and(
+          eq(platformSessionsTable.username, u),
+          isNull(platformSessionsTable.userId),
+        ),
+      );
+  }
 
   // Stamp the user's current session_version so stale sessions can be detected.
   let sessionVersion: number | null = null;
@@ -722,11 +790,40 @@ export async function getPlatformSessionAccount(
         await deletePlatformSession(sid);
         return null;
       }
+      // Resolve the user's membership within this workspace so fine-grained
+      // role rules (viewer read-only, content assigned-projects-only, billing
+      // invoices-only) can be enforced downstream. Legacy sessions without a
+      // userId keep membershipRole undefined = full access.
+      let membershipRole: MembershipRole | undefined;
+      let projectAccess: string[] | null | undefined;
+      if (row.userId) {
+        try {
+          const [mem] = await db
+            .select({
+              role: platformMembershipsTable.role,
+              projectAccess: platformMembershipsTable.projectAccess,
+            })
+            .from(platformMembershipsTable)
+            .where(
+              and(
+                eq(platformMembershipsTable.userId, row.userId),
+                eq(platformMembershipsTable.companyId, company.id),
+              ),
+            )
+            .limit(1);
+          if (mem) {
+            membershipRole = normalizeMembershipRole(mem.role);
+            projectAccess = parseProjectAccess(mem.projectAccess);
+          }
+        } catch { /* non-fatal — treated as legacy full-access session */ }
+      }
       return {
         username: company.slug,
         role: normalizeRole(company.role),
         userId: row.userId ?? undefined,
         activeCompanyId: company.id,
+        membershipRole,
+        projectAccess,
       };
     }
   }

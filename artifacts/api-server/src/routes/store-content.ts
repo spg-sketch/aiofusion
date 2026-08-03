@@ -9,8 +9,20 @@ import {
 import { and, eq, isNull, or, inArray } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
+import {
+  memberProjectGate,
+  inAssignedScope,
+  restrictToAssigned,
+} from "../lib/member-guards";
 
 const router: IRouter = Router();
+
+// Membership role gate for every content-store surface: billing members are
+// blocked entirely, viewers may only issue reads.
+router.use(
+  ["/store/archive", "/store/planner", "/store/scoring-config"],
+  memberProjectGate,
+);
 
 // Resolve the set of owner usernames the request may see.
 // Returns null for an admin (sees all).
@@ -56,11 +68,15 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const projectIds = await visibleProjectIds(req);
+      const projectIds = restrictToAssigned(req, await visibleProjectIds(req));
       const projectId =
         typeof req.query.projectId === "string" && req.query.projectId
           ? req.query.projectId
           : null;
+      if (projectId && !inAssignedScope(req, projectId)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
 
       // Build the WHERE clause: project-visibility filter + optional ?projectId
       // scoping + soft-delete guard.
@@ -131,7 +147,7 @@ router.post(
         res.status(400).json({ error: "Missing projectId" });
         return;
       }
-      if (!canSeeOwner(owner, visible)) {
+      if (!canSeeOwner(owner, visible) || !inAssignedScope(req, projectId)) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -184,7 +200,7 @@ router.put(
       }
 
       const existing = await db
-        .select({ owner: archiveItemsTable.owner })
+        .select({ owner: archiveItemsTable.owner, projectId: archiveItemsTable.projectId })
         .from(archiveItemsTable)
         .where(eq(archiveItemsTable.id, id))
         .limit(1);
@@ -193,7 +209,10 @@ router.put(
         res.status(404).json({ error: "Not found" });
         return;
       }
-      if (!canSeeOwner(existing[0].owner, visible)) {
+      if (
+        !canSeeOwner(existing[0].owner, visible) ||
+        !inAssignedScope(req, existing[0].projectId)
+      ) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -260,7 +279,7 @@ router.delete(
       }
 
       const existing = await db
-        .select({ owner: archiveItemsTable.owner })
+        .select({ owner: archiveItemsTable.owner, projectId: archiveItemsTable.projectId })
         .from(archiveItemsTable)
         .where(eq(archiveItemsTable.id, id))
         .limit(1);
@@ -269,7 +288,10 @@ router.delete(
         res.status(404).json({ error: "Not found" });
         return;
       }
-      if (!canSeeOwner(existing[0].owner, visible)) {
+      if (
+        !canSeeOwner(existing[0].owner, visible) ||
+        !inAssignedScope(req, existing[0].projectId)
+      ) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -298,11 +320,15 @@ router.get(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
-      const projectIds = await visibleProjectIds(req);
+      const projectIds = restrictToAssigned(req, await visibleProjectIds(req));
       const projectId =
         typeof req.query.projectId === "string" && req.query.projectId
           ? req.query.projectId
           : null;
+      if (projectId && !inAssignedScope(req, projectId)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
 
       // Build the WHERE clause: project-visibility filter + optional ?projectId
       // scoping + soft-delete guard.
@@ -371,7 +397,7 @@ router.post(
         res.status(400).json({ error: "Missing projectId" });
         return;
       }
-      if (!canSeeOwner(owner, visible)) {
+      if (!canSeeOwner(owner, visible) || !inAssignedScope(req, projectId)) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -420,7 +446,7 @@ router.put(
       }
 
       const existing = await db
-        .select({ owner: plannerItemsTable.owner })
+        .select({ owner: plannerItemsTable.owner, projectId: plannerItemsTable.projectId })
         .from(plannerItemsTable)
         .where(eq(plannerItemsTable.id, id))
         .limit(1);
@@ -429,7 +455,10 @@ router.put(
         res.status(404).json({ error: "Not found" });
         return;
       }
-      if (!canSeeOwner(existing[0].owner, visible)) {
+      if (
+        !canSeeOwner(existing[0].owner, visible) ||
+        !inAssignedScope(req, existing[0].projectId)
+      ) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -492,7 +521,7 @@ router.delete(
       }
 
       const existing = await db
-        .select({ owner: plannerItemsTable.owner })
+        .select({ owner: plannerItemsTable.owner, projectId: plannerItemsTable.projectId })
         .from(plannerItemsTable)
         .where(eq(plannerItemsTable.id, id))
         .limit(1);
@@ -501,7 +530,10 @@ router.delete(
         res.status(404).json({ error: "Not found" });
         return;
       }
-      if (!canSeeOwner(existing[0].owner, visible)) {
+      if (
+        !canSeeOwner(existing[0].owner, visible) ||
+        !inAssignedScope(req, existing[0].projectId)
+      ) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
