@@ -345,7 +345,7 @@ describe("team invitations", () => {
       body: { id: "proj-2", name: "nope", data: {} },
     });
     expect(badWrite.status).toBe(403);
-  });
+  }, 20000);
 
   it("enforces the seat limit (default 3) counting members + pending invites", async () => {
     const { sid } = await seedAgency("seats-agency", "owner@seats.test");

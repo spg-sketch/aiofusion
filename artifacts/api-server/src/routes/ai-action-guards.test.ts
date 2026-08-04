@@ -488,21 +488,279 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// AI action route guard tests
+// Route enumeration helper
+// ---------------------------------------------------------------------------
+
+type RouteEntry = { method: string; path: string };
+
+/**
+ * Walk an Express router's layer stack and return all (method, path) pairs.
+ * Recurses into mounted sub-routers. Plain middleware layers are skipped.
+ *
+ * This works cleanly for this codebase because every sub-router in
+ * routes/index.ts is mounted without a path prefix — each sub-router
+ * registers its own full paths (e.g. contentAiRouter.post("/content/optimise")).
+ * There is therefore no prefix-accumulation problem when recursing.
+ */
+function collectRoutes(router: any, prefix = ""): RouteEntry[] {
+  const result: RouteEntry[] = [];
+  for (const layer of router?.stack ?? []) {
+    if (layer.route) {
+      // Explicit route registered via .get/.post/.put/.patch/.delete()
+      const fullPath = prefix + String(layer.route.path);
+      const methods = Object.keys(layer.route.methods as Record<string, boolean>).filter(
+        (m) => (layer.route.methods as Record<string, boolean>)[m],
+      );
+      for (const method of methods) {
+        result.push({ method: method.toUpperCase(), path: fullPath });
+      }
+    } else if (layer.handle?.stack) {
+      // Mounted sub-router — recurse (no path prefix in this codebase)
+      result.push(...collectRoutes(layer.handle, prefix));
+    }
+    // Plain middleware layers (rate limiters, blockReadOnlyMembers, etc.) — skip
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Guard coverage constants
 // ---------------------------------------------------------------------------
 
 /**
- * The paths covered by blockReadOnlyMembers in routes/index.ts and a
- * representative POST body (may be empty — the guard fires before body
- * validation so a 403 is returned regardless).
+ * Path prefixes covered by blockReadOnlyMembers in routes/index.ts.
+ * Every route whose path starts with one of these prefixes must return 403
+ * for viewer/billing members.
  */
-const AI_PATHS: Array<{ path: string; body?: unknown }> = [
-  { path: "/api/diagnostic",              body: {} },
-  { path: "/api/seo-audit",               body: {} },
-  { path: "/api/llm-check",               body: {} },
-  { path: "/api/ai-assist/draft-field",   body: {} },
-  { path: "/api/content/optimise",        body: {} },
-];
+const PAID_AI_PREFIXES = [
+  "/diagnostic",
+  "/seo-audit",
+  "/llm-check",
+  "/ai-assist",
+  "/content",
+] as const;
+
+/**
+ * Routes that are intentionally NOT covered by blockReadOnlyMembers.
+ *
+ * Format: "METHOD /path"  (use Express param notation: :id, :slug, etc.)
+ *
+ * Every registered route must either start with a PAID_AI_PREFIX or appear
+ * in this list. Adding a new route without updating one of the two lists
+ * causes the coverage test below to fail with an actionable message.
+ */
+const PUBLIC_ALLOWLIST = new Set<string>([
+  // ── health ────────────────────────────────────────────────────────────────
+  "GET /healthz",
+
+  // ── legacy Replit auth (auth.ts) ─────────────────────────────────────────
+  "GET /auth/user",
+  "GET /login",
+  "GET /callback",
+  "GET /logout",
+  "POST /mobile-auth/token-exchange",
+  "POST /mobile-auth/logout",
+
+  // ── platform — public / self-service (platform.ts) ───────────────────────
+  "GET /platform/me",
+  "GET /platform/status",
+  "POST /platform/login",
+  "POST /platform/signup",
+  "GET /platform/verify-email",
+  "POST /platform/resend-verification",
+  "POST /platform/forgot-password",
+  "POST /platform/reset-password",
+  "POST /platform/change-password",
+  "POST /platform/setup/account-type",
+  "POST /platform/logout",
+
+  // ── platform — MFA ────────────────────────────────────────────────────────
+  "POST /platform/mfa/setup",
+  "POST /platform/mfa/enable",
+  "POST /platform/mfa/verify",
+  "GET /platform/mfa/status",
+  "POST /platform/mfa/disable",
+  "POST /platform/mfa/recovery-codes",
+  "GET /platform/mfa/trusted-devices",
+  "DELETE /platform/mfa/trusted-devices/:id",
+
+  // ── platform — OAuth ──────────────────────────────────────────────────────
+  "GET /platform/auth/google",
+  "GET /platform/auth/google/link",
+  "GET /platform/auth/google/callback",
+  "POST /platform/auth/google/callback",
+  "GET /platform/auth/microsoft",
+  "GET /platform/auth/microsoft/callback",
+  "POST /platform/auth/microsoft/callback",
+
+  // ── platform — admin / account management ────────────────────────────────
+  "GET /platform/admin/pending",
+  "POST /platform/admin/accounts/:username/approve",
+  "POST /platform/admin/accounts/:username/reject",
+  "POST /platform/accounts/:username/impersonate",
+  "POST /platform/exit-impersonation",
+  "GET /platform/admin/master-owners",
+  "GET /platform/admin/accounts/:username/master-owner",
+  "POST /platform/admin/accounts/:username/master-owner",
+  "POST /platform/switch-to-master",
+  "GET /platform/accounts",
+  "POST /platform/accounts",
+  "POST /platform/accounts/password",
+  "POST /platform/accounts/profile",
+  "POST /platform/accounts/archive",
+  "POST /platform/accounts/reset-mfa",
+  "POST /platform/accounts/delete",
+  "POST /platform/accounts/reparent",
+  "POST /platform/accounts/role",
+  "PATCH /platform/accounts/:username/seat-cap",
+  "GET /platform/accounts/:username/sessions",
+  "DELETE /platform/sessions/:sid",
+  "GET /platform/sessions",
+  "POST /platform/account/self-delete",
+  "POST /platform/migrate",
+  "GET /platform/admin-events",
+  "GET /platform/admin-events/export",
+
+  // ── team (team.ts) ────────────────────────────────────────────────────────
+  "GET /platform/team",
+  "POST /platform/team/invite",
+  "POST /platform/team/invites/:token/revoke",
+  "PATCH /platform/team/members/:userId",
+  "POST /platform/team/members/:userId/remove",
+  "POST /platform/team/seat-limit",
+  "GET /platform/invite/:token",
+  "POST /platform/invite/accept",
+
+  // ── admin panel (admin.ts) ────────────────────────────────────────────────
+  "POST /admin/generate-from-url",
+  "GET /admin/token-usage",
+  "PATCH /admin/account/:slug/quota-override",
+  "PATCH /admin/account/:slug/spend-limit",
+  "PATCH /admin/account/:slug/block",
+  "GET /admin/audit-locks",
+  "DELETE /admin/audit-lock",
+  "POST /admin/test-email-alerts",
+  "GET /admin/leads",
+  "PATCH /admin/leads/:id/status",
+  "POST /admin/leads/:id/resend",
+  "POST /admin/test-contact-forms",
+
+  // ── store — projects (store.ts) ───────────────────────────────────────────
+  "GET /store/projects",
+  "GET /store/projects/:id/intake",
+  "POST /store/projects/upsert",
+  "POST /store/projects/intake",
+  "POST /store/projects/owner",
+  "POST /store/projects/delete",
+  "GET /store/projects/:id/snapshots",
+  "POST /store/projects/restore",
+
+  // ── store — content (store-content.ts) ───────────────────────────────────
+  "GET /store/archive",
+  "POST /store/archive",
+  "PUT /store/archive/:id",
+  "DELETE /store/archive/:id",
+  "GET /store/planner",
+  "POST /store/planner",
+  "PUT /store/planner/:id",
+  "DELETE /store/planner/:id",
+  "GET /store/scoring-config",
+  "PUT /store/scoring-config",
+
+  // ── store — audits (store-audits.ts) ─────────────────────────────────────
+  "GET /store/projects/:id/audits",
+  "POST /store/projects/:id/audits",
+  "DELETE /store/projects/:id/audits/:auditId",
+  "GET /store/projects/:id/diagnostics",
+  "POST /store/projects/:id/diagnostics",
+  "DELETE /store/projects/:id/diagnostics/:diagId",
+  // content-geo + tech-geo via makeGeoRoutes()
+  "GET /store/projects/:id/content-geo",
+  "POST /store/projects/:id/content-geo",
+  "DELETE /store/projects/:id/content-geo/:geoId",
+  "GET /store/projects/:id/tech-geo",
+  "POST /store/projects/:id/tech-geo",
+  "DELETE /store/projects/:id/tech-geo/:geoId",
+
+  // ── media database (media-db.ts) ──────────────────────────────────────────
+  "GET /store/media-categories",
+  "POST /store/media-categories",
+  "DELETE /store/media-categories/:id",
+  "GET /store/media-db/outlets",
+  "POST /store/media-db/outlets",
+  "PUT /store/media-db/outlets/:id",
+  "DELETE /store/media-db/outlets/:id",
+  "GET /store/media-db/contacts",
+  "POST /store/media-db/contacts",
+  "PUT /store/media-db/contacts/:id",
+  "DELETE /store/media-db/contacts/:id",
+
+  // ── contact forms (contact.ts) — public, no auth required ────────────────
+  "POST /contact/book-demo",
+  "POST /contact/enquiry",
+
+  // ── support (support.ts) ─────────────────────────────────────────────────
+  "GET /support/faq",
+  "POST /support/faq",
+  "PATCH /support/faq/:id",
+  "POST /support/faq/reorder",
+  "POST /support/tickets/anon",    // anonymous ticket submission — no auth
+  "POST /support/tickets",
+  "GET /support/tickets",
+  "PATCH /support/tickets/:id",
+  "GET /support/tickets/:id/messages",
+  "POST /support/tickets/:id/seen",
+  "POST /support/tickets/:id/messages",
+
+  // ── llm-check audit lock ──────────────────────────────────────────────────
+  // Intentionally ungated: read-only lock-status check so the UI can disable
+  // the Run button before the user has committed to a full AI action.
+  // NOT a paid AI operation — no model is invoked.
+  "GET /audit-lock",
+]);
+
+// ---------------------------------------------------------------------------
+// Coverage test — must run before the live-server tests
+// ---------------------------------------------------------------------------
+
+describe("AI route guard coverage — no uncategorized routes", () => {
+  it("every registered route is on PUBLIC_ALLOWLIST or starts with a PAID_AI_PREFIX", () => {
+    const allRoutes = collectRoutes(mainRouter);
+
+    const uncategorized = allRoutes
+      .filter(({ method, path }) => {
+        const key = `${method} ${path}`;
+        return (
+          !PUBLIC_ALLOWLIST.has(key) &&
+          !PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix))
+        );
+      })
+      .sort((a, b) => `${a.method} ${a.path}`.localeCompare(`${b.method} ${b.path}`));
+
+    if (uncategorized.length > 0) {
+      const lines = uncategorized.map(({ method, path }) => `  ${method} ${path}`).join("\n");
+      throw new Error(
+        [
+          `${uncategorized.length} uncategorized route(s) detected.`,
+          `For each route listed below, do ONE of the following:`,
+          ``,
+          `  (a) Paid AI route — add its path prefix to the router.use([...], blockReadOnlyMembers)`,
+          `      call in routes/index.ts AND to PAID_AI_PREFIXES in this test file.`,
+          ``,
+          `  (b) Public / auth-gated-by-other-means route — add the exact string`,
+          `      "METHOD /path" to PUBLIC_ALLOWLIST in this test file.`,
+          ``,
+          `Uncategorized routes:`,
+          lines,
+        ].join("\n"),
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AI action route guard tests
+// ---------------------------------------------------------------------------
 
 describe("blockReadOnlyMembers — AI action routes", () => {
   it("rejects viewer members with 403 on every AI action path", async () => {
@@ -521,10 +779,15 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     const viewerSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
     expect(viewerSid).toBeTruthy();
 
-    for (const { path, body } of AI_PATHS) {
-      const res = await api(path, { sid: viewerSid, body });
-      expect(res.status, `viewer should get 403 on POST ${path}`).toBe(403);
-      expect(res.json.error, `viewer 403 message on ${path}`).toMatch(/read-only/i);
+    const aiRoutes = collectRoutes(mainRouter).filter(({ path }) =>
+      PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix)),
+    );
+    expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
+
+    for (const { method, path } of aiRoutes) {
+      const res = await api(`/api${path}`, { sid: viewerSid, body: {}, method });
+      expect(res.status, `viewer should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `viewer 403 message on ${method} /api${path}`).toMatch(/read-only/i);
     }
   });
 
@@ -543,10 +806,15 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     const billingSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
     expect(billingSid).toBeTruthy();
 
-    for (const { path, body } of AI_PATHS) {
-      const res = await api(path, { sid: billingSid, body });
-      expect(res.status, `billing should get 403 on POST ${path}`).toBe(403);
-      expect(res.json.error, `billing 403 message on ${path}`).toMatch(/billing/i);
+    const aiRoutes = collectRoutes(mainRouter).filter(({ path }) =>
+      PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix)),
+    );
+    expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
+
+    for (const { method, path } of aiRoutes) {
+      const res = await api(`/api${path}`, { sid: billingSid, body: {}, method });
+      expect(res.status, `billing should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `billing 403 message on ${method} /api${path}`).toMatch(/billing/i);
     }
   });
 

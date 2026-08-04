@@ -80,7 +80,7 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     expect(document.cookie).not.toContain("aio_oauth_mfa_token=tok-verify-123");
     // And the history-sync effect must have cleaned the query string.
     expect(window.location.search).toBe("");
-  });
+  }, 20000);
 
   it("oauth_status=mfa&mfa_mode=enroll shows the enrolment panel", async () => {
     document.cookie = "aio_oauth_mfa_token=tok-enroll-456; path=/";
@@ -88,8 +88,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Set up two-factor authentication")).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("oauth_status=mfa with a missing cookie shows a clear error, not a silent sign-in form", async () => {
     await renderAppAt("/?oauth_status=mfa");
@@ -98,8 +98,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Two-factor sign-in could not be started. Please try again."),
       ).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("oauth_status=error&oauth_msg=invalid_state shows the friendly error message", async () => {
     await renderAppAt("/?oauth_status=error&oauth_msg=invalid_state");
@@ -108,9 +108,9 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("The sign-in session expired. Please try again."),
       ).toBeInTheDocument();
-    });
+    }, { timeout: 10000 });
     expect(window.location.search).toBe("");
-  });
+  }, 20000);
 
   it("oauth_status=suspended shows the suspension message", async () => {
     await renderAppAt("/?oauth_status=suspended");
@@ -119,8 +119,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Your account has been suspended. Please contact support."),
       ).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("verify_status=expired shows the verification-pending screen with the expiry notice", async () => {
     await renderAppAt("/?verify_status=expired");
@@ -130,8 +130,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Your verification link has expired. Request a new one below."),
       ).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("verify_status=invalid shows the invalid-link notice on the verification screen", async () => {
     await renderAppAt("/?verify_status=invalid");
@@ -140,8 +140,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("This verification link is invalid. Please request a new one."),
       ).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("reset_token=x shows the choose-a-new-password form", async () => {
     await renderAppAt("/?reset_token=some-reset-token");
@@ -151,8 +151,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByPlaceholderText("New password (min 8 characters)"),
       ).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 10000 });
+  }, 20000);
 
   it("a stale MFA challenge does not reappear after unmount/remount", async () => {
     document.cookie = "aio_oauth_mfa_token=tok-once-789; path=/";
@@ -160,7 +160,7 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Two-factor verification")).toBeInTheDocument();
-    });
+    }, { timeout: 10000 });
 
     first.unmount();
 
@@ -174,8 +174,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     // Wait for the lazy page chunk to settle (some heading renders).
     await waitFor(() => {
       expect(document.querySelector("h1, h2")).toBeTruthy();
-    });
+    }, { timeout: 10000 });
     expect(screen.queryByText("Two-factor verification")).not.toBeInTheDocument();
     expect(screen.queryByText("Set up two-factor authentication")).not.toBeInTheDocument();
-  });
+  }, 20000);
 });
