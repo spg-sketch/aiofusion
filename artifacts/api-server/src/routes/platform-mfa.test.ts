@@ -207,9 +207,11 @@ vi.mock("../middleware/platform-auth", () => ({
 
 // Prevent real emails firing during tests — all notify-email functions are no-ops
 const sendMfaAdminResetEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const sendMfaChangedEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("../lib/notify-email", () => ({
   getAppBaseUrl: () => "https://test.example.com",
   sendMfaAdminResetEmail: sendMfaAdminResetEmailMock,
+  sendMfaChangedEmail: sendMfaChangedEmailMock,
   sendPasswordResetEmail: () => Promise.resolve(),
   sendNewSignupAlert: () => Promise.resolve(),
   sendApprovalEmail: () => Promise.resolve(),
@@ -519,6 +521,74 @@ describe("MFA login flow", () => {
     const ok = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
     expect(ok.status).toBe(200);
     expect(await getMfaState(AGENCY)).toBeNull();
+  });
+
+  it("enable sends a security alert email to the workspace owner", async () => {
+    // Seed a users row with an owner membership so recipient resolution works.
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    await ensurePlatformUser({ email: "mfa-owner@example.com", name: "Agency Owner", companyUsername: AGENCY, membershipRole: "owner", companyRole: "agency", companyStatus: "active" });
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    sendMfaChangedEmailMock.mockClear();
+
+    const setup = await post(baseUrl, "/api/platform/mfa/setup", {});
+    expect(setup.status).toBe(200);
+    const enable = await post(baseUrl, "/api/platform/mfa/enable", { code: totpCode(setup.json.secret) });
+    expect(enable.status).toBe(200);
+
+    await vi.waitFor(() => {
+      expect(sendMfaChangedEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ toEmail: "mfa-owner@example.com", enabled: true }),
+      );
+    });
+  });
+
+  it("disable sends a security alert email to the workspace owner", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    await ensurePlatformUser({ email: "mfa-owner@example.com", name: "Agency Owner", companyUsername: AGENCY, membershipRole: "owner", companyRole: "agency", companyStatus: "active" });
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    sendMfaChangedEmailMock.mockClear();
+
+    const ok = await post(baseUrl, "/api/platform/mfa/disable", { code: totpCode(secret) });
+    expect(ok.status).toBe(200);
+
+    await vi.waitFor(() => {
+      expect(sendMfaChangedEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ toEmail: "mfa-owner@example.com", enabled: false }),
+      );
+    });
+  });
+
+  it("enable does NOT send email when code is wrong", async () => {
+    actorOverride = { username: AGENCY, role: "agency" };
+    sendMfaChangedEmailMock.mockClear();
+
+    const setup = await post(baseUrl, "/api/platform/mfa/setup", {});
+    expect(setup.status).toBe(200);
+    const bad = await post(baseUrl, "/api/platform/mfa/enable", { code: "000000" });
+    expect(bad.status).toBe(401);
+
+    // Give async fire-and-forget a moment — it must not have fired.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sendMfaChangedEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("disable does NOT send email when code is wrong", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    actorOverride = { username: AGENCY, role: "agency" };
+    sendMfaChangedEmailMock.mockClear();
+
+    const bad = await post(baseUrl, "/api/platform/mfa/disable", { code: "000000" });
+    expect(bad.status).toBe(401);
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sendMfaChangedEmailMock).not.toHaveBeenCalled();
   });
 
   it("regenerates recovery codes with a valid TOTP; old codes stop working", async () => {

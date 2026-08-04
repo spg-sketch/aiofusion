@@ -86,7 +86,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -661,6 +661,27 @@ router.post("/platform/mfa/enable", loginLimiter, async (req: Request, res: Resp
       recoveryHashes: recoveryCodes.map(hashRecoveryCode),
     });
     await logAdminEvent({ username }, "mfa_enabled", username, "account");
+    // Fire-and-forget security alert to the account holder (fail-soft).
+    void (async () => {
+      try {
+        const [ownerRow] = await db
+          .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+          .from(platformMembershipsTable)
+          .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+          .where(and(
+            eq(platformMembershipsTable.companySlug, normUsername(username)),
+            eq(platformMembershipsTable.role, "owner"),
+          ))
+          .orderBy(platformMembershipsTable.createdAt)
+          .limit(1);
+        const accRow = ownerRow?.email ? null : await getAccount(normUsername(username));
+        const toEmail = ownerRow?.email || accRow?.email;
+        if (!toEmail) return;
+        await sendMfaChangedEmail({ toEmail, toName: ownerRow?.name || username, enabled: true });
+      } catch (err) {
+        logger.warn({ err, username }, "mfa/enable: failed to send security alert (non-fatal)");
+      }
+    })();
     if (pending) {
       await completeMfaLogin(res, pending, clientIp(req), { recoveryCodes });
       return;
@@ -772,6 +793,28 @@ router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, r
     try { await clearTrustedDevices(account.username); } catch { /* non-fatal */ }
     res.clearCookie(TRUSTED_DEVICE_COOKIE, { path: "/" });
     await logAdminEvent({ username: account.username }, "mfa_disabled", account.username, "account");
+    // Fire-and-forget security alert to the account holder (fail-soft).
+    void (async () => {
+      try {
+        const slug = normUsername(account.username);
+        const [ownerRow] = await db
+          .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+          .from(platformMembershipsTable)
+          .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+          .where(and(
+            eq(platformMembershipsTable.companySlug, slug),
+            eq(platformMembershipsTable.role, "owner"),
+          ))
+          .orderBy(platformMembershipsTable.createdAt)
+          .limit(1);
+        const accRow = ownerRow?.email ? null : await getAccount(slug);
+        const toEmail = ownerRow?.email || accRow?.email;
+        if (!toEmail) return;
+        await sendMfaChangedEmail({ toEmail, toName: ownerRow?.name || account.username, enabled: false });
+      } catch (err) {
+        logger.warn({ err, username: account.username }, "mfa/disable: failed to send security alert (non-fatal)");
+      }
+    })();
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Could not disable two-factor authentication" });

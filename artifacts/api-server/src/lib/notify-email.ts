@@ -133,6 +133,87 @@ export async function sendMfaAdminResetEmail(opts: {
   }
 }
 
+export async function sendMfaChangedEmail(opts: {
+  toEmail: string;
+  toName: string;
+  enabled: boolean;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — MFA changed alert not sent");
+    return;
+  }
+
+  const securityUrl = `${getAppBaseUrl()}/`;
+  const action = opts.enabled ? "enabled" : "disabled";
+  const subject = `Security alert: two-factor login ${action} on your AIO Fusion account`;
+
+  const text = opts.enabled
+    ? [
+        `Hi ${opts.toName},`,
+        ``,
+        `Two-factor authentication has been enabled on your AIO Fusion account.`,
+        `Your account is now protected by both your password and your authenticator app.`,
+        ``,
+        `If you did not make this change, contact the AIO Fusion team immediately.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n")
+    : [
+        `Hi ${opts.toName},`,
+        ``,
+        `Two-factor authentication has been disabled on your AIO Fusion account.`,
+        `Your account is now protected by your password alone.`,
+        ``,
+        `We recommend re-enabling two-factor login from your security settings as`,
+        `soon as possible.`,
+        ``,
+        `If you did not make this change, contact the AIO Fusion team immediately.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n");
+
+  const bodyHtml = opts.enabled
+    ? `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Two-factor authentication has been enabled on your AIO Fusion account.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Your account is now protected by both your password and your authenticator app.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did not make this change, contact the AIO Fusion team immediately.
+      </p>
+    `
+    : `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Two-factor authentication has been disabled on your AIO Fusion account.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Your account is now protected by your password alone until you set it up again.
+        We recommend re-enabling two-factor login from your security settings as soon as possible.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did not make this change, contact the AIO Fusion team immediately.
+      </p>
+    `;
+
+  const html = buildEmailHtml({
+    label: "Security Alert",
+    bodyHtml,
+    cta: { text: "Open AIO Fusion", href: securityUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail, enabled: opts.enabled }, "notify-email: MFA changed alert sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send MFA changed alert (non-fatal)");
+  }
+}
+
 export async function sendTeamInviteEmail(opts: {
   toEmail: string;
   companyName: string;
