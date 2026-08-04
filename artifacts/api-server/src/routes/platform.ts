@@ -1142,6 +1142,12 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
         .where(eq(platformSessionsTable.username, normUsername(mem.companySlug)));
     }
 
+    // Clear MFA trusted devices for every associated account so all devices
+    // must re-enter a TOTP code on next login after a password reset.
+    for (const mem of memberships) {
+      await clearTrustedDevices(normUsername(mem.companySlug));
+    }
+
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "reset-password: unexpected error");
@@ -1243,6 +1249,13 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
             currentSid ? ne(platformSessionsTable.sid, currentSid) : sql`true`,
           ));
       }
+
+      // Clear MFA trusted devices for every associated account so all devices
+      // must re-enter a TOTP code on next login after a password change.
+      for (const mem of memberships) {
+        await clearTrustedDevices(normUsername(mem.companySlug));
+      }
+      await clearTrustedDevices(username);
     } else {
       // Legacy session without a linked platform_users row: update the legacy
       // account store, and sync any platform_users row that shares its email
@@ -1262,6 +1275,8 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
         }
       }
       if (currentSid) await revokeOtherSessions(username, currentSid);
+      // Clear MFA trusted devices for the legacy account.
+      await clearTrustedDevices(username);
     }
 
     logger.info({ username }, "change-password: password changed");
@@ -2604,6 +2619,9 @@ router.post(
         .update(platformAccountsTable)
         .set({ passwordHash: hashPassword(newPassword) })
         .where(eq(platformAccountsTable.username, target));
+      // Clear MFA trusted devices so all devices must re-enter a TOTP code
+      // after an admin-set password change.
+      await clearTrustedDevices(target);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change password" });
