@@ -130,6 +130,104 @@ vi.mock("@workspace/db", async () => {
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS platform_password_resets (
+      token        varchar(64) PRIMARY KEY,
+      user_id      uuid NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+      expires_at   timestamptz NOT NULL,
+      used_at      timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS platform_email_verifications (
+      token      varchar(64) PRIMARY KEY,
+      user_id    uuid NOT NULL REFERENCES platform_users(id) ON DELETE CASCADE,
+      expires_at timestamptz NOT NULL,
+      used_at    timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS admin_events (
+      id           serial PRIMARY KEY,
+      actor_id     varchar(200) NOT NULL DEFAULT '',
+      actor_username varchar(200) NOT NULL,
+      action       varchar(100) NOT NULL,
+      target_id    varchar(300),
+      target_type  varchar(100),
+      metadata     jsonb,
+      created_at   timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS planner_items (
+      id           varchar PRIMARY KEY,
+      project_id   varchar NOT NULL,
+      owner        varchar NOT NULL,
+      title        varchar NOT NULL DEFAULT '',
+      content_type varchar NOT NULL DEFAULT '',
+      spokesperson varchar NOT NULL DEFAULT '',
+      key_message  varchar NOT NULL DEFAULT '',
+      audience     varchar NOT NULL DEFAULT '',
+      channels     jsonb NOT NULL DEFAULT '[]',
+      week         integer NOT NULL DEFAULT 1,
+      status       varchar NOT NULL DEFAULT 'Planned',
+      release_date varchar NOT NULL DEFAULT '',
+      notes        text NOT NULL DEFAULT '',
+      headline     text,
+      standfirst   text,
+      body_copy    text,
+      action_notes text,
+      created_at   timestamptz NOT NULL DEFAULT now(),
+      updated_at   timestamptz NOT NULL DEFAULT now(),
+      deleted_at   timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS scoring_configs (
+      owner      varchar PRIMARY KEY,
+      config     jsonb NOT NULL DEFAULT '{}',
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_categories (
+      id         serial PRIMARY KEY,
+      name       text NOT NULL,
+      account_id varchar,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS media_outlets (
+      id          serial PRIMARY KEY,
+      name        text NOT NULL,
+      category    text NOT NULL DEFAULT '',
+      website     text NOT NULL DEFAULT '',
+      description text NOT NULL DEFAULT '',
+      country     text NOT NULL DEFAULT '',
+      reach_band  text NOT NULL DEFAULT '',
+      account_id  varchar,
+      created_at  timestamptz NOT NULL DEFAULT now(),
+      deleted_at  timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS media_contacts (
+      id         serial PRIMARY KEY,
+      outlet_id  integer REFERENCES media_outlets(id),
+      first_name text NOT NULL DEFAULT '',
+      last_name  text NOT NULL DEFAULT '',
+      role       text NOT NULL DEFAULT '',
+      email      text NOT NULL DEFAULT '',
+      phone      text NOT NULL DEFAULT '',
+      notes      text NOT NULL DEFAULT '',
+      account_id varchar,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
+    CREATE TABLE IF NOT EXISTS audit_locks (
+      project_id varchar NOT NULL,
+      audit_type varchar NOT NULL,
+      owner      varchar NOT NULL DEFAULT '',
+      last_run_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (project_id, audit_type)
+    );
+    CREATE TABLE IF NOT EXISTS token_usage (
+      id                 serial PRIMARY KEY,
+      account_id         varchar(200) NOT NULL,
+      operation          varchar(80) NOT NULL,
+      model              varchar(80) NOT NULL,
+      input_tokens       integer NOT NULL DEFAULT 0,
+      output_tokens      integer NOT NULL DEFAULT 0,
+      cost_gbp_estimate  numeric(10,6),
+      project_id         varchar(200),
+      created_at         timestamptz NOT NULL DEFAULT now()
+    );
   `);
 
   return {
@@ -150,6 +248,14 @@ vi.mock("@workspace/db", async () => {
     savedDiagnosticsTable: schema.savedDiagnosticsTable,
     savedContentGeoTable: schema.savedContentGeoTable,
     savedTechGeoTable: schema.savedTechGeoTable,
+    platformPasswordResetsTable: schema.platformPasswordResetsTable,
+    platformEmailVerificationsTable: schema.platformEmailVerificationsTable,
+    adminEventsTable: schema.adminEventsTable,
+    mediaCategoriesTable: schema.mediaCategoriesTable,
+    mediaOutletsTable: schema.mediaOutletsTable,
+    mediaContactsTable: schema.mediaContactsTable,
+    auditLocksTable: schema.auditLocksTable,
+    tokenUsageTable: schema.tokenUsageTable,
   };
 });
 
@@ -183,6 +289,9 @@ vi.mock("../lib/notify-email", () => ({
   sendNewSignupAlert: () => Promise.resolve(),
   sendApprovalEmail: () => Promise.resolve(),
   sendVerificationEmail: () => Promise.resolve(),
+  sendPasswordResetEmail: () => Promise.resolve(),
+  sendMfaAdminResetEmail: () => Promise.resolve(),
+  sendSecurityAlertEmail: () => Promise.resolve(),
 }));
 
 import {
@@ -195,6 +304,7 @@ import {
 import { eq } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
+import platformRouter from "./platform";
 import teamRouter from "./team";
 import storeRouter from "./store";
 import storeContentRouter from "./store-content";
@@ -209,6 +319,7 @@ function buildApp() {
   app.use(express.json());
   app.use(cookieParser());
   app.use(resolvePlatformAccount);
+  app.use("/api", platformRouter);
   app.use("/api", teamRouter);
   app.use("/api", storeRouter);
   app.use("/api", storeContentRouter);
@@ -345,7 +456,7 @@ describe("team invitations", () => {
       body: { id: "proj-2", name: "nope", data: {} },
     });
     expect(badWrite.status).toBe(403);
-  }, 20000);
+  });
 
   it("enforces the seat limit (default 3) counting members + pending invites", async () => {
     const { sid } = await seedAgency("seats-agency", "owner@seats.test");
@@ -490,5 +601,158 @@ describe("team invitations", () => {
       .from(platformMembershipsTable)
       .where(eq(platformMembershipsTable.userId, memberUser!.id));
     expect(remaining).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /platform/me — hasPassword reflects the individual member, not the owner
+// ---------------------------------------------------------------------------
+describe("GET /platform/me — hasPassword is per-member, not per-workspace", () => {
+  // Seed a workspace with three distinct credential states and verify that
+  // /platform/me returns the right hasPassword for each session.
+
+  it("SSO-only member sees hasPassword=false; password member sees true; owner unaffected", async () => {
+    const { company, sid: ownerSid } = await seedAgency(
+      "haspw-agency",
+      "owner@haspw.example",
+    );
+
+    // SSO-only member: no passwordHash.
+    const [ssoUser] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: "sso@haspw.example",
+        passwordHash: null,
+        googleId: "google-haspw-sso",
+        emailVerified: true,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: ssoUser!.id,
+      companyId: company.id,
+      companySlug: "haspw-agency",
+      role: "content",
+    });
+    const ssoSid = await createPlatformSession(
+      "haspw-agency",
+      null,
+      ssoUser!.id,
+      company.id,
+    );
+
+    // Password-bearing member.
+    const [pwUser] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: "pw@haspw.example",
+        passwordHash: hashPassword("member-pw-haspw-1"),
+        emailVerified: true,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: pwUser!.id,
+      companyId: company.id,
+      companySlug: "haspw-agency",
+      role: "viewer",
+    });
+    const pwSid = await createPlatformSession(
+      "haspw-agency",
+      null,
+      pwUser!.id,
+      company.id,
+    );
+
+    // SSO member: hasPassword must be false (their own row, not the owner's).
+    const ssoMe = await api("/api/platform/me", { sid: ssoSid });
+    expect(ssoMe.status).toBe(200);
+    expect(ssoMe.json.hasPassword).toBe(false);
+
+    // Password member: hasPassword must be true.
+    const pwMe = await api("/api/platform/me", { sid: pwSid });
+    expect(pwMe.status).toBe(200);
+    expect(pwMe.json.hasPassword).toBe(true);
+
+    // Workspace owner is unaffected — still sees true.
+    const ownerMe = await api("/api/platform/me", { sid: ownerSid });
+    expect(ownerMe.status).toBe(200);
+    expect(ownerMe.json.hasPassword).toBe(true);
+  });
+
+  it("SSO-only member can call request-set-password; password member gets 409", async () => {
+    const [company2] = await db
+      .insert(platformCompaniesTable)
+      .values({
+        slug: "haspw2-agency",
+        role: "agency",
+        status: "active",
+        setupComplete: true,
+      })
+      .returning();
+    await db.insert(platformAccountsTable).values({
+      username: "haspw2-agency",
+      passwordHash: hashPassword("owner2-haspw"),
+      role: "agency",
+      status: "active",
+    });
+
+    // SSO-only member.
+    const [ssoUser2] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: "sso2@haspw.example",
+        passwordHash: null,
+        googleId: "google-haspw-sso-2",
+        emailVerified: true,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: ssoUser2!.id,
+      companyId: company2!.id,
+      companySlug: "haspw2-agency",
+      role: "content",
+    });
+    const ssoSid2 = await createPlatformSession(
+      "haspw2-agency",
+      null,
+      ssoUser2!.id,
+      company2!.id,
+    );
+
+    // Password-bearing member.
+    const [pwUser2] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: "pw2@haspw.example",
+        passwordHash: hashPassword("already-has-pw-2"),
+        emailVerified: true,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: pwUser2!.id,
+      companyId: company2!.id,
+      companySlug: "haspw2-agency",
+      role: "viewer",
+    });
+    const pwSid2 = await createPlatformSession(
+      "haspw2-agency",
+      null,
+      pwUser2!.id,
+      company2!.id,
+    );
+
+    // SSO member: 200 — token issued, email queued.
+    const ssoReq = await api("/api/platform/request-set-password", {
+      sid: ssoSid2,
+      body: {},
+    });
+    expect(ssoReq.status).toBe(200);
+    expect(ssoReq.json.ok).toBe(true);
+
+    // Password member: 409 — already has a password, use change-password instead.
+    const pwReq = await api("/api/platform/request-set-password", {
+      sid: pwSid2,
+      body: {},
+    });
+    expect(pwReq.status).toBe(409);
   });
 });

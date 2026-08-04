@@ -404,9 +404,10 @@ function App() {
     // cached account list. Then sync the shared store so this login sees every
     // project it may see, on every device. Local-only projects are pushed up.
     void (async () => {
-      const { session: s, needsSetup: bootNeedsSetup } = await bootstrapAuth();
+      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword } = await bootstrapAuth();
       setSessionState(s);
       if (bootNeedsSetup) setNeedsSetup(true);
+      if (bootHasPassword !== undefined) setHasPassword(bootHasPassword);
       setAuthLoading(false);
       await migrateLocalStorageContentToServer();
       await initContentStore();
@@ -504,6 +505,9 @@ function App() {
   // True when the user is signed in but hasn't chosen Agency/Partner vs Client yet
   // (new organic signups via password or SSO).
   const [needsSetup, setNeedsSetup] = useState(false);
+  // Whether the signed-in account has a password hash. undefined = not yet
+  // resolved (bootstrapAuth pending). false = SSO-only (no password set yet).
+  const [hasPassword, setHasPassword] = useState<boolean | undefined>(undefined);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -892,6 +896,7 @@ function App() {
           onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
           initialNotice={sessionExpiredNotice}
           resetToken={passwordResetToken}
+          hasPassword={hasPassword}
         />
         {!session && (
           <GeorgeSupport

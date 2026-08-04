@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts } from "../lib/auth";
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
@@ -30,6 +30,7 @@ function PlatformHomePage({
   onOpenGeorge,
   initialNotice,
   resetToken: resetTokenProp,
+  hasPassword,
   oauthRedirectParams,
   onOauthParamsConsumed,
 }: {
@@ -48,6 +49,9 @@ function PlatformHomePage({
   onOpenGeorge?: () => void;
   initialNotice?: string;
   resetToken?: string | null;
+  /** Whether the signed-in account already has a password hash. false = SSO-only
+   *  (Google/Microsoft only, no password set yet). undefined = not yet resolved. */
+  hasPassword?: boolean;
   /** Initial URL query string captured by App before the history-sync effect
    *  strips it — the OAuth/MFA/verification redirect params live here. */
   oauthRedirectParams?: string | null;
@@ -73,6 +77,13 @@ function PlatformHomePage({
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // "Set a password" flow for SSO-only accounts (no current password exists).
+  // Uses the same email-token path as password reset: user clicks "Send me a
+  // link", server emails a reset token, and the existing reset form completes it.
+  const [setPasswordLoading, setSetPasswordLoading] = useState(false);
+  const [setPasswordSent, setSetPasswordSent] = useState(false);
+  const [setPasswordError, setSetPasswordError] = useState<string | null>(null);
 
   // Sign-up form
   const [showSignup, setShowSignup] = useState(false);
@@ -281,6 +292,18 @@ function PlatformHomePage({
       .finally(() => setChangePasswordLoading(false));
   };
 
+  const handleRequestSetPassword = () => {
+    if (setPasswordLoading || setPasswordSent) return;
+    setSetPasswordError(null);
+    setSetPasswordLoading(true);
+    void serverRequestSetPassword()
+      .then((r) => {
+        if (!r.ok) { setSetPasswordError(r.error); return; }
+        setSetPasswordSent(true);
+      })
+      .finally(() => setSetPasswordLoading(false));
+  };
+
   const handleDeleteAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setDeleteError(null);
@@ -338,12 +361,12 @@ function PlatformHomePage({
         </div>
 
         {/* LOGIN / SIGN-UP / SESSION - full-width across the page */}
-        {!session ? (
+        {/* resetToken is checked first so a logged-in SSO user who clicked the
+            email link still sees the set-password form rather than the account card. */}
+        {resetToken ? (
           <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
-
-            {resetToken ? (
-              /* --- RESET PASSWORD (from email link) --- */
-              <div className="max-w-md mx-auto py-4">
+            {/* --- RESET / SET PASSWORD (from email link) --- */}
+            <div className="max-w-md mx-auto py-4">
                 {resetDone ? (
                   <div className="text-center">
                     <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
@@ -431,8 +454,12 @@ function PlatformHomePage({
                     </button>
                   </>
                 )}
-              </div>
-            ) : showForgotPassword ? (
+            </div>
+          </div>
+        ) : !session ? (
+          <div className="rounded-2xl p-6 sm:p-10 mb-6 sm:mb-8" style={{ background: "#1A647B", boxShadow: "0 8px 24px -12px rgba(26,100,123,0.35)" }}>
+
+            {showForgotPassword ? (
               /* --- FORGOT PASSWORD --- */
               <div className="max-w-md mx-auto py-4 text-center">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }}>
@@ -966,84 +993,137 @@ function PlatformHomePage({
             {/* TWO-FACTOR AUTHENTICATION - status + opt-in management */}
             <MfaSecuritySection session={session} />
 
-            {/* CHANGE PASSWORD - proactive credential change for signed-in users */}
+            {/* CHANGE PASSWORD / SET A PASSWORD - SSO-aware credential section */}
             <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
-              <button
-                onClick={() => {
-                  setShowChangePassword((v) => !v);
-                  setChangePasswordError(null);
-                  setChangePasswordDone(false);
-                  setChangeCurrentPassword("");
-                  setChangeNewPassword1("");
-                  setChangeNewPassword2("");
-                }}
-                className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity text-white"
-              >
-                <KeyRound size={15} />
-                {showChangePassword ? "Hide Change Password" : "Change Password"}
-              </button>
-              {showChangePassword && (
-                <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
-                  {changePasswordDone ? (
-                    <div className="flex items-center gap-2 text-[14px] font-medium" style={{ color: "#86efac" }}>
-                      <CheckCircle2 size={16} /> Password changed. Other devices have been signed out.
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
-                        Enter your current password, then choose a new one (at least 8 characters).
-                        You will stay signed in here, but every other device will be signed out.
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Current password</label>
-                          <input
-                            type="password"
-                            autoComplete="current-password"
-                            value={changeCurrentPassword}
-                            onChange={(e) => setChangeCurrentPassword(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
-                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
-                          />
+              {hasPassword === false ? (
+                /* --- SSO-ONLY: no password set yet — offer email-link flow --- */
+                <div>
+                  <button
+                    onClick={() => {
+                      setShowChangePassword((v) => !v);
+                      setSetPasswordError(null);
+                    }}
+                    className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity text-white"
+                  >
+                    <KeyRound size={15} />
+                    {showChangePassword ? "Hide Set a Password" : "Set a Password"}
+                  </button>
+                  {showChangePassword && (
+                    <div className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
+                      {setPasswordSent ? (
+                        <div className="flex items-start gap-3" style={{ color: "#86efac" }}>
+                          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                          <p className="text-[14px] font-medium leading-[1.6]">
+                            Check your email — we've sent you a link to set your password.
+                            The link expires in 1 hour and can only be used once.
+                          </p>
                         </div>
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>New password</label>
-                          <input
-                            type="password"
-                            autoComplete="new-password"
-                            value={changeNewPassword1}
-                            onChange={(e) => setChangeNewPassword1(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
-                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Confirm new password</label>
-                          <input
-                            type="password"
-                            autoComplete="new-password"
-                            value={changeNewPassword2}
-                            onChange={(e) => setChangeNewPassword2(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
-                            style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
-                          />
-                        </div>
-                      </div>
-                      {changePasswordError && (
-                        <p className="mt-3 text-[13px] font-medium" style={{ color: "#fca5a5" }}>{changePasswordError}</p>
+                      ) : (
+                        <>
+                          <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
+                            Your account currently uses Google or Microsoft sign-in only — no password is set.
+                            Click below and we'll email you a one-time link to choose a password.
+                            Once set, you can sign in with your email and password as well.
+                          </p>
+                          {setPasswordError && (
+                            <p className="mb-3 text-[13px] font-medium" style={{ color: "#fca5a5" }}>{setPasswordError}</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleRequestSetPassword}
+                            disabled={setPasswordLoading}
+                            className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                            style={{ background: accent }}
+                          >
+                            {setPasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                            {setPasswordLoading ? "Sending…" : "Send me a link"}
+                          </button>
+                        </>
                       )}
-                      <button
-                        type="submit"
-                        disabled={changePasswordLoading}
-                        className="mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
-                        style={{ background: accent }}
-                      >
-                        {changePasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                        Change Password
-                      </button>
-                    </>
+                    </div>
                   )}
-                </form>
+                </div>
+              ) : (
+                /* --- REGULAR: account has a password — offer change flow --- */
+                <div>
+                  <button
+                    onClick={() => {
+                      setShowChangePassword((v) => !v);
+                      setChangePasswordError(null);
+                      setChangePasswordDone(false);
+                      setChangeCurrentPassword("");
+                      setChangeNewPassword1("");
+                      setChangeNewPassword2("");
+                    }}
+                    className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.14em] hover:opacity-70 transition-opacity text-white"
+                  >
+                    <KeyRound size={15} />
+                    {showChangePassword ? "Hide Change Password" : "Change Password"}
+                  </button>
+                  {showChangePassword && (
+                    <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
+                      {changePasswordDone ? (
+                        <div className="flex items-center gap-2 text-[14px] font-medium" style={{ color: "#86efac" }}>
+                          <CheckCircle2 size={16} /> Password changed. Other devices have been signed out.
+                        </div>
+                      ) : (
+                        <>
+                          <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: "rgba(255,255,255,0.85)" }}>
+                            Enter your current password, then choose a new one (at least 8 characters).
+                            You will stay signed in here, but every other device will be signed out.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Current password</label>
+                              <input
+                                type="password"
+                                autoComplete="current-password"
+                                value={changeCurrentPassword}
+                                onChange={(e) => setChangeCurrentPassword(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                                style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>New password</label>
+                              <input
+                                type="password"
+                                autoComplete="new-password"
+                                value={changeNewPassword1}
+                                onChange={(e) => setChangeNewPassword1(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                                style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Confirm new password</label>
+                              <input
+                                type="password"
+                                autoComplete="new-password"
+                                value={changeNewPassword2}
+                                onChange={(e) => setChangeNewPassword2(e.target.value)}
+                                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none"
+                                style={{ borderColor: "rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white" }}
+                              />
+                            </div>
+                          </div>
+                          {changePasswordError && (
+                            <p className="mt-3 text-[13px] font-medium" style={{ color: "#fca5a5" }}>{changePasswordError}</p>
+                          )}
+                          <button
+                            type="submit"
+                            disabled={changePasswordLoading}
+                            className="mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+                            style={{ background: accent }}
+                          >
+                            {changePasswordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                            Change Password
+                          </button>
+                        </>
+                      )}
+                    </form>
+                  )}
+                </div>
               )}
             </div>
 

@@ -343,10 +343,12 @@ export async function serverLogout(): Promise<void> {
 // Reconcile the local session with the server on app load. Validates the
 // session cookie, runs the one-time account migration if an admin is signed in
 // and it has not happened yet, then refreshes the cached account list. Returns
-// the authoritative session and whether account setup is still pending.
-export async function bootstrapAuth(): Promise<{ session: Session | null; needsSetup?: boolean }> {
+// the authoritative session, whether account setup is still pending, and
+// whether the account already has a password hash (false = SSO-only).
+export async function bootstrapAuth(): Promise<{ session: Session | null; needsSetup?: boolean; hasPassword?: boolean }> {
   let session: Session | null = null;
   let needsSetup = false;
+  let hasPassword: boolean | undefined;
   try {
     const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
     if (meResp.ok) {
@@ -354,6 +356,7 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
         account?: ServerAccount | null;
         impersonating?: Impersonation | null;
         setupComplete?: boolean | null;
+        hasPassword?: boolean;
       };
       if (me.account) {
         const acct = me.account as ServerAccount & {
@@ -370,6 +373,7 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
         // setupComplete === false (not null, not true) means the user signed up
         // but hasn't chosen Agency/Partner vs Client yet.
         if (me.setupComplete === false) needsSetup = true;
+        hasPassword = me.hasPassword;
       } else {
         clearSession();
       }
@@ -383,7 +387,7 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
     await runMigrationIfNeeded(session.role);
     await refreshAccountsCache();
   }
-  return { session, needsSetup };
+  return { session, needsSetup, hasPassword };
 }
 
 // Fetch the current impersonation state (null when not viewing as another
@@ -673,6 +677,15 @@ export async function serverChangeMyPassword(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/change-password", { currentPassword, newPassword });
   if (!ok) return { ok: false, error: json?.error || "Failed to change password. Please try again." };
+  return { ok: true };
+}
+
+// Request a "set first password" email link for SSO-only accounts (no current
+// password needed — identity is confirmed by the active session). The server
+// issues a single-use reset token and emails it to the account address.
+export async function serverRequestSetPassword(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/request-set-password");
+  if (!ok) return { ok: false, error: json?.error || "Failed to send the link. Please try again." };
   return { ok: true };
 }
 export async function serverSetAccountType(

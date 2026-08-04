@@ -1436,3 +1436,190 @@ describe("POST /api/platform/change-password", () => {
     expect(sessions[0].sid).toBe(sid);
   });
 });
+
+// ---------------------------------------------------------------------------
+// POST /api/platform/request-set-password — first-password flow for SSO accounts
+// ---------------------------------------------------------------------------
+describe("POST /api/platform/request-set-password", () => {
+  let server: Server;
+  let baseUrl: string;
+  const EMAIL = "sso-setpw-test@example.com";
+  const USERNAME = "sso-setpw-agency";
+  const NEW_PASSWORD = "brandnewpass123!";
+  let userId: string;
+
+  // Uses the same real-session middleware as the change-password suite so
+  // requirePlatformAuth actually checks the cookie/bearer token.
+  async function startAuthedServer(): Promise<{ server: Server; baseUrl: string }> {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use(async (req: any, _res: any, next: any) => {
+      const sid = getPlatformSessionId(req);
+      req.account = sid ? await getPlatformSessionAccount(sid) : null;
+      next();
+    });
+    app.use("/api", platformRouter);
+    return new Promise((resolve) => {
+      const s = app.listen(0, () => {
+        resolve({ server: s, baseUrl: `http://127.0.0.1:${(s.address() as AddressInfo).port}` });
+      });
+    });
+  }
+
+  beforeEach(async () => {
+    passwordResetEmails.length = 0;
+    // SSO-only user: passwordHash is NULL, googleId set.
+    await db.insert(platformAccountsTable).values({
+      username: USERNAME,
+      passwordHash: hashPassword("placeholder-not-used"),
+      role: "agency",
+      status: "active",
+      email: EMAIL,
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: USERNAME, role: "agency", status: "active", email: EMAIL })
+      .returning({ id: platformCompaniesTable.id });
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: EMAIL,
+        name: "SSO User",
+        passwordHash: null,      // <-- SSO-only: no password
+        googleId: "google-sub-sso-test",
+        emailVerified: true,
+      })
+      .returning({ id: platformUsersTable.id });
+    userId = user.id;
+    await db.insert(platformMembershipsTable).values({
+      userId,
+      companyId: company.id,
+      companySlug: USERNAME,
+      role: "owner",
+    });
+    ({ server, baseUrl } = await startAuthedServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
+    vi.unstubAllGlobals();
+  });
+
+  // Create a real session for the SSO user (they're already signed in via OAuth).
+  async function createSsoSession(): Promise<string> {
+    const { createPlatformSession: cps, setPlatformCookie: spc } = await import("../lib/platform-auth");
+    void spc; // unused — we just need the sid
+    const sid = await cps(USERNAME, "127.0.0.1", userId, undefined);
+    return sid;
+  }
+
+  it("issues a reset token and emails the session user's address (happy path)", async () => {
+    const sid = await createSsoSession();
+    const res = await fetch(`${baseUrl}/api/platform/request-set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sid}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+
+    // Token row created.
+    const { platformPasswordResetsTable: prt } = (await import("@workspace/db")) as any;
+    const rows = await db.select().from(prt).where(eq(prt.userId, userId));
+    expect(rows.length).toBe(1);
+    expect(rows[0].usedAt).toBeNull();
+
+    // Email sent to the session user's address.
+    expect(passwordResetEmails.length).toBe(1);
+    expect(passwordResetEmails[0].toEmail).toBe(EMAIL);
+    expect(passwordResetEmails[0].resetUrl).toContain("reset_token=");
+  });
+
+  it("returns 409 when the account already has a password set", async () => {
+    // Give the user a password hash.
+    await db
+      .update(platformUsersTable)
+      .set({ passwordHash: hashPassword("already-has-one!") })
+      .where(eq(platformUsersTable.id, userId));
+
+    const sid = await createSsoSession();
+    const res = await fetch(`${baseUrl}/api/platform/request-set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sid}` },
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error?: string };
+    expect(body.error).toMatch(/change.password/i);
+
+    // No email sent.
+    expect(passwordResetEmails.length).toBe(0);
+  });
+
+  it("returns 401 when called without a session", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/request-set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("end-to-end: SSO user requests link, uses reset token, can then log in with email+password", async () => {
+    const sid = await createSsoSession();
+
+    // Step 1: request the set-password link.
+    const reqRes = await fetch(`${baseUrl}/api/platform/request-set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${sid}` },
+    });
+    expect(reqRes.status).toBe(200);
+
+    // Step 2: extract the issued token from the DB.
+    const { platformPasswordResetsTable: prt } = (await import("@workspace/db")) as any;
+    const rows = await db.select().from(prt).where(eq(prt.userId, userId));
+    expect(rows.length).toBe(1);
+    const token = rows[0].token as string;
+
+    // Step 3: use the token via the existing reset-password endpoint.
+    const resetRes = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password: NEW_PASSWORD }),
+    });
+    expect(resetRes.status).toBe(200);
+    expect(await resetRes.json()).toEqual({ ok: true });
+
+    // Step 4: platform_users.passwordHash is now set.
+    const [user] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, userId));
+    expect(user.passwordHash).not.toBeNull();
+
+    // Step 5: platform_accounts hash also synced (dual-write).
+    const [account] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, USERNAME));
+    expect(account.passwordHash).not.toBeNull();
+
+    // Step 6: can now sign in with email + new password.
+    const loginRes = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: EMAIL, password: NEW_PASSWORD }),
+    });
+    expect(loginRes.status).toBe(200);
+
+    // Step 7: slug login also works.
+    const slugLogin = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: USERNAME, password: NEW_PASSWORD }),
+    });
+    expect(slugLogin.status).toBe(200);
+  });
+});

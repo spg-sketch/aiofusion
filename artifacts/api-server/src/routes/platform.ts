@@ -231,16 +231,32 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     if (adminAccount) impersonating = { by: adminAccount.username, byRole: adminAccount.role };
   }
   let googleLinked = false;
+  let hasPassword = false;
   let masterOwner = false;
   let emailVerified: boolean | null = null;
   let setupComplete: boolean | null = null;
   if (req.account) {
     try {
-      const acc = await getAccount(normUsername(req.account.username));
-      if (acc?.email) {
-        const u = await getUserByEmail(acc.email);
-        googleLinked = !!(u?.googleId);
-        emailVerified = u?.emailVerified ?? null;
+      // Prefer the session's own userId so member sessions reflect the
+      // individual user's credentials, not the workspace owner's.
+      let u: typeof platformUsersTable.$inferSelect | null = null;
+      if (req.account.userId) {
+        const rows = await db
+          .select()
+          .from(platformUsersTable)
+          .where(eq(platformUsersTable.id, req.account.userId))
+          .limit(1);
+        u = rows[0] ?? null;
+      }
+      // Legacy fallback: sessions created before userId was stored.
+      if (!u) {
+        const acc = await getAccount(normUsername(req.account.username));
+        if (acc?.email) u = await getUserByEmail(acc.email);
+      }
+      if (u) {
+        googleLinked = !!(u.googleId);
+        hasPassword = !!(u.passwordHash);
+        emailVerified = u.emailVerified ?? null;
       }
     } catch { /* non-fatal */ }
     try {
@@ -260,7 +276,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       }
     : null;
   res.setHeader("Cache-Control", "no-store");
-  res.json({ account: accountWithGoogle, impersonating, masterOwner, emailVerified, setupComplete });
+  res.json({ account: accountWithGoogle, impersonating, masterOwner, emailVerified, setupComplete, hasPassword });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.
@@ -1573,6 +1589,72 @@ router.post(
     }
   },
 );
+
+// Request a "set first password" email for SSO-only accounts. Requires an
+// active session (identity already confirmed). Derives the email from the
+// session user — never trusts the request body — and reuses the same
+// platform_password_resets machinery as the forgot-password flow.
+router.post("/platform/request-set-password", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
+  try {
+    if (!req.account) {
+      res.status(401).json({ error: "Authentication required." });
+      return;
+    }
+    const actor = req.account;
+
+    // Resolve the user row from the session's linked userId or email.
+    let user: Awaited<ReturnType<typeof getUserByEmail>> | undefined;
+    if (actor.userId) {
+      const rows = await db
+        .select()
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, actor.userId))
+        .limit(1);
+      user = rows[0] ?? undefined;
+    }
+    if (!user) {
+      const acc = await getAccount(normUsername(actor.username));
+      if (acc?.email) user = await getUserByEmail(acc.email) ?? undefined;
+    }
+
+    if (!user) {
+      res.status(400).json({ error: "Could not find a user record for this session." });
+      return;
+    }
+
+    // Guard: if the user already has a password, they must use change-password.
+    if (user.passwordHash) {
+      res.status(409).json({ error: "Your account already has a password. Use Change Password instead." });
+      return;
+    }
+
+    const email = user.email;
+    if (!email) {
+      res.status(400).json({ error: "No email address is associated with this account." });
+      return;
+    }
+
+    // Reuse the same token machinery as forgot-password: invalidate stale
+    // tokens, issue a fresh one (1-hour TTL), and send the reset email.
+    await db
+      .delete(platformPasswordResetsTable)
+      .where(eq(platformPasswordResetsTable.userId, user.id));
+    const token = crypto.randomBytes(32).toString("hex");
+    await db.insert(platformPasswordResetsTable).values({
+      token,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const resetUrl = `${getAppBaseUrl()}/?reset_token=${token}`;
+    void sendPasswordResetEmail({ toEmail: email, toName: user.name || email, resetUrl });
+
+    logger.info({ username: actor.username }, "request-set-password: link sent");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "request-set-password: unexpected error");
+    res.status(500).json({ error: "Failed to send the link. Please try again." });
+  }
+});
 
 // Set account type after signup (Agency/Partner vs Client). Requires a session.
 router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
