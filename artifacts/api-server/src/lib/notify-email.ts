@@ -531,6 +531,104 @@ export async function sendSpendCapAlert(opts: {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Email-address change notices
+// Sends TWO emails:
+//   1. Security notice to the OLD address: "your email was changed to X"
+//   2. Confirmation to the NEW address:    "this address is now linked to your account"
+// Both are fail-soft — a delivery failure on one must not prevent the other.
+// ──────────────────────────────────────────────────────────────────────────────
+export async function sendEmailChangedEmail(opts: {
+  oldEmail: string;
+  newEmail: string;
+  toName: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ oldEmail: opts.oldEmail }, "notify-email: RESEND_API_KEY not set — email changed alerts not sent");
+    return;
+  }
+
+  const securityUrl = `${getAppBaseUrl()}/`;
+
+  // --- Notice to old address ---
+  const noticeSubject = `Security alert: your AIO Fusion email address was changed`;
+  const noticeText = [
+    `Hi ${opts.toName},`,
+    ``,
+    `The email address on your AIO Fusion account was changed to: ${opts.newEmail}`,
+    ``,
+    `If you made this change, you can ignore this email.`,
+    ``,
+    `If you did NOT make this change, your account may be compromised. Contact`,
+    `us immediately at info@aiofusion.ai.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const noticeHtml = buildEmailHtml({
+    label: "Security Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        The email address on your AIO Fusion account was changed.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Your account email has been updated to <strong>${escHtml(opts.newEmail)}</strong>.
+        If you made this change, you can safely ignore this email.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did <strong>not</strong> make this change, your account may be compromised.
+        Contact us immediately at
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
+      </p>
+    `,
+    cta: { text: "Open AIO Fusion", href: securityUrl },
+  });
+
+  // --- Confirmation to new address ---
+  const confirmSubject = `Your AIO Fusion email address has been updated`;
+  const confirmText = [
+    `Hi ${opts.toName},`,
+    ``,
+    `This email address (${opts.newEmail}) is now linked to your AIO Fusion account.`,
+    `You can use it to sign in going forward.`,
+    ``,
+    `If you did NOT make this change, contact us immediately at info@aiofusion.ai.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const confirmHtml = buildEmailHtml({
+    label: "Email Updated",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Your AIO Fusion email address has been updated.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        This address (<strong>${escHtml(opts.newEmail)}</strong>) is now linked to your account
+        and you can use it to sign in going forward.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did <strong>not</strong> make this change, contact us immediately at
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
+      </p>
+    `,
+    cta: { text: "Open AIO Fusion", href: securityUrl },
+  });
+
+  // Send both — fail-soft independently so one failure doesn't suppress the other.
+  await Promise.allSettled([
+    resend.emails.send({ from: fromAddress(), to: [opts.oldEmail], subject: noticeSubject, text: noticeText, html: noticeHtml })
+      .then(() => logger.info({ toEmail: opts.oldEmail }, "notify-email: email changed notice sent to old address"))
+      .catch((err: unknown) => logger.warn({ err, toEmail: opts.oldEmail }, "notify-email: failed to send email changed notice to old address (non-fatal)")),
+    resend.emails.send({ from: fromAddress(), to: [opts.newEmail], subject: confirmSubject, text: confirmText, html: confirmHtml })
+      .then(() => logger.info({ toEmail: opts.newEmail }, "notify-email: email changed confirmation sent to new address"))
+      .catch((err: unknown) => logger.warn({ err, toEmail: opts.newEmail }, "notify-email: failed to send email changed confirmation to new address (non-fatal)")),
+  ]);
+}
+
 export async function sendPasswordChangedEmail(opts: {
   toEmail: string;
   toName: string;

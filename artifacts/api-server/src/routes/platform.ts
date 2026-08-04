@@ -86,7 +86,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -1370,6 +1370,209 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
     res.status(500).json({ error: "Failed to change password. Please try again." });
   }
 });
+
+// Self-service email change: signed-in user updates their own email address.
+// Updates both platform_users (primary) and platform_accounts (legacy sync).
+// Sends a fail-soft security notice to the OLD address and a confirmation to
+// the NEW address. Enforces uniqueness: the new email must not already exist.
+router.post("/platform/change-email", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const actor = req.account!;
+    const newEmail = typeof req.body?.newEmail === "string" ? req.body.newEmail.trim().toLowerCase() : "";
+    if (!newEmail || !EMAIL_RE.test(newEmail)) {
+      res.status(400).json({ error: "A valid email address is required." });
+      return;
+    }
+
+    // Resolve the current (old) email for the actor.
+    let oldEmail: string | null = null;
+    let oldName: string | undefined;
+    let userRow: { id: string; email: string | null } | undefined;
+    if (actor.userId) {
+      const rows = await db
+        .select({ id: platformUsersTable.id, email: platformUsersTable.email, name: platformUsersTable.name })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, actor.userId))
+        .limit(1);
+      userRow = rows[0] ? { id: rows[0].id, email: rows[0].email } : undefined;
+      oldEmail = rows[0]?.email ?? null;
+      oldName = rows[0]?.name || undefined;
+    }
+    if (!oldEmail) {
+      // Fallback: resolve via platform_accounts
+      const account = await getAccount(normUsername(actor.username));
+      oldEmail = account?.email ?? null;
+    }
+
+    if (!oldEmail) {
+      res.status(400).json({ error: "No email address is associated with your account." });
+      return;
+    }
+
+    if (oldEmail === newEmail) {
+      res.status(400).json({ error: "The new email address is the same as your current one." });
+      return;
+    }
+
+    // Reject if the new address is already registered in either credential store.
+    // emailExists checks platform_accounts; getUserByEmail checks platform_users.
+    if (await emailExists(newEmail) || !!(await getUserByEmail(newEmail))) {
+      res.status(409).json({ error: "That email address is already associated with another account." });
+      return;
+    }
+
+    // Update platform_users (primary store).
+    if (userRow) {
+      await db
+        .update(platformUsersTable)
+        .set({ email: newEmail })
+        .where(eq(platformUsersTable.id, userRow.id));
+    }
+
+    // Update platform_accounts (legacy store) — keep in sync.
+    await db
+      .update(platformAccountsTable)
+      .set({ email: newEmail })
+      .where(eq(platformAccountsTable.username, normUsername(actor.username)));
+
+    void logAdminEvent(
+      { username: actor.username, id: actor.userId },
+      "email_changed",
+      actor.username,
+      "account",
+      { oldEmail, newEmail },
+    );
+
+    // Fire-and-forget security notices — never block the response.
+    const capturedOld = oldEmail;
+    const capturedName = oldName || actor.username;
+    void (async () => {
+      try {
+        await sendEmailChangedEmail({ oldEmail: capturedOld, newEmail, toName: capturedName });
+      } catch (err) {
+        logger.warn({ err, username: actor.username }, "change-email: failed to send email changed alerts (non-fatal)");
+      }
+    })();
+
+    logger.info({ username: actor.username, oldEmail, newEmail }, "change-email: email changed");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "change-email: unexpected error");
+    res.status(500).json({ error: "Failed to change email address. Please try again." });
+  }
+});
+
+// Admin/manager email change: update a target account's email address.
+// Admins may change any account; managers may change their own descendants'.
+// Updates both platform_users (primary) and platform_accounts (legacy sync).
+// Sends a fail-soft security notice to the OLD address and a confirmation to
+// the NEW address — never to the actor performing the change.
+router.post(
+  "/platform/accounts/email",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(req.body?.username);
+      const newEmail = typeof req.body?.newEmail === "string" ? req.body.newEmail.trim().toLowerCase() : "";
+
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      if (!newEmail || !EMAIL_RE.test(newEmail)) {
+        res.status(400).json({ error: "A valid email address is required." });
+        return;
+      }
+
+      const isSelf = target === normUsername(actor.username);
+      if (!isSelf && !(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot change this account." });
+        return;
+      }
+
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+
+      const oldEmail = existing.email ?? null;
+
+      if (oldEmail === newEmail) {
+        // No-op — already set to this address.
+        res.json({ ok: true });
+        return;
+      }
+
+      // Reject if the new address is already registered in either credential store.
+      // emailExists checks platform_accounts; getUserByEmail checks platform_users.
+      if (await emailExists(newEmail) || !!(await getUserByEmail(newEmail))) {
+        res.status(409).json({ error: "That email address is already associated with another account." });
+        return;
+      }
+
+      // Update platform_accounts (legacy store).
+      await db
+        .update(platformAccountsTable)
+        .set({ email: newEmail })
+        .where(eq(platformAccountsTable.username, target));
+
+      // Update platform_users (primary store) — look up by old email to stay in sync.
+      if (oldEmail) {
+        const [userRow] = await db
+          .select({ id: platformUsersTable.id, name: platformUsersTable.name })
+          .from(platformUsersTable)
+          .where(eq(platformUsersTable.email, oldEmail))
+          .limit(1);
+        if (userRow) {
+          await db
+            .update(platformUsersTable)
+            .set({ email: newEmail })
+            .where(eq(platformUsersTable.id, userRow.id));
+        }
+      }
+
+      void logAdminEvent(
+        { username: actor.username, id: actor.userId },
+        "email_changed",
+        target,
+        "account",
+        { oldEmail, newEmail, changedBy: actor.username },
+      );
+
+      // Security notices — fail-soft, fire-and-forget.
+      if (oldEmail) {
+        // Resolve a display name for the notice — prefer platform_users name.
+        let toName: string = target;
+        try {
+          const [u] = await db
+            .select({ name: platformUsersTable.name })
+            .from(platformUsersTable)
+            .where(eq(platformUsersTable.email, newEmail)) // already updated above
+            .limit(1);
+          if (u?.name) toName = u.name;
+        } catch { /* non-fatal */ }
+
+        const capturedOld = oldEmail;
+        const capturedName = toName;
+        void (async () => {
+          try {
+            await sendEmailChangedEmail({ oldEmail: capturedOld, newEmail, toName: capturedName });
+          } catch (err) {
+            logger.warn({ err, target }, "accounts/email: failed to send email changed alerts (non-fatal)");
+          }
+        })();
+      }
+
+      logger.info({ actor: actor.username, target, oldEmail, newEmail }, "accounts/email: email changed");
+      res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, "accounts/email: unexpected error");
+      res.status(500).json({ error: "Failed to change email address." });
+    }
+  },
+);
 
 // Set account type after signup (Agency/Partner vs Client). Requires a session.
 router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
