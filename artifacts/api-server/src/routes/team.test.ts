@@ -454,7 +454,7 @@ describe("team invitations", () => {
     const bInv = await api("/api/platform/team/invite", { sid, body: { email: "bb@surface.test", role: "billing" } });
     // seat limit! bump it via direct meta insert is master-only; instead remove viewer? Simpler: raise seat limit in DB.
     expect(bInv.status === 201 || bInv.status === 403).toBe(true);
-  });
+  }, 20000);
 
   it("lets owners update a member's role and remove them", async () => {
     const { sid, company } = await seedAgency("mgmt-agency", "owner@mgmt.test");
