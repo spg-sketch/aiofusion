@@ -1516,6 +1516,40 @@ function getFrontendOrigin(req: Request): string {
   return `https://${getCanonicalHost(req)}`;
 }
 
+// HTML-attribute encode a string before injecting into an HTML template.
+// Prevents code/state values (which are opaque hex strings from the provider)
+// from being misinterpreted as markup if they ever contain special characters.
+function htmlAttrEncode(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Build the interstitial page that auto-submits the OAuth code via a POST form.
+// Scanners follow GETs but never execute JS or submit forms, so the one-time
+// authorization code is never redeemed until the real browser acts on it.
+function buildOauthInterstitial(postAction: string, code: string, state: string): string {
+  const safeAction = htmlAttrEncode(postAction);
+  const safeCode = htmlAttrEncode(code);
+  const safeState = htmlAttrEncode(state);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Completing sign-in\u2026</title>` +
+    `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc}` +
+    `p{color:#374151;font-size:15px}</style></head><body>` +
+    `<p>Completing sign-in, please wait\u2026</p>` +
+    `<noscript><p>JavaScript is required to complete sign-in. <a href="/?oauth_status=error&amp;oauth_msg=no_js">Return to sign-in</a></p></noscript>` +
+    `<form id="f" method="POST" action="${safeAction}">` +
+    `<input type="hidden" name="code" value="${safeCode}">` +
+    `<input type="hidden" name="state" value="${safeState}">` +
+    `</form><script>document.getElementById('f').submit();</script></body></html>`;
+}
+
+// Known link-scanner / bot user-agent patterns. When matched the GET callback
+// returns an empty 200 immediately — no code redemption, no error redirect.
+const SCANNER_UA_RE = /safelinks|outlook\s*safe|microsoftpreview|microsoftteams|iframely|facebookexternalhit|twitterbot|linkedinbot|slackbot|whatsapp|telegrambot|applebot|bingpreview/i;
+
 router.get("/platform/auth/google", (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
@@ -1572,7 +1606,53 @@ router.get("/platform/auth/google/link", requirePlatformAuth, (req: Request, res
   res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
-router.get("/platform/auth/google/callback", async (req: Request, res: Response) => {
+// GET callback: scanner/bot guard + interstitial page.
+// Does NOT redeem the authorization code — only validates the CSRF state and
+// serves a tiny HTML page that auto-submits a POST form. Scanners (Outlook Safe
+// Links, Teams link-preview, etc.) follow GET redirects but never execute JS or
+// submit forms, so the one-time code is preserved for the real browser.
+router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
+  // HEAD requests from health-checks / scanners — respond empty immediately.
+  if (req.method === "HEAD") { res.status(200).end(); return; }
+  // Known link-scanner user-agents — empty 200, no code consumption.
+  if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
+
+  const origin = getFrontendOrigin(req);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_configured`);
+    return;
+  }
+  const { code, state, error: oauthError } = req.query as Record<string, string>;
+  if (oauthError) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=${encodeURIComponent(oauthError)}`);
+    return;
+  }
+  // Validate CSRF state — reject early so scanners that do carry cookies can't
+  // be tricked into delivering a valid interstitial for a forged code.
+  // Important: do NOT clear the cookie here; the POST handler will read + clear it.
+  const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
+  if (!state || state !== storedState) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=invalid_state`);
+    return;
+  }
+  if (!code) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_code`);
+    return;
+  }
+  // Serve the auto-submit interstitial. The form POSTs code+state back to this
+  // same path (method=POST) so the redirect_uri registered with Google stays
+  // unchanged. The aio_oauth_state and aio_oauth_link cookies survive to the POST.
+  const postUrl = `${origin}/api/platform/auth/google/callback`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).send(buildOauthInterstitial(postUrl, code, state));
+});
+
+// POST callback: the real code redemption, triggered by the interstitial's
+// auto-submit form. Scanners never POST, so the authorization code is safe.
+router.post("/platform/auth/google/callback", async (req: Request, res: Response) => {
   const origin = getFrontendOrigin(req);
   try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -1581,12 +1661,10 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_configured`);
       return;
     }
-    const { code, state, error: oauthError } = req.query as Record<string, string>;
-    if (oauthError) {
-      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${encodeURIComponent(oauthError)}`);
-      return;
-    }
-    // Verify CSRF state
+    // code and state arrive in the POST body (from the interstitial form).
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    const state = typeof req.body?.state === "string" ? req.body.state : "";
+    // Verify CSRF state and clear the cookie — single-use.
     const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
     const linkUsername = (req.cookies as Record<string, string>)?.[OAUTH_LINK_COOKIE] ?? "";
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
@@ -1599,7 +1677,10 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_code`);
       return;
     }
-    // Exchange authorisation code for access token
+    // Exchange authorisation code for access token.
+    // redirect_uri must exactly match what was used during authorisation
+    // (getGoogleCallbackUrl is request-derived from CANONICAL_DOMAIN / host header —
+    // same value the initiation handler sent to Google).
     const tokenRes = await fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1612,7 +1693,11 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
       }).toString(),
     });
     if (!tokenRes.ok) {
-      res.redirect(`${origin}/?oauth_status=error&oauth_msg=token_exchange_failed`);
+      // Distinguish "code already redeemed" (scanner ate it) from other failures.
+      let tokenErrBody: { error?: string } = {};
+      try { tokenErrBody = await tokenRes.json() as { error?: string }; } catch { /* ignore */ }
+      const msg = tokenErrBody.error === "invalid_grant" ? "code_already_used" : "token_exchange_failed";
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${msg}`);
       return;
     }
     const tokens = await tokenRes.json() as { access_token?: string; error?: string };
@@ -1636,6 +1721,8 @@ router.get("/platform/auth/google/callback", async (req: Request, res: Response)
     const googleId = (userInfo as { id?: string }).id ?? "";
 
     // --- Google account link flow (logged-in user linking their account) ----
+    // linkUsername arrives via the aio_oauth_link cookie which survives the
+    // GET interstitial unchanged and is cleared above.
     if (linkUsername) {
       const linkAccount = await getAccount(linkUsername);
       if (!linkAccount || !linkAccount.email) {
@@ -1880,7 +1967,43 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
   res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
-router.get("/platform/auth/microsoft/callback", async (req: Request, res: Response) => {
+// GET callback: scanner/bot guard + interstitial page (mirrors Google logic).
+// The aio_ms_state cookie is validated but NOT cleared here — the POST clears it.
+// The action flag embedded in state ("login:..." / "link:...") is preserved
+// because state travels as a hidden field in the interstitial form.
+router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) => {
+  if (req.method === "HEAD") { res.status(200).end(); return; }
+  if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
+
+  const origin = getFrontendOrigin(req);
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=microsoft_not_configured`);
+    return;
+  }
+  const { code, state, error: oauthError } = req.query as Record<string, string>;
+  if (oauthError || !code) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=${oauthError ?? "no_code"}`);
+    return;
+  }
+  // Validate CSRF state without clearing the cookie (POST will clear it).
+  const storedState = (req.cookies as Record<string, string>)?.[MS_STATE_COOKIE] ?? "";
+  if (!storedState || storedState !== state) {
+    res.redirect(`${origin}/?oauth_status=error&oauth_msg=state_mismatch`);
+    return;
+  }
+  // Serve the auto-submit interstitial.
+  // redirect_uri for Microsoft is getAppBaseUrl()-based (env var) — same path,
+  // same method split, so no Azure app registration change is needed.
+  const postUrl = `${origin}/api/platform/auth/microsoft/callback`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).send(buildOauthInterstitial(postUrl, code, state));
+});
+
+// POST callback: actual code redemption for Microsoft.
+router.post("/platform/auth/microsoft/callback", async (req: Request, res: Response) => {
   const origin = getFrontendOrigin(req);
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
@@ -1889,9 +2012,10 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
     return;
   }
   try {
-    const { code, state, error: oauthError } = req.query as Record<string, string>;
-    if (oauthError || !code) {
-      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${oauthError ?? "no_code"}`);
+    const code = typeof req.body?.code === "string" ? req.body.code : "";
+    const state = typeof req.body?.state === "string" ? req.body.state : "";
+    if (!code) {
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_code`);
       return;
     }
     const storedState = (req.cookies as Record<string, string>)?.[MS_STATE_COOKIE] ?? "";
@@ -1900,7 +2024,10 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=state_mismatch`);
       return;
     }
+    // action is embedded in the state value ("login:nonce" or "link:nonce").
     const action = (state as string).split(":")[0] ?? "login";
+    // redirect_uri must exactly match the one used during authorisation.
+    // Microsoft uses getAppBaseUrl() (env var) — same value as the initiation handler.
     const redirect_uri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
 
     // Exchange code for access token
@@ -1909,7 +2036,13 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code, grant_type: "authorization_code", redirect_uri, scope: "openid profile email User.Read" }).toString(),
     });
-    if (!tokenResp.ok) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=token_exchange_failed`); return; }
+    if (!tokenResp.ok) {
+      let tokenErrBody: { error?: string } = {};
+      try { tokenErrBody = await tokenResp.json() as { error?: string }; } catch { /* ignore */ }
+      const msg = tokenErrBody.error === "invalid_grant" ? "code_already_used" : "token_exchange_failed";
+      res.redirect(`${origin}/?oauth_status=error&oauth_msg=${msg}`);
+      return;
+    }
     const tokenData = (await tokenResp.json()) as { access_token?: string };
     if (!tokenData.access_token) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_access_token`); return; }
 
@@ -1924,6 +2057,8 @@ router.get("/platform/auth/microsoft/callback", async (req: Request, res: Respon
     const displayName = profile.displayName || msEmail.split("@")[0];
 
     // --- Link action: attach Microsoft to the current session account --------
+    // action is extracted from state above; req.account comes from the aio_sid
+    // session cookie that the browser carries alongside the POST.
     if (action === "link") {
       if (!req.account) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=not_signed_in`); return; }
       const conflictUser = await getUserByMicrosoftId(microsoftId);

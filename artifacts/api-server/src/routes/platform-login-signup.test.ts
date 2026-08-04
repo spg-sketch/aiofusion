@@ -256,6 +256,9 @@ import platformRouter from "./platform";
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // URL-encoded body parsing is required for the OAuth POST callback (the
+  // interstitial auto-submits code+state as application/x-www-form-urlencoded).
+  app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
   // Inject a null account so requirePlatformAuth middleware (mocked) still
   // has req.account available for the rare routes that read it.
@@ -632,16 +635,20 @@ describe("GET /api/platform/auth/google/callback", () => {
 
   // Builds a fetch stub that intercepts Google's token and userinfo endpoints,
   // forwarding everything else to the original fetch (i.e. our test server).
+  // tokenError: when set, returned as the error body (and status 400) instead
+  // of the token payload. Defaults to "invalid_client" so the route maps it to
+  // token_exchange_failed (not code_already_used which is reserved for "invalid_grant").
   function makeFetchStub(
     tokenPayload: unknown,
     userInfoPayload: unknown,
     tokenStatusOk = true,
+    tokenError = "invalid_client",
   ) {
     const realFetch = global.fetch;
     return vi.fn(async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : (url as Request).url;
       if (urlStr.includes("oauth2.googleapis.com/token")) {
-        return new Response(JSON.stringify(tokenStatusOk ? tokenPayload : { error: "invalid_grant" }), {
+        return new Response(JSON.stringify(tokenStatusOk ? tokenPayload : { error: tokenError }), {
           status: tokenStatusOk ? 200 : 400,
           headers: { "Content-Type": "application/json" },
         });
@@ -657,11 +664,18 @@ describe("GET /api/platform/auth/google/callback", () => {
     });
   }
 
+  // The GET callback now serves an interstitial; the actual code redemption
+  // happens via POST. callCallback sends the code+state as a form-encoded body.
   async function callCallback(overrides: Record<string, string> = {}) {
-    const qs = new URLSearchParams({ state: OAUTH_STATE, code: "mock-auth-code", ...overrides });
-    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback?${qs}`, {
+    const body = { state: OAUTH_STATE, code: "mock-auth-code", ...overrides };
+    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
       redirect: "manual",
-      headers: { Cookie: `aio_oauth_state=${OAUTH_STATE}` },
+      headers: {
+        Cookie: `aio_oauth_state=${OAUTH_STATE}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(body).toString(),
     });
     return res;
   }
@@ -787,10 +801,14 @@ describe("GET /api/platform/auth/google/callback", () => {
       ),
     );
 
-    const qs = new URLSearchParams({ state: OAUTH_STATE, code: "mock-auth-code" });
-    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback?${qs}`, {
+    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
       redirect: "manual",
-      headers: { Cookie: `aio_oauth_state=${OAUTH_STATE}` },
+      headers: {
+        Cookie: `aio_oauth_state=${OAUTH_STATE}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ state: OAUTH_STATE, code: "mock-auth-code" }).toString(),
     });
     expect(res.status).toBe(302);
     const location = res.headers.get("location") ?? "";
@@ -888,10 +906,14 @@ describe("GET /api/platform/auth/google/callback", () => {
   it("redirects with invalid_state error when CSRF state does not match", async () => {
     vi.stubGlobal("fetch", makeFetchStub({}, {}));
 
-    const qs = new URLSearchParams({ state: "wrong-state", code: "mock-auth-code" });
-    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback?${qs}`, {
+    const res = await fetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
       redirect: "manual",
-      headers: { Cookie: `aio_oauth_state=${OAUTH_STATE}` },
+      headers: {
+        Cookie: `aio_oauth_state=${OAUTH_STATE}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ state: "wrong-state", code: "mock-auth-code" }).toString(),
     });
     expect(res.status).toBe(302);
     expect(res.headers.get("location") ?? "").toContain("invalid_state");

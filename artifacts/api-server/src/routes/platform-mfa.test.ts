@@ -247,6 +247,8 @@ let actorOverride: { username: string; role: string } | null = null;
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // URL-encoded body parsing needed for the OAuth POST callback interstitial.
+  app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
   app.use((req: any, _res: any, next: any) => {
     req.account = actorOverride;
@@ -752,10 +754,19 @@ describe("OAuth SSO MFA challenge handoff", () => {
     }) as typeof fetch;
   }
 
+  // The GET callback now serves an interstitial; code redemption happens via POST.
   async function runCallback(): Promise<{ status: number; location: URL; setCookies: string[] }> {
     const res = await realFetch(
-      `${baseUrl}/api/platform/auth/google/callback?code=abc&state=${STATE}`,
-      { redirect: "manual", headers: { cookie: `aio_oauth_state=${STATE}` } },
+      `${baseUrl}/api/platform/auth/google/callback`,
+      {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          cookie: `aio_oauth_state=${STATE}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ code: "abc", state: STATE }).toString(),
+      },
     );
     const loc = res.headers.get("location") ?? "";
     return { status: res.status, location: new URL(loc, baseUrl), setCookies: res.headers.getSetCookie() };

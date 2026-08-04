@@ -186,7 +186,9 @@ function PlatformHomePage({
         state_mismatch: "The sign-in session expired. Please try again.",
         no_code: "Sign-in was interrupted before completing. Please try again.",
         token_exchange_failed:
-          "Could not complete sign-in — the sign-in link was already used or expired. Please try again in your browser.",
+          "Could not complete sign-in — the provider rejected the request. Please try again.",
+        code_already_used:
+          "Your sign-in link was already used — this can happen when Teams or Outlook previews it automatically. Please click \"Sign in with Microsoft\" (or Google) again.",
         no_access_token: "The sign-in provider did not return a valid token. Please try again.",
         userinfo_failed: "Could not retrieve your Google profile. Please try again.",
         graph_failed: "Could not retrieve your Microsoft profile. Please try again.",
