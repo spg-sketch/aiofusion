@@ -169,6 +169,107 @@ function UsersAdminPage({
     return out;
   }, [users, knownUsernames]);
 
+  // ── 2FA filter + active/archived section split ────────────────────────────
+  const [only2FAOff, setOnly2FAOff] = useState(false);
+
+  // Two section-scoped mfa filter sets — propagation never crosses the
+  // archived/active boundary, so an archived parent is not surfaced because
+  // of an active descendant that won't actually be rendered under it.
+  //
+  // mfaFilterPassingActive: non-archived accounts that pass (no mfaEnabled)
+  //   or have a non-archived descendant that passes.
+  const mfaFilterPassingActive = useMemo<Set<string> | null>(() => {
+    if (!only2FAOff) return null;
+    const passing = new Set<string>();
+    for (const u of users) {
+      if (!u.archived && !u.mfaEnabled) passing.add(u.username.toLowerCase());
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const u of users) {
+        if (u.archived) continue;
+        const key = u.username.toLowerCase();
+        if (passing.has(key)) continue;
+        const kids = childrenByParent.get(key) ?? [];
+        if (kids.some((c) => !c.archived && passing.has(c.username.toLowerCase()))) {
+          passing.add(key);
+          changed = true;
+        }
+      }
+    }
+    return passing;
+  }, [only2FAOff, users, childrenByParent]);
+
+  // mfaFilterPassingArchived: archived accounts that pass or have an archived
+  //   descendant that passes.
+  const mfaFilterPassingArchived = useMemo<Set<string> | null>(() => {
+    if (!only2FAOff) return null;
+    const passing = new Set<string>();
+    for (const u of users) {
+      if (u.archived && !u.mfaEnabled) passing.add(u.username.toLowerCase());
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const u of users) {
+        if (!u.archived) continue;
+        const key = u.username.toLowerCase();
+        if (passing.has(key)) continue;
+        const kids = childrenByParent.get(key) ?? [];
+        if (kids.some((c) => c.archived && passing.has(c.username.toLowerCase()))) {
+          passing.add(key);
+          changed = true;
+        }
+      }
+    }
+    return passing;
+  }, [only2FAOff, users, childrenByParent]);
+
+  // Active section roots: non-archived top-level users PLUS non-archived users
+  // whose direct parent is archived (they'd otherwise be invisible — the
+  // archived section skips non-archived children and they have no active path).
+  const activeTopLevel = useMemo(() => {
+    const topActive = topLevelUsers.filter((u) => !u.archived);
+    const seen = new Set(topActive.map((u) => u.username.toLowerCase()));
+    const orphans = users.filter((u) => {
+      if (u.archived) return false;
+      const parentKey = (u.parent ?? "").toLowerCase();
+      if (!parentKey || !knownUsernames.has(parentKey)) return false;
+      const parentUser = users.find((p) => p.username.toLowerCase() === parentKey);
+      return parentUser && parentUser.archived; // parent archived → surface here
+    });
+    return [...topActive, ...orphans.filter((u) => !seen.has(u.username.toLowerCase()))];
+  }, [topLevelUsers, users, knownUsernames]);
+
+  // Archived section roots: archived top-level users PLUS archived users whose
+  // direct parent is non-archived (mirror of the active-orphan rule above).
+  const archivedTopLevel = useMemo(() => {
+    const topArchived = topLevelUsers.filter((u) => u.archived);
+    const seen = new Set(topArchived.map((u) => u.username.toLowerCase()));
+    const orphans = users.filter((u) => {
+      if (!u.archived) return false;
+      const parentKey = (u.parent ?? "").toLowerCase();
+      if (!parentKey || !knownUsernames.has(parentKey)) return false;
+      const parentUser = users.find((p) => p.username.toLowerCase() === parentKey);
+      return parentUser && !parentUser.archived; // parent active → surface here
+    });
+    return [...topArchived, ...orphans.filter((u) => !seen.has(u.username.toLowerCase()))];
+  }, [topLevelUsers, users, knownUsernames]);
+
+  const visibleActiveTopLevel = useMemo(
+    () => (mfaFilterPassingActive !== null
+      ? activeTopLevel.filter((u) => mfaFilterPassingActive.has(u.username.toLowerCase()))
+      : activeTopLevel),
+    [activeTopLevel, mfaFilterPassingActive],
+  );
+  const visibleArchivedTopLevel = useMemo(
+    () => (mfaFilterPassingArchived !== null
+      ? archivedTopLevel.filter((u) => mfaFilterPassingArchived.has(u.username.toLowerCase()))
+      : archivedTopLevel),
+    [archivedTopLevel, mfaFilterPassingArchived],
+  );
+
   // Which accounts have their sub-account tree collapsed. Starts empty (every
   // account expanded), since admins usually need to see the whole hierarchy.
   const [collapsedAccounts, setCollapsedAccounts] = useState<Set<string>>(new Set());
@@ -573,7 +674,7 @@ function UsersAdminPage({
   // Renders one account card, plus (recursively) its sub-accounts nested
   // inside a bordered "rail" container, so the master/agency/client
   // hierarchy is expressed structurally instead of via margin indentation.
-  function renderAccountNode(u: LocalUser, depth: number): React.ReactElement {
+  function renderAccountNode(u: LocalUser, depth: number, sectionIsArchived: boolean): React.ReactElement {
     const isMe = u.username.toLowerCase() === session.username.toLowerCase();
     const editingPw = pwUser === u.username;
     const editingName = nameUser === u.username;
@@ -583,7 +684,14 @@ function UsersAdminPage({
     const isMasterOwner = masterOwnerSet.has(u.username.toLowerCase());
     const isTogglingMasterOwner = masterOwnerTogglingFor === u.username;
     const hasDisplayName = !!(u.displayName && u.displayName.trim());
-    const children = childrenByParent.get(u.username.toLowerCase()) || [];
+    // Filter children: only those whose own archived status matches the current
+    // section, and only those that pass the section-scoped mfa filter.
+    const sectionFilter = sectionIsArchived ? mfaFilterPassingArchived : mfaFilterPassingActive;
+    const children = (childrenByParent.get(u.username.toLowerCase()) ?? []).filter((c) => {
+      if (!!c.archived !== sectionIsArchived) return false;
+      if (sectionFilter !== null && !sectionFilter.has(c.username.toLowerCase())) return false;
+      return true;
+    });
     const hasChildren = children.length > 0;
     const isCollapsed = collapsedAccounts.has(u.username.toLowerCase());
     return (
@@ -1021,7 +1129,7 @@ function UsersAdminPage({
         </div>
         {hasChildren && !isCollapsed && (
           <div className="ml-[22px] pl-4 border-l-2 flex flex-col gap-3" style={{ borderColor: accentSoft }}>
-            {children.map((c) => renderAccountNode(c, depth + 1))}
+            {children.map((c) => renderAccountNode(c, depth + 1, sectionIsArchived))}
           </div>
         )}
       </div>
@@ -1316,12 +1424,62 @@ function UsersAdminPage({
 
         {/* USERS LIST */}
         <div className="rounded-2xl overflow-hidden mb-2" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <div className="px-6 sm:px-8 py-5 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[18px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>All accounts ({users.length})</h2>
+          <div className="px-6 sm:px-8 py-5 border-b flex flex-wrap items-center justify-between gap-3" style={{ borderColor: vars.g200 }}>
+            <h2 className="text-[18px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
+              All accounts ({users.length})
+            </h2>
+            <button
+              onClick={() => setOnly2FAOff((v) => !v)}
+              title={only2FAOff ? "Showing accounts without 2FA — click to clear" : "Show only accounts without 2FA enabled"}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all"
+              style={
+                only2FAOff
+                  ? { background: accent, color: "white" }
+                  : { background: accentSoft, color: accent, border: `1.5px solid ${accent}40` }
+              }
+            >
+              <ShieldOff size={12} />
+              {only2FAOff ? "Without 2FA (on)" : "Only without 2FA"}
+            </button>
           </div>
-          <div className="flex flex-col gap-3 p-5 sm:p-6">
-            {topLevelUsers.map((u) => renderAccountNode(u, 0))}
+
+          {/* Active accounts */}
+          <div className="p-5 sm:p-6">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g500 }}>
+              Active{only2FAOff ? ` — ${visibleActiveTopLevel.length} without 2FA` : ` (${activeTopLevel.length})`}
+            </p>
+            {visibleActiveTopLevel.length > 0 ? (
+              <div className="flex flex-col gap-3">
+                {visibleActiveTopLevel.map((u) => renderAccountNode(u, 0, false))}
+              </div>
+            ) : (
+              <p className="text-[13px] font-light italic py-2" style={{ color: vars.g400 }}>
+                {only2FAOff
+                  ? "All active accounts have 2FA enabled."
+                  : "No active accounts."}
+              </p>
+            )}
           </div>
+
+          {/* Archived accounts */}
+          {(archivedTopLevel.length > 0) && (
+            <div className="px-5 sm:px-6 pb-5 sm:pb-6">
+              <div className="pt-4 border-t" style={{ borderColor: vars.g200 }}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g400 }}>
+                  Archived{only2FAOff ? ` — ${visibleArchivedTopLevel.length} without 2FA` : ` (${archivedTopLevel.length})`}
+                </p>
+                {visibleArchivedTopLevel.length > 0 ? (
+                  <div className="flex flex-col gap-3 opacity-60">
+                    {visibleArchivedTopLevel.map((u) => renderAccountNode(u, 0, true))}
+                  </div>
+                ) : (
+                  <p className="text-[13px] font-light italic py-2" style={{ color: vars.g400 }}>
+                    All archived accounts have 2FA enabled.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AUDIT LOG */}

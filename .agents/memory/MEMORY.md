@@ -37,4 +37,5 @@
 - [Scrambled semantic-merge test files](aio-fusion-scrambled-merge-tests.md) — if a rebase-conflict file fails tests, the incoming main version may itself be spliced/broken; rebuild from last coherent commit.
 - [Security alert email recipient](aio-fusion-security-alert-recipient.md) — resolve to earliest OWNER membership (fallback: account email), never latest-membership lookup; non-owners must not get security notices.
 - [App-level jsdom tests](aio-fusion-app-level-jsdom-tests.md) — full-App render needs elementFromPoint/observer stubs + 401 fetch; set URL before importing App (useState initializers capture params).
+- [Users admin tree filtering](aio-fusion-users-admin-tree-filtering.md) — filters/sections must apply per-account through the whole tree; section-scoped ancestor retention; Vitest 3 vi.fn generics gotcha.
 - [AIO Fusion MFA (TOTP)](aio-fusion-mfa.md) — state in platform_meta not platform_users (legacy admin has no users row); stateless HMAC pending-token login two-step; SSO logins bypass MFA.

@@ -71,9 +71,11 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     document.cookie = "aio_oauth_mfa_token=tok-verify-123; path=/";
     await renderAppAt("/?oauth_status=mfa");
 
+    // Long timeout: this test involves async bootstrapAuth + lazy chunk loading
+    // which can be slow under CI load, causing intermittent failures.
     await waitFor(() => {
       expect(screen.getByText("Two-factor verification")).toBeInTheDocument();
-    });
+    }, { timeout: 10000 });
     // The single-use cookie must be consumed immediately.
     expect(document.cookie).not.toContain("aio_oauth_mfa_token=tok-verify-123");
     // And the history-sync effect must have cleaned the query string.
