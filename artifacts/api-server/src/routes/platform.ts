@@ -86,7 +86,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -1191,6 +1191,22 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
       await clearTrustedDevices(normUsername(mem.companySlug));
     }
 
+    // Security alert — non-fatal: never blocks the response.
+    void (async () => {
+      try {
+        const [u] = await db
+          .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+          .from(platformUsersTable)
+          .where(eq(platformUsersTable.id, row.userId))
+          .limit(1);
+        if (u?.email) {
+          await sendPasswordChangedEmail({ toEmail: u.email, toName: u.name || "AIO Fusion user" });
+        }
+      } catch (err) {
+        logger.warn({ err }, "reset-password: failed to send password changed alert (non-fatal)");
+      }
+    })();
+
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "reset-password: unexpected error");
@@ -1321,6 +1337,31 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
       // Clear MFA trusted devices for the legacy account.
       await clearTrustedDevices(username);
     }
+
+    // Security alert — non-fatal: never blocks the response.
+    void (async () => {
+      try {
+        let toEmail: string | null | undefined;
+        let toName: string | undefined;
+        if (userRow) {
+          const [u] = await db
+            .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+            .from(platformUsersTable)
+            .where(eq(platformUsersTable.id, userRow.id))
+            .limit(1);
+          toEmail = u?.email;
+          toName = u?.name || undefined;
+        } else {
+          const acct = await getAccount(username);
+          toEmail = acct?.email;
+        }
+        if (toEmail) {
+          await sendPasswordChangedEmail({ toEmail, toName: toName || username });
+        }
+      } catch (err) {
+        logger.warn({ err, username }, "change-password: failed to send password changed alert (non-fatal)");
+      }
+    })();
 
     logger.info({ username }, "change-password: password changed");
     res.json({ ok: true });
@@ -2665,6 +2706,30 @@ router.post(
       // Clear MFA trusted devices so all devices must re-enter a TOTP code
       // after an admin-set password change.
       await clearTrustedDevices(target);
+
+      // Security alert to the target account — non-fatal, fire-and-forget.
+      // Recipient is the target's email, resolved from platform_users (for the
+      // name) then falling back to platform_accounts email. Never sent to the
+      // actor (admin/manager performing the reset).
+      const targetEmail = existing.email;
+      void (async () => {
+        try {
+          if (!targetEmail) return;
+          let toName: string | undefined;
+          try {
+            const [u] = await db
+              .select({ name: platformUsersTable.name })
+              .from(platformUsersTable)
+              .where(eq(platformUsersTable.email, targetEmail))
+              .limit(1);
+            toName = u?.name || undefined;
+          } catch { /* non-fatal: fall back to username */ }
+          await sendPasswordChangedEmail({ toEmail: targetEmail, toName: toName || target });
+        } catch (err) {
+          logger.warn({ err, target }, "accounts/password: failed to send password changed alert (non-fatal)");
+        }
+      })();
+
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change password" });

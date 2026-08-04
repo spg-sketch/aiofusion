@@ -7,3 +7,5 @@ Rule: when emailing a security notice about a workspace/account (MFA reset, pass
 **Why:** a recently invited content/viewer/billing teammate would otherwise intercept security alerts meant for the account holder (code review rejected this once).
 
 **How to apply:** any new notify-email trigger keyed by company slug must use the owner-membership query pattern (see reset-mfa handler) and stay fail-soft. Tests must seed an owner + a later non-owner member to prove non-owners don't receive it; clear stale memberships first since logins auto-create owner memberships.
+
+Also: an account event (like a password change) usually has THREE routes — self-service, email-reset, and admin-acting-on-account (`/api/platform/accounts/password`); a notification hook must cover all of them or code review rejects it. Fire-and-forget IIFE after `res.json` is the established non-fatal send pattern.

@@ -531,6 +531,58 @@ export async function sendSpendCapAlert(opts: {
   }
 }
 
+export async function sendPasswordChangedEmail(opts: {
+  toEmail: string;
+  toName: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — password changed alert not sent");
+    return;
+  }
+
+  const securityUrl = `${getAppBaseUrl()}/`;
+  const subject = `Security alert: your AIO Fusion password was changed`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `Your AIO Fusion account password was just changed.`,
+    ``,
+    `If you made this change, you can ignore this email.`,
+    ``,
+    `If you did NOT make this change, your account may be compromised. Contact`,
+    `us immediately at info@aiofusion.ai or sign in and change your password.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Security Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Your AIO Fusion account password was just changed.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        If you made this change, you can safely ignore this email.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you did <strong>not</strong> make this change, your account may be compromised.
+        Contact us immediately at
+        <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>
+        or sign in and change your password right away.
+      </p>
+    `,
+    cta: { text: "Open AIO Fusion", href: securityUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: password changed alert sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send password changed alert (non-fatal)");
+  }
+}
 export async function sendBookDemoInternalAlert(opts: {
   name: string;
   email: string;

@@ -232,6 +232,7 @@ vi.mock("../lib/notify-email", () => ({
     passwordResetEmails.push(args[0] as { toEmail: string; toName: string; resetUrl: string });
     return Promise.resolve();
   },
+  sendPasswordChangedEmail: () => Promise.resolve(),
 }));
 
 // Captured sendPasswordResetEmail calls (hoisted so the mock factory sees it).
