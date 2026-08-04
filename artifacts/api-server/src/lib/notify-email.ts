@@ -1131,6 +1131,57 @@ export async function sendEnquiryConfirmation(opts: {
   logger.info({ toEmail: opts.toEmail }, "notify-email: enquiry confirmation sent");
 }
 
+export async function sendNewTrustedDeviceEmail(opts: {
+  toEmail: string;
+  toName: string;
+  deviceLabel: string;
+  securitySettingsUrl: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — new trusted device alert not sent");
+    return;
+  }
+
+  const subject = `Security alert: a new trusted device was added to your AIO Fusion account`;
+  const text = [
+    `Hi ${opts.toName},`,
+    ``,
+    `A new device was registered to skip two-factor verification on your AIO Fusion account.`,
+    ``,
+    `Device: ${opts.deviceLabel}`,
+    ``,
+    `If this was you, no action is needed.`,
+    `If this wasn't you, remove the device from your security settings immediately:`,
+    ``,
+    opts.securitySettingsUrl,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Security Alert",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        A new device was registered to skip two-factor verification on your account.
+      </p>
+      ${buildDataRows([["Device", opts.deviceLabel]])}
+      <p style="margin: 16px 0 0 0;">
+        If this was you, no action is needed. If this <strong>wasn't you</strong>, remove the
+        device from your security settings immediately.
+      </p>
+    `,
+    cta: { text: "Review trusted devices", href: opts.securitySettingsUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: new trusted device alert sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send new trusted device alert (non-fatal)");
+  }
+}
 export async function sendPasswordResetEmail(opts: {
   toEmail: string;
   toName: string;

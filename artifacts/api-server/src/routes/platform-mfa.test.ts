@@ -205,28 +205,31 @@ vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-// Prevent real emails firing during tests — all notify-email functions are no-ops
+// Spies for functions asserted in tests (hoisted so the factory captures them).
 const sendMfaAdminResetEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const sendMfaChangedEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-vi.mock("../lib/notify-email", () => ({
-  getAppBaseUrl: () => "https://test.example.com",
-  sendMfaAdminResetEmail: sendMfaAdminResetEmailMock,
-  sendMfaChangedEmail: sendMfaChangedEmailMock,
-  sendPasswordResetEmail: () => Promise.resolve(),
-  sendNewSignupAlert: () => Promise.resolve(),
-  sendApprovalEmail: () => Promise.resolve(),
-  sendSpikeAlert: () => Promise.resolve(),
-  sendQuotaBreachAlert: () => Promise.resolve(),
-  sendSpendCapAlert: () => Promise.resolve(),
-  sendBookDemoInternalAlert: () => Promise.resolve(),
-  sendBookDemoConfirmation: () => Promise.resolve(),
-  sendEnquiryInternalAlert: () => Promise.resolve(),
-  sendEnquiryConfirmation: () => Promise.resolve(),
-  sendSupportTicketAlert: () => Promise.resolve(),
-  sendSupportTicketAck: () => Promise.resolve(),
-  sendVerificationEmail: () => Promise.resolve(),
-}));
+const sendNewTrustedDeviceEmailMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
+// Forward-compatible notify-email mock: auto-wraps every exported async function
+// as a no-op so new functions added by future tasks never cause "X is not a
+// function" failures. Only the three spied-on functions are overridden.
+vi.mock("../lib/notify-email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
+  const mock: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(actual)) {
+    if (k === "getAppBaseUrl") {
+      mock[k] = () => "https://test.example.com";
+    } else if (typeof v === "function") {
+      mock[k] = () => Promise.resolve();
+    } else {
+      mock[k] = v;
+    }
+  }
+  mock.sendMfaAdminResetEmail = sendMfaAdminResetEmailMock;
+  mock.sendMfaChangedEmail = sendMfaChangedEmailMock;
+  mock.sendNewTrustedDeviceEmail = sendNewTrustedDeviceEmailMock;
+  return mock;
+});
 import {
   db,
   platformUsersTable,
@@ -647,6 +650,11 @@ describe("MFA trusted devices", () => {
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, AGENCY));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, AGENCY));
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa%"));
+    // Clean up any memberships/users seeded by individual tests.
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    for (const e of ["device-owner@example.com"]) {
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
+    }
   });
 
   it("verify with trustDevice sets a signed cookie that skips the next challenge", async () => {
@@ -727,6 +735,87 @@ describe("MFA trusted devices", () => {
     actorOverride = null;
     const login2 = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD }, trustCookie);
     expect(login2.json.mfaRequired).toBe(true);
+  });
+
+  it("sends a security alert email to the account owner when a new device is trusted", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    // Seed an owner membership so the recipient resolution finds the owner email.
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    await ensurePlatformUser({
+      email: "device-owner@example.com",
+      name: "Device Owner",
+      companyUsername: AGENCY,
+      membershipRole: "owner",
+      companyRole: "agency",
+      companyStatus: "active",
+    });
+
+    sendNewTrustedDeviceEmailMock.mockClear();
+    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login.json.mfaToken,
+      code: totpCode(secret),
+      trustDevice: true,
+    });
+    expect(verify.status).toBe(200);
+    expect(verify.setCookie).toMatch(/aio_mfa_trust=/);
+
+    // The security alert must be sent to the workspace owner, not an arbitrary member.
+    await vi.waitFor(() => {
+      expect(sendNewTrustedDeviceEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ toEmail: "device-owner@example.com" }),
+      );
+    });
+  });
+
+  it("does not send a trusted device email when trustDevice flag is not set", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    sendNewTrustedDeviceEmailMock.mockClear();
+    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login.json.mfaToken,
+      code: totpCode(secret),
+      // no trustDevice: true
+    });
+    expect(verify.status).toBe(200);
+    // Give async fire-and-forget a chance to run if it were incorrectly triggered.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sendNewTrustedDeviceEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("silently skips the email when no owner or account email is configured", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(AGENCY, { secret, enabled: true, recoveryHashes: [] });
+
+    // Remove all memberships and the account email so no recipient can be found.
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, AGENCY));
+    await db
+      .update(platformAccountsTable)
+      .set({ email: null } as any)
+      .where(eq(platformAccountsTable.username, AGENCY));
+
+    sendNewTrustedDeviceEmailMock.mockClear();
+    const login = await post(baseUrl, "/api/platform/login", { username: AGENCY, password: PASSWORD });
+    const verify = await post(baseUrl, "/api/platform/mfa/verify", {
+      mfaToken: login.json.mfaToken,
+      code: totpCode(secret),
+      trustDevice: true,
+    });
+    // Login must still succeed — no email config must never block the flow.
+    expect(verify.status).toBe(200);
+    expect(verify.setCookie).toMatch(/aio_mfa_trust=/);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sendNewTrustedDeviceEmailMock).not.toHaveBeenCalled();
+
+    // Restore the account email for afterEach cleanup.
+    await db
+      .update(platformAccountsTable)
+      .set({ email: "mfa-agency@example.com" })
+      .where(eq(platformAccountsTable.username, AGENCY));
   });
 
   it("disabling MFA clears the trusted-device list", async () => {

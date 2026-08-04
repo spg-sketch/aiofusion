@@ -213,30 +213,30 @@ vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-// Prevent real emails firing during tests — all notify-email functions are no-ops
-vi.mock("../lib/notify-email", () => ({
-  getAppBaseUrl: () => "https://test.example.com",
-  sendNewSignupAlert: () => Promise.resolve(),
-  sendApprovalEmail: () => Promise.resolve(),
-  sendSpikeAlert: () => Promise.resolve(),
-  sendQuotaBreachAlert: () => Promise.resolve(),
-  sendSpendCapAlert: () => Promise.resolve(),
-  sendBookDemoInternalAlert: () => Promise.resolve(),
-  sendBookDemoConfirmation: () => Promise.resolve(),
-  sendEnquiryInternalAlert: () => Promise.resolve(),
-  sendEnquiryConfirmation: () => Promise.resolve(),
-  sendSupportTicketAlert: () => Promise.resolve(),
-  sendSupportTicketAck: () => Promise.resolve(),
-  sendVerificationEmail: () => Promise.resolve(),
-  sendPasswordResetEmail: (...args: unknown[]) => {
-    passwordResetEmails.push(args[0] as { toEmail: string; toName: string; resetUrl: string });
-    return Promise.resolve();
-  },
-  sendPasswordChangedEmail: () => Promise.resolve(),
-}));
-
 // Captured sendPasswordResetEmail calls (hoisted so the mock factory sees it).
 const passwordResetEmails = vi.hoisted(() => [] as { toEmail: string; toName: string; resetUrl: string }[]);
+
+// Forward-compatible notify-email mock: auto-wraps every exported async function
+// as a no-op so new functions added by future tasks never cause "X is not a
+// function" failures. Only sendPasswordResetEmail is overridden with a spy.
+vi.mock("../lib/notify-email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
+  const mock: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(actual)) {
+    if (k === "getAppBaseUrl") {
+      mock[k] = () => "https://test.example.com";
+    } else if (typeof v === "function") {
+      mock[k] = () => Promise.resolve();
+    } else {
+      mock[k] = v;
+    }
+  }
+  mock.sendPasswordResetEmail = (...args: unknown[]) => {
+    passwordResetEmails.push(args[0] as { toEmail: string; toName: string; resetUrl: string });
+    return Promise.resolve();
+  };
+  return mock;
+});
 
 import {
   db,

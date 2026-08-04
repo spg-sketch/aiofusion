@@ -86,7 +86,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -739,7 +739,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       if (req.body?.trustDevice !== true) return;
       try {
         const label = (req.headers["user-agent"] as string | undefined)?.slice(0, 160) || "Unknown device";
-        const { cookieValue } = await addTrustedDevice(pending.u, label);
+        const { cookieValue, device } = await addTrustedDevice(pending.u, label);
         res.cookie(TRUSTED_DEVICE_COOKIE, cookieValue, {
           httpOnly: true,
           secure: true,
@@ -748,6 +748,39 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
           maxAge: TRUSTED_DEVICE_TTL_MS,
         });
         await logAdminEvent({ username: pending.u }, "mfa_device_trusted", pending.u, "account");
+        // Security alert: fire-and-forget, never blocks login.
+        // Recipient = earliest OWNER membership email, falling back to the
+        // account's canonical email — same rule as reset-mfa alert.
+        void (async () => {
+          try {
+            const [ownerRow] = await db
+              .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+              .from(platformMembershipsTable)
+              .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+              .where(and(
+                eq(platformMembershipsTable.companySlug, pending.u),
+                eq(platformMembershipsTable.role, "owner"),
+              ))
+              .orderBy(platformMembershipsTable.createdAt)
+              .limit(1);
+            const [accRow] = await db
+              .select({ email: platformAccountsTable.email })
+              .from(platformAccountsTable)
+              .where(eq(platformAccountsTable.username, pending.u))
+              .limit(1);
+            const toEmail = ownerRow?.email || accRow?.email;
+            if (!toEmail) return;
+            const securitySettingsUrl = `${getAppBaseUrl()}/`;
+            await sendNewTrustedDeviceEmail({
+              toEmail,
+              toName: ownerRow?.name || pending.u,
+              deviceLabel: device.label,
+              securitySettingsUrl,
+            });
+          } catch (err) {
+            logger.warn({ err, username: pending.u }, "trusted-device: failed to send security alert (non-fatal)");
+          }
+        })();
       } catch { /* non-fatal: login still completes without the trusted cookie */ }
     };
     if (verifyTotp(state.secret, code)) {

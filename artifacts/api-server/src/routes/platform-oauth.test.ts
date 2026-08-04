@@ -207,15 +207,20 @@ vi.mock("../lib/admin-events", () => ({ logAdminEvent: () => Promise.resolve() }
 vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
-vi.mock("../lib/notify-email", () => ({
-  getAppBaseUrl: () => "https://test.example.com",
-  sendNewSignupAlert: () => Promise.resolve(),
-  sendApprovalEmail: () => Promise.resolve(),
-  sendVerificationEmail: () => Promise.resolve(),
-  sendPasswordResetEmail: () => Promise.resolve(),
-  sendMfaAdminResetEmail: () => Promise.resolve(),
-  sendSecurityAlertEmail: () => Promise.resolve(),
-}));
+vi.mock("../lib/notify-email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
+  const mock: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(actual)) {
+    if (k === "getAppBaseUrl") {
+      mock[k] = () => "https://test.example.com";
+    } else if (typeof v === "function") {
+      mock[k] = () => Promise.resolve();
+    } else {
+      mock[k] = v;
+    }
+  }
+  return mock;
+});
 vi.mock("../lib/team-invites", () => ({
   getValidInvite: () => Promise.resolve(null),
   consumeInvite: () => Promise.resolve(false),

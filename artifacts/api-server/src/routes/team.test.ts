@@ -279,20 +279,30 @@ vi.mock("../lib/admin-events", () => ({
 }));
 
 // Capture invite emails instead of sending them.
-const sentInvites: Array<{ toEmail: string; inviteUrl: string }> = [];
-vi.mock("../lib/notify-email", () => ({
-  getAppBaseUrl: () => "https://test.example.com",
-  sendTeamInviteEmail: (opts: { toEmail: string; inviteUrl: string }) => {
+// Capture invite emails instead of sending them (hoisted so the factory sees it).
+const sentInvites = vi.hoisted(() => [] as Array<{ toEmail: string; inviteUrl: string }>);
+
+// Forward-compatible notify-email mock: auto-wraps every exported async function
+// as a no-op so new functions added by future tasks never cause "X is not a
+// function" failures. Only sendTeamInviteEmail is overridden with a capture spy.
+vi.mock("../lib/notify-email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
+  const mock: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(actual)) {
+    if (k === "getAppBaseUrl") {
+      mock[k] = () => "https://test.example.com";
+    } else if (typeof v === "function") {
+      mock[k] = () => Promise.resolve();
+    } else {
+      mock[k] = v;
+    }
+  }
+  mock.sendTeamInviteEmail = (opts: { toEmail: string; inviteUrl: string }) => {
     sentInvites.push(opts);
     return Promise.resolve();
-  },
-  sendNewSignupAlert: () => Promise.resolve(),
-  sendApprovalEmail: () => Promise.resolve(),
-  sendVerificationEmail: () => Promise.resolve(),
-  sendPasswordResetEmail: () => Promise.resolve(),
-  sendMfaAdminResetEmail: () => Promise.resolve(),
-  sendSecurityAlertEmail: () => Promise.resolve(),
-}));
+  };
+  return mock;
+});
 
 import {
   db,

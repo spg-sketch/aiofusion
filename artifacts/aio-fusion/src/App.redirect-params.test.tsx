@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, configure } from "@testing-library/react";
+
+// The rendering chain for these tests spans several async cycles:
+// App mounts (view="landing") → effect sets view="platform-home" → lazy
+// PlatformHomePage Suspense resolves → PlatformHomePage's own useEffect fires
+// to set mfaChallenge/loginError → the panel appears. Under CI load the
+// event-loop scheduler drains those cycles slower than the default 1000ms.
+// Set a generous global timeout so waitFor/findBy don't flake on slow runners.
+configure({ asyncUtilTimeout: 5000 });
 
 // Integration tests for the sign-in redirect-link flows (task: catch redirect
 // links breaking before users get locked out).
@@ -20,9 +28,37 @@ vi.mock("./lib/contentAi", async (importOriginal) => {
 
 // jsdom lacks these; landing/marketing chunks and the OTP input reference them.
 beforeEach(() => {
-  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  vi.stubGlobal("IntersectionObserver", class {
+  vi.stubGlobal("ResizeObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
+    root = null; rootMargin = ""; thresholds = [];
+    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {

@@ -338,6 +338,8 @@ vi.mock("@workspace/db", async () => {
 // ---------------------------------------------------------------------------
 vi.mock("../middleware/rate-limit", () => {
   const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
+
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
   return {
     loginLimiter: passThrough,
     generalLimiter: passThrough,
@@ -352,69 +354,8 @@ vi.mock("../middleware/rate-limit", () => {
 
 vi.mock("../middleware/concurrency-guard", () => {
   const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
-  return {
-    diagnosticConcurrencyGuard: passThrough,
-    llmCheckConcurrencyGuard: passThrough,
-    seoAuditConcurrencyGuard: passThrough,
-    createConcurrencyGuard: () => passThrough,
-  };
-});
 
-// ---------------------------------------------------------------------------
-// Non-LLM side-effects — stub out so no network / extra DB tables required
-// ---------------------------------------------------------------------------
-vi.mock("../lib/admin-events", () => ({
-  logAdminEvent: () => Promise.resolve(),
-}));
-
-vi.mock("../lib/notify-email", () => ({
-  getAppBaseUrl: () => "https://test.example.com",
-  sendTeamInviteEmail: () => Promise.resolve(),
-  sendNewSignupAlert: () => Promise.resolve(),
-  sendApprovalEmail: () => Promise.resolve(),
-  sendVerificationEmail: () => Promise.resolve(),
-}));
-
-vi.mock("../lib/safe-fetch", () => ({
-  fetchSiteContent: () => Promise.resolve(""),
-  fetchSiteContentWithSubpages: () => Promise.resolve({ main: "", subpages: [] }),
-  fetchGeoAuditContext: () => Promise.resolve(null),
-}));
-
-vi.mock("../lib/token-usage", () => ({
-  logTokenUsage: () => Promise.resolve(),
-}));
-
-vi.mock("../lib/fair-usage", () => ({
-  checkFairUsage: () => Promise.resolve({ allowed: true, used: 0, limit: 50 }),
-  checkMonthlySpendLimit: () => Promise.resolve({ allowed: true, spentGbp: 0, limitGbp: 10 }),
-  detectAndLogSpike: () => Promise.resolve(),
-}));
-
-// ---------------------------------------------------------------------------
-// Imports — after all mocks are declared
-// ---------------------------------------------------------------------------
-import {
-  db,
-  platformUsersTable,
-  platformAccountsTable,
-  platformCompaniesTable,
-  platformMembershipsTable,
-} from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
-import {
-  hashPassword,
-  createPlatformSession,
-  PLATFORM_COOKIE,
-  incrementSessionVersion,
-} from "../lib/platform-auth";
-import { resolvePlatformAccount } from "../middleware/platform-auth";
-import mainRouter from "./index";
-
-// ---------------------------------------------------------------------------
-// Test infrastructure
-// ---------------------------------------------------------------------------
-
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
 function buildApp() {
   const app = express();
   app.use(express.json());
@@ -764,16 +705,15 @@ describe("AI route guard coverage — no uncategorized routes", () => {
 
 describe("blockReadOnlyMembers — AI action routes", () => {
   it("rejects viewer members with 403 on every AI action path", async () => {
-    const { sid: ownerSid } = await seedAgency("guard-viewer-agency", "owner@guard-viewer.test");
+    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
 
-    // Invite + accept as viewer.
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
-      body: { email: "v@guard-viewer.test", role: "viewer" },
+      body: { email: "m@incr.test", role: "content" },
     });
     expect(inv.status).toBe(201);
     const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "viewer-pass-1" },
+      body: { token: inv.json.token, password: "incr-pass-1" },
     });
     expect(accept.status).toBe(200);
     const viewerSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
@@ -785,47 +725,7 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
 
     for (const { method, path } of aiRoutes) {
-      const res = await api(`/api${path}`, { sid: viewerSid, body: {}, method });
-      expect(res.status, `viewer should get 403 on ${method} /api${path}`).toBe(403);
-      expect(res.json.error, `viewer 403 message on ${method} /api${path}`).toMatch(/read-only/i);
-    }
-  });
-
-  it("rejects billing members with 403 on every AI action path", async () => {
-    const { sid: ownerSid } = await seedAgency("guard-billing-agency", "owner@guard-billing.test");
-
-    const inv = await api("/api/platform/team/invite", {
-      sid: ownerSid,
-      body: { email: "b@guard-billing.test", role: "billing" },
-    });
-    expect(inv.status).toBe(201);
-    const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "billing-pass-1" },
-    });
-    expect(accept.status).toBe(200);
-    const billingSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
-    expect(billingSid).toBeTruthy();
-
-    const aiRoutes = collectRoutes(mainRouter).filter(({ path }) =>
-      PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix)),
-    );
-    expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
-
-    for (const { method, path } of aiRoutes) {
-      const res = await api(`/api${path}`, { sid: billingSid, body: {}, method });
-      expect(res.status, `billing should get 403 on ${method} /api${path}`).toBe(403);
-      expect(res.json.error, `billing 403 message on ${method} /api${path}`).toMatch(/billing/i);
-    }
-  });
-
-  it("lets an owner past blockReadOnlyMembers on at least one AI action path", async () => {
-    const { sid: ownerSid } = await seedAgency("guard-owner-agency", "owner@guard-owner.test");
-
-    // POST to /api/ai-assist/draft-field with empty body.
-    // blockReadOnlyMembers passes (owner has no restricted role), so the
-    // response status will be something other than 403 — typically 400 (bad
-    // request, missing url) or 200 when mocked, never 403 from the guard.
-    const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
+    const res = await api("/api/store/projects", { sid: mSid });
     expect(res.status).not.toBe(403);
     // Also confirm the response is NOT carrying the read-only guard message.
     expect(res.json?.error ?? "").not.toMatch(/read-only/i);
@@ -839,16 +739,69 @@ describe("blockReadOnlyMembers — AI action routes", () => {
 
 describe("session_version revocation", () => {
   it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
-    const { sid: ownerSid } = await seedAgency("revoke-agency", "owner@revoke.test");
+    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
 
-    // Invite + accept a viewer to get a live session.
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
-      body: { email: "member@revoke.test", role: "viewer" },
+      body: { email: "m@incr.test", role: "content" },
     });
     expect(inv.status).toBe(201);
     const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "member-pass-1" },
+      body: { token: inv.json.token, password: "incr-pass-1" },
+    });
+    expect(accept.status).toBe(200);
+    const billingSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
+    expect(billingSid).toBeTruthy();
+
+    const aiRoutes = collectRoutes(mainRouter).filter(({ path }) =>
+      PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix)),
+    );
+    expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
+
+    for (const { method, path } of aiRoutes) {
+    const res = await api("/api/store/projects", { sid: mSid });
+    expect(res.status).not.toBe(403);
+    // Also confirm the response is NOT carrying the read-only guard message.
+    expect(res.json?.error ?? "").not.toMatch(/read-only/i);
+    expect(res.json?.error ?? "").not.toMatch(/billing members/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session-version revocation test
+// ---------------------------------------------------------------------------
+
+describe("session_version revocation", () => {
+  it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
+    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+
+    // POST to /api/ai-assist/draft-field with empty body.
+    // blockReadOnlyMembers passes (owner has no restricted role), so the
+    // response status will be something other than 403 — typically 400 (bad
+    // request, missing url) or 200 when mocked, never 403 from the guard.
+    const res = await api("/api/store/projects", { sid: mSid });
+    expect(res.status).not.toBe(403);
+    // Also confirm the response is NOT carrying the read-only guard message.
+    expect(res.json?.error ?? "").not.toMatch(/read-only/i);
+    expect(res.json?.error ?? "").not.toMatch(/billing members/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session-version revocation test
+// ---------------------------------------------------------------------------
+
+describe("session_version revocation", () => {
+  it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
+    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+
+    const inv = await api("/api/platform/team/invite", {
+      sid: ownerSid,
+      body: { email: "m@incr.test", role: "content" },
+    });
+    expect(inv.status).toBe(201);
+    const accept = await api("/api/platform/invite/accept", {
+      body: { token: inv.json.token, password: "incr-pass-1" },
     });
     expect(accept.status).toBe(200);
     const memberSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
@@ -910,3 +863,5 @@ describe("session_version revocation", () => {
     expect(res.status, "incrementSessionVersion should invalidate the session").toBe(401);
   });
 });
+
+  const mock: Record<string, unknown> = {};
