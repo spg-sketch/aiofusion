@@ -29,6 +29,7 @@ export type AdminAction =
   | "mfa_recovery_codes_regenerated"
   | "switch_to_master"
   | "team_invite_sent"
+  | "team_invite_resent"
   | "team_member_removed"
   | "email_changed";
 

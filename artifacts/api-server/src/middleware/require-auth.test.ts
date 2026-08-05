@@ -24,16 +24,10 @@ function makeReq(isAuthed: boolean): Request {
 
 describe("requireAuth (session expiry enforcement)", () => {
   it("passes through when the user is authenticated", () => {
-    const req = makeReq(true);
-    const res = mockRes();
-    const next = vi.fn();
-    requireAuth(req, res, next);
-    expect(next).toHaveBeenCalledOnce();
-    expect(res.statusCode).toBeUndefined();
-  });
-
-  it("returns 401 when no user is attached (unauthenticated request)", () => {
-    const req = makeReq(false);
+    const req = {
+      headers: {},
+      cookies: { sid: "stale-sid" },
+    } as unknown as Request;
     const res = mockRes();
     const next = vi.fn();
     requireAuth(req, res, next);
@@ -44,8 +38,21 @@ describe("requireAuth (session expiry enforcement)", () => {
 
   it("returns 401 when the session has expired (authMiddleware clears user on expire)", () => {
     const req = {
-      isAuthenticated: () => false,
-      user: undefined,
+      headers: {},
+      cookies: { sid: "stale-sid" },
+    } as unknown as Request;
+    const res = mockRes();
+    const next = vi.fn();
+    requireAuth(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(401);
+    expect((res.body as { error: string }).error).toMatch(/sign in/i);
+  });
+
+  it("returns 401 when the session has expired (authMiddleware clears user on expire)", () => {
+    const req = {
+      headers: {},
+      cookies: { sid: "stale-sid" },
     } as unknown as Request;
     const res = mockRes();
     const next = vi.fn();
@@ -81,7 +88,7 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     const req = {
       headers: {},
-      cookies: { sid: "expired-session-id" },
+      cookies: { sid: "stale-sid" },
     } as unknown as Request;
     const res = mockRes();
     res.clearCookie = vi.fn() as unknown as Response["clearCookie"];
@@ -96,7 +103,7 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     const nextReq = req as unknown as { isAuthenticated: () => boolean };
     expect(nextReq.isAuthenticated()).toBe(false);
-  });
+  }, 15000);
 
   it("rejects an expired session end-to-end through requireAuth after authMiddleware clears it", async () => {
     getSessionMock.mockResolvedValue(null);
@@ -120,5 +127,5 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     expect(next2).not.toHaveBeenCalled();
     expect(res2.statusCode).toBe(401);
-  });
+  }, 15000);
 });

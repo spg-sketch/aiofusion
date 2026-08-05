@@ -900,6 +900,8 @@ export type TeamInvite = {
   projectAccess: string[] | null;
   expiresAt: string;
   createdAt: string;
+  /** True when expiresAt is in the past but the invite has not been used or revoked. */
+  expired: boolean;
 };
 
 export type TeamOverview = {
@@ -989,6 +991,12 @@ export async function serverRevokeTeamInvite(token: string): Promise<{ ok: boole
   return { ok, error: json?.error };
 }
 
+export async function serverResendTeamInvite(
+  token: string,
+): Promise<{ ok: boolean; error?: string; newToken?: string }> {
+  const { ok, json } = await postJson(`/api/platform/team/invites/${encodeURIComponent(token)}/resend`);
+  return { ok, error: json?.error, newToken: json?.token };
+}
 export async function serverGetInviteInfo(token: string): Promise<{ ok: boolean; invite?: InviteInfo; error?: string }> {
   try {
     const resp = await fetch(`${apiBase()}/api/platform/invite/${encodeURIComponent(token)}`, {

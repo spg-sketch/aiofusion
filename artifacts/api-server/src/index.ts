@@ -17,6 +17,8 @@ import { seedSupportFaq } from "./lib/seed-support-faq";
 import { db, platformAccountsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
+import { ensurePlatformSchemaV5 } from "./lib/ensure-platform-schema-v5";
+import { sendInviteReminders } from "./lib/invite-reminders";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -102,6 +104,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v2 additions", ensurePlatformSchemaV2],
     ["platform schema v3 additions", ensurePlatformSchemaV3],
     ["platform schema v4 additions", ensurePlatformSchemaV4],
+    ["platform schema v5 additions", ensurePlatformSchemaV5],
     ["platform_password_resets table", ensurePasswordResetsTable],
   ];
   for (const [label, step] of steps) {
@@ -172,4 +175,15 @@ app.listen(port, (err) => {
       logger.error({ err }, "Failed to clean up expired token rows (scheduled)");
     });
   }, PRUNE_INTERVAL_MS).unref();
+
+  // Hourly sweep: send a reminder email to invitees whose invite expires in ~24 h.
+  const REMINDER_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  sendInviteReminders().catch((err) => {
+    logger.error({ err }, "Failed to run invite reminder sweep on startup");
+  });
+  setInterval(() => {
+    sendInviteReminders().catch((err) => {
+      logger.error({ err }, "Failed to run invite reminder sweep (scheduled)");
+    });
+  }, REMINDER_INTERVAL_MS).unref();
 });

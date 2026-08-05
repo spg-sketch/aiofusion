@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mail, Users, Trash2, X, CheckCircle2 } from "lucide-react";
+import { Loader2, Mail, Users, Trash2, X, CheckCircle2, RefreshCw, Clock } from "lucide-react";
 import { vars } from "../marketing/vars";
 import {
   type MembershipRole,
@@ -7,6 +7,7 @@ import {
   serverGetTeam,
   serverInviteTeamMember,
   serverRevokeTeamInvite,
+  serverResendTeamInvite,
   serverUpdateTeamMember,
   serverRemoveTeamMember,
 } from "../lib/auth";
@@ -83,6 +84,15 @@ export function TeamSection() {
     void serverRevokeTeamInvite(token).then(() => { setBusy(null); reload(); });
   };
 
+  const handleResend = (token: string) => {
+    setBusy(token);
+    void serverResendTeamInvite(token).then((r) => {
+      setBusy(null);
+      if (!r.ok) alert(r.error ?? "Failed to resend invitation.");
+      else reload();
+    });
+  };
+
   const handleRemove = (userId: string, label: string) => {
     if (!window.confirm(`Remove ${label} from your team? They will lose access immediately.`)) return;
     setBusy(userId);
@@ -122,6 +132,8 @@ export function TeamSection() {
   }
 
   const seatsFull = team.seatsUsed >= team.seatLimit;
+  const pendingInvites = team.invites.filter((i) => !i.expired);
+  const expiredInvites = team.invites.filter((i) => i.expired);
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
@@ -279,12 +291,12 @@ export function TeamSection() {
         ))}
       </div>
 
-      {/* Pending invites */}
-      {team.invites.length > 0 && (
+      {/* Pending invitations */}
+      {pendingInvites.length > 0 && (
         <div className="mt-5">
           <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: vars.g600 }}>Pending invitations</h3>
           <div className="space-y-2">
-            {team.invites.map((i) => (
+            {pendingInvites.map((i) => (
               <div key={i.token} className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
                 <Mail size={13} color="#92400E" />
                 <div className="flex-1 min-w-0">
@@ -293,14 +305,73 @@ export function TeamSection() {
                     {roleLabel(i.role)} · expires {new Date(i.expiresAt).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleRevoke(i.token)}
-                  disabled={busy === i.token}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
-                  style={{ borderColor: vars.g300, color: ink }}
-                >
-                  {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Revoke
-                </button>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => handleResend(i.token)}
+                    disabled={busy === i.token}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                    style={{ borderColor: "#92400E", color: "#92400E" }}
+                    title="Resend invitation"
+                  >
+                    {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Resend
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(i.token)}
+                    disabled={busy === i.token}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                    style={{ borderColor: vars.g300, color: ink }}
+                  >
+                    {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />} Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Expired invitations */}
+      {expiredInvites.length > 0 && (
+        <div className="mt-5">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: vars.g600 }}>Expired invitations</h3>
+          <div className="space-y-2">
+            {expiredInvites.map((i) => (
+              <div key={i.token} className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: "#f8fafc", border: `1px solid ${vars.g200}`, opacity: 0.85 }}>
+                <Clock size={13} color={vars.g400 ?? "#94a3b8"} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-[13px] font-semibold truncate" style={{ color: vars.g600 }}>{i.email}</p>
+                    <span
+                      className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-[0.12em]"
+                      style={{ background: "#F1F5F9", color: vars.g600 ?? "#64748b" }}
+                    >
+                      Expired
+                    </span>
+                  </div>
+                  <p className="text-[11px]" style={{ color: vars.g400 ?? "#94a3b8" }}>
+                    {roleLabel(i.role)} · expired {new Date(i.expiresAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => handleResend(i.token)}
+                    disabled={busy === i.token}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                    style={{ borderColor: accent, color: accent }}
+                    title="Resend with a fresh link"
+                  >
+                    {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Resend
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(i.token)}
+                    disabled={busy === i.token}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                    style={{ borderColor: vars.g200, color: vars.g600 ?? "#64748b" }}
+                    title="Remove this expired invitation"
+                  >
+                    {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>

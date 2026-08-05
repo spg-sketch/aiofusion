@@ -94,6 +94,7 @@ vi.mock("@workspace/db", async () => {
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
       revoked_at timestamptz,
+      reminder_sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_accounts (
@@ -577,6 +578,10 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/reset-password",
   "POST /platform/change-password",
   "POST /platform/setup/account-type",
+  "POST /platform/accounts/email",
+  "POST /platform/change-email",
+  "POST /platform/request-set-password",
+  "POST /platform/team/invites/:token/resend",
   "POST /platform/logout",
 
   // ── platform — MFA ────────────────────────────────────────────────────────
@@ -617,9 +622,6 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/accounts/delete",
   "POST /platform/accounts/reparent",
   "POST /platform/accounts/role",
-  "POST /platform/accounts/email",        // admin-initiated email change
-  "POST /platform/change-email",          // self-service email change
-  "POST /platform/request-set-password",  // SSO accounts setting first password
   "PATCH /platform/accounts/:username/seat-cap",
   "GET /platform/accounts/:username/sessions",
   "DELETE /platform/sessions/:sid",
@@ -774,6 +776,7 @@ describe("blockReadOnlyMembers — AI action routes", () => {
   it("rejects viewer members with 403 on every AI action path", async () => {
     const { sid: ownerSid } = await seedAgency("guard-viewer-agency", "owner@guard-viewer.test");
 
+    // Invite + accept as viewer.
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
       body: { email: "v@guard-viewer.test", role: "viewer" },
@@ -792,13 +795,9 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
 
     for (const { method, path } of aiRoutes) {
-      const res = await api(`/api${path}`, {
-        method,
-        sid: viewerSid,
-        body: method !== "GET" ? {} : undefined,
-      });
-      expect(res.status, `viewer should get 403 on ${method} ${path}`).toBe(403);
-      expect(res.json?.error ?? "", `viewer 403 message on ${path}`).toMatch(/read-only/i);
+      const res = await api(`/api${path}`, { sid: viewerSid, body: {}, method });
+      expect(res.status, `viewer should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `viewer 403 message on ${method} /api${path}`).toMatch(/read-only/i);
     }
   });
 
@@ -820,16 +819,12 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     const aiRoutes = collectRoutes(mainRouter).filter(({ path }) =>
       PAID_AI_PREFIXES.some((prefix) => path.startsWith(prefix)),
     );
-    expect(aiRoutes.length).toBeGreaterThan(0);
+    expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
 
     for (const { method, path } of aiRoutes) {
-      const res = await api(`/api${path}`, {
-        method,
-        sid: billingSid,
-        body: method !== "GET" ? {} : undefined,
-      });
-      expect(res.status, `billing should get 403 on ${method} ${path}`).toBe(403);
-      expect(res.json?.error ?? "", `billing 403 message on ${path}`).toMatch(/billing/i);
+      const res = await api(`/api${path}`, { sid: billingSid, body: {}, method });
+      expect(res.status, `billing should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `billing 403 message on ${method} /api${path}`).toMatch(/billing/i);
     }
   });
 
@@ -842,6 +837,7 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     // request, missing url) or 200 when mocked, never 403 from the guard.
     const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
     expect(res.status).not.toBe(403);
+    // Also confirm the response is NOT carrying the read-only guard message.
     expect(res.json?.error ?? "").not.toMatch(/read-only/i);
     expect(res.json?.error ?? "").not.toMatch(/billing members/i);
   });

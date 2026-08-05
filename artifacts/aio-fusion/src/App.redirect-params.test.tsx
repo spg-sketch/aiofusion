@@ -1,13 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, waitFor, cleanup, configure } from "@testing-library/react";
-
-// The rendering chain for these tests spans several async cycles:
-// App mounts (view="landing") → effect sets view="platform-home" → lazy
-// PlatformHomePage Suspense resolves → PlatformHomePage's own useEffect fires
-// to set mfaChallenge/loginError → the panel appears. Under CI load the
-// event-loop scheduler drains those cycles slower than the default 1000ms.
-// Set a generous global timeout so waitFor/findBy don't flake on slow runners.
-configure({ asyncUtilTimeout: 5000 });
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 
 // Integration tests for the sign-in redirect-link flows (task: catch redirect
 // links breaking before users get locked out).
@@ -79,16 +71,14 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     document.cookie = "aio_oauth_mfa_token=tok-verify-123; path=/";
     await renderAppAt("/?oauth_status=mfa");
 
-    // Long timeout: this test involves async bootstrapAuth + lazy chunk loading
-    // which can be slow under CI load, causing intermittent failures.
     await waitFor(() => {
       expect(screen.getByText("Two-factor verification")).toBeInTheDocument();
-    }, { timeout: 10000 });
+    });
     // The single-use cookie must be consumed immediately.
     expect(document.cookie).not.toContain("aio_oauth_mfa_token=tok-verify-123");
     // And the history-sync effect must have cleaned the query string.
     expect(window.location.search).toBe("");
-  }, 20000);
+  });
 
   it("oauth_status=mfa&mfa_mode=enroll shows the enrolment panel", async () => {
     document.cookie = "aio_oauth_mfa_token=tok-enroll-456; path=/";
@@ -96,8 +86,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Set up two-factor authentication")).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("oauth_status=mfa with a missing cookie shows a clear error, not a silent sign-in form", async () => {
     await renderAppAt("/?oauth_status=mfa");
@@ -106,8 +96,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Two-factor sign-in could not be started. Please try again."),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("oauth_status=error&oauth_msg=invalid_state shows the friendly error message", async () => {
     await renderAppAt("/?oauth_status=error&oauth_msg=invalid_state");
@@ -116,9 +106,9 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("The sign-in session expired. Please try again."),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
+    });
     expect(window.location.search).toBe("");
-  }, 20000);
+  });
 
   it("oauth_status=suspended shows the suspension message", async () => {
     await renderAppAt("/?oauth_status=suspended");
@@ -127,8 +117,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Your account has been suspended. Please contact support."),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("verify_status=expired shows the verification-pending screen with the expiry notice", async () => {
     await renderAppAt("/?verify_status=expired");
@@ -138,8 +128,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("Your verification link has expired. Request a new one below."),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("verify_status=invalid shows the invalid-link notice on the verification screen", async () => {
     await renderAppAt("/?verify_status=invalid");
@@ -148,8 +138,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByText("This verification link is invalid. Please request a new one."),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("reset_token=x shows the choose-a-new-password form", async () => {
     await renderAppAt("/?reset_token=some-reset-token");
@@ -159,8 +149,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
       expect(
         screen.getByPlaceholderText("New password (min 8 characters)"),
       ).toBeInTheDocument();
-    }, { timeout: 10000 });
-  }, 20000);
+    });
+  });
 
   it("a stale MFA challenge does not reappear after unmount/remount", async () => {
     document.cookie = "aio_oauth_mfa_token=tok-once-789; path=/";
@@ -168,7 +158,7 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Two-factor verification")).toBeInTheDocument();
-    }, { timeout: 10000 });
+    });
 
     first.unmount();
 
@@ -182,8 +172,8 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     // Wait for the lazy page chunk to settle (some heading renders).
     await waitFor(() => {
       expect(document.querySelector("h1, h2")).toBeTruthy();
-    }, { timeout: 10000 });
+    });
     expect(screen.queryByText("Two-factor verification")).not.toBeInTheDocument();
     expect(screen.queryByText("Set up two-factor authentication")).not.toBeInTheDocument();
-  }, 20000);
+  });
 });

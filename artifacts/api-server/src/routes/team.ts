@@ -91,6 +91,8 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       .where(eq(platformMembershipsTable.companyId, company.id))
       .orderBy(desc(platformMembershipsTable.createdAt));
 
+    // Include expired (not yet used/revoked) invites so the UI can show them
+    // distinctly; they are flagged below and excluded from the seat count.
     const inviteRows = await db
       .select()
       .from(platformInvitationsTable)
@@ -99,10 +101,12 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
           eq(platformInvitationsTable.companyId, company.id),
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
-          gt(platformInvitationsTable.expiresAt, new Date()),
         ),
       )
       .orderBy(desc(platformInvitationsTable.createdAt));
+
+    const now = new Date();
+    const pendingCount = inviteRows.filter((i) => i.expiresAt > now).length;
 
     const seatLimit = await getTeamSeatLimit(company.slug);
     res.json({
@@ -122,9 +126,10 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         projectAccess: parseProjectAccess(i.projectAccess),
         expiresAt: i.expiresAt,
         createdAt: i.createdAt,
+        expired: i.expiresAt <= now,
       })),
       seatLimit,
-      seatsUsed: memberRows.length + inviteRows.length,
+      seatsUsed: memberRows.length + pendingCount,
     });
   } catch (err) {
     logger.error({ err }, "team: failed to list team");
@@ -245,6 +250,86 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
   } catch (err) {
     logger.error({ err }, "team: failed to create invite");
     res.status(500).json({ error: "Failed to send invitation." });
+  }
+});
+
+// --- Resend (regenerate) a pending or expired invite --------------------------
+
+router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (!canManageTeam(req.account!)) {
+      res.status(403).json({ error: "Only owners and admins can resend invitations." });
+      return;
+    }
+    const company = await getActiveCompany(req);
+    if (!company) { res.status(403).json({ error: "No active workspace." }); return; }
+
+    const oldToken = String(req.params.token || "").trim();
+
+    // Look up the existing invite — scoped to this company, not yet used/revoked.
+    const [existing] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(
+        and(
+          eq(platformInvitationsTable.token, oldToken),
+          eq(platformInvitationsTable.companyId, company.id),
+          isNull(platformInvitationsTable.usedAt),
+          isNull(platformInvitationsTable.revokedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Invitation not found, already used, or already revoked." });
+      return;
+    }
+
+    // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat
+    // cap (still-pending invites already hold their seat — no check needed).
+    if (existing.expiresAt <= new Date()) {
+      const { members, pendingInvites } = await countSeatsUsed(company.id);
+      const seatLimit = await getTeamSeatLimit(company.slug);
+      if (members + pendingInvites >= seatLimit) {
+        res.status(403).json({
+          error: "Seat limit reached — remove a member or invite before resending this expired invitation.",
+          limitReached: true,
+        });
+        return;
+      }
+    }
+
+    // Regenerate: fresh token, fresh 7-day expiry, clear reminder flag.
+    const newToken = crypto.randomBytes(32).toString("hex");
+    const newExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
+
+    await db
+      .update(platformInvitationsTable)
+      .set({ token: newToken, expiresAt: newExpiresAt, reminderSentAt: null })
+      .where(eq(platformInvitationsTable.token, oldToken));
+
+    const inviteUrl = `${getAppBaseUrl()}/?invite=${newToken}`;
+    const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
+    void sendTeamInviteEmail({
+      toEmail: existing.email,
+      companyName: company.displayName || company.slug,
+      inviterName,
+      roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(existing.role)] ?? existing.role,
+      inviteUrl,
+    });
+
+    void logAdminEvent(
+      { username: req.account!.username, id: req.account!.userId },
+      "team_invite_resent",
+      existing.email,
+      "invitation",
+      { companySlug: company.slug },
+    );
+
+    res.status(200).json({ ok: true, token: newToken, inviteUrl, expiresAt: newExpiresAt });
+  } catch (err) {
+    logger.error({ err }, "team: failed to resend invite");
+    res.status(500).json({ error: "Failed to resend invitation." });
   }
 });
 

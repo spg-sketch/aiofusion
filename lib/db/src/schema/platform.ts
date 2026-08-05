@@ -168,6 +168,9 @@ export const platformInvitationsTable = pgTable("platform_invitations", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  //  reminderSentAt — set once the 24h-before-expiry reminder email is sent.
+  //  NULL = reminder not yet sent (or not applicable for expired/used invites).
+  reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

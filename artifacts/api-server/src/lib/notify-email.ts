@@ -133,6 +133,73 @@ export async function sendMfaAdminResetEmail(opts: {
   }
 }
 
+/**
+ * Send an invite reminder email.
+ *
+ * Returns `true` when the email was delivered, `false` when Resend is not
+ * configured (no RESEND_API_KEY — caller should not stamp reminder_sent_at so
+ * the invite is retried once the key is set), and throws on provider errors
+ * (caller should also not stamp so the invite is retried next sweep).
+ */
+export async function sendInviteReminderEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  inviterName: string;
+  roleLabel: string;
+  inviteUrl: string;
+  expiresAt: Date;
+}): Promise<boolean> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — invite reminder email not sent");
+    return false;
+  }
+
+  // Format the expiry as e.g. "Tuesday 24 June at 14:30 UTC"
+  const expiryLabel = opts.expiresAt.toUTCString().replace(" GMT", " UTC");
+
+  const subject = `Reminder: your invitation to join ${opts.companyName} on AIO Fusion expires soon`;
+  const text = [
+    `Hi,`,
+    ``,
+    `Just a reminder that your invitation to join ${opts.companyName} on AIO Fusion as ${opts.roleLabel} expires in approximately 24 hours.`,
+    ``,
+    `Expiry: ${expiryLabel}`,
+    ``,
+    `Click the link below to accept the invitation before it expires:`,
+    ``,
+    opts.inviteUrl,
+    ``,
+    `If you're no longer interested, you can safely ignore this email.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Invitation Expiring Soon",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi,</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        Your invitation to join ${escHtml(opts.companyName)} on AIO Fusion is expiring soon.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        ${escHtml(opts.inviterName)} invited you as <strong>${escHtml(opts.roleLabel)}</strong>.
+        Your invitation link expires in approximately <strong>24 hours</strong>
+        (${escHtml(expiryLabel)}).
+        Click the button below to accept it before it expires.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you're no longer interested, you can safely ignore this email.
+      </p>
+    `,
+    cta: { text: "Accept invitation", href: opts.inviteUrl },
+  });
+
+  // Let provider errors propagate — the sweep will catch them and skip stamping.
+  await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+  logger.info({ toEmail: opts.toEmail }, "notify-email: invite reminder email sent");
+  return true;
+}
 export async function sendMfaChangedEmail(opts: {
   toEmail: string;
   toName: string;

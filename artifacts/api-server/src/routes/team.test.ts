@@ -63,6 +63,7 @@ vi.mock("@workspace/db", async () => {
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
       revoked_at timestamptz,
+      reminder_sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_accounts (
@@ -127,7 +128,10 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS project_snapshots (
       id varchar PRIMARY KEY,
       project_id varchar,
+      name varchar,
       data jsonb,
+      intake jsonb,
+      logo text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_password_resets (
@@ -310,6 +314,7 @@ import {
   platformAccountsTable,
   platformCompaniesTable,
   platformMembershipsTable,
+  platformInvitationsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
@@ -611,6 +616,207 @@ describe("team invitations", () => {
       .from(platformMembershipsTable)
       .where(eq(platformMembershipsTable.userId, memberUser!.id));
     expect(remaining).toHaveLength(0);
+  });
+});
+// ---------------------------------------------------------------------------
+// Resend invite endpoint
+// ---------------------------------------------------------------------------
+describe("resend invite endpoint", () => {
+  it("regenerates token + fresh 7-day expiry + clears reminderSentAt; old token becomes invalid", async () => {
+    const { sid } = await seedAgency("resend-basic", "owner@resend-basic.test");
+
+    const inv = await api("/api/platform/team/invite", { sid, body: { email: "r@resend-basic.test", role: "viewer" } });
+    expect(inv.status).toBe(201);
+    const oldToken = inv.json.token as string;
+
+    // Simulate a reminder already sent.
+    await db
+      .update(platformInvitationsTable)
+      .set({ reminderSentAt: new Date() })
+      .where(eq(platformInvitationsTable.token, oldToken));
+
+    const before = Date.now();
+    const resend = await api(`/api/platform/team/invites/${oldToken}/resend`, { sid, body: {} });
+    expect(resend.status).toBe(200);
+    expect(resend.json.ok).toBe(true);
+    const newToken = resend.json.token as string;
+    expect(newToken).toBeTruthy();
+    expect(newToken).not.toBe(oldToken);
+    expect(resend.json.inviteUrl).toContain(newToken);
+
+    // DB: row now uses new token, expiry ≈ +7 days, reminderSentAt cleared.
+    const [row] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, newToken));
+    expect(row).toBeTruthy();
+    expect(row!.reminderSentAt).toBeNull();
+    const sevenDaysOut = before + 7 * 24 * 60 * 60 * 1000;
+    expect(row!.expiresAt.getTime()).toBeGreaterThan(sevenDaysOut - 10_000);
+    expect(row!.expiresAt.getTime()).toBeLessThan(sevenDaysOut + 10_000);
+
+    // Old token is gone from the public info endpoint.
+    expect((await api(`/api/platform/invite/${oldToken}`)).status).toBe(404);
+    // New token works.
+    const info = await api(`/api/platform/invite/${newToken}`);
+    expect(info.status).toBe(200);
+    expect(info.json.email).toBe("r@resend-basic.test");
+  });
+
+  it("resend of an expired invite reactivates it with a fresh 7-day expiry", async () => {
+    const { sid, company } = await seedAgency("resend-expired", "owner@resend-expired.test");
+
+    const expiredToken = "resend-expired-direct-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expiredToken,
+      email: "exp@resend-expired.test",
+      companyId: company.id,
+      companySlug: "resend-expired",
+      role: "content",
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // already expired
+    });
+
+    const before = Date.now();
+    const resend = await api(`/api/platform/team/invites/${expiredToken}/resend`, { sid, body: {} });
+    expect(resend.status).toBe(200);
+    const newToken = resend.json.token as string;
+    expect(newToken).not.toBe(expiredToken);
+
+    // New expiry is in the future (~7 days).
+    const [row] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, newToken));
+    expect(row!.expiresAt.getTime()).toBeGreaterThan(before + 6 * 24 * 60 * 60 * 1000);
+
+    // Public endpoint now accepts the new token.
+    expect((await api(`/api/platform/invite/${newToken}`)).status).toBe(200);
+  });
+
+  it("rejects viewer and content member roles with 403", async () => {
+    const { sid } = await seedAgency("resend-authz", "owner@resend-authz.test");
+
+    // Invite + accept a viewer (uses 1 of 3 seats as member after accept).
+    const vInv = await api("/api/platform/team/invite", { sid, body: { email: "v@resend-authz.test", role: "viewer" } });
+    const vAcc = await api("/api/platform/invite/accept", { body: { token: vInv.json.token, password: "viewer-pass-resend-1" } });
+    const vSid = /aio_sid=([^;]+)/.exec(vAcc.setCookie ?? "")?.[1];
+
+    // Create the target invite the viewer will try to resend.
+    const target = await api("/api/platform/team/invite", { sid, body: { email: "tgt@resend-authz.test", role: "viewer" } });
+    expect(target.status).toBe(201);
+    const targetToken = target.json.token as string;
+
+    // Viewer → 403.
+    const vResend = await api(`/api/platform/team/invites/${targetToken}/resend`, { sid: vSid, body: {} });
+    expect(vResend.status).toBe(403);
+
+    // Unauthenticated → 401.
+    const unauth = await api(`/api/platform/team/invites/${targetToken}/resend`, { body: {} });
+    expect(unauth.status).toBe(401);
+  });
+
+  it("cross-company isolation: cannot resend another company's invite", async () => {
+    const { sid: sidA } = await seedAgency("resend-iso-a", "owner@resend-iso-a.test");
+    const { sid: sidB } = await seedAgency("resend-iso-b", "owner@resend-iso-b.test");
+
+    // Company A creates an invite.
+    const inv = await api("/api/platform/team/invite", { sid: sidA, body: { email: "x@resend-iso-a.test", role: "viewer" } });
+    expect(inv.status).toBe(201);
+    const tokenA = inv.json.token as string;
+
+    // Company B tries to resend it — scoped lookup must return 404.
+    const r = await api(`/api/platform/team/invites/${tokenA}/resend`, { sid: sidB, body: {} });
+    expect(r.status).toBe(404);
+  });
+
+  it("returns 404 for used, revoked, and unknown tokens", async () => {
+    const { sid } = await seedAgency("resend-404", "owner@resend-404.test");
+
+    // Unknown token.
+    expect((await api("/api/platform/team/invites/no-such-token-xyz/resend", { sid, body: {} })).status).toBe(404);
+
+    // Revoked token.
+    const inv1 = await api("/api/platform/team/invite", { sid, body: { email: "rev@resend-404.test", role: "viewer" } });
+    await api(`/api/platform/team/invites/${inv1.json.token}/revoke`, { sid, body: {} });
+    expect((await api(`/api/platform/team/invites/${inv1.json.token}/resend`, { sid, body: {} })).status).toBe(404);
+
+    // Used (accepted) token — need a seat free; revoke freed one above.
+    const inv2 = await api("/api/platform/team/invite", { sid, body: { email: "used@resend-404.test", role: "viewer" } });
+    expect(inv2.status).toBe(201);
+    await api("/api/platform/invite/accept", { body: { token: inv2.json.token, password: "used-pass-resend-1" } });
+    expect((await api(`/api/platform/team/invites/${inv2.json.token}/resend`, { sid, body: {} })).status).toBe(404);
+  });
+
+  it("resending an expired invite at a full workspace returns 403 limitReached; resending a still-pending invite succeeds", async () => {
+    const { sid, company } = await seedAgency("resend-seatcap", "owner@resend-seatcap.test");
+
+    // Fill the workspace: owner (1 member) + 2 pending invites = 3 seats (the default limit).
+    const inv1 = await api("/api/platform/team/invite", { sid, body: { email: "a@resend-seatcap.test", role: "viewer" } });
+    const inv2 = await api("/api/platform/team/invite", { sid, body: { email: "b@resend-seatcap.test", role: "viewer" } });
+    expect(inv1.status).toBe(201);
+    expect(inv2.status).toBe(201);
+    // Confirm we're at the limit.
+    expect((await api("/api/platform/team/invite", { sid, body: { email: "extra@resend-seatcap.test", role: "viewer" } })).status).toBe(403);
+
+    // Insert an expired invite — it is NOT counted in seatsUsed.
+    const expiredTok = "seatcap-expired-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expiredTok,
+      email: "expired@resend-seatcap.test",
+      companyId: company.id,
+      companySlug: "resend-seatcap",
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+
+    // Resending the expired invite would add a pending seat → 403.
+    const capReject = await api(`/api/platform/team/invites/${expiredTok}/resend`, { sid, body: {} });
+    expect(capReject.status).toBe(403);
+    expect(capReject.json.limitReached).toBe(true);
+
+    // Resending a still-pending invite does NOT consume a new seat → 200.
+    const pendingResend = await api(`/api/platform/team/invites/${inv1.json.token}/resend`, { sid, body: {} });
+    expect(pendingResend.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /team: expired invites in response + seatsUsed exclusion
+// ---------------------------------------------------------------------------
+describe("GET /team: expired invite visibility", () => {
+  it("includes expired invites flagged expired=true and excludes them from seatsUsed", async () => {
+    const { sid, company } = await seedAgency("get-team-exp", "owner@get-team-exp.test");
+
+    // One fresh pending invite.
+    const pending = await api("/api/platform/team/invite", { sid, body: { email: "pending@get-team-exp.test", role: "viewer" } });
+    expect(pending.status).toBe(201);
+    const pendingToken = pending.json.token as string;
+
+    // One expired invite inserted directly (bypasses the create endpoint so we can back-date it).
+    const expiredToken = "get-team-exp-direct-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expiredToken,
+      email: "expired@get-team-exp.test",
+      companyId: company.id,
+      companySlug: "get-team-exp",
+      role: "content",
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+
+    const team = await api("/api/platform/team", { sid });
+    expect(team.status).toBe(200);
+
+    // Both invites appear in the invites array.
+    expect(team.json.invites).toHaveLength(2);
+    const p = team.json.invites.find((i: any) => i.token === pendingToken);
+    const e = team.json.invites.find((i: any) => i.token === expiredToken);
+    expect(p).toBeTruthy();
+    expect(e).toBeTruthy();
+    expect(p!.expired).toBe(false);
+    expect(e!.expired).toBe(true);
+
+    // seatsUsed = 1 owner member + 1 pending invite; expired doesn't count.
+    expect(team.json.seatsUsed).toBe(2);
   });
 });
 
