@@ -1,5 +1,7 @@
 ---
 name: notify-email test mock factories
-description: Durable rule for mocking shared email modules in api-server tests
+description: Forward-compatible pattern for mocking lib/notify-email across api-server tests
 ---
-Rule: static export-list mocks of shared modules (like notify-email) break whenever another task adds a new export — the new name resolves to `undefined` and throws in unrelated test suites. Always use `importOriginal` auto-wrap factories instead.
+Never enumerate notify-email exports statically in a mock factory. Use an `importOriginal`-based auto-wrap: iterate the real module's exports, wrap every async function as a resolved no-op, then override only the functions a specific test needs to spy on.
+
+**Why it matters across sessions:** any task that adds a new email function to notify-email will silently break every test file that uses a static export list, even tests with no relation to the new function.

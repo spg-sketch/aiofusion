@@ -235,6 +235,10 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let masterOwner = false;
   let emailVerified: boolean | null = null;
   let setupComplete: boolean | null = null;
+  // Profile fields for intake form prefill. Only populated for the account's
+  // own direct session (not impersonation, not a team-member session).
+  let accountDisplayName: string | null = null;
+  let accountWebsite: string | null = null;
   if (req.account) {
     try {
       // Prefer the session's own userId so member sessions reflect the
@@ -248,9 +252,11 @@ router.get("/platform/me", async (req: Request, res: Response) => {
           .limit(1);
         u = rows[0] ?? null;
       }
+      // Load the account row unconditionally — website lives on platform_accounts
+      // and must be available for both modern (userId) and legacy sessions.
+      const acc = await getAccount(normUsername(req.account.username));
       // Legacy fallback: sessions created before userId was stored.
       if (!u) {
-        const acc = await getAccount(normUsername(req.account.username));
         if (acc?.email) u = await getUserByEmail(acc.email);
       }
       if (u) {
@@ -258,6 +264,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         hasPassword = !!(u.passwordHash);
         emailVerified = u.emailVerified ?? null;
       }
+      accountWebsite = acc?.website ?? null;
     } catch { /* non-fatal */ }
     try {
       masterOwner = await isMasterOwner(req.account.username);
@@ -265,6 +272,15 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     try {
       const co = await getCompanyBySlug(normUsername(req.account.username));
       setupComplete = co?.setupComplete ?? null;
+    } catch { /* non-fatal */ }
+    // displayName lives in platform_meta
+    try {
+      const [profileRow] = await db
+        .select()
+        .from(platformMetaTable)
+        .where(eq(platformMetaTable.key, profileKey(normUsername(req.account.username))))
+        .limit(1);
+      accountDisplayName = parseDisplayName(profileRow?.value) ?? null;
     } catch { /* non-fatal */ }
   }
   const accountWithGoogle = req.account
@@ -276,7 +292,17 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       }
     : null;
   res.setHeader("Cache-Control", "no-store");
-  res.json({ account: accountWithGoogle, impersonating, masterOwner, emailVerified, setupComplete, hasPassword });
+  res.json({
+    account: accountWithGoogle,
+    impersonating,
+    masterOwner,
+    emailVerified,
+    setupComplete,
+    hasPassword,
+    // Returned for client-side intake prefill. The client performs its own
+    // role + impersonation guard before using these values.
+    accountProfile: { displayName: accountDisplayName, website: accountWebsite },
+  });
 });
 
 // Whether the one-time migration of browser-stored accounts has already run.

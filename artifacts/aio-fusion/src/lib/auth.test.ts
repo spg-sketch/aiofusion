@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   addUser,
   getSubAccounts,
   getVisibleUsernames,
   canViewOwner,
   saveUsers,
+  bootstrapAuth,
   type Session,
 } from "./auth";
 
@@ -72,5 +73,84 @@ describe("auth sub-accounts and visibility", () => {
   it("admins can view any owner, including unowned projects", () => {
     expect(canViewOwner(adminSession, "anyone")).toBe(true);
     expect(canViewOwner(adminSession, undefined)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bootstrapAuth — accountProfile flows from /api/platform/me to the caller
+// ---------------------------------------------------------------------------
+
+/** Stub fetch to return a shaped /api/platform/me response; all other calls 401. */
+function stubMeResponse(body: object) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (String(url).includes("/api/platform/me")) {
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      // status / accounts-cache / migrate — all 401 no-ops.
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+}
+
+describe("bootstrapAuth — accountProfile server→client path", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it("surfaces displayName and website for a direct-owner client session", async () => {
+    stubMeResponse({
+      account: { username: "mybrand", role: "client" },
+      impersonating: null,
+      setupComplete: true,
+      hasPassword: true,
+      accountProfile: { displayName: "My Brand Ltd", website: "mybrand.com" },
+    });
+
+    const result = await bootstrapAuth();
+
+    expect(result.session?.username).toBe("mybrand");
+    expect(result.accountProfile?.displayName).toBe("My Brand Ltd");
+    expect(result.accountProfile?.website).toBe("mybrand.com");
+  });
+
+  it("returns accountProfile null for a team-member session (membershipRole present)", async () => {
+    stubMeResponse({
+      account: { username: "mybrand", role: "client", membershipRole: "viewer" },
+      impersonating: null,
+      setupComplete: true,
+      hasPassword: true,
+      accountProfile: { displayName: "My Brand Ltd", website: "mybrand.com" },
+    });
+
+    const result = await bootstrapAuth();
+
+    expect(result.session?.membershipRole).toBe("viewer");
+    // membershipRole present → must not expose foreign workspace profile
+    expect(result.accountProfile).toBeNull();
+  });
+
+  it("returns accountProfile null when impersonating another account", async () => {
+    stubMeResponse({
+      account: { username: "someagency", role: "agency" },
+      impersonating: { by: "admin", byRole: "admin" },
+      setupComplete: true,
+      hasPassword: true,
+      accountProfile: { displayName: "Some Agency Ltd", website: "someagency.com" },
+    });
+
+    const result = await bootstrapAuth();
+
+    expect(result.session?.username).toBe("someagency");
+    expect(result.accountProfile).toBeNull();
   });
 });

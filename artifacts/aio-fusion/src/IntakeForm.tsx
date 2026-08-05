@@ -726,7 +726,17 @@ export const OPTIMISED_FIELD_IDS: readonly string[] = sections
 
 type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 
-export default function IntakePage() {
+// Props passed by App.tsx for optional intake prefill.
+// accountProfile is only non-null when App is confident it is safe to prefill
+// (direct account-owner session, not impersonating, not a team member).
+// role is the account role — "client" triggers prefill; "agency" shows a
+// neutral "this form is for your client" note without touching field values.
+export type IntakeAccountProps = {
+  accountProfile?: { displayName?: string | null; website?: string | null } | null;
+  role?: string | null;
+};
+
+export default function IntakePage({ accountProfile, role }: IntakeAccountProps = {}) {
   const [track, setTrack] = useState<Track>("pr");
   const visibleSections = useMemo(() => sections.filter((s) => s.track === track), [track]);
   const [activeSection, setActiveSection] = useState(0);
@@ -752,6 +762,11 @@ export default function IntakePage() {
         return fd;
       }
     } catch { /* noop */ }
+    // Fresh intake — prefill 4.1 for direct brand accounts when a display name
+    // is available. Agencies get a blank form (the intake is for their client).
+    if (role === "client" && accountProfile?.displayName) {
+      return { "4.1": accountProfile.displayName };
+    }
     return {};
   });
   const [duals, setDuals] = useState<Record<string, DualValue>>(() => {
@@ -883,8 +898,28 @@ export default function IntakePage() {
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [aiWebsite, setAiWebsite] = useState<string>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).aiWebsite || ""; } catch { /* noop */ }
+    // Fresh intake — prefill website for direct brand accounts.
+    if (role === "client" && accountProfile?.website) return accountProfile.website;
     return "";
   });
+  // One-shot note shown only on truly fresh intakes (localStorage key absent at
+  // mount time). Computed here so it captures the "was fresh" state before the
+  // save useEffect writes the first blob. Value:
+  //   "brand"  → client role, prefill applied, show "pre-filled" message
+  //   "agency" → agency role, no prefill, show "this is for your client" message
+  //   null     → saved intake or admin/member session, no note
+  const [prefillNote] = useState<"brand" | "agency" | null>(() => {
+    try {
+      if (localStorage.getItem(currentIntakeKey()) !== null) return null; // saved intake
+    } catch { /* noop */ }
+    // Both note and prefill require a non-null accountProfile — this is null for
+    // team-member sessions, impersonation, and offline fallback (spec item 6).
+    if (!accountProfile) return null;
+    if (role === "client") return "brand";
+    if (role === "agency") return "agency";
+    return null;
+  });
+  const [prefillNoteDismissed, setPrefillNoteDismissed] = useState(false);
   const [urlTouched, setUrlTouched] = useState(false);
   // The entity the user confirmed is theirs in the Earned Media entity-clarity
   // step. Set from the LLM Check page, not edited here; round-tripped through
@@ -1699,6 +1734,33 @@ export default function IntakePage() {
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
       <div ref={topRef} aria-hidden="true" />
+      {/* Prefill / context note — shown once on fresh intakes only */}
+      {prefillNote && !prefillNoteDismissed && (
+        <div
+          className="flex items-start gap-3 rounded-xl px-4 py-3 mb-5 text-[13px]"
+          style={{
+            background: prefillNote === "brand" ? "rgba(200,73,122,0.10)" : "rgba(79,143,255,0.10)",
+            border: `1px solid ${prefillNote === "brand" ? "rgba(200,73,122,0.28)" : "rgba(79,143,255,0.28)"}`,
+            color: "#ffffff",
+          }}
+          role="note"
+          aria-label="intake prefill notice"
+        >
+          <Info size={15} style={{ marginTop: 2, flexShrink: 0, color: prefillNote === "brand" ? "#C8497A" : vars.teal }} />
+          <span className="flex-1 leading-relaxed font-light">
+            {prefillNote === "brand"
+              ? "We've pre-filled your company name and website from your account — edit them here any time."
+              : "This intake is for your client — enter their details below."}
+          </span>
+          <button
+            aria-label="Dismiss"
+            onClick={() => setPrefillNoteDismissed(true)}
+            className="ml-1 flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-6 sm:mb-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-2">

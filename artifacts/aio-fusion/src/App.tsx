@@ -9,6 +9,7 @@ import {
   type Session as LocalSession,
   type User as LocalUser,
   type Role as LocalRole,
+  type AccountProfile,
   seedAdminIfEmpty,
   getSession as getLocalSession,
   getUsers as getLocalUsers,
@@ -20,6 +21,7 @@ import {
   refreshAccountsCache,
   canCreateSubAccounts,
   bootstrapAuth,
+  fetchAccountProfile,
   type SessionInfo,
 } from "./lib/auth";
 import { vars } from "./marketing/vars";
@@ -405,10 +407,15 @@ function App() {
     // cached account list. Then sync the shared store so this login sees every
     // project it may see, on every device. Local-only projects are pushed up.
     void (async () => {
-      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword } = await bootstrapAuth();
+      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword, accountProfile: ap } = await bootstrapAuth();
       setSessionState(s);
       if (bootNeedsSetup) setNeedsSetup(true);
       if (bootHasPassword !== undefined) setHasPassword(bootHasPassword);
+      // Only store profile when the session role is client (direct brand) or
+      // agency — admins never need it and it keeps the guard simple in IntakePage.
+      if (ap && s && (s.role === "client" || s.role === "agency")) {
+        setAccountProfile(ap);
+      }
       setAuthLoading(false);
       await migrateLocalStorageContentToServer();
       await initContentStore();
@@ -509,6 +516,11 @@ function App() {
   // Whether the signed-in account has a password hash. undefined = not yet
   // resolved (bootstrapAuth pending). false = SSO-only (no password set yet).
   const [hasPassword, setHasPassword] = useState<boolean | undefined>(undefined);
+  // Profile data for intake prefill (company name + website). Set by
+  // bootstrapAuth when the session is a direct account-owner session.
+  // Null means prefill should not be attempted (impersonation, team member,
+  // offline fallback, or admin account).
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -752,6 +764,7 @@ function App() {
     void serverLogout();
     setSessionState(null);
     setNeedsSetup(false);
+    setAccountProfile(null);
     setActiveClient(null);
     setView("landing");
     window.scrollTo(0, 0);
@@ -834,6 +847,9 @@ function App() {
         onComplete={(role) => {
           setNeedsSetup(false);
           setSessionState({ username: session.username, role });
+          // Role just changed (client/agency now known) — refresh profile so
+          // the intake prefill fires on the first project the user creates.
+          void fetchAccountProfile().then((ap) => setAccountProfile(ap));
           void refreshAccountsCache();
         }}
         onSignOut={handleSignOut}
@@ -882,6 +898,9 @@ function App() {
             setSessionExpiredNotice(undefined);
             setGeorgeAnonOpen(false);
             setSessionState(s);
+            // Refresh accountProfile so an in-session login (password / SSO /
+            // MFA) gets the same prefill as a page-load bootstrapAuth call.
+            void fetchAccountProfile().then((ap) => setAccountProfile(ap));
             void initContentStore().then(() => resyncProjects());
           }}
           onSignOut={handleSignOut}
@@ -1070,7 +1089,7 @@ function App() {
         {currentPage === "dashboard" && (
           <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
         )}
-        {currentPage === "intake" && <IntakePage />}
+        {currentPage === "intake" && <IntakePage accountProfile={accountProfile} role={session?.role ?? null} />}
         {currentPage === "diagnostic" && (
           <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
         )}

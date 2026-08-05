@@ -315,6 +315,7 @@ import {
   platformCompaniesTable,
   platformMembershipsTable,
   platformInvitationsTable,
+  platformMetaTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
@@ -970,5 +971,93 @@ describe("GET /platform/me — hasPassword is per-member, not per-workspace", ()
       body: {},
     });
     expect(pwReq.status).toBe(409);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /platform/me — accountProfile (displayName + website) prefill data
+// ---------------------------------------------------------------------------
+describe("GET /platform/me — accountProfile carries displayName and website", () => {
+  it("modern client session: returns both displayName and website", async () => {
+    // Modern path: platform_users row exists + userId stored in session.
+    await db.insert(platformAccountsTable).values({
+      username: "acctprofile-brand",
+      passwordHash: hashPassword("pw-acctprofile-1"),
+      role: "client",
+      status: "active",
+      email: "owner@acctprofile-brand.test",
+      website: "https://acctprofile-brand.example",
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({
+        slug: "acctprofile-brand",
+        role: "client",
+        status: "active",
+        setupComplete: true,
+      })
+      .returning();
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({
+        email: "owner@acctprofile-brand.test",
+        passwordHash: hashPassword("pw-acctprofile-1"),
+        emailVerified: true,
+      })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: "acctprofile-brand",
+      role: "owner",
+    });
+    // Store displayName in platform_meta (same format as the platform profile endpoint).
+    await db.insert(platformMetaTable).values({
+      key: "account:profile:acctprofile-brand",
+      value: JSON.stringify({ displayName: "AcCtProfile Brand Ltd" }),
+    });
+    // Modern session: userId is stored in the session record.
+    const sid = await createPlatformSession(
+      "acctprofile-brand",
+      null,
+      user!.id,
+      company!.id,
+    );
+
+    const me = await api("/api/platform/me", { sid });
+    expect(me.status).toBe(200);
+    expect(me.json.accountProfile.displayName).toBe("AcCtProfile Brand Ltd");
+    expect(me.json.accountProfile.website).toBe("https://acctprofile-brand.example");
+  });
+
+  it("legacy client session (no userId): still returns website via platform_accounts fallback", async () => {
+    await db.insert(platformAccountsTable).values({
+      username: "legacy-brand",
+      passwordHash: hashPassword("pw-legacy-1"),
+      role: "client",
+      status: "active",
+      email: "owner@legacy-brand.test",
+      website: "https://legacy-brand.example",
+    });
+    const [legacyCompany] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: "legacy-brand", role: "client", status: "active", setupComplete: true })
+      .returning();
+    const [legacyUser] = await db
+      .insert(platformUsersTable)
+      .values({ email: "owner@legacy-brand.test", passwordHash: hashPassword("pw-legacy-1"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: legacyUser!.id,
+      companyId: legacyCompany!.id,
+      companySlug: "legacy-brand",
+      role: "owner",
+    });
+    // Legacy session: no userId or activeCompanyId in session record.
+    const sid = await createPlatformSession("legacy-brand", null, null, null);
+
+    const me = await api("/api/platform/me", { sid });
+    expect(me.status).toBe(200);
+    expect(me.json.accountProfile.website).toBe("https://legacy-brand.example");
   });
 });

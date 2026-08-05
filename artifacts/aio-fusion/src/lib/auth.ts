@@ -340,15 +340,20 @@ export async function serverLogout(): Promise<void> {
   clearSession();
 }
 
-// Reconcile the local session with the server on app load. Validates the
-// session cookie, runs the one-time account migration if an admin is signed in
-// and it has not happened yet, then refreshes the cached account list. Returns
-// the authoritative session, whether account setup is still pending, and
-// whether the account already has a password hash (false = SSO-only).
-export async function bootstrapAuth(): Promise<{ session: Session | null; needsSetup?: boolean; hasPassword?: boolean }> {
+export type AccountProfile = {
+  displayName: string | null;
+  website: string | null;
+};
+export async function bootstrapAuth(): Promise<{
+  session: Session | null;
+  needsSetup?: boolean;
+  hasPassword?: boolean;
+  accountProfile?: AccountProfile | null;
+}> {
   let session: Session | null = null;
   let needsSetup = false;
   let hasPassword: boolean | undefined;
+  let accountProfile: AccountProfile | null = null;
   try {
     const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
     if (meResp.ok) {
@@ -357,6 +362,7 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
         impersonating?: Impersonation | null;
         setupComplete?: boolean | null;
         hasPassword?: boolean;
+        accountProfile?: { displayName?: string | null; website?: string | null } | null;
       };
       if (me.account) {
         const acct = me.account as ServerAccount & {
@@ -374,6 +380,16 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
         // but hasn't chosen Agency/Partner vs Client yet.
         if (me.setupComplete === false) needsSetup = true;
         hasPassword = me.hasPassword;
+        // Only expose profile data when this is a direct account-owner session:
+        // impersonation or team-member sessions must not prefill foreign data.
+        const isImpersonating = !!me.impersonating;
+        const isMember = !!acct.membershipRole;
+        if (!isImpersonating && !isMember && me.accountProfile) {
+          accountProfile = {
+            displayName: me.accountProfile.displayName ?? null,
+            website: me.accountProfile.website ?? null,
+          };
+        }
       } else {
         clearSession();
       }
@@ -381,17 +397,35 @@ export async function bootstrapAuth(): Promise<{ session: Session | null; needsS
   } catch {
     /* offline: fall back to whatever the cache holds */
     session = getSession();
+    // accountProfile stays null — we can't safely prefill from cache alone
   }
 
   if (session) {
     await runMigrationIfNeeded(session.role);
     await refreshAccountsCache();
   }
-  return { session, needsSetup, hasPassword };
+  return { session, needsSetup, hasPassword, accountProfile };
 }
 
-// Fetch the current impersonation state (null when not viewing as another
-// account). Safe to call even when signed out.
+export async function fetchAccountProfile(): Promise<AccountProfile | null> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+    if (!resp.ok) return null;
+    const me = (await resp.json()) as {
+      account?: { membershipRole?: string | null } | null;
+      impersonating?: unknown | null;
+      accountProfile?: { displayName?: string | null; website?: string | null } | null;
+    };
+    if (!me.account || !me.accountProfile) return null;
+    if (!!me.account.membershipRole || !!me.impersonating) return null;
+    return {
+      displayName: me.accountProfile.displayName ?? null,
+      website: me.accountProfile.website ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
 export async function getImpersonationState(): Promise<Impersonation | null> {
   try {
     const resp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
