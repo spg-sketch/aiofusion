@@ -39,4 +39,5 @@
 - [App-level jsdom tests](aio-fusion-app-level-jsdom-tests.md) — full-App render needs elementFromPoint/observer stubs + 401 fetch; set URL before importing App (useState initializers capture params).
 - [Users admin tree filtering](aio-fusion-users-admin-tree-filtering.md) — filters/sections must apply per-account through the whole tree; section-scoped ancestor retention; Vitest 3 vi.fn generics gotcha.
 - [AIO Fusion SEO pre-render pipeline](aio-fusion-seo-prerender.md) — public pages SSG'd via 3-step build + pageMeta.ts; new public routes/articles must be added to pageMeta or they get shell defaults.
+- [OAuth interstitial vs password shield](aio-fusion-oauth-interstitial-shield.md) — SSO stuck on "Completing sign-in…" on deployed site = deployment visibility is password/private; shield swallows the interstitial POST; check visibility before debugging code.
 - [AIO Fusion MFA (TOTP)](aio-fusion-mfa.md) — state in platform_meta not platform_users (legacy admin has no users row); stateless HMAC pending-token login two-step; SSO logins bypass MFA.
