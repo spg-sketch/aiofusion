@@ -342,6 +342,202 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
       mainEntityOfPage: `${BASE}/insights/ai-proves-pr-drives-sales`,
     },
   },
+  "earned-media": {
+    articleTitle: "Why earned media beats paid in the AI era",
+    title: "Why earned media beats paid in the AI era | AIO Fusion Insights",
+    description:
+      "How AI engines weigh third-party validation when deciding which brands to recommend. Earned media is structurally more powerful in the AI era.",
+    canonical: `${BASE}/insights/earned-media`,
+    ogType: "article",
+    excerpt:
+      "How AI engines weigh third-party validation when deciding which brands to recommend.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "Why earned media beats paid in the AI era",
+      description:
+        "How AI engines weigh third-party validation when deciding which brands to recommend.",
+      url: `${BASE}/insights/earned-media`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/earned-media`,
+    },
+  },
+  "geo-signals": {
+    articleTitle: "The 6 GEO signal categories every brand should track",
+    title:
+      "The 6 GEO signal categories every brand should track | AIO Fusion Insights",
+    description:
+      "A practical breakdown of the six criteria AI models use to rank, surface and cite content. The starting point for any serious GEO strategy.",
+    canonical: `${BASE}/insights/geo-signals`,
+    ogType: "article",
+    excerpt:
+      "A practical breakdown of the criteria AI models use to rank, surface and cite content.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "The 6 GEO signal categories every brand should track",
+      description:
+        "A practical breakdown of the six criteria AI models use to rank, surface and cite content.",
+      url: `${BASE}/insights/geo-signals`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/geo-signals`,
+    },
+  },
+  "seo-aio": {
+    articleTitle: "From SEO to AIO: a transition playbook for marketing teams",
+    title:
+      "From SEO to AIO: a transition playbook for marketing teams | AIO Fusion Insights",
+    description:
+      "How to evolve your existing SEO programme into one that captures AI visibility. What to keep, what to change, what to add, and how to measure the result.",
+    canonical: `${BASE}/insights/seo-aio`,
+    ogType: "article",
+    excerpt:
+      "How to evolve your existing SEO programme into one that captures AI visibility.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "From SEO to AIO: a transition playbook for marketing teams",
+      description:
+        "How to evolve your existing SEO programme into one that captures AI visibility.",
+      url: `${BASE}/insights/seo-aio`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/seo-aio`,
+    },
+  },
+  "setup-guide": {
+    articleTitle: "How to set up your first project in AIO Fusion",
+    title:
+      "How to set up your first project in AIO Fusion | AIO Fusion Insights",
+    description:
+      "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.",
+    canonical: `${BASE}/insights/setup-guide`,
+    ogType: "article",
+    excerpt:
+      "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "How to set up your first project in AIO Fusion",
+      description:
+        "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.",
+      url: `${BASE}/insights/setup-guide`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/setup-guide`,
+    },
+  },
+  "authority-report": {
+    articleTitle: "Running an Authority Report and reading the results",
+    title:
+      "Running an Authority Report and reading the results | AIO Fusion Insights",
+    description:
+      "How the six GEO signal categories are scored, what each band means, and where to focus first.",
+    canonical: `${BASE}/insights/authority-report`,
+    ogType: "article",
+    excerpt:
+      "How the six GEO signal categories are scored, what each band means, and where to focus first.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "Running an Authority Report and reading the results",
+      description:
+        "How the six GEO signal categories are scored, what each band means, and where to focus first.",
+      url: `${BASE}/insights/authority-report`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/authority-report`,
+    },
+  },
+  "optimiser-guide": {
+    articleTitle: "Using the Optimiser with tracked changes",
+    title: "Using the Optimiser with tracked changes | AIO Fusion Insights",
+    description:
+      "How to review every edit the platform suggests, accept or reject changes, and export the final draft.",
+    canonical: `${BASE}/insights/optimiser-guide`,
+    ogType: "article",
+    excerpt:
+      "How to review every edit the platform suggests, accept or reject changes, and export the final draft.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "Using the Optimiser with tracked changes",
+      description:
+        "How to review every edit the platform suggests, accept or reject changes, and export the final draft.",
+      url: `${BASE}/insights/optimiser-guide`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/optimiser-guide`,
+    },
+  },
+  "media-research-guide": {
+    articleTitle:
+      "Building a Media Research list that journalists will actually open",
+    title:
+      "Building a Media Research list that journalists will actually open | AIO Fusion Insights",
+    description:
+      "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.",
+    canonical: `${BASE}/insights/media-research-guide`,
+    ogType: "article",
+    excerpt:
+      "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline:
+        "Building a Media Research list that journalists will actually open",
+      description:
+        "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.",
+      url: `${BASE}/insights/media-research-guide`,
+      image: OG_IMAGE,
+      author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
+      publisher: {
+        "@type": "Organization",
+        name: "AIO Fusion",
+        url: BASE,
+        logo: { "@type": "ImageObject", url: `${BASE}/images/logo-color.png` },
+      },
+      mainEntityOfPage: `${BASE}/insights/media-research-guide`,
+    },
+  },
 };
 
 /** All public URL paths for sitemap generation (route → slug). */

@@ -648,11 +648,6 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/my-invites/:token/accept",
   "POST /platform/switch-workspace",
 
-  // ── platform — self-service account actions ───────────────────────────────
-  "POST /platform/request-set-password",
-  "POST /platform/accounts/email",
-  "POST /platform/change-email",
-
   // ── admin panel (admin.ts) ────────────────────────────────────────────────
   "POST /admin/generate-from-url",
   "GET /admin/token-usage",
@@ -779,20 +774,23 @@ describe("AI route guard coverage — no uncategorized routes", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
 // AI action route guard tests
 // ---------------------------------------------------------------------------
 
 describe("blockReadOnlyMembers — AI action routes", () => {
   it("rejects viewer members with 403 on every AI action path", async () => {
-    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+    const { sid: ownerSid } = await seedAgency("guard-viewer-agency", "owner@guard-viewer.test");
 
+    // Invite + accept as viewer.
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
-      body: { email: "m@incr.test", role: "content" },
+      body: { email: "v@guard-viewer.test", role: "viewer" },
     });
     expect(inv.status).toBe(201);
     const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "incr-pass-1" },
+      body: { token: inv.json.token, password: "viewer-pass-1" },
     });
     expect(accept.status).toBe(200);
     const viewerSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
@@ -804,29 +802,22 @@ describe("blockReadOnlyMembers — AI action routes", () => {
     expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
 
     for (const { method, path } of aiRoutes) {
-    const res = await api("/api/store/projects", { sid: mSid });
-    expect(res.status).not.toBe(403);
-    // Also confirm the response is NOT carrying the read-only guard message.
-    expect(res.json?.error ?? "").not.toMatch(/read-only/i);
-    expect(res.json?.error ?? "").not.toMatch(/billing members/i);
+      const res = await api(`/api${path}`, { sid: viewerSid, body: {}, method });
+      expect(res.status, `viewer should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `viewer 403 message on ${method} /api${path}`).toMatch(/read-only/i);
+    }
   });
-});
 
-// ---------------------------------------------------------------------------
-// Session-version revocation test
-// ---------------------------------------------------------------------------
-
-describe("session_version revocation", () => {
-  it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
-    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+  it("rejects billing members with 403 on every AI action path", async () => {
+    const { sid: ownerSid } = await seedAgency("guard-billing-agency", "owner@guard-billing.test");
 
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
-      body: { email: "m@incr.test", role: "content" },
+      body: { email: "b@guard-billing.test", role: "billing" },
     });
     expect(inv.status).toBe(201);
     const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "incr-pass-1" },
+      body: { token: inv.json.token, password: "billing-pass-1" },
     });
     expect(accept.status).toBe(200);
     const billingSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
@@ -838,27 +829,20 @@ describe("session_version revocation", () => {
     expect(aiRoutes.length).toBeGreaterThan(0); // sanity: guard must cover something
 
     for (const { method, path } of aiRoutes) {
-    const res = await api("/api/store/projects", { sid: mSid });
-    expect(res.status).not.toBe(403);
-    // Also confirm the response is NOT carrying the read-only guard message.
-    expect(res.json?.error ?? "").not.toMatch(/read-only/i);
-    expect(res.json?.error ?? "").not.toMatch(/billing members/i);
+      const res = await api(`/api${path}`, { sid: billingSid, body: {}, method });
+      expect(res.status, `billing should get 403 on ${method} /api${path}`).toBe(403);
+      expect(res.json.error, `billing 403 message on ${method} /api${path}`).toMatch(/billing/i);
+    }
   });
-});
 
-// ---------------------------------------------------------------------------
-// Session-version revocation test
-// ---------------------------------------------------------------------------
-
-describe("session_version revocation", () => {
-  it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
-    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+  it("lets an owner past blockReadOnlyMembers on at least one AI action path", async () => {
+    const { sid: ownerSid } = await seedAgency("guard-owner-agency", "owner@guard-owner.test");
 
     // POST to /api/ai-assist/draft-field with empty body.
     // blockReadOnlyMembers passes (owner has no restricted role), so the
     // response status will be something other than 403 — typically 400 (bad
     // request, missing url) or 200 when mocked, never 403 from the guard.
-    const res = await api("/api/store/projects", { sid: mSid });
+    const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
     expect(res.status).not.toBe(403);
     // Also confirm the response is NOT carrying the read-only guard message.
     expect(res.json?.error ?? "").not.toMatch(/read-only/i);
@@ -872,15 +856,16 @@ describe("session_version revocation", () => {
 
 describe("session_version revocation", () => {
   it("rejects a member's existing session after session_version is bumped (as removal does)", async () => {
-    const { sid: ownerSid } = await seedAgency("incr-agency", "owner@incr.test");
+    const { sid: ownerSid } = await seedAgency("revoke-agency", "owner@revoke.test");
 
+    // Invite + accept a viewer to get a live session.
     const inv = await api("/api/platform/team/invite", {
       sid: ownerSid,
-      body: { email: "m@incr.test", role: "content" },
+      body: { email: "member@revoke.test", role: "viewer" },
     });
     expect(inv.status).toBe(201);
     const accept = await api("/api/platform/invite/accept", {
-      body: { token: inv.json.token, password: "incr-pass-1" },
+      body: { token: inv.json.token, password: "member-pass-1" },
     });
     expect(accept.status).toBe(200);
     const memberSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
