@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type User as LocalUser, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster } from "../lib/auth";
+import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, canCreateSubAccounts } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -21,10 +21,12 @@ function SubAccountsPage({
   session,
   onBack,
   onAssignProjectOwner,
+  onRoleChanged,
 }: {
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => void;
+  onRoleChanged?: (newRole: Role) => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -53,6 +55,36 @@ function SubAccountsPage({
   const [pwUser, setPwUser] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+
+  // Account Type section state
+  const isOwner = session.membershipRole == null || session.membershipRole === "owner";
+  const isAgencyOrClient = session.role === "agency" || session.role === "client";
+  const [selectedType, setSelectedType] = useState<"agency" | "client" | null>(null);
+  const [typeChanging, setTypeChanging] = useState(false);
+  const [typeError, setTypeError] = useState<string | null>(null);
+  const [typeSuccess, setTypeSuccess] = useState<string | null>(null);
+
+  const handleChangeAccountType = () => {
+    if (!selectedType || typeChanging) return;
+    if (selectedType === session.role) {
+      setSelectedType(null);
+      return;
+    }
+    setTypeChanging(true);
+    setTypeError(null);
+    setTypeSuccess(null);
+    void (async () => {
+      const result = await serverChangeAccountType(selectedType);
+      setTypeChanging(false);
+      if (!result.ok) {
+        setTypeError(result.error);
+        return;
+      }
+      setTypeSuccess(`Account type updated to ${selectedType === "agency" ? "Agency / Partner" : "Client"}.`);
+      setSelectedType(null);
+      if (onRoleChanged) onRoleChanged(result.role);
+    })();
+  };
 
   const [enteringUsername, setEnteringUsername] = useState<string | null>(null);
   const [enterError, setEnterError] = useState<string | null>(null);
@@ -200,15 +232,136 @@ function SubAccountsPage({
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
-            <Users size={12} color={accent} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Client accounts</span>
+            {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
+              {canCreateSubAccounts(session.role) ? "Client accounts" : "My account"}
+            </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            Manage your client accounts
+            {canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients.
+            {canCreateSubAccounts(session.role)
+              ? "Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients."
+              : "Manage your account settings, team members, and security options."}
           </p>
+        </div>
+
+        {/* ACCOUNT TYPE */}
+        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+          <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
+          <p className="text-[13px] font-light mb-5 leading-[1.7]" style={{ color: vars.g600 }}>
+            Controls how your dashboard is set up — whether you manage multiple clients or one brand.
+          </p>
+          {!isAgencyOrClient ? (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
+              <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
+              <p className="text-[12px] leading-[1.6]" style={{ color: "#7A5500" }}>
+                Your account type was set up by an administrator. Contact support to change it.
+              </p>
+            </div>
+          ) : !isOwner ? (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
+              <Info size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
+              <p className="text-[12px] leading-[1.6]" style={{ color: "#7A5500" }}>
+                Only the account owner can change the account type.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                {/* Agency / Partner option */}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedType("agency"); setTypeError(null); setTypeSuccess(null); }}
+                  className="text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5"
+                  style={{
+                    borderColor: (selectedType ?? session.role) === "agency" ? accent : vars.g200,
+                    background: (selectedType ?? session.role) === "agency" ? "#FDF0F5" : "white",
+                    boxShadow: (selectedType ?? session.role) === "agency" ? `0 0 0 1px ${accent}` : undefined,
+                  }}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "agency" ? accent : vars.g100 }}>
+                      <Building2 size={16} color={(selectedType ?? session.role) === "agency" ? "white" : vars.g500} />
+                    </div>
+                    <div>
+                      <p className="text-[14px] font-bold" style={{ color: ink }}>Agency / Partner</p>
+                      {session.role === "agency" && !selectedType && (
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Current</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[12px] leading-[1.6]" style={{ color: vars.g600 }}>
+                    Manage PR for multiple clients. Create client accounts and view all dashboards from one place.
+                  </p>
+                </button>
+
+                {/* Client option */}
+                <button
+                  type="button"
+                  onClick={() => { setSelectedType("client"); setTypeError(null); setTypeSuccess(null); }}
+                  className="text-left p-5 rounded-xl border-2 transition-all hover:-translate-y-0.5"
+                  style={{
+                    borderColor: (selectedType ?? session.role) === "client" ? "#1A647B" : vars.g200,
+                    background: (selectedType ?? session.role) === "client" ? "#EDF6F9" : "white",
+                    boxShadow: (selectedType ?? session.role) === "client" ? `0 0 0 1px #1A647B` : undefined,
+                  }}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: (selectedType ?? session.role) === "client" ? "#1A647B" : vars.g100 }}>
+                      <User size={16} color={(selectedType ?? session.role) === "client" ? "white" : vars.g500} />
+                    </div>
+                    <div>
+                      <p className="text-[14px] font-bold" style={{ color: ink }}>Client</p>
+                      {session.role === "client" && !selectedType && (
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "#1A647B" }}>Current</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[12px] leading-[1.6]" style={{ color: vars.g600 }}>
+                    Manage PR for your own brand. One focused workspace for all your projects.
+                  </p>
+                </button>
+              </div>
+
+              {typeError && (
+                <div className="flex items-start gap-2 mb-3 px-4 py-3 rounded-xl" style={{ background: "rgba(220,38,38,0.07)", border: "1px solid rgba(220,38,38,0.25)" }}>
+                  <XCircle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "rgb(185,28,28)" }} />
+                  <p className="text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{typeError}</p>
+                </div>
+              )}
+              {typeSuccess && (
+                <div className="flex items-center gap-2 mb-3 px-4 py-3 rounded-xl" style={{ background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)" }}>
+                  <CheckCircle2 size={14} style={{ color: "rgb(21,128,61)" }} />
+                  <p className="text-[12px] font-semibold" style={{ color: "rgb(21,128,61)" }}>{typeSuccess}</p>
+                </div>
+              )}
+
+              {selectedType && selectedType !== session.role && (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleChangeAccountType}
+                    disabled={typeChanging}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
+                    style={{ background: accent }}
+                  >
+                    {typeChanging ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    {typeChanging ? "Saving..." : `Switch to ${selectedType === "agency" ? "Agency / Partner" : "Client"}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedType(null); setTypeError(null); }}
+                    className="px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                    style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* MY ACCOUNT */}
@@ -261,8 +414,8 @@ function SubAccountsPage({
           <TeamSection />
         )}
 
-        {/* ADD CLIENT ACCOUNT */}
-        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {/* ADD CLIENT ACCOUNT — agency/admin only */}
+        {canCreateSubAccounts(session.role) && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
             <div className="md:col-span-5">
@@ -299,8 +452,9 @@ function SubAccountsPage({
             {addError && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>}
             {addSuccess && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>}
           </form>
-        </div>
+        </div>}
 
+        {canCreateSubAccounts(session.role) && (<>
         {/* CLIENT ACCOUNTS LIST */}
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
@@ -497,6 +651,7 @@ function SubAccountsPage({
             </ul>
           )}
         </div>
+        </>)}
       </div>
     </div>
   );

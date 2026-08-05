@@ -962,11 +962,26 @@ function App() {
     );
   }
   if (view === "sub-accounts") {
-    // Direct clients are leaf accounts and cannot manage sub-accounts.
-    if (!session || !canCreateSubAccounts(session.role)) {
+    // Direct clients are leaf accounts and cannot manage sub-accounts, but
+    // they may still reach this page (as "My Account") if they are a Client
+    // account type — they just won't see the sub-account management sections.
+    if (!session) {
       return null;
     }
-    return <SubAccountsPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} />;
+    const handleRoleChanged = async (newRole: import("./lib/auth").Role) => {
+      // Re-sync the authoritative session from the server so all role-dependent
+      // UI (dashboard tabs, project limits, etc.) reflects the new type.
+      const { session: s } = await bootstrapAuth();
+      setSessionState(s ?? { ...session, role: newRole });
+    };
+    return (
+      <SubAccountsPage
+        session={session}
+        onBack={() => setView("platform-home")}
+        onAssignProjectOwner={handleAssignProjectOwner}
+        onRoleChanged={handleRoleChanged}
+      />
+    );
   }
   if (view === "guidance") {
     return <GuidancePage onBack={() => setView("platform-home")} />;

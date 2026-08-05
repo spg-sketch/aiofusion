@@ -325,6 +325,7 @@ vi.mock("../lib/notify-email", () => ({
   sendSupportTicketAlert: vi.fn().mockResolvedValue(true),
   sendSupportTicketAck: vi.fn().mockResolvedValue(true),
   sendSupportTicketReplyNotification: vi.fn().mockResolvedValue(true),
+  sendPasswordChangedEmail: () => Promise.resolve(),
 }));
 
 import supportRouter from "./support";

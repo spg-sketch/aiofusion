@@ -1714,6 +1714,71 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
   }
 });
 
+// --- Settings: change account type (post-setup) ----------------------------
+//
+// Distinct from /platform/setup/account-type: this endpoint NEVER touches
+// setupComplete and is gated to the account owner (not just any authed session).
+
+router.post("/platform/settings/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const account = req.account!;
+    // Only agency/client accounts may switch type. Admins and legacy "user"
+    // accounts are excluded.
+    const currentRole = normalizeRole(account.role);
+    if (currentRole !== "agency" && currentRole !== "client") {
+      res.status(403).json({ error: "Only Agency/Partner or Client accounts can change account type." });
+      return;
+    }
+    // Only the account owner (membershipRole null/undefined or "owner") may
+    // change the account type. Team admins/members cannot.
+    const memRole = account.membershipRole;
+    if (memRole !== null && memRole !== undefined && memRole !== "owner") {
+      res.status(403).json({ error: "Only the account owner can change the account type." });
+      return;
+    }
+
+    const accountType = typeof req.body?.accountType === "string" ? req.body.accountType : "";
+    if (accountType !== "agency" && accountType !== "client") {
+      res.status(400).json({ error: "accountType must be 'agency' or 'client'." });
+      return;
+    }
+
+    const username = normUsername(account.username);
+
+    // Block agency→client switch when sub-accounts exist. A client cannot
+    // manage sub-accounts, so allowing the switch would orphan them.
+    if (accountType === "client") {
+      const [subCountRow] = await db
+        .select({ cnt: count() })
+        .from(platformAccountsTable)
+        .where(eq(platformAccountsTable.parent, username));
+      const subCount = Number(subCountRow?.cnt ?? 0);
+      if (subCount > 0) {
+        res.status(400).json({
+          error: `You have ${subCount} client sub-account${subCount === 1 ? "" : "s"}. Remove or reassign them before switching to a Client account type.`,
+        });
+        return;
+      }
+    }
+
+    // Update both tables. setupComplete is intentionally NOT touched here.
+    await db
+      .update(platformAccountsTable)
+      .set({ role: accountType })
+      .where(eq(platformAccountsTable.username, username));
+    await db
+      .update(platformCompaniesTable)
+      .set({ role: accountType })
+      .where(eq(platformCompaniesTable.slug, username));
+
+    logger.info({ username, accountType }, "settings/account-type: role updated");
+    res.json({ ok: true, role: accountType });
+  } catch (err) {
+    logger.error({ err }, "settings/account-type: unexpected error");
+    res.status(500).json({ error: "Failed to update account type." });
+  }
+});
+
 // --- Admin: list pending accounts -------------------------------------------
 
 router.get("/platform/admin/pending", requirePlatformAuth, async (req: Request, res: Response) => {

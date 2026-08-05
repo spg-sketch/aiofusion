@@ -881,15 +881,15 @@ function PlatformHomePage({
                       Token Usage
                     </button>
                   </>
-                ) : canCreateSubAccounts(session.role) ? (
+                ) : (
                   <button
                     onClick={onManageSubAccounts}
                     className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
-                    <Users size={15} /> Client Accounts
+                    {canCreateSubAccounts(session.role) ? <><Users size={15} /> Client Accounts</> : <><User size={15} /> My Account</>}
                   </button>
-                ) : null}
+                )}
                 <button
                   onClick={onContinueToProjects}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"

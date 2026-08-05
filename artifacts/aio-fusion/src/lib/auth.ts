@@ -696,6 +696,18 @@ export async function serverSetAccountType(
   return { ok: true, role: json?.role ?? accountType };
 }
 
+export async function serverChangeAccountType(
+  accountType: "agency" | "client",
+): Promise<{ ok: true; role: Role } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/settings/account-type", { accountType });
+  if (!ok) return { ok: false, error: json?.error || "Failed to update account type." };
+  const role = (json?.role === "agency" || json?.role === "client") ? json.role as Role : accountType;
+  // Update local session cache immediately so the UI reflects the change.
+  const current = getSession();
+  if (current) setSession({ ...current, role });
+  await refreshAccountsCache();
+  return { ok: true, role };
+}
 export type PendingAccount = {
   username: string;
   email: string | null;

@@ -578,6 +578,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/reset-password",
   "POST /platform/change-password",
   "POST /platform/setup/account-type",
+  "POST /platform/settings/account-type",
   "POST /platform/accounts/email",
   "POST /platform/change-email",
   "POST /platform/request-set-password",
