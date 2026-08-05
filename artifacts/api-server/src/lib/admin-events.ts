@@ -30,6 +30,7 @@ export type AdminAction =
   | "switch_to_master"
   | "team_invite_sent"
   | "team_invite_resent"
+  | "team_invite_accepted_inapp"
   | "team_member_removed"
   | "email_changed";
 

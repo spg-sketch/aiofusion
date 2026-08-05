@@ -102,6 +102,7 @@ function SidebarContent({
   georgeHasUpdate,
   wide,
   onToggleWide,
+  workspaceSwitcher,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -117,6 +118,7 @@ function SidebarContent({
   georgeHasUpdate?: boolean;
   wide?: boolean;
   onToggleWide?: () => void;
+  workspaceSwitcher?: React.ReactNode;
 }) {
   const [allAudits, setAllAudits] = useState<SavedAudit[]>(
     () => loadSavedAudits(activeClient.id),
@@ -202,6 +204,11 @@ function SidebarContent({
     <>
       <div className="flex flex-col items-center gap-1 px-6 py-6 border-b" style={{ borderColor: vars.g200 }}>
         <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-24 object-contain self-center" />
+        {workspaceSwitcher && (
+          <div className="w-full mt-2 px-1">
+            {workspaceSwitcher}
+          </div>
+        )}
       </div>
       <div className="flex items-stretch justify-center border-b py-5" style={{ borderColor: vars.g200 }}>
         <div className="relative group/sblogo flex-shrink-0">
@@ -488,6 +495,7 @@ export function Sidebar({
   onOpenSavedTechGeo,
   onOpenGeorge,
   georgeHasUpdate,
+  workspaceSwitcher,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -500,6 +508,7 @@ export function Sidebar({
   onOpenSavedTechGeo?: (id: string) => void;
   onOpenGeorge?: () => void;
   georgeHasUpdate?: boolean;
+  workspaceSwitcher?: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [width, setWidth] = useState<number>(() => {
@@ -556,7 +565,7 @@ export function Sidebar({
         <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} />
           </div>
         </div>
       )}
@@ -565,7 +574,7 @@ export function Sidebar({
         className="hidden md:flex flex-col border-r flex-shrink-0 sticky relative"
         style={{ width: `${width}px`, borderColor: vars.g200, background: "white", top: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}
       >
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} />
         {/* Drag handle */}
         <div
           onMouseDown={onDragHandleMouseDown}

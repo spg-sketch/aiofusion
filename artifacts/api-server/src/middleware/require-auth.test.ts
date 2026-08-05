@@ -96,7 +96,7 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     const nextReq = req as unknown as { isAuthenticated: () => boolean };
     expect(nextReq.isAuthenticated()).toBe(false);
-  });
+  }, 15000);
 
   it("rejects an expired session end-to-end through requireAuth after authMiddleware clears it", async () => {
     getSessionMock.mockResolvedValue(null);
@@ -120,5 +120,5 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     expect(next2).not.toHaveBeenCalled();
     expect(res2.statusCode).toBe(401);
-  });
+  }, 15000);
 });

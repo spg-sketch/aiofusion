@@ -22,8 +22,9 @@ import {
   adminEventsTable,
   platformEmailVerificationsTable,
   platformPasswordResetsTable,
+  platformInvitationsTable,
 } from "@workspace/db";
-import { and, count, desc, eq, gte, ilike, like, lte, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, ilike, inArray, isNull, like, lte, ne, sql } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -60,6 +61,7 @@ import {
   type Role,
   getCompanyBySlug,
   incrementSessionVersion,
+  normalizeMembershipRole,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
@@ -291,6 +293,49 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         projectAccess: req.account.projectAccess ?? null,
       }
     : null;
+
+  // All workspaces the signed-in human belongs to — drives the workspace
+  // switcher on the client without a second round-trip.
+  let workspaces: Array<{
+    companyId: string;
+    companySlug: string;
+    companyName: string;
+    companyRole: string;
+    membershipRole: string;
+    isActive: boolean;
+  }> = [];
+  if (req.account?.userId) {
+    try {
+      const mems = await db
+        .select({
+          companyId: platformMembershipsTable.companyId,
+          companySlug: platformMembershipsTable.companySlug,
+          membershipRole: platformMembershipsTable.role,
+          companyRole: platformCompaniesTable.role,
+          companyName: platformCompaniesTable.displayName,
+        })
+        .from(platformMembershipsTable)
+        .innerJoin(
+          platformCompaniesTable,
+          eq(platformMembershipsTable.companyId, platformCompaniesTable.id),
+        )
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, req.account.userId),
+            eq(platformCompaniesTable.status, "active"),
+          ),
+        );
+      workspaces = mems.map((m) => ({
+        companyId: m.companyId,
+        companySlug: m.companySlug,
+        companyName: m.companyName || m.companySlug,
+        companyRole: normalizeRole(m.companyRole),
+        membershipRole: normalizeMembershipRole(m.membershipRole),
+        isActive: m.companyId === req.account!.activeCompanyId,
+      }));
+    } catch { /* non-fatal — client falls back to single-workspace mode */ }
+  }
+
   res.setHeader("Cache-Control", "no-store");
   res.json({
     account: accountWithGoogle,
@@ -302,6 +347,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     // Returned for client-side intake prefill. The client performs its own
     // role + impersonation guard before using these values.
     accountProfile: { displayName: accountDisplayName, website: accountWebsite },
+    workspaces,
   });
 });
 
@@ -2957,6 +3003,232 @@ router.post(
       res.json({ account: { username: adminRow.username, role: normalizeRole(adminRow.role) } });
     } catch {
       res.status(500).json({ error: "Failed to switch to master." });
+    }
+  },
+);
+
+// --- Pending invites for the signed-in user ----------------------------------
+
+// GET /platform/my-invites — list pending invites addressed to the signed-in
+// user's email. Only works for new-auth sessions that carry a userId. Legacy
+// sessions (no userId) return an empty list.
+router.get(
+  "/platform/my-invites",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    const userId = req.account?.userId;
+    if (!userId) {
+      res.json({ invites: [] });
+      return;
+    }
+    try {
+      const [userRow] = await db
+        .select({ email: platformUsersTable.email })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, userId))
+        .limit(1);
+      if (!userRow?.email) {
+        res.json({ invites: [] });
+        return;
+      }
+      const rows = await db
+        .select({
+          token: platformInvitationsTable.token,
+          companySlug: platformInvitationsTable.companySlug,
+          companyId: platformInvitationsTable.companyId,
+          role: platformInvitationsTable.role,
+          expiresAt: platformInvitationsTable.expiresAt,
+          createdAt: platformInvitationsTable.createdAt,
+          companyDisplayName: platformCompaniesTable.displayName,
+        })
+        .from(platformInvitationsTable)
+        .leftJoin(
+          platformCompaniesTable,
+          eq(platformInvitationsTable.companyId, platformCompaniesTable.id),
+        )
+        .where(
+          and(
+            eq(platformInvitationsTable.email, userRow.email),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            gt(platformInvitationsTable.expiresAt, new Date()),
+          ),
+        )
+        .orderBy(desc(platformInvitationsTable.createdAt));
+
+      // Resolve display names from platform_meta (account:profile:{slug})
+      // for any row whose companies.display_name column is null — password
+      // signup stores the name there, not in the companies table directly.
+      const slugsNeedingMeta = rows
+        .filter((r) => !r.companyDisplayName)
+        .map((r) => r.companySlug);
+      const metaDisplayNames = new Map<string, string>();
+      if (slugsNeedingMeta.length > 0) {
+        const metaKeys = slugsNeedingMeta.map((s) => profileKey(s));
+        const metaRows = await db
+          .select({ key: platformMetaTable.key, value: platformMetaTable.value })
+          .from(platformMetaTable)
+          .where(inArray(platformMetaTable.key, metaKeys));
+        for (const m of metaRows) {
+          const slug = m.key.slice(PROFILE_PREFIX.length);
+          const dn = parseDisplayName(m.value);
+          if (dn) metaDisplayNames.set(slug, dn);
+        }
+      }
+
+      res.json({
+        invites: rows.map((r) => ({
+          token: r.token,
+          companyId: r.companyId,
+          companySlug: r.companySlug,
+          companyName:
+            r.companyDisplayName ||
+            metaDisplayNames.get(r.companySlug) ||
+            r.companySlug,
+          role: normalizeMembershipRole(r.role),
+          expiresAt: r.expiresAt,
+          createdAt: r.createdAt,
+        })),
+      });
+    } catch (err) {
+      logger.error({ err }, "my-invites: failed to load");
+      res.status(500).json({ error: "Failed to load invitations." });
+    }
+  },
+);
+
+// POST /platform/my-invites/:token/accept — in-app accept for an already
+// signed-in user. Adds the membership without issuing a new session (the
+// caller stays logged in to their current workspace). The client should offer
+// a "Switch to workspace" button separately after success.
+// Guards: userId required, email must match invite email exactly.
+router.post(
+  "/platform/my-invites/:token/accept",
+  requirePlatformAuth,
+  loginLimiter,
+  async (req: Request, res: Response) => {
+    const userId = req.account?.userId;
+    if (!userId) {
+      res.status(403).json({ error: "Legacy sessions cannot accept invitations. Please sign in again." });
+      return;
+    }
+    try {
+      const token = String(req.params.token || "").trim();
+      const invite = await getValidInvite(token);
+      if (!invite) {
+        res.status(404).json({ error: "This invitation is invalid, expired, or has already been used." });
+        return;
+      }
+      // Email-bound: the signed-in user's email must match the invited email.
+      const [userRow] = await db
+        .select({ email: platformUsersTable.email })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, userId))
+        .limit(1);
+      if (!userRow?.email || userRow.email !== invite.email) {
+        res.status(403).json({ error: "This invitation is for a different email address." });
+        return;
+      }
+      const ok = await consumeInvite(invite, userId);
+      if (!ok) {
+        res.status(409).json({ error: "This invitation has already been used." });
+        return;
+      }
+      const [company] = await db
+        .select({
+          displayName: platformCompaniesTable.displayName,
+          slug: platformCompaniesTable.slug,
+          role: platformCompaniesTable.role,
+        })
+        .from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.id, invite.companyId))
+        .limit(1);
+      void logAdminEvent(
+        { username: req.account!.username, id: userId },
+        "team_invite_accepted_inapp",
+        userId,
+        "membership",
+        { companySlug: invite.companySlug, role: normalizeMembershipRole(invite.role) },
+      );
+      res.json({
+        ok: true,
+        companyId: invite.companyId,
+        companySlug: company?.slug ?? invite.companySlug,
+        companyName: company?.displayName || company?.slug || invite.companySlug,
+        role: normalizeMembershipRole(invite.role),
+      });
+    } catch (err) {
+      logger.error({ err }, "my-invites: failed to accept");
+      res.status(500).json({ error: "Failed to accept invitation." });
+    }
+  },
+);
+
+// POST /platform/switch-workspace — switch the signed-in user's active
+// workspace. Requires a platform_memberships row for (userId, companyId).
+// Issues a fresh session pointing at the new workspace; createPlatformSession
+// revokes prior sessions for this userId (single-session-per-user model).
+// The client should reload after this so all workspace-scoped state is reset.
+router.post(
+  "/platform/switch-workspace",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    const userId = req.account?.userId;
+    if (!userId) {
+      res.status(403).json({ error: "Legacy sessions cannot switch workspaces. Please sign in again." });
+      return;
+    }
+    try {
+      const companyId = typeof req.body?.companyId === "string" ? req.body.companyId.trim() : "";
+      if (!companyId) {
+        res.status(400).json({ error: "companyId is required." });
+        return;
+      }
+      // Verify the user has an active membership in the target workspace.
+      const [mem] = await db
+        .select({
+          companySlug: platformMembershipsTable.companySlug,
+          membershipRole: platformMembershipsTable.role,
+          companyRole: platformCompaniesTable.role,
+        })
+        .from(platformMembershipsTable)
+        .innerJoin(
+          platformCompaniesTable,
+          eq(platformMembershipsTable.companyId, platformCompaniesTable.id),
+        )
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, userId),
+            eq(platformMembershipsTable.companyId, companyId),
+            eq(platformCompaniesTable.status, "active"),
+          ),
+        )
+        .limit(1);
+      if (!mem) {
+        res.status(403).json({ error: "You do not have access to that workspace." });
+        return;
+      }
+      const rawIp =
+        (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
+        ?? req.socket.remoteAddress;
+      // A full session re-issue is safer than mutating activeCompanyId in-place:
+      // it stamps the current session_version and revokes stale sessions.
+      // Side-effect: any other tabs open in the old workspace will get a 401 on
+      // their next request. This matches login/invite-accept behaviour and is
+      // consistent with the single-session-per-user model already in use.
+      const sid = await createPlatformSession(mem.companySlug, makeIpHint(rawIp), userId, companyId);
+      setPlatformCookie(res, sid);
+      res.json({
+        ok: true,
+        account: {
+          username: mem.companySlug,
+          role: normalizeRole(mem.companyRole),
+          membershipRole: normalizeMembershipRole(mem.membershipRole),
+        },
+      });
+    } catch (err) {
+      logger.error({ err }, "switch-workspace: failed");
+      res.status(500).json({ error: "Failed to switch workspace." });
     }
   },
 );

@@ -349,11 +349,13 @@ export async function bootstrapAuth(): Promise<{
   needsSetup?: boolean;
   hasPassword?: boolean;
   accountProfile?: AccountProfile | null;
+  workspaces?: WorkspaceInfo[];
 }> {
   let session: Session | null = null;
   let needsSetup = false;
   let hasPassword: boolean | undefined;
   let accountProfile: AccountProfile | null = null;
+  let workspaces: WorkspaceInfo[] = [];
   try {
     const meResp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
     if (meResp.ok) {
@@ -363,6 +365,7 @@ export async function bootstrapAuth(): Promise<{
         setupComplete?: boolean | null;
         hasPassword?: boolean;
         accountProfile?: { displayName?: string | null; website?: string | null } | null;
+        workspaces?: WorkspaceInfo[];
       };
       if (me.account) {
         const acct = me.account as ServerAccount & {
@@ -390,6 +393,7 @@ export async function bootstrapAuth(): Promise<{
             website: me.accountProfile.website ?? null,
           };
         }
+        if (Array.isArray(me.workspaces)) workspaces = me.workspaces;
       } else {
         clearSession();
       }
@@ -404,7 +408,18 @@ export async function bootstrapAuth(): Promise<{
     await runMigrationIfNeeded(session.role);
     await refreshAccountsCache();
   }
-  return { session, needsSetup, hasPassword, accountProfile };
+  return { session, needsSetup, hasPassword, accountProfile, workspaces };
+}
+
+export async function serverGetWorkspaces(): Promise<WorkspaceInfo[]> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { workspaces?: WorkspaceInfo[] };
+    return Array.isArray(json.workspaces) ? json.workspaces : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchAccountProfile(): Promise<AccountProfile | null> {
@@ -1056,6 +1071,14 @@ export async function serverGetInviteInfo(token: string): Promise<{ ok: boolean;
   }
 }
 
+export type WorkspaceInfo = {
+  companyId: string;
+  companySlug: string;
+  companyName: string;
+  companyRole: string;
+  membershipRole: MembershipRole;
+  isActive: boolean;
+};
 export async function serverMfaTrustedDevices(): Promise<
   { ok: true; devices: TrustedDevice[] } | { ok: false; error: string }
 > {
@@ -1080,5 +1103,80 @@ export async function serverMfaRevokeTrustedDevice(id: string): Promise<{ ok: tr
     return { ok: true };
   } catch {
     return { ok: false, error: "Could not remove the trusted device." };
+  }
+}
+
+export type PendingMyInvite = {
+  token: string;
+  companyId: string;
+  companySlug: string;
+  companyName: string;
+  role: MembershipRole;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export async function serverAcceptMyInvite(token: string): Promise<{
+  ok: boolean;
+  companyId?: string;
+  companySlug?: string;
+  companyName?: string;
+  role?: MembershipRole;
+  error?: string;
+}> {
+  try {
+    const resp = await fetch(
+      `${apiBase()}/api/platform/my-invites/${encodeURIComponent(token)}/accept`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include" },
+    );
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to accept invitation." };
+    return {
+      ok: true,
+      companyId: json?.companyId,
+      companySlug: json?.companySlug,
+      companyName: json?.companyName,
+      role: json?.role,
+    };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverGetMyInvites(): Promise<{
+  ok: boolean;
+  invites?: PendingMyInvite[];
+  error?: string;
+}> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/my-invites`, { credentials: "include" });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to load invitations." };
+    return { ok: true, invites: Array.isArray(json?.invites) ? json.invites : [] };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverSwitchWorkspace(companyId: string): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/switch-workspace`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ companyId }),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to switch workspace." };
+    // New session cookie is now set. Reload so every hook and store reinitialises
+    // against the new workspace's data. The fresh /platform/me call inside
+    // bootstrapAuth will pick up the new session automatically.
+    window.location.reload();
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Network error." };
   }
 }

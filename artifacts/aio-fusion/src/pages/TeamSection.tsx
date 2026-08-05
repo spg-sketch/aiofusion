@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mail, Users, Trash2, X, CheckCircle2, RefreshCw, Clock } from "lucide-react";
+import { Loader2, Mail, Users, Trash2, X, CheckCircle2, RefreshCw, Clock, Building2 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import {
   type MembershipRole,
   type TeamOverview,
+  type PendingMyInvite,
   serverGetTeam,
   serverInviteTeamMember,
   serverRevokeTeamInvite,
   serverResendTeamInvite,
   serverUpdateTeamMember,
   serverRemoveTeamMember,
+  serverGetMyInvites,
+  serverAcceptMyInvite,
+  serverSwitchWorkspace,
 } from "../lib/auth";
 import { loadStoredProjects } from "../lib/projectStore";
 
@@ -30,7 +34,7 @@ const roleLabel = (r: MembershipRole) =>
 // Team management card: invite colleagues by email with a role and
 // (optionally) restricted project access. Rendered inside SubAccountsPage for
 // Agency/Partner owners and admins.
-export function TeamSection() {
+export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () => void } = {}) {
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -44,6 +48,13 @@ export function TeamSection() {
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Invites addressed to the current user's own email (they are the invitee).
+  const [myInvites, setMyInvites] = useState<PendingMyInvite[]>([]);
+  const [myInvitesBusy, setMyInvitesBusy] = useState<string | null>(null);
+  const [myInvitesAccepted, setMyInvitesAccepted] = useState<Record<string, { companyName: string; companyId: string }>>({});
+  const [myInviteError, setMyInviteError] = useState<string | null>(null);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+
   const projects = useMemo(() => loadStoredProjects(), []);
   const projectScoped = role === "content" || role === "viewer";
 
@@ -55,6 +66,39 @@ export function TeamSection() {
     });
   };
   useEffect(reload, []);
+
+  // Load invites addressed to the current user's own email.
+  const reloadMyInvites = () => {
+    void serverGetMyInvites().then((r) => {
+      if (r.ok && r.invites) setMyInvites(r.invites);
+    });
+  };
+  useEffect(reloadMyInvites, []);
+
+  const handleAcceptMyInvite = async (token: string) => {
+    setMyInviteError(null);
+    setMyInvitesBusy(token);
+    const result = await serverAcceptMyInvite(token);
+    setMyInvitesBusy(null);
+    if (result.ok && result.companyId) {
+      setMyInvitesAccepted((prev) => ({
+        ...prev,
+        [token]: { companyName: result.companyName ?? result.companySlug ?? "", companyId: result.companyId! },
+      }));
+      reloadMyInvites();
+      // Notify parent so the workspace switcher updates immediately.
+      onWorkspacesChanged?.();
+    } else {
+      setMyInviteError(result.error ?? "Failed to accept invitation.");
+    }
+  };
+
+  const handleSwitchWorkspace = async (companyId: string) => {
+    setSwitchingId(companyId);
+    await serverSwitchWorkspace(companyId);
+    // serverSwitchWorkspace reloads on success; setSwitchingId(null) only reached on error.
+    setSwitchingId(null);
+  };
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,23 +156,95 @@ export function TeamSection() {
     });
   };
 
+  // Workspace invitations — shown regardless of team-load state so users always
+  // see pending cross-workspace invites even when the team members API fails.
+  const invitationsBlock = (myInvites.length > 0 || Object.keys(myInvitesAccepted).length > 0) ? (
+    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Building2 size={13} color={accent} />
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: vars.g600 }}>
+          My workspace invitations
+        </h3>
+      </div>
+      <p className="text-[12px] font-light mb-3 leading-relaxed" style={{ color: vars.g600 }}>
+        You've been invited to join these workspaces.
+      </p>
+      {myInviteError && (
+        <p className="mb-3 text-[12px] font-semibold" style={{ color: accent }}>{myInviteError}</p>
+      )}
+      <div className="space-y-2">
+        {myInvites.filter((i) => !myInvitesAccepted[i.token]).map((i) => (
+          <div
+            key={i.token}
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+            style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}
+          >
+            <Building2 size={13} color="#92400E" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold truncate" style={{ color: ink }}>{i.companyName}</p>
+              <p className="text-[11px]" style={{ color: vars.g600 }}>
+                {roleLabel(i.role)} · expires {new Date(i.expiresAt).toLocaleDateString()}
+              </p>
+            </div>
+            <button
+              onClick={() => void handleAcceptMyInvite(i.token)}
+              disabled={myInvitesBusy === i.token}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: ink, color: "#fff" }}
+            >
+              {myInvitesBusy === i.token ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+              {myInvitesBusy === i.token ? "Accepting…" : "Accept"}
+            </button>
+          </div>
+        ))}
+        {Object.entries(myInvitesAccepted).map(([token, info]) => (
+          <div
+            key={token}
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+            style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}
+          >
+            <CheckCircle2 size={13} color="#166534" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold" style={{ color: "#166534" }}>Joined {info.companyName}!</p>
+            </div>
+            <button
+              onClick={() => void handleSwitchWorkspace(info.companyId)}
+              disabled={switchingId === info.companyId}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ background: "#166534", color: "#F0FDF4" }}
+            >
+              {switchingId === info.companyId ? <Loader2 size={12} className="animate-spin" /> : null}
+              {switchingId === info.companyId ? "Switching…" : "Switch to workspace"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   if (loading) {
     return (
-      <div className="rounded-2xl p-6 sm:p-8 mb-6 flex items-center gap-3" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
-        <Loader2 size={16} className="animate-spin" color={accent} />
-        <span className="text-[13px]" style={{ color: vars.g600 }}>Loading team…</span>
-      </div>
+      <>
+        <div className="rounded-2xl p-6 sm:p-8 mb-6 flex items-center gap-3" style={{ background: "white", border: `1px solid ${vars.g200}` }}>
+          <Loader2 size={16} className="animate-spin" color={accent} />
+          <span className="text-[13px]" style={{ color: vars.g600 }}>Loading team…</span>
+        </div>
+        {invitationsBlock}
+      </>
     );
   }
-  // Team management not available (e.g. client account) — hide the card.
+  // Team management not available (e.g. client account) — hide the team card but
+  // still show pending cross-workspace invitations.
   if (!team) {
-    return loadError && !loadError.toLowerCase().includes("not available")
+    const errorCard = loadError && !loadError.toLowerCase().includes("not available")
       ? (
         <div className="rounded-2xl p-6 mb-6 text-[13px]" style={{ background: "white", border: `1px solid ${vars.g200}`, color: accent }}>
           {loadError}
         </div>
       )
       : null;
+    if (!errorCard && !invitationsBlock) return null;
+    return <>{errorCard}{invitationsBlock}</>;
   }
 
   const seatsFull = team.seatsUsed >= team.seatLimit;
@@ -136,6 +252,7 @@ export function TeamSection() {
   const expiredInvites = team.invites.filter((i) => i.expired);
 
   return (
+    <>
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
@@ -377,8 +494,12 @@ export function TeamSection() {
           </div>
         </div>
       )}
+
     </div>
+    {invitationsBlock}
+    </>
   );
 }
+
 
 export default TeamSection;

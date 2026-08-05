@@ -45,6 +45,7 @@ export default function ClientSelectorPage({
   onDeleteProject,
   session,
   onGenerateFromUrl,
+  workspaceSwitcher,
 }: {
   projects: Client[];
   onSelectClient: (client: Client) => void;
@@ -57,6 +58,8 @@ export default function ClientSelectorPage({
   onDeleteProject: (id: string) => void;
   session?: { username: string; role: string } | null;
   onGenerateFromUrl?: () => void;
+  /** Rendered inside the header right section — workspace switcher when the user belongs to >1 workspace. */
+  workspaceSwitcher?: React.ReactNode;
 }) {
   useContentStore();
   const displayClients = projects;
@@ -73,6 +76,11 @@ export default function ClientSelectorPage({
           <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
         <div className="flex items-center gap-4">
+          {workspaceSwitcher && (
+            <div className="bg-white/10 rounded-xl px-3 py-2">
+              {workspaceSwitcher}
+            </div>
+          )}
           <button onClick={onBackToPlatformHome} className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl" style={{ background: accent, color: "white" }}>
             <ArrowLeft size={16} /> Platform home
           </button>

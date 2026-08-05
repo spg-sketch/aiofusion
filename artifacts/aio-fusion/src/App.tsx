@@ -10,6 +10,8 @@ import {
   type User as LocalUser,
   type Role as LocalRole,
   type AccountProfile,
+  type WorkspaceInfo,
+  type PendingMyInvite,
   seedAdminIfEmpty,
   getSession as getLocalSession,
   getUsers as getLocalUsers,
@@ -22,8 +24,12 @@ import {
   canCreateSubAccounts,
   bootstrapAuth,
   fetchAccountProfile,
+  serverGetMyInvites,
+  serverGetWorkspaces,
   type SessionInfo,
 } from "./lib/auth";
+import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { vars } from "./marketing/vars";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
@@ -407,8 +413,9 @@ function App() {
     // cached account list. Then sync the shared store so this login sees every
     // project it may see, on every device. Local-only projects are pushed up.
     void (async () => {
-      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword, accountProfile: ap } = await bootstrapAuth();
+      const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword, workspaces: ws, accountProfile: ap } = await bootstrapAuth();
       setSessionState(s);
+      if (ws && ws.length > 0) setWorkspaces(ws);
       if (bootNeedsSetup) setNeedsSetup(true);
       if (bootHasPassword !== undefined) setHasPassword(bootHasPassword);
       // Only store profile when the session role is client (direct brand) or
@@ -521,6 +528,12 @@ function App() {
   // Null means prefill should not be attempted (impersonation, team member,
   // offline fallback, or admin account).
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  // All workspaces the signed-in user belongs to (from /platform/me).
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
+  // Pending team invites addressed to the signed-in user's email.
+  const [pendingInvites, setPendingInvites] = useState<PendingMyInvite[]>([]);
+  // True when the user has dismissed the invite banner for this page session.
+  const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -614,6 +627,16 @@ function App() {
     window.addEventListener("aio:george-updates-changed", handler);
     return () => window.removeEventListener("aio:george-updates-changed", handler);
   }, []);
+
+  // Fetch pending invites for the signed-in user. Re-runs when the session
+  // username changes (login / workspace switch). Uses the username as the dep
+  // rather than the full session object to avoid unnecessary re-fetches.
+  useEffect(() => {
+    if (!session?.username) { setPendingInvites([]); return; }
+    void serverGetMyInvites().then((r) => {
+      if (r.ok && r.invites) setPendingInvites(r.invites);
+    });
+  }, [session?.username]);
 
   // Shown on the login form when the admin stash cookie expires mid view-as
   // session and the user is redirected back to sign in.
@@ -999,6 +1022,9 @@ function App() {
         onBack={() => setView("platform-home")}
         onAssignProjectOwner={handleAssignProjectOwner}
         onRoleChanged={handleRoleChanged}
+        onWorkspacesChanged={() => {
+          void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
+        }}
       />
     );
   }
@@ -1017,11 +1043,25 @@ function App() {
     );
   }
 
+  // Whether the invite banner should be shown in the current render.
+  const showInviteBanner = !authLoading && !!session && pendingInvites.length > 0 && !inviteBannerDismissed;
+
   if (!activeClient) {
     return (
       <>
+      {showInviteBanner && (
+        <PendingInvitesBanner
+          invites={pendingInvites}
+          onInviteAccepted={() => {
+            void serverGetMyInvites().then((r) => { if (r.ok && r.invites) setPendingInvites(r.invites); });
+            void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
+          }}
+          onDismiss={() => setInviteBannerDismissed(true)}
+        />
+      )}
       <ClientSelectorPage
         projects={visibleProjects}
+        workspaceSwitcher={workspaces.length > 1 ? <WorkspaceSwitcher workspaces={workspaces} /> : undefined}
         onSelectClient={async (client) => {
           setActiveProjectId(client.id);
           // Pull this project's latest Set-Up from the shared store before
@@ -1066,8 +1106,20 @@ function App() {
   }
 
   return (
+    <>
+    {showInviteBanner && (
+      <PendingInvitesBanner
+        invites={pendingInvites}
+        onInviteAccepted={() => {
+          void serverGetMyInvites().then((r) => { if (r.ok && r.invites) setPendingInvites(r.invites); });
+          void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
+        }}
+        onDismiss={() => setInviteBannerDismissed(true)}
+      />
+    )}
     <div className="flex w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc", marginTop: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}>
       <Sidebar
+        workspaceSwitcher={workspaces.length > 1 ? <WorkspaceSwitcher workspaces={workspaces} /> : undefined}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         activeClient={activeClient}
@@ -1109,9 +1161,9 @@ function App() {
         {currentPage === "media-database" && <MediaDatabasePage />}
       </main>
     </div>
+    </>
   );
 }
-
 export default App;
 
 const BillingOnlyPage = lazy(() =>

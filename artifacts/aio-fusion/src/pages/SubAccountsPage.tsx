@@ -22,11 +22,14 @@ function SubAccountsPage({
   onBack,
   onAssignProjectOwner,
   onRoleChanged,
+  onWorkspacesChanged,
 }: {
   session: LocalSession;
   onBack: () => void;
   onAssignProjectOwner: (id: string, owner: string) => void;
   onRoleChanged?: (newRole: Role) => void;
+  /** Called after the user accepts a cross-workspace invite so the parent can refresh the workspace list. */
+  onWorkspacesChanged?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -411,7 +414,7 @@ function SubAccountsPage({
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
         {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin") && (
-          <TeamSection />
+          <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
         )}
 
         {/* ADD CLIENT ACCOUNT — agency/admin only */}
