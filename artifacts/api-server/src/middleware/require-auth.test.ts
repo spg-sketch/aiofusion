@@ -24,10 +24,16 @@ function makeReq(isAuthed: boolean): Request {
 
 describe("requireAuth (session expiry enforcement)", () => {
   it("passes through when the user is authenticated", () => {
-    const req = {
-      headers: {},
-      cookies: { sid: "stale-sid" },
-    } as unknown as Request;
+    const req = makeReq(true);
+    const res = mockRes();
+    const next = vi.fn();
+    requireAuth(req, res, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.statusCode).toBeUndefined();
+  });
+
+  it("returns 401 when no user is attached (unauthenticated request)", () => {
+    const req = makeReq(false);
     const res = mockRes();
     const next = vi.fn();
     requireAuth(req, res, next);
@@ -38,21 +44,8 @@ describe("requireAuth (session expiry enforcement)", () => {
 
   it("returns 401 when the session has expired (authMiddleware clears user on expire)", () => {
     const req = {
-      headers: {},
-      cookies: { sid: "stale-sid" },
-    } as unknown as Request;
-    const res = mockRes();
-    const next = vi.fn();
-    requireAuth(req, res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(401);
-    expect((res.body as { error: string }).error).toMatch(/sign in/i);
-  });
-
-  it("returns 401 when the session has expired (authMiddleware clears user on expire)", () => {
-    const req = {
-      headers: {},
-      cookies: { sid: "stale-sid" },
+      isAuthenticated: () => false,
+      user: undefined,
     } as unknown as Request;
     const res = mockRes();
     const next = vi.fn();
@@ -88,7 +81,7 @@ describe("authMiddleware + requireAuth integration: expired session is rejected"
 
     const req = {
       headers: {},
-      cookies: { sid: "stale-sid" },
+      cookies: { sid: "expired-session-id" },
     } as unknown as Request;
     const res = mockRes();
     res.clearCookie = vi.fn() as unknown as Response["clearCookie"];

@@ -1,9 +1,12 @@
 import { Globe, Mail, Check, Calendar } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 
 export default function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
+      <PageHead meta={PAGE_META["for-inhouse"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion will transform the performance of your PR and marketing and put you in control.
       </p>

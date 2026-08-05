@@ -1,10 +1,13 @@
 import { Users, Mail } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
 
 export default function AboutPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Designed by PR consultants. Built with deep tech expertise." eyebrow={<><Users size={12} /> About AIO Fusion</> as any} {...props}>
+      <PageHead meta={PAGE_META.about} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
         AIO Fusion is a Generative Engine Optimisation (GEO) platform which measures in real time how visible your brand is to AI search engines such as ChatGPT and Claude.
       </p>

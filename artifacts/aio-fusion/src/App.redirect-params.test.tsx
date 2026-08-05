@@ -28,37 +28,9 @@ vi.mock("./lib/contentAi", async (importOriginal) => {
 
 // jsdom lacks these; landing/marketing chunks and the OTP input reference them.
 beforeEach(() => {
-  vi.stubGlobal("ResizeObserver", class {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal("IntersectionObserver", class {
     observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    observe() {} unobserve() {} disconnect() {} takeRecords() { return []; }
-    root = null; rootMargin = ""; thresholds = [];
-    root = null; rootMargin = ""; thresholds = [];
     root = null; rootMargin = ""; thresholds = [];
   });
   if (!window.matchMedia) {

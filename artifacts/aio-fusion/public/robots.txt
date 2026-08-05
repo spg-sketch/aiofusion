@@ -3,27 +3,39 @@
 
 User-agent: *
 Allow: /
+Disallow: /api/
 
 # AI answer-engine and training crawlers (explicitly allowed)
 User-agent: GPTBot
 Allow: /
+Disallow: /api/
 
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /api/
 
 User-agent: OAI-SearchBot
 Allow: /
+Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /
+Disallow: /api/
 
 User-agent: Claude-Web
 Allow: /
+Disallow: /api/
 
 User-agent: anthropic-ai
 Allow: /
+Disallow: /api/
 
 User-agent: CCBot
 Allow: /
+Disallow: /api/
+
+# Structured machine-readable briefings
+# llms.txt: https://aiofusion.ai/llms.txt
+# agents.md: https://aiofusion.ai/agents.md
 
 Sitemap: https://aiofusion.ai/sitemap.xml

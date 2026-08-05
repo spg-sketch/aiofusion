@@ -20,6 +20,8 @@ import {
   Mail,
 } from "lucide-react";
 import { vars } from "./vars";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 import step1Img from "../assets/photos/photo-diagnose.jpg";
 import step2Img from "../assets/photos/photo-strategy.jpg";
 import step3Img from "../assets/photos/photo-plan.jpg";
@@ -35,7 +37,33 @@ const llmEngines = [
   { name: "Claude", logo: `${import.meta.env.BASE_URL}images/logo-claude.png` },
 ];
 
-export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
+const NAV_LINKS = [
+  { l: "Home", v: "landing" },
+  { l: "Features", v: "landing#features" },
+  { l: "For In-house", v: "for-inhouse" },
+  { l: "For PR Agencies", v: "for-agencies" },
+  { l: "Pricing", v: "pricing" },
+  { l: "Insights", v: "insights" },
+  { l: "Contact", v: "contact" },
+  { l: "About", v: "about" },
+];
+
+function navHref(v: string): string {
+  const base = import.meta.env.BASE_URL;
+  if (v === "landing") return base;
+  if (v === "landing#features") return `${base}#features`;
+  return `${base}${v}`;
+}
+
+export default function LandingPageC({
+  onLogin,
+  onNavigate,
+  isAuthed,
+}: {
+  onLogin: () => void;
+  onNavigate: (v: string) => void;
+  isAuthed?: boolean;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const paper = "#FBF6EC";
   const ink = "#102B36";
@@ -43,54 +71,85 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
   const accentDark = "#A33860";
   const accentTint = "#F4B4CD";
   const accentSoft = "#FBE3ED";
+  const base = import.meta.env.BASE_URL;
+
   return (
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
+      <PageHead meta={PAGE_META.landing} />
+
+      <nav
+        aria-label="Main navigation"
+        className="fixed top-0 left-0 right-0 z-50"
+        style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
-          <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
-          </button>
+          <a
+            href={base}
+            onClick={(e) => { e.preventDefault(); onNavigate("landing"); }}
+            className="flex items-center gap-3"
+          >
+            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
+          </a>
+
           <div className="hidden lg:flex items-center gap-7">
-            {[
-              { l: "Home", v: "landing" },
-              { l: "Features", v: "landing#features" },
-              { l: "For In-house", v: "for-inhouse" },
-              { l: "For PR Agencies", v: "for-agencies" },
-              { l: "Pricing", v: "pricing" },
-              { l: "Insights", v: "insights" },
-              { l: "Contact", v: "contact" },
-              { l: "About", v: "about" },
-            ].map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: ink }}>{it.l}</button>
+            {NAV_LINKS.map((it) => (
+              <a
+                key={it.l}
+                href={navHref(it.v)}
+                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
+                className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity"
+                style={{ color: ink }}
+              >
+                {it.l}
+              </a>
             ))}
-            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
+            <button
+              onClick={onLogin}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+              style={{ background: ink, color: paper }}
+            >
               {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
             </button>
           </div>
-          <button className="lg:hidden" style={{ color: ink }} onClick={() => setMenuOpen(!menuOpen)}>
+
+          <button
+            className="lg:hidden"
+            style={{ color: ink }}
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+          >
             {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
+
         {menuOpen && (
-          <div className="lg:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4" style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
-            {[
-              { l: "Home", v: "landing" },
-              { l: "Features", v: "landing#features" },
-              { l: "For In-house", v: "for-inhouse" },
-              { l: "For PR Agencies", v: "for-agencies" },
-              { l: "Pricing", v: "pricing" },
-              { l: "Insights", v: "insights" },
-              { l: "Contact", v: "contact" },
-              { l: "About", v: "about" },
-            ].map((it) => (
-              <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
+          <div
+            className="lg:hidden px-4 sm:px-8 pb-5 flex flex-col gap-4"
+            style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}
+          >
+            {NAV_LINKS.map((it) => (
+              <a
+                key={it.l}
+                href={navHref(it.v)}
+                onClick={(e) => { e.preventDefault(); setMenuOpen(false); onNavigate(it.v); }}
+                className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left"
+                style={{ color: ink }}
+              >
+                {it.l}
+              </a>
             ))}
-            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
+            <button
+              onClick={() => { setMenuOpen(false); onLogin(); }}
+              className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2"
+              style={{ background: ink, color: paper }}
+            >
+              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
+            </button>
           </div>
         )}
       </nav>
 
-      {/* HERO - image-led with warm overlay */}
+      {/* HERO */}
       <section className="relative pt-[100px] sm:pt-[120px] pb-12 sm:pb-16 overflow-hidden">
         <div className="absolute inset-0" aria-hidden="true">
           <img src={heroBgImg} alt="" className="w-full h-full object-cover" />
@@ -111,7 +170,11 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
                 With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <a href="#features" className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5" style={{ color: ink, border: `1.5px solid ${ink}30` }}>
+                <a
+                  href="#features"
+                  className="flex items-center gap-2 px-7 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-black/5"
+                  style={{ color: ink, border: `1.5px solid ${ink}30` }}
+                >
                   Explore Features <ArrowRight size={14} />
                 </a>
               </div>
@@ -120,7 +183,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* FEATURE PANELS - three full-colour blocks (teal, raspberry, gold) */}
+      {/* FEATURE PANELS */}
       <section className="pb-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 mb-10">
           <div className="max-w-3xl">
@@ -168,7 +231,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* HOW IT WORKS - colourful image grid (3x2 cards) */}
+      {/* HOW IT WORKS */}
       <section className="py-20 mt-12" style={{ background: "white" }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
@@ -199,7 +262,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* KEY FEATURES - compact pill tags grouped by accent */}
+      {/* KEY FEATURES */}
       <section id="features" className="py-20" style={{ background: vars.creamDeep }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="max-w-3xl mb-12">
@@ -221,13 +284,15 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               { icon: Code2, title: "Website Technical GEO", desc: "Back-end instructions to maximise the AI effectiveness of your website.", accent: vars.accent },
               { icon: TrendingUp, title: "SEO Integration", desc: "Integrate SEO with AI optimisation for earned and owned media.", accent: accent, soon: true },
             ].map((tool) => (
-              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${tool.accent}25` }}>
+              <div key={tool.title} className="p-5 rounded-xl bg-white transition-shadow hover:shadow-md" style={{ border: `1px solid ${(tool as { accent: string }).accent}25` }}>
                 <div className="flex items-center gap-2.5 mb-2">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${tool.accent}18` }}>
-                    <tool.icon size={14} color={tool.accent} />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${(tool as { accent: string }).accent}18` }}>
+                    <tool.icon size={14} color={(tool as { accent: string }).accent} />
                   </div>
                   <h4 className="text-[13px] font-bold uppercase tracking-[0.08em]" style={{ color: ink }}>{tool.title}</h4>
-                  {tool.soon && (<span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: `${tool.accent}18`, color: tool.accent }}>Soon</span>)}
+                  {(tool as { soon?: boolean }).soon && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: `${(tool as { accent: string }).accent}18`, color: (tool as { accent: string }).accent }}>Soon</span>
+                  )}
                 </div>
                 <p className="text-[13px] leading-[1.7] font-light" style={{ color: vars.g600 }}>{tool.desc}</p>
               </div>
@@ -244,7 +309,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* INSIGHTS - image-led blog tiles */}
+      {/* INSIGHTS */}
       <section className="py-20" style={{ background: paper }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="flex items-end justify-between flex-wrap gap-4 mb-10">
@@ -252,17 +317,29 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: vars.gold }}>Insights</span>
               <h2 className="text-4xl md:text-5xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Practical thinking on AI visibility.</h2>
             </div>
-            <button onClick={() => onNavigate("insights")} className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70" style={{ color: accent }}>
+            <a
+              href={`${base}insights`}
+              onClick={(e) => { e.preventDefault(); onNavigate("insights"); }}
+              className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] hover:opacity-70"
+              style={{ color: accent }}
+            >
               All articles <ArrowRight size={14} />
-            </button>
+            </a>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
-              { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: null, external: false, accent: accent },
-              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.", url: null, external: false, accent: vars.gold },
+              { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: `${base}insights/pr-professionals-not-threat`, external: false, accent: accent },
+              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
             ].map((a) => (
-              <a key={a.title} href={a.url ?? undefined} onClick={!a.external ? (e) => { e.preventDefault(); onNavigate("insights"); } : undefined} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
+              <a
+                key={a.title}
+                href={a.url ?? "#"}
+                onClick={!a.external ? (e) => { e.preventDefault(); onNavigate("insights"); } : undefined}
+                {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer"
+                style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}
+              >
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
                   <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
@@ -277,7 +354,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* MADE BY COMMS - warm colour-blocked panel */}
+      {/* MADE BY COMMS */}
       <section className="py-20" style={{ background: accentSoft }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8">
           <div className="grid md:grid-cols-12 gap-10 items-center">
@@ -286,7 +363,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
                 <div className="absolute -top-8 -right-8 w-44 h-44 rounded-full" style={{ background: vars.gold, opacity: 0.4 }} />
                 <div className="absolute -bottom-10 -left-10 w-52 h-52 rounded-full" style={{ background: vars.teal, opacity: 0.3 }} />
                 <div className="absolute inset-0 flex items-center justify-center p-12">
-                  <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="w-full max-w-[200px]" />
+                  <img src={`${base}images/logo-white-notagline.png`} alt="AIO Fusion" className="w-full max-w-[200px]" />
                 </div>
               </div>
             </div>
@@ -304,7 +381,7 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
         </div>
       </section>
 
-      {/* FINAL CTA - raspberry → gold gradient (not navy) */}
+      {/* FINAL CTA */}
       <section className="py-20 sm:py-24 relative overflow-hidden" style={{ background: `linear-gradient(120deg, ${accent} 0%, ${accentDark} 60%, ${vars.gold} 130%)`, color: "white" }}>
         <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full opacity-20" style={{ background: vars.cream }} />
         <div className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full opacity-15" style={{ background: vars.teal }} />
@@ -316,32 +393,42 @@ export default function LandingPageC({ onLogin, onNavigate, isAuthed }: { onLogi
               <p className="text-[15px] leading-relaxed font-light text-white/85 max-w-md">Get in touch to book a platform demo and find out about pricing.</p>
             </div>
             <div className="md:col-span-5 flex flex-col gap-3">
-              <button onClick={() => onNavigate("contact")} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90" style={{ background: "white", color: accent }}>
+              <a
+                href={`${base}contact`}
+                onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}
+                className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90"
+                style={{ background: "white", color: accent }}
+              >
                 <span className="flex items-center gap-2"><Calendar size={16} /> Book a Demo</span> <ArrowRight size={14} />
-              </button>
-              <button onClick={() => onNavigate("contact")} className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white" style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}>
+              </a>
+              <a
+                href={`${base}contact`}
+                onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}
+                className="flex items-center justify-between gap-2.5 px-6 py-4 rounded-full text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white"
+                style={{ border: "1.5px solid rgba(255,255,255,0.55)" }}
+              >
                 <span className="flex items-center gap-2"><Mail size={16} /> Talk to Us</span> <ArrowRight size={14} />
-              </button>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      <footer className="py-10" style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-8">
+      <footer style={{ background: paper, borderTop: `1px solid ${vars.g200}` }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-5">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-14" />
-            <div className="flex items-center gap-6 text-[12px] font-semibold uppercase tracking-[0.12em] flex-wrap justify-center" style={{ color: vars.g500 }}>
+            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-14" />
+            <nav aria-label="Footer navigation" className="flex items-center gap-6 text-[12px] font-semibold uppercase tracking-[0.12em] flex-wrap justify-center" style={{ color: vars.g500 }}>
               <a href="#features" className="hover:opacity-60">Features</a>
-              <button onClick={() => onNavigate("for-inhouse")} className="hover:opacity-60">For In-house</button>
-              <button onClick={() => onNavigate("for-agencies")} className="hover:opacity-60">For PR Agencies</button>
-              <button onClick={() => onNavigate("insights")} className="hover:opacity-60">Insights</button>
-              <button onClick={() => onNavigate("contact")} className="hover:opacity-60">Contact</button>
-              <button onClick={() => onNavigate("about")} className="hover:opacity-60">About</button>
-              <button onClick={() => onNavigate("trust-security")} className="hover:opacity-60">Trust &amp; Security</button>
-              <button onClick={() => onNavigate("privacy-policy")} className="hover:opacity-60">Privacy Policy</button>
-              <button onClick={() => onNavigate("terms-conditions")} className="hover:opacity-60">Terms &amp; Conditions</button>
-            </div>
+              <a href={`${base}for-inhouse`} onClick={(e) => { e.preventDefault(); onNavigate("for-inhouse"); }} className="hover:opacity-60">For In-house</a>
+              <a href={`${base}for-agencies`} onClick={(e) => { e.preventDefault(); onNavigate("for-agencies"); }} className="hover:opacity-60">For PR Agencies</a>
+              <a href={`${base}insights`} onClick={(e) => { e.preventDefault(); onNavigate("insights"); }} className="hover:opacity-60">Insights</a>
+              <a href={`${base}contact`} onClick={(e) => { e.preventDefault(); onNavigate("contact"); }} className="hover:opacity-60">Contact</a>
+              <a href={`${base}about`} onClick={(e) => { e.preventDefault(); onNavigate("about"); }} className="hover:opacity-60">About</a>
+              <a href={`${base}trust-security`} onClick={(e) => { e.preventDefault(); onNavigate("trust-security"); }} className="hover:opacity-60">Trust &amp; Security</a>
+              <a href={`${base}privacy-policy`} onClick={(e) => { e.preventDefault(); onNavigate("privacy-policy"); }} className="hover:opacity-60">Privacy Policy</a>
+              <a href={`${base}terms-conditions`} onClick={(e) => { e.preventDefault(); onNavigate("terms-conditions"); }} className="hover:opacity-60">Terms &amp; Conditions</a>
+            </nav>
             <p className="text-[11px] font-light" style={{ color: vars.g400 }}>&copy; AIO Fusion 2026</p>
           </div>
         </div>

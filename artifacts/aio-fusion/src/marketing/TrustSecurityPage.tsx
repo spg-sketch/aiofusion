@@ -1,5 +1,7 @@
 import { ShieldCheck, Lock, Server, Users2, FileWarning, Mail } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
 
 function Item({ icon, title, children }: { icon: any; title: string; children: any }) {
@@ -19,6 +21,7 @@ function Item({ icon, title, children }: { icon: any; title: string; children: a
 export default function TrustSecurityPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Trust & Security" eyebrow={<><ShieldCheck size={12} /> How we protect your data</> as any} {...props}>
+      <PageHead meta={PAGE_META["trust-security"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         AIO Fusion handles real business and communications data on behalf of our clients, so security is built into
         the platform rather than added on afterwards. This page summarises the controls we currently have in place.

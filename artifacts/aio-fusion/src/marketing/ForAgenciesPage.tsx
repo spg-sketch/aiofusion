@@ -1,9 +1,12 @@
 import { Users, Calendar, Check } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 
 export default function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
+      <PageHead meta={PAGE_META["for-agencies"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         Elevate your agency capability for the AI era with tailored, measurable optimisation for each client. One platform to enhance your team and service performance helping you harness the power of answer engines.
       </p>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Mail, Users, BookOpen, ArrowUpRight, Calendar, MessageSquare, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
 
 const NAVY = "#102B36";
@@ -335,6 +337,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
       eyebrow={<><Mail size={12} /> Contact</> as any}
       {...props}
     >
+      <PageHead meta={PAGE_META.contact} />
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         Book a demo or send us a message — we'd love to hear from you.
       </p>

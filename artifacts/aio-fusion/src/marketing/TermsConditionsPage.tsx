@@ -1,5 +1,7 @@
 import { Mail } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 import { vars } from "./vars";
 
 function Section({ title, children }: { title: string; children: any }) {
@@ -14,6 +16,7 @@ function Section({ title, children }: { title: string; children: any }) {
 export default function TermsConditionsPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
     <MarketingPage title="Terms &amp; Conditions" {...props}>
+      <PageHead meta={PAGE_META["terms-conditions"]} />
       <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 10 July 2026</p>
 
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>

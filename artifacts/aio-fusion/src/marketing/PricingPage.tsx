@@ -1,8 +1,36 @@
 import { useState } from "react";
 import { Sparkles, User, LogIn, X, Menu, Check, ChevronDown } from "lucide-react";
 import { vars } from "./vars";
+import { PageHead } from "./PageHead";
+import { PAGE_META } from "./pageMeta";
 
-export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
+function navHref(v: string): string {
+  const base = import.meta.env.BASE_URL;
+  if (v === "landing") return base;
+  if (v === "landing#features") return `${base}#features`;
+  return `${base}${v}`;
+}
+
+const NAV_LINKS = [
+  { l: "Home", v: "landing" },
+  { l: "Features", v: "landing#features" },
+  { l: "For In-house", v: "for-inhouse" },
+  { l: "For PR Agencies", v: "for-agencies" },
+  { l: "Pricing", v: "pricing" },
+  { l: "Insights", v: "insights" },
+  { l: "Contact", v: "contact" },
+  { l: "About", v: "about" },
+];
+
+export default function PricingPage({
+  onLogin,
+  onNavigate,
+  isAuthed,
+}: {
+  onLogin: () => void;
+  onNavigate: (v: string) => void;
+  isAuthed?: boolean;
+}) {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const paper = "#FBF6EC";
@@ -11,6 +39,7 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
   const accentSoft = "#FBE3ED";
   const teal = vars.teal;
   const agenticGold = "#7C6A3A";
+  const base = import.meta.env.BASE_URL;
 
   type PlanFeature = { label: string; inhouse: string | boolean; agency: string | boolean; agentic: string | boolean; section?: boolean };
 
@@ -74,34 +103,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
     },
   ];
 
-  /* ── WITH AGENTS / AGENTIC LAYER ── hidden for launch, restore when ready ──
-  const AGENTIC_PLAN = {
-    key: "agentic",
-    name: "With Agents",
-    sub: "Agentic Layer",
-    tagline: "Autonomous PR and marketing programme management with trained specialist agents, governed by human approval gates.",
-    annualFrom: 7000,
-    color: agenticGold,
-    highlight: false,
-    cta: "Join the Waitlist",
-    launch: "Q2 2027",
-    upgradeOffer: "50% off the first 6 months for Standard clients upgrading to With Agents.",
-    competitorNote: "Enterprise AI deployments cost £50,000–£150,000+/yr. No autonomous PR agent alternative exists at this price.",
-    includes: [
-      "Everything in Standard Agency, plus:",
-      "20-agent autonomous team per project",
-      "Always-on AI visibility monitoring",
-      "AI-assisted draft content and GEO fixes",
-      "Human approval gates throughout",
-      "Journalist and Media AI Authority Score",
-      "Full AI Media Database - multi-market",
-      "Release Gateway and Wire API integrations",
-      "Tactical Media Relations - live opportunity response",
-      "Authority-building content engine",
-    ],
-  };
-  ── end WITH AGENTS ── */
-
   const TABLE_ROWS: PlanFeature[] = [
     { label: "Brands / projects", inhouse: "1 Premium brand/project", agency: "3 Premium projects included", agentic: "3 Premium projects included" },
     { label: "AI Visibility Audit + GEO strategy", inhouse: true, agency: true, agentic: true },
@@ -126,14 +127,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
     { label: "Support", inhouse: "Email", agency: "Priority email and chat", agentic: "Priority email and chat" },
   ];
 
-  const FAQS = [
-    { q: "What is the Standard platform?", a: "Standard is the full AIO Fusion platform - all 10 modules including AI Visibility Audit, Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO tools, reporting and Content Library. It is available as an In-House plan for a single brand or an Agency plan for multi-client work." },
-    { q: "What counts as an LLM Visibility Check?", a: "Each AI Visibility Audit runs your brand through Claude and ChatGPT simultaneously, scoring how often and how accurately each engine cites your brand. The audit maps which AI queries your brand appears in, how it is described, and which competitors appear alongside it. Both Standard plans include full audit access with no artificial run caps." },
-    { q: "Can I add more projects to the Agency plan?", a: "Yes. The Agency plan includes 3 Premium projects. You can add further projects at Standard, Premium, or Max tier — see the additional project tiers on this page for details." },
-    { q: "Are prices per user or per account?", a: "Prices are per account, billed annually. Multiple team members can collaborate within the same account. Contact us if you need to discuss seat arrangements for larger teams." },
-    { q: "Do you offer discounts for charities or non-profits?", a: "Yes, we offer a 30% discount for registered charities and non-profit organisations. Please contact us with your registration details." },
-  ];
-
   const ADDITIONAL_PROJECT_TIERS = [
     { name: "Standard", price: 500, actions: 50, color: teal },
     { name: "Premium", price: 650, actions: 75, color: accent },
@@ -147,19 +140,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
     return <span className="text-[12px] font-medium text-center block" style={{ color: ink }}>{v}</span>;
   }
 
-  const navLinks = [
-    { l: "Home", v: "landing" },
-    { l: "Features", v: "landing#features" },
-    { l: "For In-house", v: "for-inhouse" },
-    { l: "For PR Agencies", v: "for-agencies" },
-    { l: "Pricing", v: "pricing" },
-    { l: "Insights", v: "insights" },
-    { l: "Contact", v: "contact" },
-    { l: "About", v: "about" },
-  ];
-
   return (
     <div className="font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <PageHead meta={PAGE_META.pricing} />
 
       {/* Beta banner */}
       <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center px-4 py-2 text-center" style={{ background: "#F59E0B", minHeight: "40px" }}>
@@ -168,27 +151,68 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         </p>
       </div>
 
-      <nav className="fixed left-0 right-0 z-50 backdrop-blur-md" style={{ top: "40px", background: "rgba(251,246,236,0.95)", borderBottom: `1px solid rgba(16,43,54,0.08)` }}>
+      <nav
+        aria-label="Main navigation"
+        className="fixed left-0 right-0 z-50 backdrop-blur-md"
+        style={{ top: "40px", background: "rgba(251,246,236,0.95)", borderBottom: "1px solid rgba(16,43,54,0.08)" }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-8 h-[64px] sm:h-[80px] flex items-center justify-between">
-          <button onClick={() => onNavigate("landing")} className="flex items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
-          </button>
+          <a
+            href={base}
+            onClick={(e) => { e.preventDefault(); onNavigate("landing"); }}
+            className="flex items-center gap-3"
+          >
+            <img src={`${base}images/logo-color.png`} alt="AIO Fusion" className="h-12 sm:h-16" />
+          </a>
           <div className="hidden md:flex items-center gap-6">
-            {navLinks.map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity" style={{ color: ink }}>{it.l}</button>
+            {NAV_LINKS.map((it) => (
+              <a
+                key={it.l}
+                href={navHref(it.v)}
+                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
+                className="text-[12px] font-semibold uppercase tracking-[0.14em] hover:opacity-60 transition-opacity"
+                style={{ color: ink }}
+              >
+                {it.l}
+              </a>
             ))}
-            <button onClick={onLogin} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80" style={{ background: ink, color: paper }}>
+            <button
+              onClick={onLogin}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+              style={{ background: ink, color: paper }}
+            >
               {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
             </button>
           </div>
-          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ color: ink }}>{menuOpen ? <X size={24} /> : <Menu size={24} />}</button>
+          <button
+            className="md:hidden"
+            onClick={() => setMenuOpen(!menuOpen)}
+            style={{ color: ink }}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+          >
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
         {menuOpen && (
           <div className="md:hidden px-4 pb-5 flex flex-col gap-3 border-t" style={{ background: paper, borderColor: vars.g200 }}>
-            {navLinks.map((it) => (
-              <button key={it.l} onClick={() => { setMenuOpen(false); onNavigate(it.v); }} className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left" style={{ color: ink }}>{it.l}</button>
+            {NAV_LINKS.map((it) => (
+              <a
+                key={it.l}
+                href={navHref(it.v)}
+                onClick={(e) => { e.preventDefault(); setMenuOpen(false); onNavigate(it.v); }}
+                className="text-[12px] font-semibold uppercase tracking-[0.14em] py-2 text-left"
+                style={{ color: ink }}
+              >
+                {it.l}
+              </a>
             ))}
-            <button onClick={() => { setMenuOpen(false); onLogin(); }} className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2" style={{ background: ink, color: paper }}>{isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}</button>
+            <button
+              onClick={() => { setMenuOpen(false); onLogin(); }}
+              className="px-4 py-2 rounded-lg text-[12px] font-bold uppercase tracking-[0.14em] flex items-center gap-2"
+              style={{ background: ink, color: paper }}
+            >
+              {isAuthed ? <><User size={14} /> My Account</> : <><LogIn size={14} /> Platform Login</>}
+            </button>
           </div>
         )}
       </nav>
@@ -212,10 +236,9 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
       {/* Pricing cards */}
       <section className="pb-10 px-4 sm:px-8">
         <div className="max-w-5xl mx-auto">
-
           <div className="grid sm:grid-cols-2 gap-5 mb-8">
             {STANDARD_PLANS.map((plan) => (
-              <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.key === "agency" ? `2px solid ${accent}` : `2px solid ${ink}`, background: "white", boxShadow: plan.key === "agency" ? `0 20px 48px -12px ${accent}30` : `0 20px 48px -12px rgba(16,43,54,0.15)` }}>
+              <div key={plan.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: plan.key === "agency" ? `2px solid ${accent}` : `2px solid ${ink}`, background: "white", boxShadow: plan.key === "agency" ? `0 20px 48px -12px ${accent}30` : "0 20px 48px -12px rgba(16,43,54,0.15)" }}>
                 <div className="p-7 flex flex-col flex-1">
                   <div className="mb-1">
                     <h2 className="text-[26px] mt-0.5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{plan.sub}</h2>
@@ -232,9 +255,14 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
                       Or <span className="font-semibold" style={{ color: ink }}>£{plan.quarterlyMonthly}/month · £{plan.quarterly.toLocaleString()}/yr</span> billed quarterly
                     </p>
                   </div>
-                  <button onClick={() => onNavigate("contact")} className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6" style={{ background: plan.highlight ? accent : ink, color: "white" }}>
+                  <a
+                    href={`${base}contact`}
+                    onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}
+                    className="w-full py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 mb-6 text-center text-white"
+                    style={{ background: plan.highlight ? accent : ink, display: "block" }}
+                  >
                     {plan.cta}
-                  </button>
+                  </a>
                   <ul className="space-y-3 flex-1">
                     {plan.includes.map((item, i) => (
                       <li key={i} className="flex items-start gap-2.5 text-[13px]">
@@ -253,11 +281,10 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               </div>
             ))}
           </div>
-
         </div>
       </section>
 
-      {/* Additional Projects section */}
+      {/* Additional Projects */}
       <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
         <div className="max-w-5xl mx-auto">
           <div className="mb-10">
@@ -272,7 +299,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               Choose the activity level to match your client or brand requirements:
             </p>
           </div>
-
           <div className="flex flex-col gap-4 max-w-2xl">
             {ADDITIONAL_PROJECT_TIERS.map((tier) => (
               <div key={tier.name} className="rounded-2xl p-6 flex items-center justify-between" style={{ border: `1.5px solid ${tier.color}30`, background: `${tier.color}08` }}>
@@ -293,7 +319,6 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
               </div>
             ))}
           </div>
-
         </div>
       </section>
 
@@ -325,50 +350,39 @@ export default function PricingPage({ onLogin, onNavigate, isAuthed }: { onLogin
         </div>
       </section>
 
-      {/* FAQ — hidden for launch, restore when ready
-      <section className="py-16 px-4 sm:px-8" style={{ background: paper }}>
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-10">
-            <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: teal }}>FAQ</span>
-            <h2 className="text-3xl md:text-4xl mt-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Questions and answers</h2>
-          </div>
-          <div className="space-y-3">
-            {FAQS.map((faq, i) => (
-              <div key={i} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${vars.g200}` }}>
-                <button onClick={() => setOpenFaq(openFaq === i ? null : i)} className="w-full flex items-center justify-between gap-4 p-5 text-left" style={{ background: openFaq === i ? "white" : paper }}>
-                  <span className="text-[14px] font-semibold" style={{ color: ink }}>{faq.q}</span>
-                  <ChevronDown size={16} color={vars.g400} className="flex-shrink-0 transition-transform" style={{ transform: openFaq === i ? "rotate(180deg)" : "none" }} />
-                </button>
-                {openFaq === i && (
-                  <div className="px-5 pb-5 bg-white">
-                    <p className="text-[13px] font-light leading-relaxed" style={{ color: vars.g600 }}>{faq.a}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-      end FAQ */}
-
       {/* CTA */}
       <section className="py-16 px-4 sm:px-8 text-center" style={{ background: ink }}>
         <h2 className="text-3xl md:text-4xl mb-4" style={{ color: "#FBF6EC", fontFamily: "'Alice', Georgia, serif" }}>Ready to build AI authority?</h2>
         <p className="text-[14px] font-light mb-8 max-w-md mx-auto" style={{ color: "rgba(251,246,236,0.7)" }}>Book a platform demo and see how AIO Fusion measures and improves your AI visibility.</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button onClick={() => onNavigate("contact")} className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90" style={{ background: accent, color: "white" }}>Book a Demo</button>
+          <a
+            href={`${base}contact`}
+            onClick={(e) => { e.preventDefault(); onNavigate("contact"); }}
+            className="px-8 py-3.5 rounded-full text-[13px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-90 text-white"
+            style={{ background: accent, display: "inline-block" }}
+          >
+            Book a Demo
+          </a>
         </div>
       </section>
 
       <footer className="py-10 border-t" style={{ background: paper, borderColor: "rgba(16,43,54,0.1)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-[12px] font-light" style={{ color: "rgba(16,43,54,0.5)" }}>&copy; AIO Fusion. All rights reserved.</p>
-          <div className="flex items-center gap-6">
+          <nav aria-label="Footer navigation" className="flex items-center gap-6 flex-wrap justify-center">
             {[{ l: "About", v: "about" }, { l: "Contact", v: "contact" }, { l: "Insights", v: "insights" }].map((it) => (
-              <button key={it.l} onClick={() => onNavigate(it.v)} className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>{it.l}</button>
+              <a
+                key={it.l}
+                href={`${base}${it.v}`}
+                onClick={(e) => { e.preventDefault(); onNavigate(it.v); }}
+                className="text-[12px] font-light hover:underline"
+                style={{ color: "rgba(16,43,54,0.7)" }}
+              >
+                {it.l}
+              </a>
             ))}
             <a href="mailto:info@aiofusion.ai" className="text-[12px] font-light hover:underline" style={{ color: "rgba(16,43,54,0.7)" }}>info@aiofusion.ai</a>
-          </div>
+          </nav>
         </div>
       </footer>
     </div>

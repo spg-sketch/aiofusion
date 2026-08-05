@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { BookOpen, ArrowUpRight } from "lucide-react";
 import MarketingPage from "./MarketingPage";
+import { PageHead } from "./PageHead";
+import { PAGE_META, ARTICLE_META } from "./pageMeta";
 import { vars } from "./vars";
 import ArticleDetailView from "./ArticleDetailView";
 import { NEW_ARTICLES } from "./articles-data";
@@ -57,11 +59,13 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
     const articleData = NEW_ARTICLES.find((a) => a.id === openArticleId);
     const coverImg = articleData ? ARTICLE_IMAGES[articleData.imgSrc] : "";
     if (articleData && coverImg) {
+      const articleMeta = ARTICLE_META[openArticleId];
       return (
         <MarketingPage
           title=""
           {...marketingProps}
         >
+          {articleMeta && <PageHead meta={articleMeta} />}
           <ArticleDetailView
             article={articleData}
             onBack={() => { setOpenArticleId(null); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
@@ -74,6 +78,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
 
   return (
     <MarketingPage title={isGuidance ? "Guidance" : "Insights"} eyebrow={<><BookOpen size={12} /> {isGuidance ? "How-to library" : "Library"}</> as any} {...marketingProps}>
+      <PageHead meta={PAGE_META.insights} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
         {isGuidance
           ? "How-to articles and videos for using the AIO Fusion platform - set-up, Authority Reports, Optimiser, Media Research and more."
