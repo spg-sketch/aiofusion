@@ -75,7 +75,7 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
           We offer two types of account: a <strong style={{ color: ink }}>Direct Client</strong> account, for managing your own company or brand, and an <strong style={{ color: ink }}>Agency / Partner</strong> account, for managing PR and marketing on behalf of multiple clients.
         </p>
         <p className="text-[16px] leading-[1.7] mb-10" style={{ color: vars.g600 }}>
-          Which would suit you best? Don't worry — you can change this later from your account settings.
+          Which would suit you best? Don't worry — you can always update this in your account settings at a later stage.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
