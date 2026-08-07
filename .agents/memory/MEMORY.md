@@ -1,3 +1,4 @@
+- [AIO Fusion profile images](aio-fusion-profile-images.md) — avatar/logo stored as data URLs in platform_meta via /api/platform/profile/image; new authed routes must be added to the ai-action-guards allowlist.
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
 - [AIO Fusion audit server sync](aio-fusion-audit-server-sync.md) — savedAudits/savedDiagnostics synced to DB via store-audits.ts; auditSync.ts is the client helper; savedAuditsKey must be exported; Content/Tech GEO SavedScored still localStorage-only.
 - [AIO Fusion IntakeForm structured fields](aio-fusion-intake-structured-fields.md) — adding a repeatable field needs wiring in 3 completion counters (diff indentation) + legacy migration must only fall back when array undefined.

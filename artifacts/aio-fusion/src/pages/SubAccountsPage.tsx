@@ -324,7 +324,7 @@ function SubAccountsPage({
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-              {canCreateSubAccounts(session.role) ? "Client accounts" : "My account"}
+              {canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
