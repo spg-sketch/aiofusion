@@ -1073,6 +1073,18 @@ function PlatformHomePage({
                   </button>
                   {showChangePassword && (
                     <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5" style={{ background: "rgba(0,0,0,0.18)" }}>
+                      {/* Hidden username field so password managers link the new
+                          password to the right saved login and offer to update it. */}
+                      <input
+                        type="text"
+                        name="username"
+                        autoComplete="username"
+                        value={session.username}
+                        readOnly
+                        hidden
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      />
                       {changePasswordDone ? (
                         <div className="flex items-center gap-2 text-[14px] font-medium" style={{ color: "#86efac" }}>
                           <CheckCircle2 size={16} /> Password changed. Other devices have been signed out.
@@ -1088,6 +1100,7 @@ function PlatformHomePage({
                               <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Current password</label>
                               <input
                                 type="password"
+                                name="current-password"
                                 autoComplete="current-password"
                                 value={changeCurrentPassword}
                                 onChange={(e) => setChangeCurrentPassword(e.target.value)}
@@ -1099,6 +1112,7 @@ function PlatformHomePage({
                               <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>New password</label>
                               <input
                                 type="password"
+                                name="new-password"
                                 autoComplete="new-password"
                                 value={changeNewPassword1}
                                 onChange={(e) => setChangeNewPassword1(e.target.value)}
@@ -1110,6 +1124,7 @@ function PlatformHomePage({
                               <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: "rgba(255,255,255,0.7)" }}>Confirm new password</label>
                               <input
                                 type="password"
+                                name="confirm-new-password"
                                 autoComplete="new-password"
                                 value={changeNewPassword2}
                                 onChange={(e) => setChangeNewPassword2(e.target.value)}
