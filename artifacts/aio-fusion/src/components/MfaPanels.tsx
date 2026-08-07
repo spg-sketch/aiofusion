@@ -317,7 +317,24 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
 
 // --- Signed-in management section ---------------------------------------------
 
-export function MfaSecuritySection({ session }: { session: Session }) {
+export function MfaSecuritySection({ session, light = false }: { session: Session; light?: boolean }) {
+  // Palette: the section renders on a teal card by default (white text) or on
+  // a white card when `light` is set (dark text, matching the account page).
+  const fg = light ? "#0a1628" : "white";
+  const fgSoft = light ? vars.g500 : "rgba(255,255,255,0.6)";
+  const fgMid = light ? vars.g600 : "rgba(255,255,255,0.7)";
+  const fgStrong = light ? "#0a1628" : "rgba(255,255,255,0.85)";
+  const dividerColor = light ? vars.g200 : "rgba(255,255,255,0.2)";
+  const chipOffStyle = light
+    ? { background: vars.g100, color: vars.g500 }
+    : { background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" };
+  const chipOnStyle = light
+    ? { background: "#E6F4EA", color: "#1B7A3E" }
+    : { background: "rgba(34,197,94,0.25)", color: "#B6F2CB" };
+  const rowBg = light ? vars.g50 : "rgba(255,255,255,0.08)";
+  const warnColor = light ? vars.red : "#ff8a8a";
+  const panelClass = light ? "mt-4 rounded-xl p-5 border" : "mt-4 rounded-xl p-5 bg-white";
+  const panelStyle = light ? { background: vars.g50, borderColor: vars.g200 } : undefined;
   const [status, setStatus] = useState<{ enabled: boolean; required: boolean; recoveryCodesRemaining: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -412,21 +429,19 @@ export function MfaSecuritySection({ session }: { session: Session }) {
   if (!status) return null;
 
   return (
-    <div className="mt-4 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
+    <div className="mt-4 pt-5" style={{ borderTop: `1px solid ${dividerColor}` }}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-white">
+        <div className="flex items-center gap-2" style={{ color: fg }}>
           <ShieldCheck size={15} />
           <span className="text-[13px] font-bold uppercase tracking-[0.14em]">Two-Factor Authentication</span>
           <span
             className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.12em]"
-            style={status.enabled
-              ? { background: "rgba(34,197,94,0.25)", color: "#B6F2CB" }
-              : { background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}
+            style={status.enabled ? chipOnStyle : chipOffStyle}
           >
             {status.enabled ? "On" : "Off"}
           </span>
           {status.required && (
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.12em]" style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.7)" }}>
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.12em]" style={chipOffStyle}>
               Required for master accounts
             </span>
           )}
@@ -436,8 +451,8 @@ export function MfaSecuritySection({ session }: { session: Session }) {
             type="button"
             onClick={startEnroll}
             disabled={busy}
-            className="px-5 py-2 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10 disabled:opacity-50"
-            style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+            className={`px-5 py-2 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] transition-all disabled:opacity-50 ${light ? "hover:bg-black/5" : "text-white hover:bg-white/10"}`}
+            style={light ? { border: `1.5px solid ${vars.g300}`, color: fg } : { border: "1.5px solid rgba(255,255,255,0.5)" }}
           >
             Turn on
           </button>
@@ -447,7 +462,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
             type="button"
             onClick={() => { setDisabling(true); setError(null); }}
             className="text-[12px] font-semibold hover:opacity-70"
-            style={{ color: "rgba(255,255,255,0.6)" }}
+            style={{ color: fgSoft }}
           >
             Turn off
           </button>
@@ -456,7 +471,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
       {status.enabled && (
         <p
           className={`mt-2 text-[12px] ${status.recoveryCodesRemaining <= 3 ? "font-semibold" : "font-light"}`}
-          style={{ color: status.recoveryCodesRemaining <= 3 ? "#ff8a8a" : "rgba(255,255,255,0.6)" }}
+          style={{ color: status.recoveryCodesRemaining <= 3 ? warnColor : fgSoft }}
         >
           {status.recoveryCodesRemaining <= 3 && <AlertTriangle size={12} className="inline mr-1 -mt-0.5" />}
           {status.recoveryCodesRemaining} recovery code{status.recoveryCodesRemaining === 1 ? "" : "s"} remaining.
@@ -467,7 +482,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
                 type="button"
                 onClick={() => { setRegenerating(true); setDisabling(false); setError(null); }}
                 className="font-semibold underline underline-offset-2 hover:opacity-70"
-                style={{ color: "rgba(255,255,255,0.85)" }}
+                style={{ color: fgStrong }}
               >
                 Regenerate
               </button>
@@ -478,22 +493,22 @@ export function MfaSecuritySection({ session }: { session: Session }) {
 
       {status.enabled && trustedDevices.length > 0 && (
         <div className="mt-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: "rgba(255,255,255,0.7)" }}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: fgMid }}>
             Trusted devices (skip the code)
           </p>
           <div className="space-y-2">
             {trustedDevices.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ background: rowBg }}>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold text-white truncate max-w-[420px]">
+                  <p className="text-[12px] font-semibold truncate max-w-[420px]" style={{ color: fg }}>
                     {d.label}
                     {d.current && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.1em]" style={{ background: "rgba(34,197,94,0.25)", color: "#B6F2CB" }}>
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-[0.1em]" style={chipOnStyle}>
                         This device
                       </span>
                     )}
                   </p>
-                  <p className="text-[11px] font-light" style={{ color: "rgba(255,255,255,0.55)" }}>
+                  <p className="text-[11px] font-light" style={{ color: fgSoft }}>
                     Trusted until {new Date(d.expiresAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                 </div>
@@ -502,7 +517,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
                   onClick={() => revokeDevice(d.id)}
                   disabled={revokingId !== null}
                   className="text-[11px] font-semibold underline underline-offset-2 hover:opacity-70 disabled:opacity-40"
-                  style={{ color: "rgba(255,255,255,0.7)" }}
+                  style={{ color: fgMid }}
                 >
                   {revokingId === d.id ? "Removing…" : "Remove"}
                 </button>
@@ -513,7 +528,7 @@ export function MfaSecuritySection({ session }: { session: Session }) {
       )}
 
       {(enrolling || recoveryCodes || disabling || regenerating) && (
-        <div className="mt-4 rounded-xl p-5 bg-white">
+        <div className={panelClass} style={panelStyle}>
           {recoveryCodes ? (
             <RecoveryCodesBlock codes={recoveryCodes} doneLabel="Done" onDone={() => setRecoveryCodes(null)} />
           ) : enrolling ? (

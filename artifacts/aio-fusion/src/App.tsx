@@ -1025,6 +1025,7 @@ function App() {
         onWorkspacesChanged={() => {
           void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
         }}
+        onSignOut={handleSignOut}
       />
     );
   }

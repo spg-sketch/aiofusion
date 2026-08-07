@@ -17,12 +17,14 @@ import { loadStoredProjects } from "../lib/projectStore";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
+import { AccountSecurityCard } from "../components/AccountSecurityCard";
 function SubAccountsPage({
   session,
   onBack,
   onAssignProjectOwner,
   onRoleChanged,
   onWorkspacesChanged,
+  onSignOut,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -30,6 +32,8 @@ function SubAccountsPage({
   onRoleChanged?: (newRole: Role) => void;
   /** Called after the user accepts a cross-workspace invite so the parent can refresh the workspace list. */
   onWorkspacesChanged?: () => void;
+  /** Signs the user out (used after account deletion and by the sign-out button). */
+  onSignOut?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -433,6 +437,9 @@ function SubAccountsPage({
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
           )}
         </div>
+
+        {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
+        {onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
         {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin") && (
