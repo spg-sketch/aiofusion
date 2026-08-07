@@ -115,7 +115,7 @@ export default function ClientSelectorPage({
             {isAdmin ? "Master" : isClient ? null : "Agency"}{isAdmin || !isClient ? " " : null}
             <span style={{ color: accent }}>Project Hub</span>
           </h1>
-          <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-2xl leading-[1.7]" style={{ color: ink }}>
+          <p className="text-[15px] sm:text-[16px] font-light mt-3 mb-8 max-w-4xl lg:whitespace-nowrap leading-[1.7]" style={{ color: ink }}>
             {displayClients.length === 0
               ? "Set up your first project to start optimising your PR and marketing output for AI discoverability."
               : "Select a project to manage AI optimisation, ongoing PR and marketing output."}
