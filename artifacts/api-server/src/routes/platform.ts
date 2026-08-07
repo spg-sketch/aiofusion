@@ -4251,4 +4251,86 @@ router.get(
   },
 );
 
+// ---------------------------------------------------------------------------
+// PROFILE IMAGES — user photo ("avatar") and brand/agency logo ("logo").
+// Stored as data URLs in platform_meta (small, client-side resized images)
+// so no extra storage infrastructure is needed and they survive deploys.
+// ---------------------------------------------------------------------------
+const IMAGE_KINDS = ["avatar", "logo"] as const;
+type ImageKind = (typeof IMAGE_KINDS)[number];
+const profileImageKey = (kind: ImageKind, username: string) =>
+  `account:image:${kind}:${normUsername(username)}`;
+// ~600KB of base64 ≈ 450KB image — plenty for a resized avatar/logo.
+const MAX_IMAGE_DATA_URL_LENGTH = 800_000;
+const DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+router.post("/platform/profile/image", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const { kind, dataUrl } = (req.body ?? {}) as { kind?: string; dataUrl?: string };
+    if (!IMAGE_KINDS.includes(kind as ImageKind)) {
+      res.status(400).json({ error: "Invalid image kind" });
+      return;
+    }
+    if (typeof dataUrl !== "string" || !DATA_URL_RE.test(dataUrl)) {
+      res.status(400).json({ error: "Image must be a PNG, JPEG or WebP data URL" });
+      return;
+    }
+    if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      res.status(400).json({ error: "Image is too large — please use a smaller photo" });
+      return;
+    }
+    const key = profileImageKey(kind as ImageKind, req.account!.username);
+    await db
+      .insert(platformMetaTable)
+      .values({ key, value: dataUrl })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: dataUrl } });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Failed to save image" });
+  }
+});
+
+router.delete("/platform/profile/image/:kind", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const kind = req.params.kind;
+    if (!IMAGE_KINDS.includes(kind as ImageKind)) {
+      res.status(400).json({ error: "Invalid image kind" });
+      return;
+    }
+    await db
+      .delete(platformMetaTable)
+      .where(eq(platformMetaTable.key, profileImageKey(kind as ImageKind, req.account!.username)));
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Failed to remove image" });
+  }
+});
+
+router.get("/platform/profile/image/:kind", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const kind = req.params.kind;
+    if (!IMAGE_KINDS.includes(kind as ImageKind)) {
+      res.status(400).json({ error: "Invalid image kind" });
+      return;
+    }
+    const [row] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, profileImageKey(kind as ImageKind, req.account!.username)))
+      .limit(1);
+    if (!row?.value || !DATA_URL_RE.test(row.value)) {
+      res.status(404).json({ error: "No image" });
+      return;
+    }
+    const [, mime] = row.value.match(/^data:(image\/[a-z]+);base64,/) ?? [];
+    const base64 = row.value.slice(row.value.indexOf(",") + 1);
+    const buf = Buffer.from(base64, "base64");
+    res.setHeader("Content-Type", mime || "image/png");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(buf);
+  } catch {
+    res.status(500).json({ error: "Failed to load image" });
+  }
+});
+
 export default router;

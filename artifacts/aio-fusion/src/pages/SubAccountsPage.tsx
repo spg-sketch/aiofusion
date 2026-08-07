@@ -97,13 +97,92 @@ function SubAccountsPage({
   const [enterError, setEnterError] = useState<string | null>(null);
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
   const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
+  const [accountWebsite, setAccountWebsite] = useState<string | null>(null);
+  // Profile images — value is a cache-busted URL when an image exists, null when none.
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<"avatar" | "logo" | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const profileImageUrl = (kind: "avatar" | "logo") =>
+    `${apiBase()}/api/platform/profile/image/${kind}?t=${Date.now()}`;
+
+  useEffect(() => {
+    // Probe for existing images; 404 simply means none uploaded yet.
+    (["avatar", "logo"] as const).forEach((kind) => {
+      fetch(`${apiBase()}/api/platform/profile/image/${kind}`, { credentials: "include" })
+        .then((r) => {
+          if (r.ok) (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+        })
+        .catch(() => { /* non-fatal */ });
+    });
+  }, []);
+
+  /** Downscales the chosen file on a canvas, then saves it server-side. */
+  const handleImageUpload = (kind: "avatar" | "logo", file: File) => {
+    setImageError(null);
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setImageError("Please choose a PNG, JPEG or WebP image.");
+      return;
+    }
+    setUploadingImage(kind);
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const maxSide = kind === "avatar" ? 256 : 512;
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { setUploadingImage(null); setImageError("Could not process the image."); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // PNG keeps logo transparency; JPEG keeps photos small.
+      const dataUrl = file.type === "image/jpeg"
+        ? canvas.toDataURL("image/jpeg", 0.85)
+        : canvas.toDataURL("image/png");
+      fetch(`${apiBase()}/api/platform/profile/image`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, dataUrl }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => null) as { error?: string } | null;
+            setImageError(body?.error ?? "Failed to save the image.");
+            return;
+          }
+          (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+        })
+        .catch(() => setImageError("Failed to save the image."))
+        .finally(() => setUploadingImage(null));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setUploadingImage(null);
+      setImageError("Could not read that image file.");
+    };
+    img.src = objectUrl;
+  };
+
+  const handleImageRemove = (kind: "avatar" | "logo") => {
+    setImageError(null);
+    fetch(`${apiBase()}/api/platform/profile/image/${kind}`, { method: "DELETE", credentials: "include" })
+      .then((r) => {
+        if (r.ok) (kind === "avatar" ? setAvatarUrl : setLogoUrl)(null);
+      })
+      .catch(() => { /* non-fatal */ });
+  };
   const [isMasterOwner, setIsMasterOwner] = useState<boolean>(false);
   const [switchingToMaster, setSwitchingToMaster] = useState(false);
   const [switchToMasterError, setSwitchToMasterError] = useState<string | null>(null);
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null; masterOwner?: boolean } | null) => {
+      .then((data: { account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null; masterOwner?: boolean; accountProfile?: { website?: string | null } | null } | null) => {
+        if (data?.accountProfile?.website) setAccountWebsite(data.accountProfile.website);
         if (data?.account) {
           setGoogleLinked(data.account.googleLinked ?? false);
           setMicrosoftLinked(data.account.microsoftLinked ?? false);
@@ -385,12 +464,59 @@ function SubAccountsPage({
           )}
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
-                <User size={16} />
-              </div>
+              <label
+                className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer overflow-hidden group relative"
+                style={{ background: accentSoft, color: accent }}
+                title={avatarUrl ? "Change your photo" : "Add your photo"}
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Your photo" className="w-full h-full object-cover" />
+                ) : uploadingImage === "avatar" ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <User size={16} />
+                )}
+                <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-[8px] font-bold uppercase tracking-[0.1em] text-white" style={{ background: "rgba(10,22,40,0.55)" }}>
+                  {avatarUrl ? "Change" : "Add photo"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={uploadingImage !== null}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) handleImageUpload("avatar", f);
+                  }}
+                />
+              </label>
               <div>
                 <p className="text-[14px] font-bold" style={{ color: ink }}>{session.username}</p>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role}</span>
+                  {accountWebsite && (
+                    <a
+                      href={accountWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:underline"
+                      style={{ color: vars.g500 }}
+                    >
+                      <Globe size={11} /> {accountWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                </div>
+                {avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleImageRemove("avatar")}
+                    className="mt-1 text-[11px] font-medium hover:underline"
+                    style={{ color: vars.g400 }}
+                  >
+                    Remove photo
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
@@ -435,6 +561,59 @@ function SubAccountsPage({
           </div>
           {switchToMasterError && (
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
+          )}
+
+          {/* BRAND / AGENCY LOGO */}
+          <div className="mt-5 pt-5 flex flex-col sm:flex-row sm:items-center gap-4" style={{ borderTop: `1px solid ${vars.g200}` }}>
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Brand logo" className="w-full h-full object-contain p-1" />
+                ) : uploadingImage === "logo" ? (
+                  <Loader2 size={16} className="animate-spin" style={{ color: vars.g400 }} />
+                ) : (
+                  <ImageIcon size={16} style={{ color: vars.g400 }} />
+                )}
+              </div>
+              <div>
+                <p className="text-[13px] font-bold" style={{ color: ink }}>Brand / agency logo</p>
+                <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
+                  {logoUrl ? "Shown on your account." : "Upload your company or brand logo (PNG, JPEG or WebP)."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <label
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50 cursor-pointer"
+                style={{ borderColor: vars.g300, color: ink, opacity: uploadingImage !== null ? 0.6 : 1 }}
+              >
+                <Upload size={13} /> {logoUrl ? "Replace logo" : "Upload logo"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={uploadingImage !== null}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) handleImageUpload("logo", f);
+                  }}
+                />
+              </label>
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => handleImageRemove("logo")}
+                  className="text-[12px] font-medium hover:underline"
+                  style={{ color: vars.g400 }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          {imageError && (
+            <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{imageError}</p>
           )}
         </div>
 
