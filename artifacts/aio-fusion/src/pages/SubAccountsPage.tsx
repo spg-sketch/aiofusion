@@ -159,6 +159,85 @@ function SubAccountsPage({
     });
   }, []);
 
+  // Logo sizing dialog state: source image + zoom/pan the user chooses.
+  const [logoAdjust, setLogoAdjust] = useState<{ src: string; imgW: number; imgH: number; zoom: number; offX: number; offY: number } | null>(null);
+  const logoDragRef = useRef<{ startX: number; startY: number; baseOffX: number; baseOffY: number } | null>(null);
+  const LOGO_PREVIEW = 240; // px, square preview in the dialog
+
+  /** Uploads a prepared data URL to the profile-image endpoint. */
+  const uploadImageDataUrl = (kind: "avatar" | "logo", dataUrl: string) => {
+    setUploadingImage(kind);
+    fetch(`${apiBase()}/api/platform/profile/image`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, dataUrl }),
+    })
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null) as { error?: string } | null;
+          setImageError(body?.error ?? "Failed to save the image.");
+          return;
+        }
+        (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+      })
+      .catch(() => setImageError("Failed to save the image."))
+      .finally(() => setUploadingImage(null));
+  };
+
+  /** Opens the sizing dialog for a chosen logo file. */
+  const handleLogoFileChosen = (file: File) => {
+    setImageError(null);
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setImageError("Please choose a PNG, JPEG or WebP image.");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Keep a reasonably sized working copy so the dialog stays snappy.
+      const workScale = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * workScale));
+      canvas.height = Math.max(1, Math.round(img.height * workScale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { URL.revokeObjectURL(objectUrl); setImageError("Could not process the image."); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      setLogoAdjust({ src: canvas.toDataURL("image/png"), imgW: canvas.width, imgH: canvas.height, zoom: 1, offX: 0, offY: 0 });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setImageError("Could not read that image file.");
+    };
+    img.src = objectUrl;
+  };
+
+  /** Renders the adjusted logo to a square 512px PNG and saves it. */
+  const handleLogoAdjustSave = () => {
+    if (!logoAdjust) return;
+    const { src, imgW, imgH, zoom, offX, offY } = logoAdjust;
+    const img = new Image();
+    img.onload = () => {
+      const OUT = 512;
+      const f = OUT / LOGO_PREVIEW;
+      const s0 = Math.min(LOGO_PREVIEW / imgW, LOGO_PREVIEW / imgH);
+      const drawW = imgW * s0 * zoom;
+      const drawH = imgH * s0 * zoom;
+      const x = LOGO_PREVIEW / 2 + offX - drawW / 2;
+      const y = LOGO_PREVIEW / 2 + offY - drawH / 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = OUT;
+      canvas.height = OUT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { setImageError("Could not process the image."); return; }
+      ctx.drawImage(img, x * f, y * f, drawW * f, drawH * f);
+      setLogoAdjust(null);
+      uploadImageDataUrl("logo", canvas.toDataURL("image/png"));
+    };
+    img.src = src;
+  };
+
   /** Downscales the chosen file on a canvas, then saves it server-side. */
   const handleImageUpload = (kind: "avatar" | "logo", file: File) => {
     setImageError(null);
@@ -663,35 +742,18 @@ function SubAccountsPage({
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     e.target.value = "";
-                    if (f) handleImageUpload("logo", f);
+                    if (f) handleLogoFileChosen(f);
                   }}
                 />
               </label>
               <div>
                 <p className="text-[13px] font-bold" style={{ color: ink }}>Brand / agency logo</p>
                 <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
-                  {logoUrl ? "Shown on your account." : "Upload your company or brand logo (PNG, JPEG or WebP)."}
+                  {logoUrl ? "Click the logo to change or resize it." : "Click the box to upload your company or brand logo (PNG, JPEG or WebP)."}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <label
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50 cursor-pointer"
-                style={{ borderColor: vars.g300, color: ink, opacity: uploadingImage !== null ? 0.6 : 1 }}
-              >
-                <Upload size={13} /> {logoUrl ? "Replace logo" : "Upload logo"}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  disabled={uploadingImage !== null}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) handleImageUpload("logo", f);
-                  }}
-                />
-              </label>
               {logoUrl && (
                 <button
                   type="button"
@@ -708,6 +770,83 @@ function SubAccountsPage({
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{imageError}</p>
           )}
         </div>
+
+        {/* LOGO SIZING DIALOG - zoom and drag the logo into the square frame */}
+        {logoAdjust && (
+          <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4" style={{ background: "rgba(10,22,40,0.55)" }} onClick={() => setLogoAdjust(null)}>
+            <div className="rounded-2xl p-6 w-full max-w-sm" style={{ background: "white", boxShadow: "0 24px 64px -16px rgba(16,43,54,0.4)" }} onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Size your logo</h3>
+              <p className="text-[12.5px] font-light mb-4" style={{ color: vars.g500 }}>Drag to position and use the slider to zoom until your logo sits nicely in the square.</p>
+              <div className="mx-auto mb-4 relative overflow-hidden rounded-xl touch-none select-none" style={{ width: LOGO_PREVIEW, height: LOGO_PREVIEW, border: `1px solid ${vars.g200}`, background: "repeating-conic-gradient(#f1f5f9 0% 25%, white 0% 50%) 50% / 20px 20px", cursor: "grab" }}
+                onPointerDown={(e) => {
+                  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                  logoDragRef.current = { startX: e.clientX, startY: e.clientY, baseOffX: logoAdjust.offX, baseOffY: logoAdjust.offY };
+                }}
+                onPointerMove={(e) => {
+                  const d = logoDragRef.current;
+                  if (!d) return;
+                  setLogoAdjust((prev) => prev ? { ...prev, offX: d.baseOffX + (e.clientX - d.startX), offY: d.baseOffY + (e.clientY - d.startY) } : prev);
+                }}
+                onPointerUp={() => { logoDragRef.current = null; }}
+                onPointerCancel={() => { logoDragRef.current = null; }}
+              >
+                {(() => {
+                  const s0 = Math.min(LOGO_PREVIEW / logoAdjust.imgW, LOGO_PREVIEW / logoAdjust.imgH);
+                  const w = logoAdjust.imgW * s0 * logoAdjust.zoom;
+                  const hh = logoAdjust.imgH * s0 * logoAdjust.zoom;
+                  return (
+                    <img
+                      src={logoAdjust.src}
+                      alt="Logo preview"
+                      draggable={false}
+                      className="absolute pointer-events-none"
+                      style={{ width: w, height: hh, left: LOGO_PREVIEW / 2 + logoAdjust.offX - w / 2, top: LOGO_PREVIEW / 2 + logoAdjust.offY - hh / 2, maxWidth: "none" }}
+                    />
+                  );
+                })()}
+              </div>
+              <div className="flex items-center gap-3 mb-5">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>Zoom</span>
+                <input
+                  type="range"
+                  min={0.4}
+                  max={3}
+                  step={0.01}
+                  value={logoAdjust.zoom}
+                  onChange={(e) => setLogoAdjust((prev) => prev ? { ...prev, zoom: Number(e.target.value) } : prev)}
+                  className="flex-1"
+                  style={{ accentColor: accent }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setLogoAdjust((prev) => prev ? { ...prev, zoom: 1, offX: 0, offY: 0 } : prev)}
+                  className="text-[11px] font-semibold underline"
+                  style={{ color: vars.g500 }}
+                >
+                  Reset
+                </button>
+              </div>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLogoAdjust(null)}
+                  className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                  style={{ borderColor: vars.g300, color: ink }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogoAdjustSave}
+                  className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90"
+                  style={{ background: accent }}
+                >
+                  Save logo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
         {onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
