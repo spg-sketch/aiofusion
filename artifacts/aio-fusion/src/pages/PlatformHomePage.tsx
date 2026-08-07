@@ -168,7 +168,11 @@ function PlatformHomePage({
       }
       return;
     }
-    if (status === "mfa") {
+    if (status === "linked_microsoft") {
+      // Microsoft account linked successfully — nothing to show, the account
+      // page will reflect the linked state on next load.
+      setLoginError(null);
+    } else if (status === "mfa") {
       // SSO login needs a two-factor step: the callback set a short-lived
       // cookie holding the pending token (kept out of the URL so it never
       // lands in browser history or logs). Read it once, clear it, and show
@@ -210,6 +214,8 @@ function PlatformHomePage({
         no_email: "Your account does not have a verified email address. Please use password sign-in.",
         unexpected: "An unexpected error occurred. Please try again.",
         access_denied: "Sign-in was cancelled.",
+        microsoft_already_linked: "That Microsoft account is already linked to a different AIO Fusion account.",
+        not_signed_in: "You need to be signed in to link an account. Please sign in and try again.",
       };
       setLoginError(friendly[msg] ?? `Sign-in failed (${msg}). Please try again or sign in with your password.`);
     }

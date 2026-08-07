@@ -92,14 +92,18 @@ function SubAccountsPage({
   const [enteringUsername, setEnteringUsername] = useState<string | null>(null);
   const [enterError, setEnterError] = useState<string | null>(null);
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
+  const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
   const [isMasterOwner, setIsMasterOwner] = useState<boolean>(false);
   const [switchingToMaster, setSwitchingToMaster] = useState(false);
   const [switchToMasterError, setSwitchToMasterError] = useState<string | null>(null);
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { account?: { googleLinked?: boolean } | null; masterOwner?: boolean } | null) => {
-        if (data?.account) setGoogleLinked(data.account.googleLinked ?? false);
+      .then((data: { account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null; masterOwner?: boolean } | null) => {
+        if (data?.account) {
+          setGoogleLinked(data.account.googleLinked ?? false);
+          setMicrosoftLinked(data.account.microsoftLinked ?? false);
+        }
         setIsMasterOwner(data?.masterOwner === true);
       })
       .catch(() => { /* non-fatal */ });
@@ -369,7 +373,12 @@ function SubAccountsPage({
 
         {/* MY ACCOUNT */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>My account</h2>
+          <h2 className="text-[16px] font-bold mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>My account</h2>
+          {(googleLinked === false || microsoftLinked === false) && (
+            <p className="text-[13.5px] leading-[1.65] mb-4" style={{ color: vars.g600 }}>
+              Linking is optional — if you would like to link your account to an existing Google or Microsoft account, please select below.
+            </p>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
               <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
@@ -392,6 +401,19 @@ function SubAccountsPage({
                   style={{ borderColor: vars.g300, color: ink }}
                 >
                   <LinkIcon size={13} /> Link Google account
+                </a>
+              ) : null}
+              {microsoftLinked === true ? (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold" style={{ background: "#E6F4EA", color: "#1B7A3E" }}>
+                  <CheckCircle2 size={13} /> Microsoft linked
+                </span>
+              ) : microsoftLinked === false ? (
+                <a
+                  href={`${apiBase()}/api/platform/auth/microsoft?action=link`}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] border transition-all hover:bg-gray-50"
+                  style={{ borderColor: vars.g300, color: ink }}
+                >
+                  <LinkIcon size={13} /> Link Microsoft account
                 </a>
               ) : null}
               {isMasterOwner && (

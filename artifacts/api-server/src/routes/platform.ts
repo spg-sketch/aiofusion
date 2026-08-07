@@ -234,6 +234,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     if (adminAccount) impersonating = { by: adminAccount.username, byRole: adminAccount.role };
   }
   let googleLinked = false;
+  let microsoftLinked = false;
   let hasPassword = false;
   let masterOwner = false;
   let emailVerified: boolean | null = null;
@@ -264,6 +265,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       }
       if (u) {
         googleLinked = !!(u.googleId);
+        microsoftLinked = !!(u.microsoftId);
         hasPassword = !!(u.passwordHash);
         emailVerified = u.emailVerified ?? null;
       }
@@ -290,6 +292,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     ? {
         ...req.account,
         googleLinked,
+        microsoftLinked,
         membershipRole: req.account.membershipRole ?? null,
         projectAccess: req.account.projectAccess ?? null,
       }
