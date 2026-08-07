@@ -365,7 +365,9 @@ function PlatformHomePage({
             Welcome to <span style={{ color: accent }}>AIO Fusion</span><span className="text-2xl sm:text-3xl lg:text-4xl font-light ml-2 align-baseline" style={{ color: vars.g500 }}>(beta)</span>
           </h1>
           <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] whitespace-nowrap" style={{ color: vars.g600 }}>
-            Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority.
+            {session
+              ? "Manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority."
+              : "Sign in to manage your PR and marketing projects, then move through The AIO Marketing Loop to grow business AI authority."}
           </p>
         </div>
 
