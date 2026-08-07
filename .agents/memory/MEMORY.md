@@ -43,4 +43,5 @@
 - [notify-email test mocks](aio-fusion-notify-email-mock-factories.md) — use importOriginal auto-wrap factories, never static export lists; jsdom App tests need asyncUtilTimeout 5000.
 - [AIO Fusion intake prefill](aio-fusion-intake-prefill.md) — prefill in lazy initialisers gated on null intake key + non-null accountProfile; refresh profile on in-session login, clear on logout.
 - [AIO Fusion SEO pre-render pipeline](aio-fusion-seo-prerender.md) — public pages SSG'd via 3-step build + pageMeta.ts; new public routes/articles must be added to pageMeta or they get shell defaults.
+- [Legacy pending_approval accounts](aio-fusion-legacy-pending-approval.md) — pending_approval is legacy, treated as active in all login paths; only suspended blocks; admin reject suspends, never deletes.
 - [OAuth interstitial vs password shield](aio-fusion-oauth-interstitial-shield.md) — SSO stuck on "Completing sign-in…" on deployed site = deployment visibility is password/private; shield swallows the interstitial POST; check visibility before debugging code.
