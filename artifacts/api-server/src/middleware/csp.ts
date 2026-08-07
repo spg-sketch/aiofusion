@@ -43,6 +43,16 @@ function buildCspHeader(isDev: boolean): string {
 const isDev = process.env.NODE_ENV !== "production";
 const cspHeaderValue = buildCspHeader(isDev);
 
+/**
+ * CSP header for responses that must run a specific inline script (e.g. the
+ * OAuth interstitial's auto-submit form). Identical to the global policy but
+ * with a per-response nonce added to script-src. The caller must put the same
+ * nonce on the <script> tag.
+ */
+export function cspHeaderWithScriptNonce(nonce: string): string {
+  return cspHeaderValue.replace("script-src 'self'", `script-src 'self' 'nonce-${nonce}'`);
+}
+
 export function cspMiddleware(
   _req: Request,
   res: Response,

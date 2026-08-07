@@ -64,6 +64,7 @@ import {
   normalizeMembershipRole,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import { cspHeaderWithScriptNonce } from "../middleware/csp";
 import {
   getMfaState,
   getMfaEnabledSet,
@@ -2085,7 +2086,7 @@ function htmlAttrEncode(s: string): string {
 // Build the interstitial page that auto-submits the OAuth code via a POST form.
 // Scanners follow GETs but never execute JS or submit forms, so the one-time
 // authorization code is never redeemed until the real browser acts on it.
-function buildOauthInterstitial(postAction: string, code: string, state: string): string {
+function buildOauthInterstitial(postAction: string, code: string, state: string, nonce: string): string {
   const safeAction = htmlAttrEncode(postAction);
   const safeCode = htmlAttrEncode(code);
   const safeState = htmlAttrEncode(state);
@@ -2097,7 +2098,7 @@ function buildOauthInterstitial(postAction: string, code: string, state: string)
     `<form id="f" method="POST" action="${safeAction}">` +
     `<input type="hidden" name="code" value="${safeCode}">` +
     `<input type="hidden" name="state" value="${safeState}">` +
-    `</form><script>document.getElementById('f').submit();</script></body></html>`;
+    `</form><script nonce="${htmlAttrEncode(nonce)}">document.getElementById('f').submit();</script></body></html>`;
 }
 
 // Known link-scanner / bot user-agent patterns. When matched the GET callback
@@ -2199,9 +2200,13 @@ router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
   // same path (method=POST) so the redirect_uri registered with Google stays
   // unchanged. The aio_oauth_state and aio_oauth_link cookies survive to the POST.
   const postUrl = `${origin}/api/platform/auth/google/callback`;
+  const nonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).send(buildOauthInterstitial(postUrl, code, state));
+  // The global CSP (script-src 'self') blocks inline scripts, which would
+  // silently break the auto-submit form. Re-issue the header with a nonce.
+  res.setHeader("Content-Security-Policy", cspHeaderWithScriptNonce(nonce));
+  res.status(200).send(buildOauthInterstitial(postUrl, code, state, nonce));
 });
 
 // POST callback: the real code redemption, triggered by the interstitial's
@@ -2551,9 +2556,12 @@ router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) =>
   // redirect_uri for Microsoft is getAppBaseUrl()-based (env var) — same path,
   // same method split, so no Azure app registration change is needed.
   const postUrl = `${origin}/api/platform/auth/microsoft/callback`;
+  const nonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).send(buildOauthInterstitial(postUrl, code, state));
+  // Global CSP blocks inline scripts — add a per-response nonce (see Google callback).
+  res.setHeader("Content-Security-Policy", cspHeaderWithScriptNonce(nonce));
+  res.status(200).send(buildOauthInterstitial(postUrl, code, state, nonce));
 });
 
 // POST callback: actual code redemption for Microsoft.
