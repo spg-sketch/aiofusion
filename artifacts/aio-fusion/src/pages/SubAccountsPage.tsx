@@ -550,7 +550,7 @@ function SubAccountsPage({
                 ) : (
                   <User size={16} />
                 )}
-                <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-[8px] font-bold uppercase tracking-[0.1em] text-white" style={{ background: "rgba(10,22,40,0.55)" }}>
+                <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-center leading-[1.2] px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-white" style={{ background: "rgba(10,22,40,0.55)" }}>
                   {avatarUrl ? "Change" : "Add photo"}
                 </span>
                 <input
@@ -640,7 +640,11 @@ function SubAccountsPage({
           {/* BRAND / AGENCY LOGO */}
           <div className="mt-5 pt-5 flex flex-col sm:flex-row sm:items-center gap-4" style={{ borderTop: `1px solid ${vars.g200}` }}>
             <div className="flex items-center gap-3 flex-1">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
+              <label
+                className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer group relative"
+                style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}
+                title={logoUrl ? "Change your logo" : "Add your logo"}
+              >
                 {logoUrl ? (
                   <img src={logoUrl} alt="Brand logo" className="w-full h-full object-contain p-1" />
                 ) : uploadingImage === "logo" ? (
@@ -648,7 +652,21 @@ function SubAccountsPage({
                 ) : (
                   <ImageIcon size={16} style={{ color: vars.g400 }} />
                 )}
-              </div>
+                <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-center leading-[1.2] px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-white" style={{ background: "rgba(10,22,40,0.55)" }}>
+                  {logoUrl ? "Change" : "Add logo"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={uploadingImage !== null}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) handleImageUpload("logo", f);
+                  }}
+                />
+              </label>
               <div>
                 <p className="text-[13px] font-bold" style={{ color: ink }}>Brand / agency logo</p>
                 <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
