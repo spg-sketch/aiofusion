@@ -513,6 +513,7 @@ describe("POST /api/platform/signup", () => {
       name: "Alice Agency",
       email: EMAIL,
       companyName: "Alice Corp",
+      website: "https://example.com",
       password: "supersecure123",
     });
     expect(status).toBe(201);
@@ -528,6 +529,7 @@ describe("POST /api/platform/signup", () => {
       name: "Bob Builder",
       email: EMAIL,
       companyName: "Bob LLC",
+      website: "https://example.com",
       password: "supersecure123",
     });
 
@@ -546,6 +548,7 @@ describe("POST /api/platform/signup", () => {
       name: "Carol Company",
       email: EMAIL,
       companyName: "Carol Inc",
+      website: "https://example.com",
       password: "supersecure123",
     });
 
@@ -580,12 +583,14 @@ describe("POST /api/platform/signup", () => {
       name: "Dave Duplicate",
       email: EMAIL,
       companyName: "Dave Co",
+      website: "https://example.com",
       password: "supersecure123",
     });
     const { status } = await signup({
       name: "Dave Again",
       email: EMAIL,
       companyName: "Dave Again Co",
+      website: "https://example.com",
       password: "supersecure123",
     });
     expect(status).toBe(409);
@@ -601,6 +606,7 @@ describe("POST /api/platform/signup", () => {
       name: "Short Pass",
       email: EMAIL,
       companyName: "Short Co",
+      website: "https://example.com",
       password: "abc",
     });
     expect(status).toBe(400);
@@ -611,6 +617,7 @@ describe("POST /api/platform/signup", () => {
       name: "Bad Email",
       email: "not-an-email",
       companyName: "Bad Co",
+      website: "https://example.com",
       password: "supersecure123",
     });
     expect(status).toBe(400);

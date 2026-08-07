@@ -1040,6 +1040,7 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
     if (!name) { res.status(400).json({ error: "Your name is required." }); return; }
     if (!email || !EMAIL_RE.test(email)) { res.status(400).json({ error: "A valid email address is required." }); return; }
     if (!companyName) { res.status(400).json({ error: "Company name is required." }); return; }
+    if (!website) { res.status(400).json({ error: "Company website is required." }); return; }
     if (!password || password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters." }); return; }
 
     // Email must be unique.
