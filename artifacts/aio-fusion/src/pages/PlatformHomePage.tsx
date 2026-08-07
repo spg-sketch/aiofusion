@@ -644,7 +644,7 @@ function PlatformHomePage({
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
-                    <span className="text-[12px] font-light" style={{ color: "rgba(255,255,255,0.55)" }}>or fill in your details below</span>
+                    <span className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>or fill in your details below</span>
                     <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.2)" }} />
                   </div>
                 </div>
