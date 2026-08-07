@@ -69,10 +69,13 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold mb-3 leading-tight" style={{ fontFamily: "'Alice', Georgia, serif", color: ink }}>
-          What best describes your account?
+          Thank you for signing up to AIO Fusion
         </h1>
+        <p className="text-[16px] leading-[1.7] mb-2" style={{ color: vars.g600 }}>
+          We offer two types of account: a <strong style={{ color: ink }}>Direct Client</strong> account, for managing your own company or brand, and an <strong style={{ color: ink }}>Agency / Partner</strong> account, for managing PR and marketing on behalf of multiple clients.
+        </p>
         <p className="text-[16px] leading-[1.7] mb-10" style={{ color: vars.g600 }}>
-          This helps us set up your dashboard correctly. You can always update this later from your account settings.
+          Which would suit you best? Don't worry — you can change this later from your account settings.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
@@ -92,7 +95,7 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
             </div>
             <div className="text-[17px] font-bold mb-2" style={{ color: ink }}>Agency / Partner</div>
             <p className="text-[13.5px] leading-[1.65]" style={{ color: vars.g600 }}>
-              You manage PR and marketing for multiple clients. Add client accounts and view their dashboards from one place.
+              For agencies and consultants working on behalf of clients. Add client accounts, manage their projects, and view every dashboard from one place.
             </p>
             {selected === "agency" && (
               <div className="mt-4 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>
@@ -118,9 +121,9 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
             <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: selected === "client" ? teal : vars.g100 }}>
               <User size={22} color={selected === "client" ? "white" : vars.g500} />
             </div>
-            <div className="text-[17px] font-bold mb-2" style={{ color: ink }}>Client</div>
+            <div className="text-[17px] font-bold mb-2" style={{ color: ink }}>Direct Client</div>
             <p className="text-[13.5px] leading-[1.65]" style={{ color: vars.g600 }}>
-              You manage PR and marketing for your own company or brand. One focused workspace, all your projects in one place.
+              For businesses managing PR and marketing for their own company or brand. One focused workspace with all your projects in one place.
             </p>
             {selected === "client" && (
               <div className="mt-4 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: teal }}>
