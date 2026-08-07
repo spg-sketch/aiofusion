@@ -153,7 +153,7 @@ export function addUser(username: string, password: string, role: Role, parent?:
   const u = username.trim();
   if (!u) return { ok: false, error: "Username is required." };
   if (!/^[a-zA-Z0-9_.-]{2,32}$/.test(u)) return { ok: false, error: "Username must be 2–32 characters: letters, numbers, _.-" };
-  if (!password || password.length < 4) return { ok: false, error: "Password must be at least 4 characters." };
+  if (!password || password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
   const users = getUsers();
   if (users.some((x) => x.username.toLowerCase() === u.toLowerCase())) {
     return { ok: false, error: "That username already exists." };
@@ -223,7 +223,7 @@ export function deleteUser(username: string): { ok: true } | { ok: false; error:
 }
 
 export function changePassword(username: string, newPassword: string): { ok: true } | { ok: false; error: string } {
-  if (!newPassword || newPassword.length < 4) return { ok: false, error: "Password must be at least 4 characters." };
+  if (!newPassword || newPassword.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
   const users = getUsers();
   const idx = users.findIndex((x) => x.username.toLowerCase() === username.toLowerCase());
   if (idx === -1) return { ok: false, error: "User not found." };

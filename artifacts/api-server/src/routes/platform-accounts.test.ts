@@ -144,7 +144,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   it("lets the master create an agency with the requested role honoured", async () => {
     const { status, json } = await create({
       username: "newagency",
-      password: "pw12",
+      password: "pw123456",
       role: "agency",
     });
     expect(status).toBe(200);
@@ -154,14 +154,14 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   });
 
   it("lets the master create a direct client", async () => {
-    const { status } = await create({ username: "directclient", password: "pw12", role: "client" });
+    const { status } = await create({ username: "directclient", password: "pw123456", role: "client" });
     expect(status).toBe(200);
     expect(created("directclient")?.role).toBe("client");
   });
 
   it("coerces an agency's requested role to client regardless of what is asked", async () => {
     actor = { username: "agency", role: "agency" };
-    const { status } = await create({ username: "sub1", password: "pw12", role: "agency" });
+    const { status } = await create({ username: "sub1", password: "pw123456", role: "agency" });
     expect(status).toBe(200);
     expect(created("sub1")?.role).toBe("client");
     expect(created("sub1")?.parent).toBe("agency");
@@ -170,7 +170,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   it("blocks a direct client (leaf account) from creating any account", async () => {
     actor = { username: "client1", role: "client" };
     const before = h.state.accounts.length;
-    const { status } = await create({ username: "grandchild", password: "pw12", role: "client" });
+    const { status } = await create({ username: "grandchild", password: "pw123456", role: "client" });
     expect(status).toBe(403);
     expect(h.state.accounts.length).toBe(before);
   });
@@ -178,7 +178,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   it("stores an optional display name when provided", async () => {
     const { status } = await create({
       username: "named",
-      password: "pw12",
+      password: "pw123456",
       role: "client",
       displayName: "Friendly Name",
     });
@@ -187,7 +187,7 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   });
 
   it("rejects a duplicate username (409)", async () => {
-    const { status } = await create({ username: "agency", password: "pw12", role: "client" });
+    const { status } = await create({ username: "agency", password: "pw123456", role: "client" });
     expect(status).toBe(409);
   });
 

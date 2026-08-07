@@ -3336,8 +3336,8 @@ router.post(
         });
         return;
       }
-      if (!password || password.length < 4) {
-        res.status(400).json({ error: "Password must be at least 4 characters." });
+      if (!password || password.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters." });
         return;
       }
       // A direct client is a leaf account and may not create sub-accounts.
@@ -3444,8 +3444,8 @@ router.post(
         res.status(400).json({ error: "Username is required." });
         return;
       }
-      if (!newPassword || newPassword.length < 4) {
-        res.status(400).json({ error: "Password must be at least 4 characters." });
+      if (!newPassword || newPassword.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters." });
         return;
       }
       const isSelf = target === normUsername(actor.username);

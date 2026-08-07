@@ -996,7 +996,7 @@ function UsersAdminPage({
                 type="text"
                 value={pwValue}
                 onChange={(e) => setPwValue(e.target.value)}
-                placeholder="New password (min 4 chars)"
+                placeholder="New password (min 8 chars)"
                 className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
@@ -1387,7 +1387,7 @@ function UsersAdminPage({
                 type="text"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="min 4 characters"
+                placeholder="min 8 characters"
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />

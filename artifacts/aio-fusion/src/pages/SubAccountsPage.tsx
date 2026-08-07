@@ -690,7 +690,7 @@ function SubAccountsPage({
               />
             </div>
             <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact full name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <input
                 type="text"
                 value={newContactName}
@@ -718,7 +718,7 @@ function SubAccountsPage({
                 type="text"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="min 4 characters"
+                placeholder="min 8 characters"
                 required
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
@@ -823,7 +823,7 @@ function SubAccountsPage({
                           type="text"
                           value={pwValue}
                           onChange={(e) => setPwValue(e.target.value)}
-                          placeholder="New password (min 4 chars)"
+                          placeholder="New password (min 8 chars)"
                           className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
                           style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
                         />

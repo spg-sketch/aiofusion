@@ -26,7 +26,7 @@ describe("auth sub-accounts and visibility", () => {
   });
 
   it("creates a sub-account linked to its parent", () => {
-    const result = addUser("client-a", "pw-client", "user", "agency");
+    const result = addUser("client-a", "pw-client-1", "user", "agency");
     expect(result.ok).toBe(true);
     const subs = getSubAccounts("agency");
     expect(subs.map((u) => u.username)).toEqual(["client-a"]);
@@ -34,7 +34,7 @@ describe("auth sub-accounts and visibility", () => {
   });
 
   it("matches sub-accounts case-insensitively on parent", () => {
-    addUser("client-a", "pw-client", "user", "AGENCY");
+    addUser("client-a", "pw-client-1", "user", "AGENCY");
     expect(getSubAccounts("agency").map((u) => u.username)).toEqual(["client-a"]);
   });
 
@@ -47,22 +47,22 @@ describe("auth sub-accounts and visibility", () => {
   });
 
   it("a normal account sees itself plus its sub-accounts (recursively)", () => {
-    addUser("client-a", "pw-a", "user", "agency");
-    addUser("client-b", "pw-b", "user", "agency");
-    addUser("client-a-sub", "pw-as", "user", "client-a");
+    addUser("client-a", "pw-a-12345", "user", "agency");
+    addUser("client-b", "pw-b-12345", "user", "agency");
+    addUser("client-a-sub", "pw-as-1234", "user", "client-a");
     const visible = getVisibleUsernames({ username: "agency", role: "user" });
     expect(visible).not.toBeNull();
     expect(new Set(visible!)).toEqual(new Set(["agency", "client-a", "client-b", "client-a-sub"]));
   });
 
   it("a sub-account sees only its own projects", () => {
-    addUser("client-a", "pw-a", "user", "agency");
+    addUser("client-a", "pw-a-12345", "user", "agency");
     const visible = getVisibleUsernames({ username: "client-a", role: "user" });
     expect(visible).toEqual(["client-a"]);
   });
 
   it("does not leak another top-level account's projects", () => {
-    addUser("client-a", "pw-a", "user", "agency");
+    addUser("client-a", "pw-a-12345", "user", "agency");
     const session: Session = { username: "agency", role: "user" };
     expect(canViewOwner(session, "agency")).toBe(true);
     expect(canViewOwner(session, "client-a")).toBe(true);
