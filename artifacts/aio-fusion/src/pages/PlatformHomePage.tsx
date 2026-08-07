@@ -186,6 +186,9 @@ function PlatformHomePage({
       } else {
         setLoginError("Two-factor sign-in could not be started. Please try again.");
       }
+    } else if (status === "pending") {
+      // Legacy servers may still send this for accounts awaiting approval.
+      setLoginError("Your account is awaiting approval. Please try again later or contact support.");
     } else if (status === "suspended") {
       setLoginError("Your account has been suspended. Please contact support.");
     } else if (status === "error") {

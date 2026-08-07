@@ -2341,10 +2341,9 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
-          if (account.status === "pending_approval") {
-            res.redirect(`${origin}/?oauth_status=pending`);
-            return;
-          }
+          // Note: legacy "pending_approval" is treated as active — the
+          // signup-approval flow was removed (new signups are active
+          // immediately), matching the password-login path.
           if (account.status === "suspended") {
             res.redirect(`${origin}/?oauth_status=suspended`);
             return;
@@ -2389,10 +2388,6 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       .where(ilike(platformAccountsTable.email, userInfo.email))
       .limit(1);
     if (existing) {
-      if (existing.status === "pending_approval") {
-        res.redirect(`${origin}/?oauth_status=pending`);
-        return;
-      }
       if (existing.status === "suspended") {
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
@@ -2662,7 +2657,6 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
-          if (account.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
           try {
@@ -2691,7 +2685,6 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
-          if (account.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
           try {
@@ -2714,7 +2707,6 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     // Step 3: look up by email in platform_accounts (legacy accounts)
     const [legacyMs] = await db.select().from(platformAccountsTable).where(ilike(platformAccountsTable.email, msEmail)).limit(1);
     if (legacyMs) {
-      if (legacyMs.status === "pending_approval") { res.redirect(`${origin}/?oauth_status=pending`); return; }
       if (legacyMs.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
       let userId: string | undefined; let activeCompanyId: string | undefined;
       try {

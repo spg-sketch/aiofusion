@@ -718,7 +718,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null for a new-path session whose company is pending_approval", async () => {
+  it("keeps a new-path session whose company is legacy pending_approval (treated as active)", async () => {
     const companyId = "company-pending-001";
     mock.companiesById.set(companyId, {
       id: companyId,
@@ -739,7 +739,8 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
     });
 
     const result = await getPlatformSessionAccount("new-path-pending-sid");
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.username).toBe("pending-co");
   });
 
   // ---------------------------------------------------------------------------

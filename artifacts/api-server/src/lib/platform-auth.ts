@@ -776,10 +776,11 @@ export async function getPlatformSessionAccount(
       .where(eq(platformCompaniesTable.id, row.activeCompanyId))
       .limit(1);
     if (company) {
-      // Mirror the same status guard as the legacy path: suspended or
-      // pending_approval companies must not be granted access. Invalidate
-      // the session so the user is forced to re-authenticate after approval.
-      if (company.status === "suspended" || company.status === "pending_approval") {
+      // Mirror the same status guard as the legacy path: suspended companies
+      // must not be granted access. Invalidate the session so the user is
+      // forced to re-authenticate. (Legacy "pending_approval" is treated as
+      // active — the signup-approval flow was removed.)
+      if (company.status === "suspended") {
         await deletePlatformSession(sid);
         return null;
       }
