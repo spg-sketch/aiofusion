@@ -366,8 +366,8 @@ function PlatformHomePage({
           </h1>
           <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] whitespace-nowrap" style={{ color: vars.g600 }}>
             {session
-              ? "Manage your PR and marketing projects, then move through The AIO Marketing Approach to grow business AI authority."
-              : "Sign in to manage your PR and marketing projects, then move through The AIO Marketing Approach to grow business AI authority."}
+              ? "Manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."
+              : "Sign in to manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."}
           </p>
         </div>
 
@@ -1189,7 +1189,7 @@ function PlatformHomePage({
               <Repeat size={20} />
             </div>
             <div>
-              <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>The AIO Marketing Approach</h2>
+              <h2 className="text-[22px] font-bold" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>The AIO Fusion Approach</h2>
               <p className="text-[14px] font-light mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>Each stage improves how often AI recommends your business.</p>
             </div>
           </div>
@@ -1217,7 +1217,7 @@ function PlatformHomePage({
             </div>
           </div>
           <p className="text-[14px] font-medium mt-8 leading-[1.7] max-w-3xl" style={{ color: "rgba(255,255,255,0.8)" }}>
-            The AIO Marketing Approach runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
+            The AIO Fusion Approach runs through every project: capture project data, audit earned media and site visibility, optimise content, plan and target releases, measure impact, then repeat.
           </p>
         </div>
 
