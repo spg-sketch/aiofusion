@@ -1034,7 +1034,9 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
     const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 64) : "";
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const companyName = typeof req.body?.companyName === "string" ? req.body.companyName.trim().slice(0, 64) : "";
-    const website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 128) : "";
+    const websiteRaw = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 128) : "";
+    // Forgiving format: prepend https:// when the scheme was left off.
+    const website = websiteRaw && !/^https?:\/\//i.test(websiteRaw) ? `https://${websiteRaw}` : websiteRaw;
     const password = typeof req.body?.password === "string" ? req.body.password : "";
 
     if (!name) { res.status(400).json({ error: "Your name is required." }); return; }
