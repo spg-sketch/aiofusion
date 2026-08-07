@@ -865,7 +865,7 @@ function PlatformHomePage({
                   <User size={24} />
                 </div>
                 <div>
-                  <span className="inline-flex items-center mb-1.5 px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(79,143,255,0.15)", color: session.role === "admin" ? "white" : vars.teal }}>
+                  <span className="inline-flex items-center mb-1.5 px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {roleLabel(session.role)}
                   </span>
                   <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
