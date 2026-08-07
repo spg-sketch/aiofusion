@@ -1,5 +1,9 @@
 # Workspace
 
+## User preferences
+
+- NEVER use em dashes (U+2014) anywhere in site content, UI copy, emails, or AI-generated text. Use a plain hyphen ( - ) instead. Guard tests (`no-em-dash.test.ts` in both aio-fusion and api-server) fail the build if one appears. British spelling, no emojis.
+
 ## Overview
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.

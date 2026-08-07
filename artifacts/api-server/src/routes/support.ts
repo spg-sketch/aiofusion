@@ -49,9 +49,9 @@ function isAdmin(req: Request): boolean {
 
 // ── GET /api/support/faq ───────────────────────────────────────────────────
 // Returns FAQ entries. Optional query params:
-//   q          — full-text search across question, answer, and keywords
-//   category   — filter by category name
-//   admin=1    — (admin only) return all entries including inactive ones
+//   q - full-text search across question, answer, and keywords
+//   category - filter by category name
+//   admin=1 - (admin only) return all entries including inactive ones
 router.get("/support/faq", async (req: Request, res: Response) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -98,7 +98,7 @@ router.get("/support/faq", async (req: Request, res: Response) => {
           //   question field: 4 × term-length weight  (most specific)
           //   keywords field: 2 × term-length weight  (curated synonyms)
           //   answer field:   1 × term-length weight  (broad context)
-          // Longer terms earn proportionally more — "methodology" beats "me"
+          // Longer terms earn proportionally more - "methodology" beats "me"
           score += effectiveTerms.reduce((acc, t) => {
             const w = Math.min(t.length, 6); // cap weight at length 6
             let ts = 0;
@@ -306,7 +306,7 @@ router.post(
         return;
       }
       const account = req.account!;
-      // Validate optional base64 attachment — reject anything over 512 KB
+      // Validate optional base64 attachment - reject anything over 512 KB
       let resolvedAttachmentUrl: string | null = null;
       if (typeof attachmentUrl === "string" && attachmentUrl.startsWith("data:")) {
         const bytes = Math.ceil((attachmentUrl.length * 3) / 4);
@@ -321,7 +321,7 @@ router.post(
         .values({
           accountUsername: account.username,
           userRole: account.role ?? "user",
-          // projectId is NOT accepted from the client — it would allow spoofing.
+          // projectId is NOT accepted from the client - it would allow spoofing.
           // If needed it can be derived from server-side session in the future.
           projectId: null,
           category:
@@ -673,7 +673,7 @@ router.post(
             }
           }
         } catch (err) {
-          console.error("[support] POST /tickets/:id/messages — reply notification error (non-fatal)", err);
+          console.error("[support] POST /tickets/:id/messages - reply notification error (non-fatal)", err);
         }
       }
     } catch (err) {

@@ -14,7 +14,7 @@ import { MfaSecuritySection } from "./MfaPanels";
 const ink = "#0a1628";
 const accent = "#C8497A";
 
-/** Sessions, two-factor, change/set password and account deletion — rendered
+/** Sessions, two-factor, change/set password and account deletion - rendered
  *  as a white card on the My Account page (moved from the platform home card). */
 export function AccountSecurityCard({ session, onSignOut }: { session: LocalSession; onSignOut: () => void }) {
   // Whether the signed-in user has a password (SSO-only accounts don't).
@@ -213,7 +213,7 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
       {/* CHANGE PASSWORD / SET A PASSWORD */}
       <div className="mt-4 pt-5" style={{ borderTop: `1px solid ${vars.g200}` }}>
         {hasPassword === false ? (
-          /* --- SSO-ONLY: no password set yet — offer email-link flow --- */
+          /* --- SSO-ONLY: no password set yet - offer email-link flow --- */
           <div>
             <button
               onClick={() => { setShowChangePassword((v) => !v); setSetPasswordError(null); }}
@@ -229,14 +229,14 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
                   <div className="flex items-start gap-3" style={{ color: "#1B7A3E" }}>
                     <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
                     <p className="text-[14px] font-medium leading-[1.6]">
-                      Check your email — we've sent you a link to set your password.
+                      Check your email - we've sent you a link to set your password.
                       The link expires in 1 hour and can only be used once.
                     </p>
                   </div>
                 ) : (
                   <>
                     <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
-                      Your account currently uses Google or Microsoft sign-in only — no password is set.
+                      Your account currently uses Google or Microsoft sign-in only - no password is set.
                       Click below and we'll email you a one-time link to choose a password.
                       Once set, you can sign in with your email and password as well.
                     </p>
@@ -259,7 +259,7 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
             )}
           </div>
         ) : (
-          /* --- REGULAR: account has a password — offer change flow --- */
+          /* --- REGULAR: account has a password - offer change flow --- */
           <div>
             <button
               onClick={() => {

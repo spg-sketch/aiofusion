@@ -729,7 +729,7 @@ type IntakeStatus = "Draft" | "Optimised" | "Accepted";
 // Props passed by App.tsx for optional intake prefill.
 // accountProfile is only non-null when App is confident it is safe to prefill
 // (direct account-owner session, not impersonating, not a team member).
-// role is the account role — "client" triggers prefill; "agency" shows a
+// role is the account role - "client" triggers prefill; "agency" shows a
 // neutral "this form is for your client" note without touching field values.
 export type IntakeAccountProps = {
   accountProfile?: { displayName?: string | null; website?: string | null } | null;
@@ -762,7 +762,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         return fd;
       }
     } catch { /* noop */ }
-    // Fresh intake — prefill 4.1 for direct brand accounts when a display name
+    // Fresh intake - prefill 4.1 for direct brand accounts when a display name
     // is available. Agencies get a blank form (the intake is for their client).
     if (role === "client" && accountProfile?.displayName) {
       return { "4.1": accountProfile.displayName };
@@ -898,7 +898,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [aiWebsite, setAiWebsite] = useState<string>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).aiWebsite || ""; } catch { /* noop */ }
-    // Fresh intake — prefill website for direct brand accounts.
+    // Fresh intake - prefill website for direct brand accounts.
     if (role === "client" && accountProfile?.website) return accountProfile.website;
     return "";
   });
@@ -912,7 +912,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
     try {
       if (localStorage.getItem(currentIntakeKey()) !== null) return null; // saved intake
     } catch { /* noop */ }
-    // Both note and prefill require a non-null accountProfile — this is null for
+    // Both note and prefill require a non-null accountProfile - this is null for
     // team-member sessions, impersonation, and offline fallback (spec item 6).
     if (!accountProfile) return null;
     if (role === "client") return "brand";
@@ -1734,7 +1734,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-8 max-w-6xl mx-auto">
       <div ref={topRef} aria-hidden="true" />
-      {/* Prefill / context note — shown once on fresh intakes only */}
+      {/* Prefill / context note - shown once on fresh intakes only */}
       {prefillNote && !prefillNoteDismissed && (
         <div
           className="flex items-start gap-3 rounded-xl px-4 py-3 mb-5 text-[13px]"
@@ -1749,8 +1749,8 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
           <Info size={15} style={{ marginTop: 2, flexShrink: 0, color: prefillNote === "brand" ? "#C8497A" : vars.teal }} />
           <span className="flex-1 leading-relaxed font-light">
             {prefillNote === "brand"
-              ? "We've pre-filled your company name and website from your account — edit them here any time."
-              : "This intake is for your client — enter their details below."}
+              ? "We've pre-filled your company name and website from your account - edit them here any time."
+              : "This intake is for your client - enter their details below."}
           </span>
           <button
             aria-label="Dismiss"
@@ -1831,7 +1831,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     {showUrlError && (
                       <p className="text-[12px] font-medium mt-2 flex items-center gap-1.5" style={{ color: "#DC2626" }}>
                         <AlertCircle size={13} strokeWidth={2.5} />
-                        That doesn&apos;t look like a valid URL — try something like yourcompany.com or https://yourcompany.com
+                        That doesn&apos;t look like a valid URL - try something like yourcompany.com or https://yourcompany.com
                       </p>
                     )}
                     {websiteValid && (

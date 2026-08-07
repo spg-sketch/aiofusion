@@ -899,7 +899,7 @@ adminRouter.delete(
   },
 );
 
-// Smoke-test endpoint — sends one of each alert type (HTML) to all recipients.
+// Smoke-test endpoint - sends one of each alert type (HTML) to all recipients.
 // Calls Resend directly (no error-swallowing wrapper) so failures propagate as HTTP 500.
 // Admin only.
 adminRouter.post(
@@ -912,7 +912,7 @@ adminRouter.post(
     }
     const key = process.env.RESEND_API_KEY;
     if (!key) {
-      res.status(500).json({ error: "RESEND_API_KEY is not set — cannot send test alerts." });
+      res.status(500).json({ error: "RESEND_API_KEY is not set - cannot send test alerts." });
       return;
     }
     const { Resend } = await import("resend");
@@ -924,7 +924,7 @@ adminRouter.post(
       label: "Spend Alert",
       bodyHtml: `
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — A content AI spend spike has been detected on account
+          <strong>SMOKE TEST</strong> - A content AI spend spike has been detected on account
           <strong>test-account</strong>.
         </p>
         ${buildDataRows([
@@ -932,7 +932,7 @@ adminRouter.post(
           ["Prior 7 days spend", "£0.0041"],
           ["Ratio", "3.0× (threshold: 3×)"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -941,14 +941,14 @@ adminRouter.post(
       label: "Fair Usage Limit Reached",
       bodyHtml: `
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — Account <strong>test-account</strong> has reached
+          <strong>SMOKE TEST</strong> - Account <strong>test-account</strong> has reached
           their 30-day content AI fair usage limit.
         </p>
         ${buildDataRows([
           ["30-day content AI calls", "50"],
           ["Account limit", "50"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -957,14 +957,14 @@ adminRouter.post(
       label: "Monthly Spend Cap Reached",
       bodyHtml: `
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — Account <strong>test-account</strong> has hit
+          <strong>SMOKE TEST</strong> - Account <strong>test-account</strong> has hit
           their monthly GBP spend cap.
         </p>
         ${buildDataRows([
           ["Current month spend", "£5.0000"],
           ["Monthly cap", "£5.00"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -973,9 +973,9 @@ adminRouter.post(
       label: "Backup Failed",
       bodyHtml: `
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — The nightly backup job has failed.
+          <strong>SMOKE TEST</strong> - The nightly backup job has failed.
         </p>
-        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -984,14 +984,14 @@ adminRouter.post(
       label: "Backup Success",
       bodyHtml: `
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — The nightly backup job completed successfully.
+          <strong>SMOKE TEST</strong> - The nightly backup job completed successfully.
         </p>
         ${buildDataRows([
           ["Duration", "~12s"],
           ["Projects verified", "42"],
           ["Storage destination", "Object storage bucket"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -999,7 +999,7 @@ adminRouter.post(
     const signupHtml = buildEmailHtml({
       label: "New Signup",
       bodyHtml: `
-        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new account application has been received.</p>
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> - A new account application has been received.</p>
         ${buildDataRows([
           ["Name", "Test User"],
           ["Email", "test@example.com"],
@@ -1007,7 +1007,7 @@ adminRouter.post(
           ["Username", "test-company"],
           ["Sign-up via", "Email & password"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
     });
@@ -1017,12 +1017,12 @@ adminRouter.post(
       bodyHtml: `
         <p style="margin:0 0 12px 0;">Hi Test User,</p>
         <p style="margin:0 0 16px 0;font-size:17px;font-weight:600;color:#102B36;">
-          <strong>SMOKE TEST</strong> — Great news — your AIO Fusion account has been approved and is ready to use.
+          <strong>SMOKE TEST</strong> - Great news - your AIO Fusion account has been approved and is ready to use.
         </p>
         <p style="margin:0 0 16px 0;">
           You can sign in now and start exploring the platform.
         </p>
-        <p style="margin:24px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:24px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Sign in to AIO Fusion", href: "https://aiofusion.ai" },
     });
@@ -1030,14 +1030,14 @@ adminRouter.post(
     const bookDemoInternalHtml = buildEmailHtml({
       label: "Demo Request",
       bodyHtml: `
-        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new demo request has been submitted via the website.</p>
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> - A new demo request has been submitted via the website.</p>
         ${buildDataRows([
           ["Name", "Test User"],
           ["Email", "test@example.com"],
           ["Company", "Test Company Ltd"],
           ["What they hope to achieve", "Improve AI visibility for our brand."],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Reply to enquiry", href: "mailto:test@example.com" },
     });
@@ -1047,10 +1047,10 @@ adminRouter.post(
       bodyHtml: `
         <p style="margin:0 0 12px 0;">Hi Test User,</p>
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — Thank you for requesting a demo of AIO Fusion.
+          <strong>SMOKE TEST</strong> - Thank you for requesting a demo of AIO Fusion.
           We'll be in touch within <strong>one business day</strong> to arrange a time.
         </p>
-        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
     });
@@ -1058,7 +1058,7 @@ adminRouter.post(
     const enquiryInternalHtml = buildEmailHtml({
       label: "General Enquiry",
       bodyHtml: `
-        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new general enquiry has been submitted via the website.</p>
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> - A new general enquiry has been submitted via the website.</p>
         ${buildDataRows([
           ["Name", "Test User"],
           ["Email", "test@example.com"],
@@ -1079,10 +1079,10 @@ adminRouter.post(
       bodyHtml: `
         <p style="margin:0 0 12px 0;">Hi Test User,</p>
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — Thank you for getting in touch with AIO Fusion.
+          <strong>SMOKE TEST</strong> - Thank you for getting in touch with AIO Fusion.
           We've received your message and a member of our team will get back to you.
         </p>
-        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
     });
@@ -1090,10 +1090,10 @@ adminRouter.post(
     const supportTicketAlertHtml = buildEmailHtml({
       label: "New Support Ticket",
       bodyHtml: `
-        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> — A new support ticket has been submitted and is awaiting a response.</p>
+        <p style="margin:0 0 16px 0;"><strong>SMOKE TEST</strong> - A new support ticket has been submitted and is awaiting a response.</p>
         ${buildDataRows([
           ["Ticket ID", "#999"],
-          ["Subject", "SMOKE TEST — smoke test support ticket"],
+          ["Subject", "SMOKE TEST - smoke test support ticket"],
           ["Category", "general"],
           ["Account", "test-account"],
         ])}
@@ -1111,14 +1111,14 @@ adminRouter.post(
       bodyHtml: `
         <p style="margin:0 0 12px 0;">Hi Test User,</p>
         <p style="margin:0 0 16px 0;">
-          <strong>SMOKE TEST</strong> — Thank you for getting in touch. We've received your support ticket
+          <strong>SMOKE TEST</strong> - Thank you for getting in touch. We've received your support ticket
           and a member of our team will get back to you as soon as possible.
         </p>
         ${buildDataRows([
           ["Ticket reference", "#999"],
-          ["Subject", "SMOKE TEST — smoke test support ticket"],
+          ["Subject", "SMOKE TEST - smoke test support ticket"],
         ])}
-        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed — this is a smoke test.</p>
+        <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
       cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
     });
@@ -1127,80 +1127,80 @@ adminRouter.post(
       const results = await Promise.all([
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Spend spike detected (smoke-test)",
-          text: "SMOKE TEST — spend-spike alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Spend spike detected (smoke-test)",
+          text: "SMOKE TEST - spend-spike alert. No action needed.",
           html: spikeHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Fair usage limit reached (smoke-test)",
-          text: "SMOKE TEST — quota-breach alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Fair usage limit reached (smoke-test)",
+          text: "SMOKE TEST - quota-breach alert. No action needed.",
           html: quotaHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Monthly spend cap reached (smoke-test)",
-          text: "SMOKE TEST — spend-cap alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Monthly spend cap reached (smoke-test)",
+          text: "SMOKE TEST - spend-cap alert. No action needed.",
           html: capHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Backup job FAILED (smoke-test)",
-          text: "SMOKE TEST — backup failure alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Backup job FAILED (smoke-test)",
+          text: "SMOKE TEST - backup failure alert. No action needed.",
           html: backupHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Backup job succeeded (smoke-test)",
-          text: "SMOKE TEST — backup success alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Backup job succeeded (smoke-test)",
+          text: "SMOKE TEST - backup success alert. No action needed.",
           html: backupSuccessHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — New account application (smoke-test)",
-          text: "SMOKE TEST — new signup alert. No action needed.",
+          subject: "[AIO Fusion] TEST - New account application (smoke-test)",
+          text: "SMOKE TEST - new signup alert. No action needed.",
           html: signupHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Account approved (smoke-test)",
-          text: "SMOKE TEST — approval email. No action needed.",
+          subject: "[AIO Fusion] TEST - Account approved (smoke-test)",
+          text: "SMOKE TEST - approval email. No action needed.",
           html: approvalHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Demo request internal (smoke-test)",
-          text: "SMOKE TEST — book demo internal alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Demo request internal (smoke-test)",
+          text: "SMOKE TEST - book demo internal alert. No action needed.",
           html: bookDemoInternalHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Demo request confirmation (smoke-test)",
-          text: "SMOKE TEST — book demo customer confirmation. No action needed.",
+          subject: "[AIO Fusion] TEST - Demo request confirmation (smoke-test)",
+          text: "SMOKE TEST - book demo customer confirmation. No action needed.",
           html: bookDemoConfirmHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Enquiry internal (smoke-test)",
-          text: "SMOKE TEST — general enquiry internal alert. No action needed.",
+          subject: "[AIO Fusion] TEST - Enquiry internal (smoke-test)",
+          text: "SMOKE TEST - general enquiry internal alert. No action needed.",
           html: enquiryInternalHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — Enquiry confirmation (smoke-test)",
-          text: "SMOKE TEST — general enquiry customer confirmation. No action needed.",
+          subject: "[AIO Fusion] TEST - Enquiry confirmation (smoke-test)",
+          text: "SMOKE TEST - general enquiry customer confirmation. No action needed.",
           html: enquiryConfirmHtml,
         }),
         resend.emails.send({
           from, to,
-          subject: "[AIO Fusion] TEST — New support ticket #999 (smoke-test)",
-          text: "SMOKE TEST — support ticket alert. No action needed.",
+          subject: "[AIO Fusion] TEST - New support ticket #999 (smoke-test)",
+          text: "SMOKE TEST - support ticket alert. No action needed.",
           html: supportTicketAlertHtml,
         }),
         resend.emails.send({
           from, to: ["test@example.com"],
-          subject: "[AIO Fusion] TEST — Support request received (smoke-test)",
-          text: "SMOKE TEST — support ticket ack. No action needed.",
+          subject: "[AIO Fusion] TEST - Support request received (smoke-test)",
+          text: "SMOKE TEST - support ticket ack. No action needed.",
           html: supportTicketAckHtml,
         }),
       ]);
@@ -1416,7 +1416,7 @@ adminRouter.post(
       return;
     }
     if (!process.env.RESEND_API_KEY) {
-      res.status(500).json({ error: "RESEND_API_KEY is not set — cannot send test emails." });
+      res.status(500).json({ error: "RESEND_API_KEY is not set - cannot send test emails." });
       return;
     }
 
@@ -1457,7 +1457,7 @@ adminRouter.post(
         company: "AIO Fusion (smoke test)",
         subject: "Contact-form smoke test",
         message:
-          "This is an automated smoke-test message. Please ignore — verify it arrived and then delete.",
+          "This is an automated smoke-test message. Please ignore - verify it arrived and then delete.",
       }),
     );
 

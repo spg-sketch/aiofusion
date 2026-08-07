@@ -58,7 +58,7 @@ export default function ClientSelectorPage({
   onDeleteProject: (id: string) => void;
   session?: { username: string; role: string } | null;
   onGenerateFromUrl?: () => void;
-  /** Rendered inside the header right section — workspace switcher when the user belongs to >1 workspace. */
+  /** Rendered inside the header right section - workspace switcher when the user belongs to >1 workspace. */
   workspaceSwitcher?: React.ReactNode;
 }) {
   useContentStore();

@@ -4,7 +4,7 @@ import { logger } from "./logger";
 
 // Idempotent schema additions for the v5 invite-reminder feature.
 //
-//   platform_invitations — reminder_sent_at (timestamptz, nullable)
+//   platform_invitations - reminder_sent_at (timestamptz, nullable)
 //     Set once the 24h-before-expiry reminder email has been dispatched.
 //     NULL = reminder not yet sent. Prevents duplicate reminder sends when
 //     the hourly sweep runs again over the same invite.

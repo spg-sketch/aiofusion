@@ -66,7 +66,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe("IntakePage prefill — fresh client intake", () => {
+describe("IntakePage prefill - fresh client intake", () => {
   it("pre-fills 4.1 (company name) from accountProfile.displayName", async () => {
     render(
       <IntakePage
@@ -111,7 +111,7 @@ describe("IntakePage prefill — fresh client intake", () => {
   });
 });
 
-describe("IntakePage prefill — fresh agency intake", () => {
+describe("IntakePage prefill - fresh agency intake", () => {
   it("does NOT pre-fill 4.1 for an agency session", () => {
     render(
       <IntakePage
@@ -156,7 +156,7 @@ describe("IntakePage prefill — fresh agency intake", () => {
   });
 });
 
-describe("IntakePage prefill — null accountProfile (team member / impersonation / offline)", () => {
+describe("IntakePage prefill - null accountProfile (team member / impersonation / offline)", () => {
   it("does NOT show the brand note when accountProfile is null even if role is client", () => {
     render(<IntakePage role="client" accountProfile={null} />);
     expect(screen.queryByText(/We've pre-filled your company name/i)).toBeNull();
@@ -171,13 +171,13 @@ describe("IntakePage prefill — null accountProfile (team member / impersonatio
     render(<IntakePage role="client" accountProfile={null} />);
     await waitFor(() => {
       const blob = JSON.parse(localStorage.getItem(INTAKE_KEY) || "{}");
-      // formData should be empty — no prefill applied
+      // formData should be empty - no prefill applied
       expect(blob.formData?.["4.1"] ?? "").toBe("");
     });
   });
 });
 
-describe("IntakePage prefill — saved intake is never overwritten", () => {
+describe("IntakePage prefill - saved intake is never overwritten", () => {
   it("does not overwrite 4.1 even when client role and accountProfile are present", async () => {
     // Seed a saved blob with a different company name
     seedSavedIntake("Existing Corp");

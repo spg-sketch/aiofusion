@@ -98,7 +98,7 @@ function SubAccountsPage({
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
   const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
   const [accountWebsite, setAccountWebsite] = useState<string | null>(null);
-  // Profile images — value is a cache-busted URL when an image exists, null when none.
+  // Profile images - value is a cache-busted URL when an image exists, null when none.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<"avatar" | "logo" | null>(null);
@@ -341,7 +341,7 @@ function SubAccountsPage({
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
           <p className="text-[13px] font-light mb-5 leading-[1.7]" style={{ color: vars.g600 }}>
-            Controls how your dashboard is set up — whether you manage multiple clients or one brand.
+            Controls how your dashboard is set up - whether you manage multiple clients or one brand.
           </p>
           {!isAgencyOrClient ? (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
@@ -459,7 +459,7 @@ function SubAccountsPage({
           <h2 className="text-[16px] font-bold mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>My account</h2>
           {(googleLinked === false || microsoftLinked === false) && (
             <p className="text-[13.5px] leading-[1.65] mb-4" style={{ color: vars.g600 }}>
-              Linking is optional — if you would like to link your account to an existing Google or Microsoft account, please select below.
+              Linking is optional - if you would like to link your account to an existing Google or Microsoft account, please select below.
             </p>
           )}
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -625,7 +625,7 @@ function SubAccountsPage({
           <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
         )}
 
-        {/* ADD CLIENT ACCOUNT — agency/admin only */}
+        {/* ADD CLIENT ACCOUNT - agency/admin only */}
         {canCreateSubAccounts(session.role) && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">

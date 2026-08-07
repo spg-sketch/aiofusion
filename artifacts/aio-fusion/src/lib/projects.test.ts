@@ -259,7 +259,7 @@ describe("migrateLegacyIntakeToProject", () => {
     expect(projects[0].name).toBe("New Project");
   });
 
-  it("is idempotent — running twice still leaves exactly one default project", () => {
+  it("is idempotent - running twice still leaves exactly one default project", () => {
     localStorage.setItem(
       "aio.intake.v2",
       JSON.stringify({ formData: { "4.1": "Beta Ltd" } }),
@@ -331,7 +331,7 @@ describe("migrateAssignOwnerlessToAdmin", () => {
     expect(loadStoredProjects()[0].owner).toBeUndefined();
   });
 
-  it("handles multiple ownerless projects independently — a push failure on one does not prevent healing another", async () => {
+  it("handles multiple ownerless projects independently - a push failure on one does not prevent healing another", async () => {
     const op2: Client = { ...baseProject(), id: "op2-ownerless", owner: undefined };
     vi.mocked(pushProjectMeta)
       .mockResolvedValueOnce({ ok: false })

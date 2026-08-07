@@ -96,7 +96,7 @@
   color: #475569;
 }
 
-/* Calendar top scroll bar — force visible scrollbar thumb on all platforms
+/* Calendar top scroll bar - force visible scrollbar thumb on all platforms
    (macOS overlay scrollbars hide it by default, making the bar appear non-interactive) */
 .calendar-top-scroll {
   scrollbar-width: thin;

@@ -2,7 +2,7 @@ import { db, tokenUsageTable } from "@workspace/db";
 import { logger } from "./logger";
 
 // GBP cost per 1M tokens. USD/GBP at ~1.27.
-// Claude Sonnet pricing confirmed from Anthropic; GPT-5 is estimated — update
+// Claude Sonnet pricing confirmed from Anthropic; GPT-5 is estimated - update
 // once Replit publishes the exact rate.
 const COST_PER_M: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-5": { input: 2.37, output: 11.81 },

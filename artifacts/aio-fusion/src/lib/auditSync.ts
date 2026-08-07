@@ -23,7 +23,7 @@
 //     savedAt > epoch (pending writes). Items with savedAt <= epoch that are
 //     absent from server were deleted on another login → dropped from result.
 //   • Server fetch failure (network error): epoch NOT advanced; local list
-//     returned unchanged (fail-soft — never silently lose items).
+//     returned unchanged (fail-soft - never silently lose items).
 // ---------------------------------------------------------------------------
 
 import { type SavedAudit, loadSavedAudits, savedAuditsKey } from "../LlmCheckPage";
@@ -58,7 +58,7 @@ function writeSyncEpoch(epochKey: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Generic merge helper — no side-effects, no network calls
+// Generic merge helper - no side-effects, no network calls
 // ---------------------------------------------------------------------------
 
 type HasIdAndSavedAt = { id: string; savedAt: string };
@@ -176,7 +176,7 @@ export async function syncAuditsForProject(projectId: string): Promise<SavedAudi
   const { merged, toUpload } = mergeWithEpoch(fetched.items, localList, epoch);
 
   // Await all migration uploads. Only advance epoch when every upload
-  // succeeds — if any fail, keep epoch as-is so those items are retried
+  // succeeds - if any fail, keep epoch as-is so those items are retried
   // next sync instead of being silently dropped.
   let allUploaded = true;
   if (toUpload.length > 0) {

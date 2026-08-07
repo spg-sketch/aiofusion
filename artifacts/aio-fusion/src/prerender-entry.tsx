@@ -172,7 +172,7 @@ const distPublic = path.join(process.cwd(), "dist/public");
 const templatePath = path.join(distPublic, "index.html");
 
 if (!fs.existsSync(templatePath)) {
-  console.error("❌  dist/public/index.html not found — run vite build first");
+  console.error("❌  dist/public/index.html not found - run vite build first");
   process.exit(1);
 }
 
@@ -195,13 +195,13 @@ for (const { slug } of PUBLIC_ROUTES) {
   const metaKey = slug === "" ? "landing" : slug;
   const meta = PAGE_META[metaKey];
   if (!meta) {
-    console.warn(`  ⚠  No pageMeta for route "${metaKey}" — skipping`);
+    console.warn(`  ⚠  No pageMeta for route "${metaKey}" - skipping`);
     continue;
   }
 
   const el = buildElement(slug);
   if (!el) {
-    console.warn(`  ⚠  No component for route "${slug}" — skipping`);
+    console.warn(`  ⚠  No component for route "${slug}" - skipping`);
     continue;
   }
 
@@ -255,5 +255,5 @@ if (errors > 0) {
   console.error(`\nPrerender completed with ${errors} error(s). ${ok} route(s) written.`);
   process.exit(1);
 } else {
-  console.log(`\nPrerender complete — ${ok} routes written, sitemap updated.`);
+  console.log(`\nPrerender complete - ${ok} routes written, sitemap updated.`);
 }

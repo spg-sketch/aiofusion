@@ -330,7 +330,7 @@ export default function LandingPageC({
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
               { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: `${base}insights/pr-professionals-not-threat`, external: false, accent: accent },
-              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
+              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
             ].map((a) => (
               <a
                 key={a.title}

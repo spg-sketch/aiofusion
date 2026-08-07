@@ -82,7 +82,7 @@ contactRouter.post(
       savedId = row.id;
       logger.info({ savedId, email }, "contact/book-demo: submission saved to DB");
     } catch (dbErr) {
-      logger.error({ dbErr, email }, "contact/book-demo: DB save failed — aborting");
+      logger.error({ dbErr, email }, "contact/book-demo: DB save failed - aborting");
       res.status(500).json({ error: "Failed to submit your request. Please try again." });
       return;
     }
@@ -175,7 +175,7 @@ contactRouter.post(
       savedId = row.id;
       logger.info({ savedId, email }, "contact/enquiry: submission saved to DB");
     } catch (dbErr) {
-      logger.error({ dbErr, email }, "contact/enquiry: DB save failed — aborting");
+      logger.error({ dbErr, email }, "contact/enquiry: DB save failed - aborting");
       res.status(500).json({ error: "Failed to submit your message. Please try again." });
       return;
     }

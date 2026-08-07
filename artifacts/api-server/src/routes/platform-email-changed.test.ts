@@ -5,7 +5,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 
 // ---------------------------------------------------------------------------
-// Hoisted captures — must be above all vi.mock calls
+// Hoisted captures - must be above all vi.mock calls
 // ---------------------------------------------------------------------------
 const emailChangedCalls = vi.hoisted(
   () => [] as Array<{ oldEmail: string; newEmail: string; toName: string }>,
@@ -299,7 +299,7 @@ async function flushAsync() {
 // ---------------------------------------------------------------------------
 // POST /api/platform/change-email  (self-service)
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/change-email — self-service email change", () => {
+describe("POST /api/platform/change-email - self-service email change", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -488,7 +488,7 @@ describe("POST /api/platform/change-email — self-service email change", () => 
 // ---------------------------------------------------------------------------
 // POST /api/platform/accounts/email  (admin/manager-initiated)
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/accounts/email — admin email change", () => {
+describe("POST /api/platform/accounts/email - admin email change", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -507,7 +507,7 @@ describe("POST /api/platform/accounts/email — admin email change", () => {
 
     const ph = hashPassword(TARGET_PASSWORD);
 
-    // Admin account (legacy only — no platform_users row needed for the actor)
+    // Admin account (legacy only - no platform_users row needed for the actor)
     await db.insert(platformAccountsTable).values({
       username: ADMIN_USERNAME,
       passwordHash: ph,
@@ -628,7 +628,7 @@ describe("POST /api/platform/accounts/email — admin email change", () => {
       username: ADMIN_USERNAME,
       role: "admin",
     });
-    // No-op — same email → 200 OK but no alert
+    // No-op - same email → 200 OK but no alert
     expect(res.status).toBe(200);
 
     await flushAsync();

@@ -14,8 +14,8 @@ configure({ asyncUtilTimeout: 5000 });
 //
 // Background: App.tsx mirrors internal navigation into browser history. Its
 // history-sync effect rewrites the URL (dropping the query string) before the
-// lazy-loaded PlatformHomePage mounts. Every redirect-based flow — SSO MFA,
-// OAuth errors, email-verification links, password reset — depends on App
+// lazy-loaded PlatformHomePage mounts. Every redirect-based flow - SSO MFA,
+// OAuth errors, email-verification links, password reset - depends on App
 // capturing the initial query params into state (oauthRedirectParams /
 // passwordResetToken props) BEFORE that effect runs. These tests render the
 // full App with real redirect URLs and assert the right panel still appears
@@ -181,7 +181,7 @@ describe("sign-in redirect links survive the history-sync URL rewrite", () => {
     first.unmount();
 
     // Remount with the URL as the first session left it (query string cleaned,
-    // single-use cookie consumed) — exactly what a reload would see. The stale
+    // single-use cookie consumed) - exactly what a reload would see. The stale
     // challenge must NOT resurrect as a dead MFA prompt.
     expect(window.location.search).toBe("");
     const { default: App } = await import("./App");

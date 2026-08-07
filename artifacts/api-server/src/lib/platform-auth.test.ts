@@ -5,7 +5,7 @@ import crypto from "crypto";
 // In-memory database mock.
 //
 // getVisibleUsernames / canManage read the full account list via
-// `db.select({...}).from(platformAccountsTable)` — we expose a settable
+// `db.select({...}).from(platformAccountsTable)` - we expose a settable
 // accountRows array and return it from that call chain.
 //
 // ensurePlatformUser performs inserts + upserts on three tables
@@ -392,7 +392,7 @@ describe("canManage (account management rules)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ensurePlatformUser — idempotency
+// ensurePlatformUser - idempotency
 // ---------------------------------------------------------------------------
 describe("ensurePlatformUser (idempotency)", () => {
   beforeEach(() => {
@@ -439,7 +439,7 @@ describe("ensurePlatformUser (idempotency)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getPlatformSessionAccount — fallback paths
+// getPlatformSessionAccount - fallback paths
 //
 // The function tries platform_companies (by activeCompanyId) first, then falls
 // back to platform_accounts. These tests verify the fallback works correctly
@@ -798,7 +798,7 @@ describe("getPlatformSessionAccount (session resolution + fallback)", () => {
       sid: "legacy-null-version-sid", username: "legacy-nocheck-co",
       userId: "user-legacy-v5", activeCompanyId: companyId,
       expiresAt: FUTURE, ipHint: null, createdAt: new Date(),
-      sessionVersion: null, // legacy — skip version check
+      sessionVersion: null, // legacy - skip version check
     });
 
     const result = await getPlatformSessionAccount("legacy-null-version-sid");

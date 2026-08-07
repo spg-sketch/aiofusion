@@ -207,7 +207,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     return todayIso;
   })();
 
-  // ── Live audit data — loaded from localStorage, then synced from server ──
+  // ── Live audit data - loaded from localStorage, then synced from server ──
   const [savedAudits, setSavedAudits] = useState<SavedAudit[]>(() => loadSavedAudits(activeClient.id));
   const [savedDiagnostics, setSavedDiagnostics] = useState<SavedDiagnostic[]>(() => loadSavedDiagnostics(activeClient.id));
 
@@ -260,7 +260,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
   })();
 
   // Track which project ID the current tracker snapshot belongs to.
-  // The save effect must ONLY depend on `tracker` — not on `activeClient.id` —
+  // The save effect must ONLY depend on `tracker` - not on `activeClient.id` - 
   // so that when the user switches projects the old project's rows are never
   // written to the new project's key before the load effect has had a chance
   // to populate `tracker` with the new project's data.
@@ -278,7 +278,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     [inRange]);
 
   // Guard against NaN/null scores that can result from AI-search items whose
-  // scores object was empty — JSON serialises NaN as null and null coerces to
+  // scores object was empty - JSON serialises NaN as null and null coerces to
   // 0 but the guard makes the intent explicit and fixes existing bad rows.
   const safeScore = (r: TrackerRow) => (typeof r.score === "number" && isFinite(r.score) ? r.score : 0);
   const safeReach = (r: TrackerRow) => (typeof r.reach === "number" && isFinite(r.reach) ? r.reach : 0);
@@ -511,7 +511,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
       const data = await resp.json() as { items?: typeof aiResults; error?: string };
       if (!resp.ok) {
         if (resp.status === 401) {
-          setAiSearchError("Your session has expired — please log out and log back in to continue.");
+          setAiSearchError("Your session has expired - please log out and log back in to continue.");
         } else {
           setAiSearchError(data.error ?? "The search could not complete. Please try again.");
         }
@@ -520,7 +520,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
         setAiSearched(true);
       }
     } catch {
-      setAiSearchError("Network error — please check your connection and try again.");
+      setAiSearchError("Network error - please check your connection and try again.");
     } finally {
       setAiSearching(false);
     }
@@ -568,7 +568,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     const linkInvalid = !!manualForm.link && !isValidUrl(manualForm.link);
     if (linkInvalid) {
       setUrlError("URL must start with http:// or https://");
-      // warn only — do not return; spec says don't block save
+      // warn only - do not return; spec says don't block save
     } else {
       setUrlError(null);
     }
@@ -578,7 +578,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
     const row: TrackerRow = { ...manualForm, id: `t${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     setTracker(prev => [row, ...prev]);
     setManualForm(f => ({ ...f, title: "", publication: "", link: "", reach: 0 }));
-    // Only clear the error after reset when the URL was valid — if invalid,
+    // Only clear the error after reset when the URL was valid - if invalid,
     // keep the warning visible so the user sees it (React batching means we
     // must not call setUrlError(null) in the same synchronous block as the
     // setUrlError("…") above, or the error is silently cancelled).
@@ -1025,10 +1025,10 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
                     {volBySpokesperson.map(([name]) => (
                       <tr key={name} className="border-t" style={{ borderColor: vars.g200 }}>
                         <td className="px-3 py-2.5 font-medium" style={{ color: vars.navy }}>{name}</td>
-                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
-                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
-                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
-                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}>—</td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}> - </td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}> - </td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}> - </td>
+                        <td className="px-3 py-2.5 text-center" style={{ color: vars.g400 }}> - </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1067,7 +1067,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
             </ul>
           </div>
 
-          {/* AI Coverage Search — guarded by VITE_FEATURE_AI_COVERAGE_SEARCH env var (see src/lib/features.ts) */}
+          {/* AI Coverage Search - guarded by VITE_FEATURE_AI_COVERAGE_SEARCH env var (see src/lib/features.ts) */}
           {FEATURES.aiCoverageSearch && <div className="rounded-2xl border p-4 sm:p-6" style={{ background: "white", borderColor: vars.g200 }}>
             <div className="flex items-center gap-2 mb-1">
               <Search size={16} color={vars.accent} />
@@ -1183,7 +1183,7 @@ export default function ReportPage({ activeClient, onNavigate }: { activeClient:
               <p className="mt-4 text-[12px] font-light" style={{ color: vars.accent }}>{aiSearchError}</p>
             )}
             {aiSearched && aiResults.length === 0 && !aiSearchError && (
-              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No coverage found in Claude's training data for these search parameters. Try a broader search — remove the spokesperson or content title filters, or use a wider date range.</p>
+              <p className="mt-4 text-[12px] font-light" style={{ color: vars.g500 }}>No coverage found in Claude's training data for these search parameters. Try a broader search - remove the spokesperson or content title filters, or use a wider date range.</p>
             )}
 
             {aiSearched && (

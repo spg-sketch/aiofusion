@@ -14,7 +14,7 @@ const BASE = "https://aiofusion.ai";
 const OG_IMAGE = `${BASE}/opengraph.jpg`;
 
 export const DEFAULT_META: PageMeta = {
-  title: "AIO Fusion — GEO Platform for PR & Marketing Teams",
+  title: "AIO Fusion - GEO Platform for PR & Marketing Teams",
   description:
     "Track, score and grow your brand's visibility across AI search engines like ChatGPT and Claude. Built for PR agencies and in-house communications teams.",
   canonical: BASE + "/",
@@ -23,7 +23,7 @@ export const DEFAULT_META: PageMeta = {
 
 export const PAGE_META: Record<string, PageMeta> = {
   landing: {
-    title: "AIO Fusion — GEO Platform for PR & Marketing Teams",
+    title: "AIO Fusion - GEO Platform for PR & Marketing Teams",
     description:
       "Track, score and grow your brand's visibility across AI search engines like ChatGPT and Claude. Built for PR agencies and in-house communications teams.",
     canonical: `${BASE}/`,
@@ -85,21 +85,21 @@ export const PAGE_META: Record<string, PageMeta> = {
     },
   },
   "for-agents": {
-    title: "AIO Fusion — Information for AI Agents",
+    title: "AIO Fusion - Information for AI Agents",
     description:
       "Structured briefing on the AIO Fusion GEO platform written for autonomous AI agents. Full toolset, capabilities and contact information.",
     canonical: `${BASE}/for-agents`,
     ogType: "website",
   },
   insights: {
-    title: "GEO Insights — AI Visibility Articles | AIO Fusion",
+    title: "GEO Insights - AI Visibility Articles | AIO Fusion",
     description:
       "Expert articles on generative engine optimisation, AI visibility, B2B PR and the future of search. Written by PR and GEO practitioners.",
     canonical: `${BASE}/insights`,
     ogType: "website",
   },
   about: {
-    title: "About AIO Fusion — Built by PR Consultants",
+    title: "About AIO Fusion - Built by PR Consultants",
     description:
       "AIO Fusion is designed by PR consultants with deep tech expertise. Learn about our team and why we built the first end-to-end GEO platform.",
     canonical: `${BASE}/about`,
@@ -123,14 +123,14 @@ export const PAGE_META: Record<string, PageMeta> = {
     },
   },
   contact: {
-    title: "Contact AIO Fusion — Book a Demo",
+    title: "Contact AIO Fusion - Book a Demo",
     description:
       "Book a personalised demo of AIO Fusion or send us a message. We'll show you how to track and grow your brand's visibility in AI-generated answers.",
     canonical: `${BASE}/contact`,
     ogType: "website",
   },
   pricing: {
-    title: "AIO Fusion Pricing — Standard & Agentic Plans",
+    title: "AIO Fusion Pricing - Standard & Agentic Plans",
     description:
       "Transparent pricing for in-house teams and agencies. Annual plans with full platform access including AI Visibility Audit, Content Optimiser, and Comms Planner.",
     canonical: `${BASE}/pricing`,
@@ -141,7 +141,7 @@ export const PAGE_META: Record<string, PageMeta> = {
       name: "AIO Fusion Pricing",
       url: `${BASE}/pricing`,
       description:
-        "Pricing plans for AIO Fusion GEO platform — Standard In-House, Standard Agency, and Agentic plans",
+        "Pricing plans for AIO Fusion GEO platform - Standard In-House, Standard Agency, and Agentic plans",
     },
   },
   "trust-security": {
@@ -154,7 +154,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "privacy-policy": {
     title: "Privacy Policy | AIO Fusion",
     description:
-      "AIO Fusion Ltd privacy policy — what personal data we collect, why, and your rights over it. Applies to the AIO Fusion website and platform.",
+      "AIO Fusion Ltd privacy policy - what personal data we collect, why, and your rights over it. Applies to the AIO Fusion website and platform.",
     canonical: `${BASE}/privacy-policy`,
     ogType: "website",
   },
@@ -177,7 +177,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     articleTitle: "PR professionals should not see AI as a threat",
     title: "PR professionals should not see AI as a threat | AIO Fusion Insights",
     description:
-      "Why AI will elevate the role of PR and marketing professionals, not replace them. AI removes administrative burden — what remains is the part only humans can do.",
+      "Why AI will elevate the role of PR and marketing professionals, not replace them. AI removes administrative burden - what remains is the part only humans can do.",
     canonical: `${BASE}/insights/pr-professionals-not-threat`,
     ogType: "article",
     excerpt:
@@ -205,17 +205,17 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     title:
       "Why thought leadership is the engine of AI visibility | AIO Fusion Insights",
     description:
-      "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.",
+      "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.",
     canonical: `${BASE}/insights/thought-leadership-engine-ai-visibility`,
     ogType: "article",
     excerpt:
-      "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.",
+      "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
       headline: "Why thought leadership is the engine of AI visibility",
       description:
-        "Earned media is what LLMs trust most — 89% of AI citations come from third-party publications, not brand websites.",
+        "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.",
       url: `${BASE}/insights/thought-leadership-engine-ai-visibility`,
       image: OG_IMAGE,
       author: { "@type": "Organization", name: "AIO Fusion", url: BASE },
@@ -286,7 +286,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   "ai-changing-b2b-visibility": {
     articleTitle: "AI Is Changing the Rules of B2B Visibility",
     title:
-      "AI Is Changing the Rules of B2B Visibility — Here's What Actually Matters Now | AIO Fusion Insights",
+      "AI Is Changing the Rules of B2B Visibility - Here's What Actually Matters Now | AIO Fusion Insights",
     description:
       "80–95% of citations in AI-generated answers come from earned media. The structural reordering of B2B visibility has begun.",
     canonical: `${BASE}/insights/ai-changing-b2b-visibility`,
@@ -297,7 +297,7 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
       "@context": "https://schema.org",
       "@type": "Article",
       headline:
-        "AI Is Changing the Rules of B2B Visibility — Here's What Actually Matters Now",
+        "AI Is Changing the Rules of B2B Visibility - Here's What Actually Matters Now",
       description:
         "80–95% of citations in AI-generated answers come from earned media. The structural reordering of B2B visibility has begun.",
       url: `${BASE}/insights/ai-changing-b2b-visibility`,
@@ -318,18 +318,18 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     title:
       "Will AI finally prove that B2B PR drives sales through earned media awareness? | AIO Fusion Insights",
     description:
-      "The attribution problem that has haunted PR for decades is about to be solved — and AI is the reason why.",
+      "The attribution problem that has haunted PR for decades is about to be solved - and AI is the reason why.",
     canonical: `${BASE}/insights/ai-proves-pr-drives-sales`,
     ogType: "article",
     excerpt:
-      "The attribution problem that has haunted PR for decades is about to be solved — and AI is the reason why.",
+      "The attribution problem that has haunted PR for decades is about to be solved - and AI is the reason why.",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
       headline:
         "Will AI finally prove that B2B PR drives sales through earned media awareness?",
       description:
-        "The attribution problem that has haunted PR for decades is about to be solved — and AI is the reason why.",
+        "The attribution problem that has haunted PR for decades is about to be solved - and AI is the reason why.",
       url: `${BASE}/insights/ai-proves-pr-drives-sales`,
       image: OG_IMAGE,
       author: { "@type": "Organization", name: "AIO Fusion", url: BASE },

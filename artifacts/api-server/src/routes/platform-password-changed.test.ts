@@ -5,7 +5,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 
 // ---------------------------------------------------------------------------
-// Hoisted captures — must be above all vi.mock calls
+// Hoisted captures - must be above all vi.mock calls
 // ---------------------------------------------------------------------------
 const passwordChangedCalls = vi.hoisted(
   () => [] as Array<{ toEmail: string; toName: string }>,
@@ -296,7 +296,7 @@ async function flushAsync() {
 // ---------------------------------------------------------------------------
 // POST /api/platform/change-password
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/change-password — password changed security alert", () => {
+describe("POST /api/platform/change-password - password changed security alert", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -440,7 +440,7 @@ describe("POST /api/platform/change-password — password changed security alert
 // ---------------------------------------------------------------------------
 // POST /api/platform/reset-password
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/reset-password — password changed security alert", () => {
+describe("POST /api/platform/reset-password - password changed security alert", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -597,7 +597,7 @@ describe("POST /api/platform/reset-password — password changed security alert"
 // ---------------------------------------------------------------------------
 // POST /api/platform/accounts/password  (admin/manager-initiated reset)
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/accounts/password — password changed security alert", () => {
+describe("POST /api/platform/accounts/password - password changed security alert", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -616,7 +616,7 @@ describe("POST /api/platform/accounts/password — password changed security ale
 
     const ph = hashPassword(TARGET_PASSWORD);
 
-    // Admin account (legacy only — no platform_users row needed for the actor)
+    // Admin account (legacy only - no platform_users row needed for the actor)
     await db.insert(platformAccountsTable).values({
       username: ADMIN_USERNAME,
       passwordHash: ph,

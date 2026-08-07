@@ -1,5 +1,5 @@
 /**
- * Feature flags — API server
+ * Feature flags - API server
  *
  * Each flag reads from a process env var (FEATURE_*).
  * Set the matching Replit secret to "true" to enable; absent or any other

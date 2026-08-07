@@ -69,7 +69,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("SupportAdminPage — email failure indicator in list view", () => {
+describe("SupportAdminPage - email failure indicator in list view", () => {
   beforeEach(() => {
     mockFetchStatic(TICKET_WITH_EMAIL_FAILED);
   });
@@ -91,7 +91,7 @@ describe("SupportAdminPage — email failure indicator in list view", () => {
   });
 });
 
-describe("SupportAdminPage — email failure banner in detail view", () => {
+describe("SupportAdminPage - email failure banner in detail view", () => {
   it("shows the banner and 'Clear flag' button when emailFailed=true", async () => {
     mockFetchStatic(TICKET_WITH_EMAIL_FAILED);
     render(<SupportAdminPage onBack={() => {}} />);
@@ -117,7 +117,7 @@ describe("SupportAdminPage — email failure banner in detail view", () => {
   });
 });
 
-describe("SupportAdminPage — 'Clear flag' happy path", () => {
+describe("SupportAdminPage - 'Clear flag' happy path", () => {
   it("removes the banner immediately after clicking 'Clear flag'", async () => {
     mockFetchStatic(TICKET_WITH_EMAIL_FAILED);
     render(<SupportAdminPage onBack={() => {}} />);

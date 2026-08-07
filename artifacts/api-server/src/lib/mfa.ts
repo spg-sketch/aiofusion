@@ -6,7 +6,7 @@ import { eq, like } from "drizzle-orm";
 // implemented on node's crypto so no external dependency is needed.
 //
 // MFA state is stored per-account in the generic platform_meta key/value table
-// (key `account:mfa:<username>`) — the same pattern as the master-owner and
+// (key `account:mfa:<username>`) - the same pattern as the master-owner and
 // archived flags. This works uniformly for both auth paths (platform_users and
 // the legacy platform_accounts fallback, including the seeded master admin
 // which has no email / platform_users row).

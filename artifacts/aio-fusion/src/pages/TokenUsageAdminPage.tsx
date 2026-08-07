@@ -366,7 +366,7 @@ export function TokenUsageAdminPage({
         {quotaSlug && (
           <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
             <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Quota override — {quotaSlug}</h2>
+              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Quota override - {quotaSlug}</h2>
               <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
                 Set a multiplier on the default {defaultLimit ?? 500}-call/month limit. Enter <strong>2</strong> to double the limit, <strong>0.5</strong> to halve it, or leave blank to reset to default.
               </p>
@@ -404,7 +404,7 @@ export function TokenUsageAdminPage({
         {spendLimitSlug && (
           <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
             <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
-              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Monthly spend limit — {spendLimitSlug}</h2>
+              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink }}>Monthly spend limit - {spendLimitSlug}</h2>
               <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
                 Set the maximum GBP this account may spend on AI calls in a calendar month. When the limit is hit, all AI endpoints return a clear error until the next month. Enter <strong>0</strong> to remove the cap, or leave blank to restore the system default (£{systemDefault}/month).
               </p>
@@ -443,7 +443,7 @@ export function TokenUsageAdminPage({
             {/* 30-day leaderboard sorted by cost */}
             <div className="mb-8 rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
               <div className="px-5 py-3 border-b text-[11px] font-bold uppercase tracking-[0.16em]" style={{ borderColor: vars.g200, color: vars.g500, background: vars.g100 }}>
-                30-day cost ranking — accounts sorted by spend
+                30-day cost ranking - accounts sorted by spend
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
@@ -535,7 +535,7 @@ export function TokenUsageAdminPage({
               return (
                 <div key={`daily-${slug}`} className="mb-6 rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
                   <div className="px-5 py-3 border-b text-[11px] font-bold uppercase tracking-[0.16em] flex items-center gap-2" style={{ borderColor: vars.g200, color: vars.g500, background: vars.g100 }}>
-                    Daily breakdown — {slug} — {selectedDailyMonth}
+                    Daily breakdown - {slug} - {selectedDailyMonth}
                     {renderSpikeBadge(slug)}
                   </div>
                   {allDays.length === 0 ? (

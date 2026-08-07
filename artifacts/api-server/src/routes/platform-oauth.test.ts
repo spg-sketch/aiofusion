@@ -398,7 +398,7 @@ function makeMicrosoftStub(opts: {
 // Google OAuth callback tests
 // ---------------------------------------------------------------------------
 
-describe("Google GET callback — scanner / bot guard", () => {
+describe("Google GET callback - scanner / bot guard", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -554,7 +554,7 @@ describe("Google GET callback — scanner / bot guard", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("Google POST callback — code redemption", () => {
+describe("Google POST callback - code redemption", () => {
   let server: Server;
   let baseUrl: string;
   const EMAIL = "google-oauth-post@example.com";
@@ -602,7 +602,7 @@ describe("Google POST callback — code redemption", () => {
   it("prefetch-then-real-request: scanner GET followed by browser POST succeeds", async () => {
     const code = "valid_google_code_scanner_test";
 
-    // Step 1: scanner / bot prefetches — no token call, interstitial served.
+    // Step 1: scanner / bot prefetches - no token call, interstitial served.
     const tracker = { called: false };
     vi.stubGlobal("fetch", makeGoogleStub({ trackTokenCalls: tracker, email: EMAIL }));
     const scannerRes = await realFetch(
@@ -669,7 +669,7 @@ describe("Google POST callback — code redemption", () => {
 // Microsoft OAuth callback tests
 // ---------------------------------------------------------------------------
 
-describe("Microsoft GET callback — scanner / bot guard", () => {
+describe("Microsoft GET callback - scanner / bot guard", () => {
   let server: Server;
   let baseUrl: string;
 
@@ -755,7 +755,7 @@ describe("Microsoft GET callback — scanner / bot guard", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("Microsoft POST callback — code redemption", () => {
+describe("Microsoft POST callback - code redemption", () => {
   let server: Server;
   let baseUrl: string;
   const EMAIL = "ms-oauth-post@example.com";

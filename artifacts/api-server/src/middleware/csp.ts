@@ -4,12 +4,12 @@ import type { Request, Response, NextFunction } from "express";
  * Content Security Policy middleware.
  *
  * Applies a single CSP header to every response. Update this file
- * whenever a new external origin needs to be trusted — all policy
+ * whenever a new external origin needs to be trusted - all policy
  * changes live here.
  *
  * Current external browser-facing origins:
- *   - fonts.googleapis.com  — Google Fonts stylesheet
- *   - fonts.gstatic.com     — Google Fonts file delivery
+ *   - fonts.googleapis.com - Google Fonts stylesheet
+ *   - fonts.gstatic.com - Google Fonts file delivery
  *
  * All AI/API calls (Anthropic, OpenAI, Google PageSpeed) are made
  * server-side and do not appear in the browser CSP.

@@ -579,7 +579,7 @@ describe("generateProbeQuestions", () => {
     for (const q of qs) {
       // The raw, untruncated ICP second sentence should never appear verbatim
       expect(q).not.toContain("They require enterprise-grade security");
-      // The full ICP first sentence (131 chars) should not appear — only the
+      // The full ICP first sentence (131 chars) should not appear - only the
       // 80-char truncation is allowed
       expect(q).not.toContain(
         "including financial services, healthcare, and legal",
@@ -677,7 +677,7 @@ describe("isMentioned with a BrandIdentity (namesake hardening)", () => {
   });
 });
 
-describe("isMentioned — anchored-probe path", () => {
+describe("isMentioned - anchored-probe path", () => {
   const identity: BrandIdentity = {
     name: "SMG",
     legalName: "Sports Media Group",
@@ -716,7 +716,7 @@ describe("isMentioned — anchored-probe path", () => {
     ).toBe(true);
   });
 
-  it("probeWasAnchored=true does not affect an unambiguous brand — corroboration was never required", () => {
+  it("probeWasAnchored=true does not affect an unambiguous brand - corroboration was never required", () => {
     const acme: BrandIdentity = { name: "Acme Widgets", legalName: "Acme Widgets Ltd" };
     expect(isMentioned("I recommend Acme Widgets.", acme, true)).toBe(true);
     expect(isMentioned("I recommend Acme Widgets.", acme, false)).toBe(true);
@@ -1066,12 +1066,12 @@ describe("computeVisibilityMetrics", () => {
 });
 
 // ---------------------------------------------------------------------------
-// HTTP route tests — audit-lock gate (POST /api/llm-check) and status endpoint
+// HTTP route tests - audit-lock gate (POST /api/llm-check) and status endpoint
 // (GET /api/audit-lock). These tests exercise the full Express handler so the
 // lock-check branching (429 / SSE-200 / admin bypass) is verified end-to-end.
 // ---------------------------------------------------------------------------
 
-describe("llm-check HTTP routes — audit-lock", () => {
+describe("llm-check HTTP routes - audit-lock", () => {
   let server: Server;
   let baseUrl: string;
   let account: { username: string; role: string } | undefined;
@@ -1138,7 +1138,7 @@ describe("llm-check HTTP routes — audit-lock", () => {
     return { status: res.status, json: (await res.json()) as any };
   }
 
-  describe("POST /api/llm-check — audit-lock gate", () => {
+  describe("POST /api/llm-check - audit-lock gate", () => {
     it("skips the lock gate and proceeds when no projectId is supplied", async () => {
       const { status } = await postCheck({ companyName: "Acme", sectors: ["widgets"] });
       expect(status).toBe(200);

@@ -1,5 +1,5 @@
 /**
- * Feature flags — frontend
+ * Feature flags - frontend
  *
  * Each flag reads from a Vite env var (VITE_FEATURE_*).
  * To enable a feature in Replit: add the env var as a secret and set it to "true",

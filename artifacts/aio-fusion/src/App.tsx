@@ -419,7 +419,7 @@ function App() {
       if (bootNeedsSetup) setNeedsSetup(true);
       if (bootHasPassword !== undefined) setHasPassword(bootHasPassword);
       // Only store profile when the session role is client (direct brand) or
-      // agency — admins never need it and it keeps the guard simple in IntakePage.
+      // agency - admins never need it and it keeps the guard simple in IntakePage.
       if (ap && s && (s.role === "client" || s.role === "agency")) {
         setAccountProfile(ap);
       }
@@ -513,7 +513,7 @@ function App() {
     return getLocalSession();
   });
   // True until the server has confirmed (or denied) the session via
-  // bootstrapAuth(). Guards must not redirect while this is true — the session
+  // bootstrapAuth(). Guards must not redirect while this is true - the session
   // state is still provisional (localStorage only) and may not yet reflect the
   // real cookie state.
   const [authLoading, setAuthLoading] = useState(true);
@@ -642,7 +642,7 @@ function App() {
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
 
-  // Team invite token from /?invite=<token> — captured once on mount (the
+  // Team invite token from /?invite=<token> - captured once on mount (the
   // history-sync effect rewrites the URL soon after).
   const [inviteToken] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("invite"),
@@ -763,7 +763,7 @@ function App() {
   // Access guard for the admin-only users page. Done in an effect (not during
   // render) and as a history-replacing redirect so Back does not loop back
   // onto the denied page.
-  // Guard is suppressed while authLoading is true — the session is still being
+  // Guard is suppressed while authLoading is true - the session is still being
   // confirmed by the server and a null session at this point does not mean the
   // user is logged out.
   useEffect(() => {
@@ -794,7 +794,7 @@ function App() {
   };
 
   const requireSessionThen = (next: () => void) => {
-    // While auth is still loading, silently wait — the session is being
+    // While auth is still loading, silently wait - the session is being
     // confirmed by the server and may not be null for much longer.
     if (authLoading) return;
     if (!session) {
@@ -835,7 +835,7 @@ function App() {
 
   const isAuthed = !!session;
 
-  // Team-invite landing page (/?invite=<token>) — full-page gate, shown before
+  // Team-invite landing page (/?invite=<token>) - full-page gate, shown before
   // any auth flow. The invitee sets a password or continues with SSO, then the
   // page reloads into the workspace dashboard (no account-type selection).
   if (inviteToken) {
@@ -853,7 +853,7 @@ function App() {
     );
   }
 
-  // Billing team members see invoices/billing only — no project data or tools.
+  // Billing team members see invoices/billing only - no project data or tools.
   if (session?.membershipRole === "billing" && !authLoading) {
     return (
       <Suspense fallback={null}>
@@ -862,7 +862,7 @@ function App() {
     );
   }
 
-  // Account type selection — full-page gate for brand-new signups (password or
+  // Account type selection - full-page gate for brand-new signups (password or
   // SSO) that haven't chosen Agency/Partner vs Client yet. Intercepts all views.
   if (needsSetup && session && !authLoading) {
     return (
@@ -870,7 +870,7 @@ function App() {
         onComplete={(role) => {
           setNeedsSetup(false);
           setSessionState({ username: session.username, role });
-          // Role just changed (client/agency now known) — refresh profile so
+          // Role just changed (client/agency now known) - refresh profile so
           // the intake prefill fires on the first project the user creates.
           void fetchAccountProfile().then((ap) => setAccountProfile(ap));
           void refreshAccountsCache();
@@ -1006,7 +1006,7 @@ function App() {
   if (view === "sub-accounts") {
     // Direct clients are leaf accounts and cannot manage sub-accounts, but
     // they may still reach this page (as "My Account") if they are a Client
-    // account type — they just won't see the sub-account management sections.
+    // account type - they just won't see the sub-account management sections.
     if (!session) {
       return null;
     }

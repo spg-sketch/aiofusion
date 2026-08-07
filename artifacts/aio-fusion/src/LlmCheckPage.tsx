@@ -711,7 +711,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
     // the item is not "resurrected" on the next sync from the server.
     const ok = await deleteServerAudit(activeClient.id, id);
     if (!ok) {
-      alert("Could not delete the audit — the server could not be reached. Please try again.");
+      alert("Could not delete the audit - the server could not be reached. Please try again.");
       return;
     }
     const next = savedAudits.filter((a) => a.id !== id);

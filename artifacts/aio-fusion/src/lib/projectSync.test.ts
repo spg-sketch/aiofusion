@@ -140,7 +140,7 @@ describe("assertActiveProjectConsistency", () => {
     warnSpy.mockRestore();
   });
 
-  it("empty project list: treated as not yet loaded — no-op even with a stored ID", () => {
+  it("empty project list: treated as not yet loaded - no-op even with a stored ID", () => {
     localStorage.setItem(KEY, "proj-abc");
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     assertActiveProjectConsistency([]);

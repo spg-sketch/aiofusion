@@ -11,11 +11,11 @@ configure({ asyncUtilTimeout: 5000 });
 // There are two distinct paths that must both carry the correct profile to the
 // intake form, plus regression cover for stale-profile leaks:
 //
-//   Boot path     — bootstrapAuth() returns a session on page load.
-//   Login path    — user was signed out and authenticates in the same session
+//   Boot path - bootstrapAuth() returns a session on page load.
+//   Login path - user was signed out and authenticates in the same session
 //                   via the password form. App's onLoginSuccess calls
 //                   fetchAccountProfile() (the bug fix).
-//   Stale/logout  — handleSignOut must set accountProfile = null.
+//   Stale/logout - handleSignOut must set accountProfile = null.
 //
 // Navigation strategy to reach IntakePage inside App:
 //   1. Dispatch popstate → view="platform-home" (or rely on oauth_status=ok).
@@ -159,7 +159,7 @@ async function enterPlatformAndCreateProject(projectName = "Test Project") {
 
 // ─── Boot path ───────────────────────────────────────────────────────────────
 
-describe("accountProfile — boot path via bootstrapAuth", () => {
+describe("accountProfile - boot path via bootstrapAuth", () => {
   // Pre-warm the lazy import so the first test doesn't pay the chunk-load cost.
   beforeAll(async () => {
     await import("./App");
@@ -218,9 +218,9 @@ describe("accountProfile — boot path via bootstrapAuth", () => {
 // is tested in App.inSessionLogin.test.tsx which mocks PlatformHomePage to control
 // onLoginSuccess timing cleanly.
 
-// ─── Logout clears profile (stale-profile regression) — placeholder describe ──
+// ─── Logout clears profile (stale-profile regression) - placeholder describe ──
 // (This describe block kept below; the in-session-login describe was removed.)
-describe("accountProfile — in-session login path (covered in App.inSessionLogin.test.tsx)", () => {
+describe("accountProfile - in-session login path (covered in App.inSessionLogin.test.tsx)", () => {
   it("see App.inSessionLogin.test.tsx for the full test", () => {
     expect(true).toBe(true);
   });
@@ -228,13 +228,13 @@ describe("accountProfile — in-session login path (covered in App.inSessionLogi
 
 // ─── Logout clears profile (stale-profile regression) ────────────────────────
 
-describe("accountProfile — REMOVED in-session login path (legacy placeholder)", () => {
+describe("accountProfile - REMOVED in-session login path (legacy placeholder)", () => {
   beforeAll(async () => {
     await import("./App");
   });
 
   it.skip("password sign-in populates accountProfile; brand note appears on a new project's intake (SKIPPED: flaky form-submit timing, covered in App.inSessionLogin.test.tsx)", async () => {
-    // Stage 1: signed-out — bootstrapAuth sees 401 → session = null.
+    // Stage 1: signed-out - bootstrapAuth sees 401 → session = null.
     // Stage 2: after the login form is submitted, the server "sets a cookie"
     //          (loggedIn flag) and subsequent /me calls return brand session.
     let loggedIn = false;
@@ -323,7 +323,7 @@ describe("accountProfile — REMOVED in-session login path (legacy placeholder)"
 
 // ─── Logout clears profile (stale-profile regression) ────────────────────────
 
-describe("accountProfile — logout clears profile (stale-profile regression)", () => {
+describe("accountProfile - logout clears profile (stale-profile regression)", () => {
   beforeAll(async () => {
     await import("./App");
   });
@@ -356,7 +356,7 @@ describe("accountProfile — logout clears profile (stale-profile regression)", 
       async () => makeResponse(unauthorizedBody, 401),
     );
 
-    // Navigate to platform view — since session=null AND activeClient=null (cleared
+    // Navigate to platform view - since session=null AND activeClient=null (cleared
     // by sign-out), App renders ClientSelectorPage with the "No projects yet" empty
     // state.  IntakePage does NOT render → no brand note.
     const state = { __aioNav: true, view: "platform" };

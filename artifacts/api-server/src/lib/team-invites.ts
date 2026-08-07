@@ -19,7 +19,7 @@ import { logger } from "./logger";
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export const DEFAULT_TEAM_SEATS = 3;
 
-// Roles an invitee may be given. "owner" is deliberately excluded — ownership
+// Roles an invitee may be given. "owner" is deliberately excluded - ownership
 // is transferred through the existing owner-reassignment path, not via invite.
 export const INVITABLE_ROLES: MembershipRole[] = ["admin", "billing", "content", "viewer"];
 
@@ -98,7 +98,7 @@ export async function getValidInvite(token: string): Promise<PlatformInvitationR
 }
 
 // Consume an invitation for a resolved platform user: mark the token used
-// (atomically — a second concurrent accept loses) and create the membership
+// (atomically - a second concurrent accept loses) and create the membership
 // with the invite's role and project access.
 //
 // Returns false when the token was already consumed/revoked in the meantime.

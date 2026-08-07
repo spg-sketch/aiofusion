@@ -321,7 +321,7 @@ describe("POST /api/platform/exit-impersonation", () => {
   });
 
   it("returns 401 and clears both cookies when the stash session has expired", async () => {
-    // EXPIRED_STASH_SID does not exist in platform_sessions — simulates expiry/revocation
+    // EXPIRED_STASH_SID does not exist in platform_sessions - simulates expiry/revocation
     const res = await fetch(`${baseUrl}/api/platform/exit-impersonation`, {
       method: "POST",
       headers: {

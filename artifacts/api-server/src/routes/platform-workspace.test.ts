@@ -1,10 +1,10 @@
 /**
  * Tests for the workspace-switching and in-app invite-acceptance endpoints
  * added to platform.ts:
- *   GET  /platform/me          — now includes `workspaces` array
- *   GET  /platform/my-invites  — pending invites for the signed-in user's email
- *   POST /platform/my-invites/:token/accept — in-app accept (no new session)
- *   POST /platform/switch-workspace         — switch active workspace
+ *   GET  /platform/me - now includes `workspaces` array
+ *   GET  /platform/my-invites - pending invites for the signed-in user's email
+ *   POST /platform/my-invites/:token/accept - in-app accept (no new session)
+ *   POST /platform/switch-workspace - switch active workspace
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
@@ -357,7 +357,7 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// /platform/me — workspaces field
+// /platform/me - workspaces field
 // ---------------------------------------------------------------------------
 describe("GET /platform/me – workspaces field", () => {
   it("includes all active workspaces for the signed-in user", async () => {
@@ -475,7 +475,7 @@ describe("POST /platform/my-invites/:token/accept", () => {
     expect(res.json.companySlug).toBe("accept-b");
     expect(res.json.role).toBe("content");
 
-    // No new Set-Cookie header — session must not change.
+    // No new Set-Cookie header - session must not change.
     expect(res.setCookie).toBeNull();
 
     // Membership row now exists.

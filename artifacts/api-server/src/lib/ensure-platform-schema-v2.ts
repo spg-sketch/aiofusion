@@ -5,9 +5,9 @@ import { logger } from "./logger";
 // Idempotent column additions for the v2 platform schema.
 //
 // Adds columns introduced in the login/accounts overhaul:
-//   platform_users    — session_version (fast revocation), microsoft_id (Entra ID SSO)
-//   platform_sessions — session_version (carries the version at issue time)
-//   platform_companies — free_access, billing_email, vat_number, display_name
+//   platform_users - session_version (fast revocation), microsoft_id (Entra ID SSO)
+//   platform_sessions - session_version (carries the version at issue time)
+//   platform_companies - free_access, billing_email, vat_number, display_name
 //
 // All statements use ADD COLUMN IF NOT EXISTS so they are safe to run on every
 // server restart. A failure here is non-fatal: the server continues with the

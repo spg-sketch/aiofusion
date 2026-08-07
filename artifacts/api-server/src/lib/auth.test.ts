@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 
 // A real (in-memory) Postgres engine so the timestamp comparison in
 // `getSession()` and the bulk-delete in `pruneExpiredSessions()` run actual
-// SQL — not a hand-rolled JS mock.  This proves that expired rows are rejected
+// SQL - not a hand-rolled JS mock.  This proves that expired rows are rejected
 // and deleted by the real drizzle query, not just by a mocked branch.
 import { vi } from "vitest";
 
@@ -35,7 +35,7 @@ const SAMPLE_SESSION = {
   access_token: "tok",
 };
 
-describe("session expiry — DB-backed (PGlite)", () => {
+describe("session expiry - DB-backed (PGlite)", () => {
   describe("getSession()", () => {
     it("returns session data for a valid (non-expired) session", async () => {
       const sid = "valid-sid";

@@ -24,7 +24,7 @@ const accentSoft = "#FBE3ED";
 const ROLE_OPTIONS: { value: MembershipRole; label: string; hint: string }[] = [
   { value: "admin", label: "Admin", hint: "Full access, can manage the team" },
   { value: "content", label: "Content staff", hint: "Works on assigned projects only" },
-  { value: "billing", label: "Billing", hint: "Invoices and billing only — no project access" },
+  { value: "billing", label: "Billing", hint: "Invoices and billing only - no project access" },
   { value: "viewer", label: "Viewer", hint: "Read-only access" },
 ];
 
@@ -156,7 +156,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
     });
   };
 
-  // Workspace invitations — shown regardless of team-load state so users always
+  // Workspace invitations - shown regardless of team-load state so users always
   // see pending cross-workspace invites even when the team members API fails.
   const invitationsBlock = (myInvites.length > 0 || Object.keys(myInvitesAccepted).length > 0) ? (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
@@ -233,7 +233,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       </>
     );
   }
-  // Team management not available (e.g. client account) — hide the team card but
+  // Team management not available (e.g. client account) - hide the team card but
   // still show pending cross-workspace invitations.
   if (!team) {
     const errorCard = loadError && !loadError.toLowerCase().includes("not available")
@@ -288,7 +288,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
               style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
             >
               {ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label} — {o.hint}</option>
+                <option key={o.value} value={o.value}>{o.label} - {o.hint}</option>
               ))}
             </select>
           </div>
@@ -314,7 +314,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
             {restrict && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {projects.length === 0 && (
-                  <span className="text-[12px]" style={{ color: vars.g600 }}>No projects yet — the member will see projects you assign later.</span>
+                  <span className="text-[12px]" style={{ color: vars.g600 }}>No projects yet - the member will see projects you assign later.</span>
                 )}
                 {projects.map((p) => {
                   const checked = projectIds.includes(p.id);

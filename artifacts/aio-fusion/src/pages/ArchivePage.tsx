@@ -205,7 +205,7 @@ function ArchivePage({ onNavigate }: { onNavigate: (p: string) => void }) {
             {!contentVersion ? "Loading your content…" : isContentStoreAuthError() ? "Session expired" : archive.length === 0 ? "Library is empty" : "No matching items"}
           </p>
           <p className="text-[14px] font-light mt-2" style={{ color: vars.g500 }}>
-            {!contentVersion ? "Fetching your saved pieces from the server." : isContentStoreAuthError() ? "Your session has expired. Please log out and sign back in — your content is safe and will reappear." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}
+            {!contentVersion ? "Fetching your saved pieces from the server." : isContentStoreAuthError() ? "Your session has expired. Please log out and sign back in - your content is safe and will reappear." : archive.length === 0 ? "Save a draft or final piece from the Content Optimiser, Content Creator or Comms Planner to start building your library." : "Try clearing your filters."}
           </p>
         </div>
       ) : (

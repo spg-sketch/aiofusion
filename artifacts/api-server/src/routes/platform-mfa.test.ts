@@ -181,7 +181,7 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
-// Pass-through rate limiter — avoids the express-rate-limit in-memory store
+// Pass-through rate limiter - avoids the express-rate-limit in-memory store
 // from interfering with repeated test requests.
 vi.mock("../middleware/rate-limit", () => {
   const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
@@ -468,7 +468,7 @@ describe("MFA login flow", () => {
     expect(ok.status).toBe(200);
     expect(await getMfaState(AGENCY)).toBeNull();
 
-    // The workspace owner gets a fire-and-forget security alert email — not
+    // The workspace owner gets a fire-and-forget security alert email - not
     // the more recently added non-owner member.
     await vi.waitFor(() => {
       expect(sendMfaAdminResetEmailMock).toHaveBeenCalledWith(
@@ -575,7 +575,7 @@ describe("MFA login flow", () => {
     const bad = await post(baseUrl, "/api/platform/mfa/enable", { code: "000000" });
     expect(bad.status).toBe(401);
 
-    // Give async fire-and-forget a moment — it must not have fired.
+    // Give async fire-and-forget a moment - it must not have fired.
     await new Promise((r) => setTimeout(r, 50));
     expect(sendMfaChangedEmailMock).not.toHaveBeenCalled();
   });
@@ -805,7 +805,7 @@ describe("MFA trusted devices", () => {
       code: totpCode(secret),
       trustDevice: true,
     });
-    // Login must still succeed — no email config must never block the flow.
+    // Login must still succeed - no email config must never block the flow.
     expect(verify.status).toBe(200);
     expect(verify.setCookie).toMatch(/aio_mfa_trust=/);
     await new Promise((r) => setTimeout(r, 50));

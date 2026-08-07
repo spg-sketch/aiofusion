@@ -1,5 +1,5 @@
 /**
- * PageHead — imperatively updates <head> meta tags for public marketing pages.
+ * PageHead - imperatively updates <head> meta tags for public marketing pages.
  *
  * During client-side navigation the component fires a useEffect to sync the
  * document title, description, canonical, OG, Twitter, and JSON-LD.  During

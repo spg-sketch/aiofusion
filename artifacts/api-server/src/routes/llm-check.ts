@@ -83,7 +83,7 @@ export interface BrandIdentity {
   // fallback behaviour is unchanged.
   confirmedEntity?: { name: string; description?: string } | null;
   // Organisations the client explicitly says share their name but are NOT them
-  // (e.g. "BlueHalo LLC (US defence contractor)"). Optional — only needed when
+  // (e.g. "BlueHalo LLC (US defence contractor)"). Optional - only needed when
   // the client knows of a specific namesake causing engine confusion. Used to
   // anchor the identity probe and pre-seed entity clarity.
   knownNamesakes?: string[];
@@ -236,7 +236,7 @@ export function isMentioned(text: string, brand: BrandIdentity | string, probeWa
     // When the probe question was already anchored (e.g. "Is SMG (smg.com)
     // trustworthy?"), the AI engine has been told which company is meant, so
     // any alias match in its answer refers to the right company. Skip the
-    // corroboration check — requiring the domain to appear in the *answer*
+    // corroboration check - requiring the domain to appear in the *answer*
     // would silently discard genuine mentions and collapse scores to near-zero.
     if (probeWasAnchored) return true;
     // A weak acronym match only counts when we have no disambiguation context
@@ -479,7 +479,7 @@ function isLikelyBrandName(name: string): boolean {
   const lastWord = words[words.length - 1].toLowerCase().replace(/[^a-z]/g, "");
   if (GENERIC_CONCEPT_ENDINGS.has(lastWord)) return false;
   // Reject if the name contains a preposition mid-phrase (e.g. "Participate in Real",
-  // "Press Coverage of Brands"). Ampersand (&) is fine — it appears in real brand names.
+  // "Press Coverage of Brands"). Ampersand (&) is fine - it appears in real brand names.
   if (words.length > 1 && /\b(in|of|for|is|the|a|an|at|to|with|by|from|about|on|via)\b/i.test(name)) return false;
   return true;
 }
@@ -495,7 +495,7 @@ export function extractCompetitors(text: string, brand: BrandIdentity | string):
     { re: /(?:companies|firms|agencies|providers|organizations|organisations)(?:\s+(?:like|such as|including|are))\s+([^.]+)/gi },
     // Numbered-list pattern: require at least 2 words to exclude bare single-word
     // topic fragments ("Non", "Closed", "Off", "Build") that appear as list headers.
-    { re: /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–—:])/g, minWords: 2 },
+    { re: /(?:\d+\.\s+\*{0,2})([A-Z][A-Za-z0-9\s&.']+?)(?:\*{0,2}\s*[-–\u2014:])/g, minWords: 2 },
     { re: /\*{2}([A-Z][A-Za-z0-9\s&.']+?)\*{2}/g },
   ];
 
@@ -1010,13 +1010,13 @@ export async function scoreAuthority(
   }));
 
   const weightedScoreLine = metrics.weightedVisibilityScore !== undefined && metrics.weightedVisibilityScore !== metrics.visibilityScore
-    ? `\nINTENT-WEIGHTED SCORE: ${metrics.weightedVisibilityScore} (buyer-intent probes weighted 1.5x, sector probes 1.0x, identity probe 0.5x — give this more weight than the raw presence % when setting the Authority Index, because buyer-intent mentions are more commercially significant)`
+    ? `\nINTENT-WEIGHTED SCORE: ${metrics.weightedVisibilityScore} (buyer-intent probes weighted 1.5x, sector probes 1.0x, identity probe 0.5x - give this more weight than the raw presence % when setting the Authority Index, because buyer-intent mentions are more commercially significant)`
     : "";
 
   const narrativeContextBlock = narrativeContext && (narrativeContext.gptContexts.length > 0 || narrativeContext.claudeContexts.length > 0)
     ? `
 
-NARRATIVE CONTEXT (sentences from probe responses where the brand appeared — use these ONLY to extract adjectives and framings; do not invent or embellish):
+NARRATIVE CONTEXT (sentences from probe responses where the brand appeared - use these ONLY to extract adjectives and framings; do not invent or embellish):
 ChatGPT mention contexts:
 ${narrativeContext.gptContexts.slice(0, 6).map((c, i) => `${i + 1}. ${c}`).join("\n") || "(brand did not appear in ChatGPT probes)"}
 
@@ -1027,7 +1027,7 @@ ${narrativeContext.claudeContexts.slice(0, 6).map((c, i) => `${i + 1}. ${c}`).jo
   const failedQuestionsBlock = narrativeContext && narrativeContext.failedQuestions.length > 0
     ? `
 
-QUERIES WHERE THE BRAND WAS ABSENT (exact question strings — use these to populate failedProbes on each priorityAction):
+QUERIES WHERE THE BRAND WAS ABSENT (exact question strings - use these to populate failedProbes on each priorityAction):
 ${narrativeContext.failedQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
     : "";
 
@@ -1063,8 +1063,8 @@ Return STRICT JSON only - no prose before or after, no markdown fences. Exactly 
   "topGaps": ["<the most important visibility gap>", ... up to 5],
   "priorityActions": [{ "action": "<what to do>", "rationale": "<why, grounded in the evidence>", "priority": "high|medium|low", "failedProbes": ["<exact question string where brand was absent and this action would help>", ... up to 3, or omit if not applicable] }, ... up to 5],
   "queryTable": [{ "query": "<the probed question>", "appeared": <true|false>, "notes": "<what the engines said, or which rivals they recommended instead>" }, ... one row per query in the evidence],
-  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows — do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
-  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query — do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say — frameworks, dominant terminology, competitor context — not on what the brand failed to do.],
+  "competitorInsights": [{ "name": "<competitor name exactly as it appears in the probe evidence>", "description": "<1-2 plain sentences: what this organisation does and why engines recommend it, based only on what the probe evidence shows - do not invent details>" }, ... one entry per competitor from the probe evidence that does NOT appear in the client's own competitors list above. Omit tracked competitors. Omit generic terms like 'Agency' or 'United Kingdom'. Maximum 8 entries.],
+  "categoryFraming": [{ "query": "<the probed question>", "themes": "<1-2 sentences: how AI engines frame this topic, the key concepts and vocabulary they use, based only on the probe evidence for this query - do not invent details. Max 60 words.>" }, ... one entry per probe query. Focus on what the engines DO say - frameworks, dominant terminology, competitor context - not on what the brand failed to do.],
   "narrativeSignals": {
     "gpt": ["<adjective or short framing used by ChatGPT to describe the brand>", ... 2-6 items, or [] if brand was absent in GPT probes],
     "claude": ["<adjective or short framing used by Claude to describe the brand>", ... 2-6 items, or [] if brand was absent in Claude probes],
@@ -1228,7 +1228,7 @@ export async function assessEntityClarity(identity: BrandIdentity, accountId?: s
 
   const prompt = `A PR team needs to know how clearly the name "${identity.name}" identifies a single company to AI answer engines.
 
-List the well-known companies or organisations commonly referred to as "${identity.name}", most well-known first.${identity.website ? ` The company at ${identity.website} must be included — it is the brand being assessed.` : ""} For each, output one line exactly as:
+List the well-known companies or organisations commonly referred to as "${identity.name}", most well-known first.${identity.website ? ` The company at ${identity.website} must be included - it is the brand being assessed.` : ""} For each, output one line exactly as:
 Full name - one short description including the organisation's website domain where you know it
 
 Example format: Acme Corp - a UK logistics firm (acme.co.uk)
@@ -1270,7 +1270,7 @@ Rules: plain text only, one organisation per line, no preamble, no numbering, Br
   }
 }
 
-// GET /api/audit-lock — returns the current lock status for a project+auditType pair.
+// GET /api/audit-lock - returns the current lock status for a project+auditType pair.
 // Called by the frontend on page load so it can show the last-run date and block
 // the run button before the user even tries to fire the audit.
 llmCheckRouter.get("/audit-lock", async (req: Request, res: Response) => {
@@ -1324,7 +1324,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
     return;
   }
 
-  // 1. Monthly GBP spending cap — checked first.
+  // 1. Monthly GBP spending cap - checked first.
   {
     const { allowed: spendAllowed, spentGbp, limitGbp } = await checkMonthlySpendLimit(req.account.username);
     if (!spendAllowed) {
@@ -1333,7 +1333,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
       res.setHeader("Retry-After", secondsToMonthEnd);
       res.status(429).json({
-        error: "Monthly spending limit reached — contact us to discuss your plan.",
+        error: "Monthly spending limit reached - contact us to discuss your plan.",
         spentGbp: parseFloat(spentGbp.toFixed(4)),
         limitGbp,
       });
@@ -1350,7 +1350,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       const secondsToMonthEnd = Math.max(1, Math.ceil((monthEnd.getTime() - now.getTime()) / 1000));
       res.setHeader("Retry-After", secondsToMonthEnd);
       res.status(429).json({
-        error: "Fair usage limit reached — contact us to discuss your plan.",
+        error: "Fair usage limit reached - contact us to discuss your plan.",
         callCount,
         limit,
       });
@@ -1396,7 +1396,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
             });
             return;
           }
-          // Admin forced the audit past the 21-day lock — log for accountability.
+          // Admin forced the audit past the 21-day lock - log for accountability.
           void logAdminEvent(
             { username: req.account!.username, id: req.account!.userId },
             "forced_llm_audit",

@@ -6,11 +6,11 @@
 //   onLoginSuccess(s) → setSessionState(s) + fetchAccountProfile() → setAccountProfile(ap)
 //
 // Three phases are tested:
-//   Phase 1 — App starts signed-out (bootstrapAuth returns null session).
-//   Phase 2 — onLoginSuccess fires with a brand session.
+//   Phase 1 - App starts signed-out (bootstrapAuth returns null session).
+//   Phase 2 - onLoginSuccess fires with a brand session.
 //             fetchAccountProfile() is called; returns brand profile.
 //             accountProfile state is set.
-//   Phase 3 — Navigate to platform view → create project → intake shows brand note.
+//   Phase 3 - Navigate to platform view → create project → intake shows brand note.
 import React from "react";
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, act, fireEvent } from "@testing-library/react";
@@ -23,7 +23,7 @@ configure({ asyncUtilTimeout: 5000 });
 // platform.  Immediately calls onContinueToProjects once a session exists so
 // the test flow can proceed to ClientSelectorPage without extra clicks.
 vi.mock("./pages/PlatformHomePage", async () => ({
-  // PlatformHomePage is a named export (not default) — see App.tsx lazy import.
+  // PlatformHomePage is a named export (not default) - see App.tsx lazy import.
   PlatformHomePage: ({
     session,
     onLoginSuccess,
@@ -123,7 +123,7 @@ afterEach(() => {
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
-describe("App in-session login — onLoginSuccess calls fetchAccountProfile", () => {
+describe("App in-session login - onLoginSuccess calls fetchAccountProfile", () => {
   beforeAll(async () => {
     await import("./App");
   });
@@ -142,7 +142,7 @@ describe("App in-session login — onLoginSuccess calls fetchAccountProfile", ()
       // "Mock sign in" clicks (because loggedIn starts false and the sign-in
       // button fires setSession synchronously, then fetchAccountProfile fires).
       // Simplify: return brand profile for all /me calls (bootstrapAuth sees a
-      // session immediately — that's fine; we're testing the LOGIN path where
+      // session immediately - that's fine; we're testing the LOGIN path where
       // we're already signed in from bootstrapAuth's perspective too).
       if (urlStr.includes("/api/platform/me")) return brandMeResponse();
       if (urlStr.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
@@ -215,7 +215,7 @@ describe("App in-session login — onLoginSuccess calls fetchAccountProfile", ()
 
     await act(async () => { await new Promise((r) => setTimeout(r, 150)); });
 
-    // Phase 1: signed out — Mock PlatformHomePage shows "Mock sign in" button.
+    // Phase 1: signed out - Mock PlatformHomePage shows "Mock sign in" button.
     const signInBtn = await screen.findByRole("button", { name: /Mock sign in/i }, { timeout: 8000 });
 
     // Switch /me to return brand profile BEFORE clicking sign in, so
@@ -225,7 +225,7 @@ describe("App in-session login — onLoginSuccess calls fetchAccountProfile", ()
     await act(async () => {
       fireEvent.click(signInBtn);
       // onLoginSuccess(brandSession) fires synchronously inside the click handler.
-      // fetchAccountProfile() starts (async) — give it time.
+      // fetchAccountProfile() starts (async) - give it time.
       await new Promise((r) => setTimeout(r, 100));
     });
 
@@ -252,7 +252,7 @@ describe("App in-session login — onLoginSuccess calls fetchAccountProfile", ()
       await new Promise((r) => setTimeout(r, 100));
     });
 
-    // The brand note must appear — accountProfile was set by fetchAccountProfile
+    // The brand note must appear - accountProfile was set by fetchAccountProfile
     // called from onLoginSuccess (the bug fix).
     await waitFor(() =>
       expect(screen.getByText(/We've pre-filled your company name and website/i))

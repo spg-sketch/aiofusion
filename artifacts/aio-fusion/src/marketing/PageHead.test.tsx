@@ -1,5 +1,5 @@
 /**
- * PageHead — JSON-LD lifecycle tests
+ * PageHead - JSON-LD lifecycle tests
  *
  * Verifies that navigating from a page with JSON-LD to one without removes the
  * managed <script type="application/ld+json"> from <head> so stale schema
@@ -64,7 +64,7 @@ describe("PageHead JSON-LD management", () => {
     });
 
     // Pricing has its own jsonLd (WebPage), so script should still exist but
-    // content changes — Article schema must NOT be present.
+    // content changes - Article schema must NOT be present.
     const after = document.head.querySelector(LD_SEL);
     expect(after).not.toBeNull();
     const data = JSON.parse(after!.textContent ?? "{}");

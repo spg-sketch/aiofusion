@@ -1,0 +1,34 @@
+import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, extname } from "node:path";
+
+// GUARD: no em dashes in anything the server sends to users (API copy, email
+// templates, report text, error messages). Owner's standing rule.
+// If this test fails, replace the em dash (U+2014) with a plain hyphen ( - ).
+const EM_DASH = /[\u2014\u2015]/;
+const TEXT_EXTS = new Set([".ts", ".tsx", ".md", ".html", ".json"]);
+const SKIP_DIRS = new Set(["node_modules", "dist"]);
+
+function collectFiles(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) collectFiles(p, out);
+    else if (TEXT_EXTS.has(extname(name))) out.push(p);
+  }
+  return out;
+}
+
+describe("no em dashes in server source", () => {
+  it("no text file under src/ contains an em dash", () => {
+    const offenders: string[] = [];
+    for (const file of collectFiles(__dirname)) {
+      const content = readFileSync(file, "utf8");
+      if (EM_DASH.test(content)) {
+        const line = content.split("\n").findIndex((l) => EM_DASH.test(l)) + 1;
+        offenders.push(`${file}:${line}`);
+      }
+    }
+    expect(offenders, `Em dashes found (replace with " - "):\n${offenders.join("\n")}`).toEqual([]);
+  });
+});

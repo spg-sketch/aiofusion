@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
-// Mock auth module — must be declared before the component import
+// Mock auth module - must be declared before the component import
 // ---------------------------------------------------------------------------
 const mockGetImpersonationState = vi.fn();
 const mockServerExitImpersonation = vi.fn();
@@ -42,7 +42,7 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("ImpersonationBanner — exit flow", () => {
+describe("ImpersonationBanner - exit flow", () => {
   it("renders nothing when not impersonating", async () => {
     mockGetImpersonationState.mockResolvedValue(null);
     const { container } = render(<ImpersonationBanner />);
@@ -104,9 +104,9 @@ describe("ImpersonationBanner — exit flow", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Login notice — verify the expired-session notice surfaces in the login form
+// Login notice - verify the expired-session notice surfaces in the login form
 // ---------------------------------------------------------------------------
-describe("Login form — aio_session_expired notice", () => {
+describe("Login form - aio_session_expired notice", () => {
   it("shows the expired-session message when initialNotice is set", async () => {
     // PlatformHomePage is the component that receives initialNotice from App.tsx
     // when ?aio_session_expired=1 is in the URL. We test the prop directly here

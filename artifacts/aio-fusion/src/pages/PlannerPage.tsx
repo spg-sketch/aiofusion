@@ -627,7 +627,7 @@ function PlannerPage({ onNavigate }: { onNavigate: (p: string) => void }) {
               <p>Both dimensions feed a <strong style={{ color: vars.navy }}>Combined</strong> score (the average of the two). The default weighting table is shown below - change any value in <em>Score settings</em>.</p>
               <div className="rounded-lg p-3 border" style={{ background: "rgba(200,73,122,0.05)", borderColor: "rgba(200,73,122,0.2)" }}>
                 <p className="font-semibold text-[12px] mb-1" style={{ color: vars.navy }}>How the plan total is calculated</p>
-                <p>Each new piece of content adds to your plan score, but with <strong style={{ color: vars.navy }}>diminishing returns</strong> — the first high-quality article makes the biggest difference, and a well-rounded plan of different content types will always score higher than repeating the same format. This keeps the Visibility and Authority totals meaningful and capped at 50 each (100 combined), no matter how many items are in the plan.</p>
+                <p>Each new piece of content adds to your plan score, but with <strong style={{ color: vars.navy }}>diminishing returns</strong> - the first high-quality article makes the biggest difference, and a well-rounded plan of different content types will always score higher than repeating the same format. This keeps the Visibility and Authority totals meaningful and capped at 50 each (100 combined), no matter how many items are in the plan.</p>
               </div>
               <div className="rounded-lg border overflow-hidden" style={{ borderColor: vars.g200 }}>
                 <table className="w-full text-[12px]">

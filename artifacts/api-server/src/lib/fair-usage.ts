@@ -43,7 +43,7 @@ async function getFairUsageMultiplier(accountId: string): Promise<number> {
       if (isFinite(v) && v > 0) return v;
     }
   } catch {
-    // Non-fatal — fall through to default
+    // Non-fatal - fall through to default
   }
   return 1;
 }
@@ -65,7 +65,7 @@ export async function getMonthlySpendLimitGbp(accountId: string): Promise<number
       if (isFinite(v) && v > 0) return v;
     }
   } catch {
-    // Non-fatal — fall through to default
+    // Non-fatal - fall through to default
   }
   return DEFAULT_MONTHLY_SPEND_LIMIT_GBP;
 }
@@ -100,7 +100,7 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
     if (!allowed) {
       logger.warn(
         { accountId, projectId, callCount, limit, multiplier },
-        "fair-usage: project over 30-day action limit — returning 429",
+        "fair-usage: project over 30-day action limit - returning 429",
       );
       // Send breach email at most once per hour per account
       const lastSent = quotaCooldown.get(accountId) ?? 0;
@@ -112,7 +112,7 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
 
     return { allowed, callCount, limit };
   } catch (err) {
-    logger.warn({ err, accountId, projectId }, "fair-usage: checkFairUsage DB error — allowing through");
+    logger.warn({ err, accountId, projectId }, "fair-usage: checkFairUsage DB error - allowing through");
     return { allowed: true, callCount: 0, limit: DEFAULT_FAIR_USAGE_LIMIT };
   }
 }
@@ -128,7 +128,7 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
   try {
     const limitGbp = await getMonthlySpendLimitGbp(accountId);
     if (limitGbp === null) {
-      // Explicitly unlimited — skip the DB query
+      // Explicitly unlimited - skip the DB query
       return { allowed: true, spentGbp: 0, limitGbp: null };
     }
 
@@ -153,7 +153,7 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
     if (!allowed) {
       logger.warn(
         { accountId, spentGbp: spentGbp.toFixed(4), limitGbp },
-        "fair-usage: account over monthly GBP spend limit — returning 429",
+        "fair-usage: account over monthly GBP spend limit - returning 429",
       );
       const lastSent = spendLimitCooldown.get(accountId) ?? 0;
       if (Date.now() - lastSent >= SPEND_LIMIT_COOLDOWN_MS) {
@@ -168,7 +168,7 @@ export async function checkMonthlySpendLimit(accountId: string): Promise<{
 
     return { allowed, spentGbp, limitGbp };
   } catch (err) {
-    logger.warn({ err, accountId }, "fair-usage: checkMonthlySpendLimit DB error — allowing through");
+    logger.warn({ err, accountId }, "fair-usage: checkMonthlySpendLimit DB error - allowing through");
     return { allowed: true, spentGbp: 0, limitGbp: DEFAULT_MONTHLY_SPEND_LIMIT_GBP };
   }
 }
@@ -319,7 +319,7 @@ export async function getThirtyDayCostByAccount(): Promise<Record<string, number
 }
 
 // Returns the current calendar-month GBP spend per account (all operations,
-// not just those in OPERATION_FILTER — this is for billing visibility).
+// not just those in OPERATION_FILTER - this is for billing visibility).
 export async function getCurrentMonthSpendByAccount(): Promise<Record<string, number>> {
   try {
     const now = new Date();

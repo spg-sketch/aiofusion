@@ -271,7 +271,7 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
             <ArrowLeft size={14} /> All Tickets
           </button>
           <h2 className="text-[16px] font-semibold" style={{ color: navy }}>
-            Ticket #{selectedTicket.id} — {selectedTicket.subject}
+            Ticket #{selectedTicket.id} - {selectedTicket.subject}
           </h2>
           <StatusBadge status={selectedTicket.status} />
         </div>
@@ -279,7 +279,7 @@ function TicketQueue({ navy, accent, teal }: { navy: string; accent: string; tea
         {selectedTicket.emailFailed && (
           <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-[13px] font-medium" style={{ background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>
             <MailX size={15} />
-            <span className="flex-1"><strong>Email delivery failed</strong> — one or more notification emails for this ticket were not delivered (submission alert, user acknowledgement, or admin reply notification). Check the Resend API key and configuration.</span>
+            <span className="flex-1"><strong>Email delivery failed</strong> - one or more notification emails for this ticket were not delivered (submission alert, user acknowledgement, or admin reply notification). Check the Resend API key and configuration.</span>
             <button
               onClick={() => void clearEmailFailed()}
               className="ml-2 shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-semibold hover:opacity-80 transition-opacity"
@@ -883,7 +883,7 @@ function FaqManager({ navy, accent, teal }: { navy: string; accent: string; teal
             <input
               value={editingEntry.keywords ?? ""}
               onChange={(e) => setEditingEntry((p) => ({ ...p!, keywords: e.target.value }))}
-              placeholder="Keywords — comma separated, help GEOrge find this entry"
+              placeholder="Keywords - comma separated, help GEOrge find this entry"
               className="text-[13px] px-3 py-2 rounded-lg border outline-none"
               style={{ borderColor: vars.g200, color: navy }}
             />

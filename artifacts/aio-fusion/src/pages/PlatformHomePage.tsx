@@ -53,7 +53,7 @@ function PlatformHomePage({
    *  (Google/Microsoft only, no password set yet). undefined = not yet resolved. */
   hasPassword?: boolean;
   /** Initial URL query string captured by App before the history-sync effect
-   *  strips it — the OAuth/MFA/verification redirect params live here. */
+   *  strips it - the OAuth/MFA/verification redirect params live here. */
   oauthRedirectParams?: string | null;
   onOauthParamsConsumed?: () => void;
 }) {
@@ -129,7 +129,7 @@ function PlatformHomePage({
 
   // Handle Google OAuth redirect back to this page
   useEffect(() => {
-    // Prefer the query string App captured on load — the history-sync effect
+    // Prefer the query string App captured on load - the history-sync effect
     // in App.tsx strips the URL params before this lazy page mounts.
     const params = new URLSearchParams(oauthRedirectParams ?? window.location.search);
     const status = params.get("oauth_status");
@@ -145,7 +145,7 @@ function PlatformHomePage({
       return;
     }
     if (status === "linked_microsoft") {
-      // Microsoft account linked successfully — nothing to show, the account
+      // Microsoft account linked successfully - nothing to show, the account
       // page will reflect the linked state on next load.
       setLoginError(null);
     } else if (status === "mfa") {
@@ -158,7 +158,7 @@ function PlatformHomePage({
         .split("; ")
         .find((c) => c.startsWith(`${cookieName}=`));
       const mfaToken = match ? decodeURIComponent(match.slice(cookieName.length + 1)) : "";
-      // Clear the cookie immediately — it is single-use.
+      // Clear the cookie immediately - it is single-use.
       document.cookie = `${cookieName}=; path=/; max-age=0`;
       const mfaMode = params.get("mfa_mode") ?? "verify";
       if (mfaToken) {
@@ -180,9 +180,9 @@ function PlatformHomePage({
         state_mismatch: "The sign-in session expired. Please try again.",
         no_code: "Sign-in was interrupted before completing. Please try again.",
         token_exchange_failed:
-          "Could not complete sign-in — the provider rejected the request. Please try again.",
+          "Could not complete sign-in - the provider rejected the request. Please try again.",
         code_already_used:
-          "Your sign-in link was already used — this can happen when Teams or Outlook previews it automatically. Please click \"Sign in with Microsoft\" (or Google) again.",
+          "Your sign-in link was already used - this can happen when Teams or Outlook previews it automatically. Please click \"Sign in with Microsoft\" (or Google) again.",
         no_access_token: "The sign-in provider did not return a valid token. Please try again.",
         userinfo_failed: "Could not retrieve your Google profile. Please try again.",
         graph_failed: "Could not retrieve your Microsoft profile. Please try again.",
@@ -197,7 +197,7 @@ function PlatformHomePage({
     }
     // status === "ok": session cookie set by server; App.tsx's session loader picks it up automatically
 
-    // Verification link errors — redirect back to the verification-pending screen
+    // Verification link errors - redirect back to the verification-pending screen
     const verifyStatus = params.get("verify_status");
     if (verifyStatus === "expired") {
       setLoginError("Your verification link has expired. Request a new one below.");
@@ -212,7 +212,7 @@ function PlatformHomePage({
     e.preventDefault();
     setSignupError(null);
     setSignupLoading(true);
-    // Be forgiving about the website format — prepend https:// if the
+    // Be forgiving about the website format - prepend https:// if the
     // scheme was left off (e.g. "aiofusion.ai" or "www.aiofusion.ai").
     const websiteTrimmed = signupWebsite.trim();
     const websiteNormalised = websiteTrimmed && !/^https?:\/\//i.test(websiteTrimmed)
@@ -401,7 +401,7 @@ function PlatformHomePage({
                   <>
                     <p className="text-[15px] mb-6 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
                       If an account exists for <strong>{forgotEmail.trim()}</strong>, we've sent
-                      a password reset link. It can be used once and expires in 1 hour —
+                      a password reset link. It can be used once and expires in 1 hour - 
                       check your inbox (and spam folder).
                     </p>
                     <button
@@ -648,10 +648,10 @@ function PlatformHomePage({
                   </button>
                 </div>
                 <p className="text-[14px] mb-6" style={{ color: "white" }}>
-                  Welcome back — sign in to manage your projects.
+                  Welcome back - sign in to manage your projects.
                 </p>
 
-                {/* SSO — Google + Microsoft */}
+                {/* SSO - Google + Microsoft */}
                 <div className="flex flex-col sm:flex-row gap-3 mb-5">
                   <a
                     href={`${apiBase()}/api/platform/auth/google`}
@@ -829,7 +829,7 @@ function PlatformHomePage({
               </div>
             </div>
 
-            {/* Sign out — sessions, 2FA, password and deletion now live on the
+            {/* Sign out - sessions, 2FA, password and deletion now live on the
                 My Account page (AccountSecurityCard). */}
             <div className="mt-6 pt-5 flex justify-end" style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}>
               <button

@@ -401,7 +401,7 @@ export async function bootstrapAuth(): Promise<{
   } catch {
     /* offline: fall back to whatever the cache holds */
     session = getSession();
-    // accountProfile stays null — we can't safely prefill from cache alone
+    // accountProfile stays null - we can't safely prefill from cache alone
   }
 
   if (session) {
@@ -730,7 +730,7 @@ export async function serverChangeMyPassword(
 }
 
 // Request a "set first password" email link for SSO-only accounts (no current
-// password needed — identity is confirmed by the active session). The server
+// password needed - identity is confirmed by the active session). The server
 // issues a single-use reset token and emails it to the account address.
 export async function serverRequestSetPassword(): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/request-set-password");

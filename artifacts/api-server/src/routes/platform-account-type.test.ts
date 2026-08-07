@@ -123,7 +123,7 @@ let server: Server;
 let base: string;
 
 beforeAll(async () => {
-  const app = express(); // dummy — real servers created per-test
+  const app = express(); // dummy - real servers created per-test
   server = app.listen(0);
   await new Promise<void>((r) => server.once("listening", r));
   const { port } = server.address() as AddressInfo;

@@ -71,7 +71,7 @@ describe("scoreProject", () => {
   });
 });
 
-describe("aggregatePlanScore — zero projects", () => {
+describe("aggregatePlanScore - zero projects", () => {
   it("returns all zeros", () => {
     const result = aggregatePlanScore([], CFG);
     expect(result.visibility).toBe(0);
@@ -80,7 +80,7 @@ describe("aggregatePlanScore — zero projects", () => {
   });
 });
 
-describe("aggregatePlanScore — one project", () => {
+describe("aggregatePlanScore - one project", () => {
   it("caps visibility at 50", () => {
     const p = makeProject({ channels: [...CFG.channels] });
     const { visibility } = aggregatePlanScore([p], CFG);
@@ -100,7 +100,7 @@ describe("aggregatePlanScore — one project", () => {
   });
 });
 
-describe("aggregatePlanScore — many projects at max score each", () => {
+describe("aggregatePlanScore - many projects at max score each", () => {
   const maxProjects: PlannerProject[] = Array.from({ length: 50 }, (_, i) =>
     makeProject({ id: `p${i}`, contentType: "Article", status: "Approved", channels: [...CFG.channels] })
   );
@@ -126,7 +126,7 @@ describe("aggregatePlanScore — many projects at max score each", () => {
   });
 });
 
-describe("aggregatePlanScore — non-default ScoringConfig weights", () => {
+describe("aggregatePlanScore - non-default ScoringConfig weights", () => {
   const customCfg: ScoringConfig = {
     ...CFG,
     typeWeights: { Custom: { vis: 10, auth: 10 } },
@@ -153,7 +153,7 @@ describe("aggregatePlanScore — non-default ScoringConfig weights", () => {
   });
 });
 
-describe("aggregatePlanScore — monotonic increase", () => {
+describe("aggregatePlanScore - monotonic increase", () => {
   it("adding a project never decreases visibility", () => {
     const base: PlannerProject[] = [];
     let prevVis = 0;

@@ -17,7 +17,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 
 // ---------------------------------------------------------------------------
-// Anthropic + OpenAI — mock before any route module is imported.
+// Anthropic + OpenAI - mock before any route module is imported.
 // ---------------------------------------------------------------------------
 const { messagesCreate } = vi.hoisted(() => ({ messagesCreate: vi.fn() }));
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -335,7 +335,7 @@ vi.mock("@workspace/db", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Rate limiters + concurrency guards — all pass-through
+// Rate limiters + concurrency guards - all pass-through
 // ---------------------------------------------------------------------------
 vi.mock("../middleware/rate-limit", () => {
   const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
@@ -362,7 +362,7 @@ vi.mock("../middleware/concurrency-guard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Non-LLM side-effects — stub out so no network / extra DB tables required
+// Non-LLM side-effects - stub out so no network / extra DB tables required
 // ---------------------------------------------------------------------------
 vi.mock("../lib/admin-events", () => ({
   logAdminEvent: () => Promise.resolve(),
@@ -399,7 +399,7 @@ vi.mock("../lib/fair-usage", () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Imports — after all mocks are declared
+// Imports - after all mocks are declared
 // ---------------------------------------------------------------------------
 import {
   db,
@@ -505,7 +505,7 @@ type RouteEntry = { method: string; path: string };
  * Recurses into mounted sub-routers. Plain middleware layers are skipped.
  *
  * This works cleanly for this codebase because every sub-router in
- * routes/index.ts is mounted without a path prefix — each sub-router
+ * routes/index.ts is mounted without a path prefix - each sub-router
  * registers its own full paths (e.g. contentAiRouter.post("/content/optimise")).
  * There is therefore no prefix-accumulation problem when recursing.
  */
@@ -522,10 +522,10 @@ function collectRoutes(router: any, prefix = ""): RouteEntry[] {
         result.push({ method: method.toUpperCase(), path: fullPath });
       }
     } else if (layer.handle?.stack) {
-      // Mounted sub-router — recurse (no path prefix in this codebase)
+      // Mounted sub-router - recurse (no path prefix in this codebase)
       result.push(...collectRoutes(layer.handle, prefix));
     }
-    // Plain middleware layers (rate limiters, blockReadOnlyMembers, etc.) — skip
+    // Plain middleware layers (rate limiters, blockReadOnlyMembers, etc.) - skip
   }
   return result;
 }
@@ -568,7 +568,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /mobile-auth/token-exchange",
   "POST /mobile-auth/logout",
 
-  // ── platform — public / self-service (platform.ts) ───────────────────────
+  // ── platform - public / self-service (platform.ts) ───────────────────────
   "GET /platform/me",
   "GET /platform/status",
   "POST /platform/login",
@@ -586,7 +586,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/team/invites/:token/resend",
   "POST /platform/logout",
 
-  // ── platform — MFA ────────────────────────────────────────────────────────
+  // ── platform - MFA ────────────────────────────────────────────────────────
   "POST /platform/mfa/setup",
   "POST /platform/mfa/enable",
   "POST /platform/mfa/verify",
@@ -596,7 +596,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /platform/mfa/trusted-devices",
   "DELETE /platform/mfa/trusted-devices/:id",
 
-  // ── platform — OAuth ──────────────────────────────────────────────────────
+  // ── platform - OAuth ──────────────────────────────────────────────────────
   "GET /platform/auth/google",
   "GET /platform/auth/google/link",
   "GET /platform/auth/google/callback",
@@ -605,7 +605,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /platform/auth/microsoft/callback",
   "POST /platform/auth/microsoft/callback",
 
-  // ── platform — admin / account management ────────────────────────────────
+  // ── platform - admin / account management ────────────────────────────────
   "GET /platform/admin/pending",
   "POST /platform/admin/accounts/:username/approve",
   "POST /platform/admin/accounts/:username/reject",
@@ -646,7 +646,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /platform/invite/:token",
   "POST /platform/invite/accept",
 
-  // ── platform — workspace / in-app invites ─────────────────────────────────
+  // ── platform - workspace / in-app invites ─────────────────────────────────
   "GET /platform/my-invites",
   "POST /platform/my-invites/:token/accept",
   "POST /platform/switch-workspace",
@@ -665,7 +665,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /admin/leads/:id/resend",
   "POST /admin/test-contact-forms",
 
-  // ── store — projects (store.ts) ───────────────────────────────────────────
+  // ── store - projects (store.ts) ───────────────────────────────────────────
   "GET /store/projects",
   "GET /store/projects/:id/intake",
   "POST /store/projects/upsert",
@@ -675,7 +675,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /store/projects/:id/snapshots",
   "POST /store/projects/restore",
 
-  // ── store — content (store-content.ts) ───────────────────────────────────
+  // ── store - content (store-content.ts) ───────────────────────────────────
   "GET /store/archive",
   "POST /store/archive",
   "PUT /store/archive/:id",
@@ -687,7 +687,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /store/scoring-config",
   "PUT /store/scoring-config",
 
-  // ── store — audits (store-audits.ts) ─────────────────────────────────────
+  // ── store - audits (store-audits.ts) ─────────────────────────────────────
   "GET /store/projects/:id/audits",
   "POST /store/projects/:id/audits",
   "DELETE /store/projects/:id/audits/:auditId",
@@ -715,7 +715,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
 
-  // ── contact forms (contact.ts) — public, no auth required ────────────────
+  // ── contact forms (contact.ts) - public, no auth required ────────────────
   "POST /contact/book-demo",
   "POST /contact/enquiry",
 
@@ -724,7 +724,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /support/faq",
   "PATCH /support/faq/:id",
   "POST /support/faq/reorder",
-  "POST /support/tickets/anon",    // anonymous ticket submission — no auth
+  "POST /support/tickets/anon",    // anonymous ticket submission - no auth
   "POST /support/tickets",
   "GET /support/tickets",
   "PATCH /support/tickets/:id",
@@ -735,15 +735,15 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // ── llm-check audit lock ──────────────────────────────────────────────────
   // Intentionally ungated: read-only lock-status check so the UI can disable
   // the Run button before the user has committed to a full AI action.
-  // NOT a paid AI operation — no model is invoked.
+  // NOT a paid AI operation - no model is invoked.
   "GET /audit-lock",
 ]);
 
 // ---------------------------------------------------------------------------
-// Coverage test — must run before the live-server tests
+// Coverage test - must run before the live-server tests
 // ---------------------------------------------------------------------------
 
-describe("AI route guard coverage — no uncategorized routes", () => {
+describe("AI route guard coverage - no uncategorized routes", () => {
   it("every registered route is on PUBLIC_ALLOWLIST or starts with a PAID_AI_PREFIX", () => {
     const allRoutes = collectRoutes(mainRouter);
 
@@ -764,10 +764,10 @@ describe("AI route guard coverage — no uncategorized routes", () => {
           `${uncategorized.length} uncategorized route(s) detected.`,
           `For each route listed below, do ONE of the following:`,
           ``,
-          `  (a) Paid AI route — add its path prefix to the router.use([...], blockReadOnlyMembers)`,
+          `  (a) Paid AI route - add its path prefix to the router.use([...], blockReadOnlyMembers)`,
           `      call in routes/index.ts AND to PAID_AI_PREFIXES in this test file.`,
           ``,
-          `  (b) Public / auth-gated-by-other-means route — add the exact string`,
+          `  (b) Public / auth-gated-by-other-means route - add the exact string`,
           `      "METHOD /path" to PUBLIC_ALLOWLIST in this test file.`,
           ``,
           `Uncategorized routes:`,
@@ -782,7 +782,7 @@ describe("AI route guard coverage — no uncategorized routes", () => {
 // AI action route guard tests
 // ---------------------------------------------------------------------------
 
-describe("blockReadOnlyMembers — AI action routes", () => {
+describe("blockReadOnlyMembers - AI action routes", () => {
   it("rejects viewer members with 403 on every AI action path", async () => {
     const { sid: ownerSid } = await seedAgency("guard-viewer-agency", "owner@guard-viewer.test");
 
@@ -843,7 +843,7 @@ describe("blockReadOnlyMembers — AI action routes", () => {
 
     // POST to /api/ai-assist/draft-field with empty body.
     // blockReadOnlyMembers passes (owner has no restricted role), so the
-    // response status will be something other than 403 — typically 400 (bad
+    // response status will be something other than 403 - typically 400 (bad
     // request, missing url) or 200 when mocked, never 403 from the guard.
     const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
     expect(res.status).not.toBe(403);
@@ -874,7 +874,7 @@ describe("session_version revocation", () => {
     const memberSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
     expect(memberSid).toBeTruthy();
 
-    // Confirm the session works — a read-only member can still list projects.
+    // Confirm the session works - a read-only member can still list projects.
     const before = await api("/api/store/projects", { sid: memberSid });
     expect(before.status).toBe(200);
 
@@ -897,7 +897,7 @@ describe("session_version revocation", () => {
     const after = await api("/api/store/projects", { sid: memberSid });
     expect(after.status, "stale session should be rejected after session_version bump").toBe(401);
 
-    // Also verify on an AI action path — the stale session has no account so
+    // Also verify on an AI action path - the stale session has no account so
     // blockReadOnlyMembers passes (no role) and the content route returns 401.
     const afterAi = await api("/api/content/optimise", { sid: memberSid, body: {} });
     expect(afterAi.status, "stale session should be rejected on AI route too").toBe(401);
@@ -923,7 +923,7 @@ describe("session_version revocation", () => {
       .from(platformUsersTable)
       .where(eq(platformUsersTable.email, "m@incr.test"));
 
-    // Use the exported helper — this is what the removal route actually calls.
+    // Use the exported helper - this is what the removal route actually calls.
     await incrementSessionVersion(mUser!.id);
 
     const res = await api("/api/store/projects", { sid: mSid });

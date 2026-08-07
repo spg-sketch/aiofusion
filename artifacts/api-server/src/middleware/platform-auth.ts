@@ -36,7 +36,7 @@ declare global {
 }
 
 // Resolve the platform session (if any) and attach it to req.account,
-// req.platformUser, and req.company. Always calls next() — never blocks.
+// req.platformUser, and req.company. Always calls next() - never blocks.
 // Pair with requirePlatformAuth on routes that must be protected.
 export async function resolvePlatformAccount(
   req: Request,
@@ -59,7 +59,7 @@ export async function resolvePlatformAccount(
             .limit(1);
           req.platformUser = userRow ?? undefined;
         } catch {
-          // Non-fatal — legacy session, req.platformUser stays undefined.
+          // Non-fatal - legacy session, req.platformUser stays undefined.
         }
       }
 
@@ -75,11 +75,11 @@ export async function resolvePlatformAccount(
           req.company = companyRow ?? undefined;
         }
         if (!req.company) {
-          // Slug-based fallback — always works even for legacy sessions.
+          // Slug-based fallback - always works even for legacy sessions.
           req.company = (await getCompanyBySlug(account.username)) ?? undefined;
         }
       } catch {
-        // Non-fatal — company resolution fails gracefully.
+        // Non-fatal - company resolution fails gracefully.
       }
     }
   }

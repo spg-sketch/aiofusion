@@ -10,7 +10,7 @@ const accentSoft = "#FBE3ED";
 const paper = "#f8fafc";
 
 // Landing page for a team-invite link (/?invite=<token>). The invitee sets a
-// password — or continues with Google/Microsoft SSO — and goes straight to
+// password - or continues with Google/Microsoft SSO - and goes straight to
 // the dashboard: no account-type selection, the workspace already exists.
 export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccepted: () => void }) {
   const [invite, setInvite] = useState<InviteInfo | null>(null);
@@ -145,7 +145,7 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
                   <img src="https://www.microsoft.com/favicon.ico" alt="" className="w-4 h-4" /> Continue with Microsoft
                 </a>
                 <p className="text-[11px] leading-[1.55] pt-1" style={{ color: vars.g600 }}>
-                  Use the Google or Microsoft account for <strong>{invite.email}</strong> — the invitation is bound to that email address.
+                  Use the Google or Microsoft account for <strong>{invite.email}</strong> - the invitation is bound to that email address.
                 </p>
               </div>
             </>

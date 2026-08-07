@@ -70,7 +70,7 @@ function RecoveryCodesBlock({ codes, onDone, doneLabel }: { codes: string[]; onD
         <p className="text-[13px] font-bold uppercase tracking-[0.14em]" style={{ color: "#0a1628" }}>Your recovery codes</p>
       </div>
       <p className="text-[13px] font-light leading-[1.6] mb-3" style={{ color: vars.g500 }}>
-        Save these somewhere safe — each works once if you lose access to your authenticator app. They will not be shown again.
+        Save these somewhere safe - each works once if you lose access to your authenticator app. They will not be shown again.
       </p>
       <div className="grid grid-cols-2 gap-2 rounded-xl border p-4 mb-3 font-mono text-[13px]" style={{ borderColor: vars.g200, background: vars.g50, color: "#0a1628" }}>
         {codes.map((c) => <span key={c}>{c}</span>)}
@@ -148,7 +148,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
       : serverMfaVerify(challenge.mfaToken, entered, trustDevice).then((r) => {
           if (!r.ok) { setError(r.error); return; }
           if (typeof r.recoveryCodesRemaining === "number") {
-            // A recovery code was consumed — warn about the shrinking supply
+            // A recovery code was consumed - warn about the shrinking supply
             // before letting them into the app.
             setRecoveryWarning(r.recoveryCodesRemaining);
             setPendingLogin({ session: r.session, needsSetup: r.needsSetup === true });
@@ -159,7 +159,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
     void action.finally(() => setBusy(false));
   };
 
-  // Recovery-code login — warn about the shrinking supply before entering the app.
+  // Recovery-code login - warn about the shrinking supply before entering the app.
   if (recoveryWarning !== null && pendingLogin) {
     const low = recoveryWarning <= 3;
     return (
@@ -195,7 +195,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
     );
   }
 
-  // Enrolment complete — show recovery codes before entering the app.
+  // Enrolment complete - show recovery codes before entering the app.
   if (recoveryCodes && pendingLogin) {
     return (
       <div className="rounded-2xl p-6 bg-white">
@@ -274,7 +274,7 @@ export function MfaLoginStep({ challenge, onSuccess, onCancel }: {
             style={{ accentColor: "#C8497A" }}
           />
           <span className="text-[13px] font-light" style={{ color: vars.g500 }}>
-            Trust this device for 30 days — skip the code on this browser
+            Trust this device for 30 days - skip the code on this browser
           </span>
         </label>
       )}

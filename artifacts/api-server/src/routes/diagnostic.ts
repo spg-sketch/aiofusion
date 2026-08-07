@@ -37,7 +37,7 @@ const CATEGORY_MAXES: Record<string, number> = {
 
 export const GEO_SYSTEM_PROMPT = `You are an expert in Generative Engine Optimisation (GEO) and AI Engine Optimisation (AEO). You analyse web page content for its readiness to be cited, referenced, and recommended by AI-powered search and answer engines (ChatGPT, Claude).
 
-Score each of the following 6 categories from 0 to the maximum shown. Be rigorous — most pages score poorly. Provide specific, actionable recommendations for each category.
+Score each of the following 6 categories from 0 to the maximum shown. Be rigorous - most pages score poorly. Provide specific, actionable recommendations for each category.
 
 Categories (score / max):
 1. Schema & Structured Data (0-15): Does the content have Organization schema, FAQ schema, Article schema, author markup? Look for JSON-LD, microdata, or RDFa signals.
@@ -301,7 +301,7 @@ diagnosticRouter.post("/diagnostic", diagnosticLimiter, diagnosticConcurrencyGua
             });
             return;
           }
-          // Admin forced the audit past the 21-day lock — log for accountability.
+          // Admin forced the audit past the 21-day lock - log for accountability.
           void logAdminEvent(
             { username: req.account!.username, id: req.account!.userId },
             "forced_website_audit",

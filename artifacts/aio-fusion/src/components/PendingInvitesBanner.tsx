@@ -109,7 +109,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
             <div key={inv.token} className="flex flex-wrap items-center gap-2 pl-5">
               <span className="text-[12px]" style={{ color: "#78350F" }}>
                 <span className="font-semibold">{inv.companyName}</span>
-                {" — "}
+                {" - "}
                 {ROLE_LABELS[inv.role] ?? inv.role}
               </span>
               {st?.error && (
@@ -130,7 +130,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
           );
         })}
 
-        {/* Accepted invites — offer to switch */}
+        {/* Accepted invites - offer to switch */}
         {accepted.map((inv) => {
           const st = acceptState[inv.token]!;
           const isSwitching = switching === st.companyId;

@@ -157,7 +157,7 @@ async function startServer(): Promise<{ url: string; close: () => Promise<void> 
   });
 }
 
-// ── Tests — /contact/book-demo ────────────────────────────────────────────────
+// ── Tests - /contact/book-demo ────────────────────────────────────────────────
 
 describe("POST /contact/book-demo", () => {
   const validBody = {
@@ -176,7 +176,7 @@ describe("POST /contact/book-demo", () => {
     ({ url, close } = await startServer());
   });
 
-  it("persists submission and dispatches emails on success — returns 200", async () => {
+  it("persists submission and dispatches emails on success - returns 200", async () => {
     const r = await fetch(`${url}/contact/book-demo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -323,7 +323,7 @@ describe("POST /contact/book-demo", () => {
   });
 });
 
-// ── Tests — /contact/enquiry ──────────────────────────────────────────────────
+// ── Tests - /contact/enquiry ──────────────────────────────────────────────────
 
 describe("POST /contact/enquiry", () => {
   const validBody = {
@@ -343,7 +343,7 @@ describe("POST /contact/enquiry", () => {
     ({ url, close } = await startServer());
   });
 
-  it("persists submission and dispatches emails on success — returns 200", async () => {
+  it("persists submission and dispatches emails on success - returns 200", async () => {
     const r = await fetch(`${url}/contact/enquiry`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -398,7 +398,7 @@ describe("POST /contact/enquiry", () => {
     await close();
   });
 
-  it("company is optional — succeeds without it", async () => {
+  it("company is optional - succeeds without it", async () => {
     const { company: _c, ...noCompany } = validBody;
     const r = await fetch(`${url}/contact/enquiry`, {
       method: "POST",

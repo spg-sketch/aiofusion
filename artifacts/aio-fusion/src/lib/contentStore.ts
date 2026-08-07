@@ -62,7 +62,7 @@ let _scoringCache:  ScoringConfig | null = null;
 let _contentStoreReady = false;
 let _contentStoreAuthError = false;
 
-// True if the last initContentStore call received a 401 — i.e. the session
+// True if the last initContentStore call received a 401 - i.e. the session
 // has expired or is missing. Use this to show a "please log in" message
 // rather than a misleading "Library is empty" state.
 export function isContentStoreAuthError(): boolean {

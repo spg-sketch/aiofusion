@@ -31,16 +31,16 @@ export type Role = "admin" | "agency" | "client" | "user";
 export interface PlatformAccount {
   username: string;
   role: Role;
-  /** UUID from platform_users — present on new sessions, undefined on legacy sessions. */
+  /** UUID from platform_users - present on new sessions, undefined on legacy sessions. */
   userId?: string;
-  /** UUID from platform_companies — present on new sessions, undefined on legacy sessions. */
+  /** UUID from platform_companies - present on new sessions, undefined on legacy sessions. */
   activeCompanyId?: string;
   /** Email address, if stored on the account. May be undefined for legacy sessions. */
   email?: string | null;
   /**
    * The user's membership role within the active workspace:
    * owner | admin | billing | content | viewer. Undefined for legacy sessions
-   * (treated as owner — full access, backward compatible).
+   * (treated as owner - full access, backward compatible).
    */
   membershipRole?: MembershipRole;
   /**
@@ -207,7 +207,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
 //
 // Safety: promotion only applies when the email belongs to a Google-verified
 // user (platform_users row with googleId set). A password signup can claim any
-// email without proving ownership, so it is never eligible — this closes the
+// email without proving ownership, so it is never eligible - this closes the
 // obvious privilege-escalation path of registering a listed email first.
 // The promotion also syncs platform_companies and platform_memberships so the
 // newer company-based authorization layer agrees with the legacy account role.
@@ -268,7 +268,7 @@ export async function getCompanyBySlug(
 }
 
 // Upsert a platform_companies row for the given account slug. Returns the
-// company UUID. Idempotent — safe to call repeatedly.
+// company UUID. Idempotent - safe to call repeatedly.
 export async function ensurePlatformCompany(opts: {
   slug: string;
   role?: string;
@@ -388,7 +388,7 @@ export async function ensurePlatformUser(opts: {
 
   // 1. Upsert user row. The conflict-update set must always have at least one
   // field (drizzle throws "No values to set" on an empty set), so we always
-  // include a name update — falling back to the un-changed email value as a
+  // include a name update - falling back to the un-changed email value as a
   // harmless no-op when all optional fields are absent.
   const [user] = await db
     .insert(platformUsersTable)
@@ -560,7 +560,7 @@ export async function getVisibleUsernames(
 // Whether `actor` is allowed to manage (change password / delete) `target`.
 // Admins may manage anyone; a normal account may manage its own descendants
 // but never itself via these admin paths. This intentionally does NOT include
-// the parent account that getVisibleUsernames adds for project-visibility —
+// the parent account that getVisibleUsernames adds for project-visibility - 
 // management rights are downward-only in the hierarchy.
 export async function canManage(
   actor: PlatformAccount,
@@ -680,7 +680,7 @@ export async function createPlatformSession(
   const u = normUsername(username);
   // Revoke this user's existing sessions before issuing a new one. Multiple
   // team members share the same workspace username (slug), so revocation must
-  // be scoped per human user — deleting by username alone would sign out every
+  // be scoped per human user - deleting by username alone would sign out every
   // other member of the team. Legacy sessions without a userId fall back to
   // the old per-account behaviour (restricted to other userless sessions).
   if (userId) {
@@ -709,7 +709,7 @@ export async function createPlatformSession(
         .limit(1);
       sessionVersion = userRow?.sessionVersion ?? null;
     } catch {
-      // Non-fatal — version stamping fails gracefully; session behaves as legacy.
+      // Non-fatal - version stamping fails gracefully; session behaves as legacy.
     }
   }
 
@@ -749,7 +749,7 @@ export async function getPlatformSessionAccount(
   // Fast-path revocation: if session_version is set on the session, verify it
   // matches the user's current version. A mismatch means something revoked
   // access (password change, removal, suspension) after this session was issued.
-  // NULL session_version = legacy session (pre-revocation mechanism) — skip check.
+  // NULL session_version = legacy session (pre-revocation mechanism) - skip check.
   if (row.userId != null && row.sessionVersion != null) {
     try {
       const [userRow] = await db
@@ -762,7 +762,7 @@ export async function getPlatformSessionAccount(
         return null;
       }
     } catch {
-      // Non-fatal — skip version check on error; other guards still apply.
+      // Non-fatal - skip version check on error; other guards still apply.
     }
   }
 
@@ -779,12 +779,12 @@ export async function getPlatformSessionAccount(
       // Mirror the same status guard as the legacy path: suspended companies
       // must not be granted access. Invalidate the session so the user is
       // forced to re-authenticate. (Legacy "pending_approval" is treated as
-      // active — the signup-approval flow was removed.)
+      // active - the signup-approval flow was removed.)
       if (company.status === "suspended") {
         await deletePlatformSession(sid);
         return null;
       }
-      // Also cross-check the legacy platform_accounts row — an admin may
+      // Also cross-check the legacy platform_accounts row - an admin may
       // have suspended the account there without going through the new tables.
       const legacyAccount = await getAccount(company.slug);
       if (legacyAccount && legacyAccount.status === "suspended") {
@@ -816,7 +816,7 @@ export async function getPlatformSessionAccount(
             membershipRole = normalizeMembershipRole(mem.role);
             projectAccess = parseProjectAccess(mem.projectAccess);
           }
-        } catch { /* non-fatal — treated as legacy full-access session */ }
+        } catch { /* non-fatal - treated as legacy full-access session */ }
       }
       return {
         username: company.slug,
@@ -938,7 +938,7 @@ export function clearImpersonationStashCookie(res: Response): void {
 //  3. A platform_memberships row linking user ↔ company
 //
 // This runs at startup, gated by a platform_meta flag. The flag is only set
-// after every account is successfully processed — a partial run leaves the
+// after every account is successfully processed - a partial run leaves the
 // flag unset so the next restart retries the remaining rows.
 
 const USER_BACKFILL_FLAG = "platform_users_v2_backfilled";

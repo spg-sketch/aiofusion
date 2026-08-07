@@ -4,9 +4,9 @@
  * TOTP code on the next login after a password event.
  *
  * Three code paths are exercised:
- *  1. POST /platform/change-password  — authenticated self-service change
- *  2. POST /platform/reset-password   — unauthenticated email-token reset
- *  3. POST /platform/accounts/password — admin / manager set-password
+ *  1. POST /platform/change-password - authenticated self-service change
+ *  2. POST /platform/reset-password - unauthenticated email-token reset
+ *  3. POST /platform/accounts/password - admin / manager set-password
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -217,7 +217,7 @@ vi.mock("../lib/admin-events", () => ({
   logAdminEvent: () => Promise.resolve(),
 }));
 
-// requirePlatformAuth is bypassed — actor is injected via actorOverride below.
+// requirePlatformAuth is bypassed - actor is injected via actorOverride below.
 vi.mock("../middleware/platform-auth", () => ({
   requirePlatformAuth: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));

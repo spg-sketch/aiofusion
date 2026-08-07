@@ -503,12 +503,12 @@ describe("POST /api/diagnostic", () => {
 });
 
 // ---------------------------------------------------------------------------
-// HTTP route tests — audit-lock gate (POST /api/diagnostic).
+// HTTP route tests - audit-lock gate (POST /api/diagnostic).
 // These tests exercise the full Express handler so the 21-day lock-check
 // branching (429 / 200 / admin bypass) is verified end-to-end.
 // ---------------------------------------------------------------------------
 
-describe("POST /api/diagnostic — audit-lock gate", () => {
+describe("POST /api/diagnostic - audit-lock gate", () => {
   let server: Server;
   let baseUrl: string;
   let account: { username: string; role: string } | undefined;

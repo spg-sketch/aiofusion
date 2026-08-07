@@ -166,10 +166,10 @@ export function GeorgeSupport({
       if (results.length === 0) {
         setStep({ type: "no_match" });
       } else if (results.length === 1) {
-        // Only one match — go straight to the answer
+        // Only one match - go straight to the answer
         setStep({ type: "faq_result", entry: results[0] });
       } else {
-        // Multiple matches — let the user pick the most relevant one
+        // Multiple matches - let the user pick the most relevant one
         setStep({ type: "faq_options", entries: results });
       }
     } catch {
@@ -505,7 +505,7 @@ export function GeorgeSupport({
               {step.messages.length === 0 ? (
                 <GeorgeBubble>
                   <p className="text-[13px]" style={{ color: vars.g500 }}>
-                    No messages yet — we'll be in touch soon.
+                    No messages yet - we'll be in touch soon.
                   </p>
                 </GeorgeBubble>
               ) : (
@@ -528,7 +528,7 @@ export function GeorgeSupport({
               {/* George greeting bubble */}
               <GeorgeBubble>
                 <p className="text-[14px] leading-relaxed" style={{ color: navy }}>
-                  Hi{userName ? ` ${userName}` : ""}! I'm <strong>GEOrge</strong> — your GEO support assistant.{" "}
+                  Hi{userName ? ` ${userName}` : ""}! I'm <strong>GEOrge</strong> - your GEO support assistant.{" "}
                   What can I help you with today?
                 </p>
               </GeorgeBubble>
@@ -598,7 +598,7 @@ export function GeorgeSupport({
               {step.type === "faq_options" && (
                 <GeorgeBubble>
                   <p className="text-[13px] mb-3" style={{ color: navy }}>
-                    I found a few articles that might help — which one looks closest to your question?
+                    I found a few articles that might help - which one looks closest to your question?
                   </p>
                   <div className="flex flex-col gap-1.5">
                     {step.entries.map((entry) => (
@@ -622,7 +622,7 @@ export function GeorgeSupport({
                     className="mt-3 text-[12px]"
                     style={{ color: vars.g400 }}
                   >
-                    None of these — try a different question
+                    None of these - try a different question
                   </button>
                 </GeorgeBubble>
               )}
@@ -797,7 +797,7 @@ export function GeorgeSupport({
           )}
         </div>
 
-        {/* Input bar — shown when waiting for a question */}
+        {/* Input bar - shown when waiting for a question */}
         {(step.type === "greeting" || step.type === "waiting_question") && (
           <div
             className="flex-shrink-0 border-t px-4 py-3 flex gap-2 items-center"
@@ -832,7 +832,7 @@ export function GeorgeSupport({
           </div>
         )}
 
-        {/* Reply bar — shown in ticket_detail when ticket is open or in_progress */}
+        {/* Reply bar - shown in ticket_detail when ticket is open or in_progress */}
         {step.type === "ticket_detail" && (step.ticket.status === "open" || step.ticket.status === "in_progress") && (
           <div
             className="flex-shrink-0 border-t px-4 py-3 flex flex-col gap-2"
@@ -997,7 +997,7 @@ function TicketForm({
         Submit a support ticket
       </p>
 
-      {/* Email — always shown so replies reach the right address */}
+      {/* Email - always shown so replies reach the right address */}
       {onEmail !== undefined && (
         <input
           type="email"
@@ -1105,7 +1105,7 @@ export function GeorgeTriggerButton({
   return (
     <button
       onClick={onClick}
-      title="Ask GEOrge — Support Assistant"
+      title="Ask GEOrge - Support Assistant"
       className="relative flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] font-semibold transition-all hover:brightness-110 active:scale-95"
       style={{ background: accent, color: "white" }}
     >

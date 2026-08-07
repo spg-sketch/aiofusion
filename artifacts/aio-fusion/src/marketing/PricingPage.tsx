@@ -147,7 +147,7 @@ export default function PricingPage({
       {/* Beta banner */}
       <div className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center px-4 py-2 text-center" style={{ background: "#F59E0B", minHeight: "40px" }}>
         <p className="text-[12px] font-semibold" style={{ color: "#78350F" }}>
-          AIO Fusion is in Beta — please note that all pricing is currently indicative
+          AIO Fusion is in Beta - please note that all pricing is currently indicative
         </p>
       </div>
 

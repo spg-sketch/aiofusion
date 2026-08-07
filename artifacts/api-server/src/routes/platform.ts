@@ -256,7 +256,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
           .limit(1);
         u = rows[0] ?? null;
       }
-      // Load the account row unconditionally — website lives on platform_accounts
+      // Load the account row unconditionally - website lives on platform_accounts
       // and must be available for both modern (userId) and legacy sessions.
       const acc = await getAccount(normUsername(req.account.username));
       // Legacy fallback: sessions created before userId was stored.
@@ -298,7 +298,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       }
     : null;
 
-  // All workspaces the signed-in human belongs to — drives the workspace
+  // All workspaces the signed-in human belongs to - drives the workspace
   // switcher on the client without a second round-trip.
   let workspaces: Array<{
     companyId: string;
@@ -337,7 +337,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         membershipRole: normalizeMembershipRole(m.membershipRole),
         isActive: m.companyId === req.account!.activeCompanyId,
       }));
-    } catch { /* non-fatal — client falls back to single-workspace mode */ }
+    } catch { /* non-fatal - client falls back to single-workspace mode */ }
   }
 
   res.setHeader("Cache-Control", "no-store");
@@ -482,7 +482,7 @@ export const OAUTH_MFA_TOKEN_COOKIE = "aio_oauth_mfa_token";
 // SSO logins are browser redirects (not JSON), so when an MFA challenge is
 // required the short-lived pending token is handed to the frontend via a
 // short-lived cookie (`oauth_status=mfa` signals the frontend to read it)
-// instead of a JSON body. The token alone grants nothing — a valid TOTP
+// instead of a JSON body. The token alone grants nothing - a valid TOTP
 // (or recovery) code is still required to get a session.
 async function finishOauthLoginOrChallenge(
   req: Request,
@@ -805,7 +805,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
     }
     const state = await getMfaState(pending.u);
     if (!state?.enabled) {
-      // MFA was disabled between password check and this call — let them in.
+      // MFA was disabled between password check and this call - let them in.
       await completeMfaLogin(res, pending, clientIp(req));
       return;
     }
@@ -826,7 +826,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
         await logAdminEvent({ username: pending.u }, "mfa_device_trusted", pending.u, "account");
         // Security alert: fire-and-forget, never blocks login.
         // Recipient = earliest OWNER membership email, falling back to the
-        // account's canonical email — same rule as reset-mfa alert.
+        // account's canonical email - same rule as reset-mfa alert.
         void (async () => {
           try {
             const [ownerRow] = await db
@@ -896,7 +896,7 @@ router.get("/platform/mfa/status", requirePlatformAuth, async (req: Request, res
 });
 
 // Turn MFA off. Requires a currently-valid TOTP code, and is refused for master
-// (admin) accounts — MFA is mandatory for them.
+// (admin) accounts - MFA is mandatory for them.
 router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
@@ -947,7 +947,7 @@ router.post("/platform/mfa/disable", requirePlatformAuth, async (req: Request, r
 });
 
 // Replace recovery codes with 10 fresh ones. Requires MFA to be enabled and a
-// currently-valid TOTP code (recovery codes are NOT accepted here — a stolen
+// currently-valid TOTP code (recovery codes are NOT accepted here - a stolen
 // recovery code must not be able to mint fresh ones). Returns the new codes
 // exactly once; all previously-issued codes stop working immediately.
 router.post("/platform/mfa/recovery-codes", requirePlatformAuth, async (req: Request, res: Response) => {
@@ -1188,7 +1188,7 @@ router.get("/platform/verify-email", async (req: Request, res: Response) => {
   }
 });
 
-// Always returns ok — never reveal whether an email address is registered.
+// Always returns ok - never reveal whether an email address is registered.
 router.post("/platform/resend-verification", loginLimiter, async (req: Request, res: Response) => {
   try {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
@@ -1301,7 +1301,7 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
 
     // Revoke every existing session: bump session_version (fast-path rejection
     // for user-linked sessions), delete session rows by userId, AND delete by
-    // each associated company slug — legacy sessions carry user_id = NULL and
+    // each associated company slug - legacy sessions carry user_id = NULL and
     // skip the version check, so they must be removed by username too.
     await incrementSessionVersion(row.userId);
     await db
@@ -1319,7 +1319,7 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
       await clearTrustedDevices(normUsername(mem.companySlug));
     }
 
-    // Security alert — non-fatal: never blocks the response.
+    // Security alert - non-fatal: never blocks the response.
     void (async () => {
       try {
         const [u] = await db
@@ -1365,7 +1365,7 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
     // Verify the current password. Prefer the platform_users hash (primary
     // store); fall back to the legacy platform_accounts hash for legacy
     // sessions or users without a password hash yet (e.g. SSO-only would fail
-    // verification here, which is correct — they have no current password).
+    // verification here, which is correct - they have no current password).
     let userRow: { id: string; passwordHash: string | null } | undefined;
     if (actor.userId) {
       const rows = await db
@@ -1466,7 +1466,7 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
       await clearTrustedDevices(username);
     }
 
-    // Security alert — non-fatal: never blocks the response.
+    // Security alert - non-fatal: never blocks the response.
     void (async () => {
       try {
         let toEmail: string | null | undefined;
@@ -1557,7 +1557,7 @@ router.post("/platform/change-email", requirePlatformAuth, async (req: Request, 
         .where(eq(platformUsersTable.id, userRow.id));
     }
 
-    // Update platform_accounts (legacy store) — keep in sync.
+    // Update platform_accounts (legacy store) - keep in sync.
     await db
       .update(platformAccountsTable)
       .set({ email: newEmail })
@@ -1571,7 +1571,7 @@ router.post("/platform/change-email", requirePlatformAuth, async (req: Request, 
       { oldEmail, newEmail },
     );
 
-    // Fire-and-forget security notices — never block the response.
+    // Fire-and-forget security notices - never block the response.
     const capturedOld = oldEmail;
     const capturedName = oldName || actor.username;
     void (async () => {
@@ -1594,7 +1594,7 @@ router.post("/platform/change-email", requirePlatformAuth, async (req: Request, 
 // Admins may change any account; managers may change their own descendants'.
 // Updates both platform_users (primary) and platform_accounts (legacy sync).
 // Sends a fail-soft security notice to the OLD address and a confirmation to
-// the NEW address — never to the actor performing the change.
+// the NEW address - never to the actor performing the change.
 router.post(
   "/platform/accounts/email",
   requirePlatformAuth,
@@ -1628,7 +1628,7 @@ router.post(
       const oldEmail = existing.email ?? null;
 
       if (oldEmail === newEmail) {
-        // No-op — already set to this address.
+        // No-op - already set to this address.
         res.json({ ok: true });
         return;
       }
@@ -1646,7 +1646,7 @@ router.post(
         .set({ email: newEmail })
         .where(eq(platformAccountsTable.username, target));
 
-      // Update platform_users (primary store) — look up by old email to stay in sync.
+      // Update platform_users (primary store) - look up by old email to stay in sync.
       if (oldEmail) {
         const [userRow] = await db
           .select({ id: platformUsersTable.id, name: platformUsersTable.name })
@@ -1669,9 +1669,9 @@ router.post(
         { oldEmail, newEmail, changedBy: actor.username },
       );
 
-      // Security notices — fail-soft, fire-and-forget.
+      // Security notices - fail-soft, fire-and-forget.
       if (oldEmail) {
-        // Resolve a display name for the notice — prefer platform_users name.
+        // Resolve a display name for the notice - prefer platform_users name.
         let toName: string = target;
         try {
           const [u] = await db
@@ -1704,7 +1704,7 @@ router.post(
 
 // Request a "set first password" email for SSO-only accounts. Requires an
 // active session (identity already confirmed). Derives the email from the
-// session user — never trusts the request body — and reuses the same
+// session user - never trusts the request body - and reuses the same
 // platform_password_resets machinery as the forgot-password flow.
 router.post("/platform/request-set-password", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
   try {
@@ -2069,7 +2069,7 @@ function getCanonicalHost(req: Request): string {
     const first = replitDomains.split(",")[0]!.trim();
     if (first) return first;
   }
-  // On staging, never trust request headers for the OAuth canonical host —
+  // On staging, never trust request headers for the OAuth canonical host - 
   // fall through to the fixed staging domain instead.
   if (isStaging) return "staging.aiofusion.ai";
   const host = req.get("x-forwarded-host") || req.get("host") || "";
@@ -2122,7 +2122,7 @@ function buildOauthInterstitial(postAction: string, code: string, state: string,
 }
 
 // Known link-scanner / bot user-agent patterns. When matched the GET callback
-// returns an empty 200 immediately — no code redemption, no error redirect.
+// returns an empty 200 immediately - no code redemption, no error redirect.
 const SCANNER_UA_RE = /safelinks|outlook\s*safe|microsoftpreview|microsoftteams|iframely|facebookexternalhit|twitterbot|linkedinbot|slackbot|whatsapp|telegrambot|applebot|bingpreview/i;
 
 router.get("/platform/auth/google", (req: Request, res: Response) => {
@@ -2182,14 +2182,14 @@ router.get("/platform/auth/google/link", requirePlatformAuth, (req: Request, res
 });
 
 // GET callback: scanner/bot guard + interstitial page.
-// Does NOT redeem the authorization code — only validates the CSRF state and
+// Does NOT redeem the authorization code - only validates the CSRF state and
 // serves a tiny HTML page that auto-submits a POST form. Scanners (Outlook Safe
 // Links, Teams link-preview, etc.) follow GET redirects but never execute JS or
 // submit forms, so the one-time code is preserved for the real browser.
 router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
-  // HEAD requests from health-checks / scanners — respond empty immediately.
+  // HEAD requests from health-checks / scanners - respond empty immediately.
   if (req.method === "HEAD") { res.status(200).end(); return; }
-  // Known link-scanner user-agents — empty 200, no code consumption.
+  // Known link-scanner user-agents - empty 200, no code consumption.
   if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
 
   const origin = getFrontendOrigin(req);
@@ -2204,7 +2204,7 @@ router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
     res.redirect(`${origin}/?oauth_status=error&oauth_msg=${encodeURIComponent(oauthError)}`);
     return;
   }
-  // Validate CSRF state — reject early so scanners that do carry cookies can't
+  // Validate CSRF state - reject early so scanners that do carry cookies can't
   // be tricked into delivering a valid interstitial for a forged code.
   // Important: do NOT clear the cookie here; the POST handler will read + clear it.
   const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
@@ -2243,7 +2243,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     // code and state arrive in the POST body (from the interstitial form).
     const code = typeof req.body?.code === "string" ? req.body.code : "";
     const state = typeof req.body?.state === "string" ? req.body.state : "";
-    // Verify CSRF state and clear the cookie — single-use.
+    // Verify CSRF state and clear the cookie - single-use.
     const storedState = (req.cookies as Record<string, string>)?.[OAUTH_STATE_COOKIE];
     const linkUsername = (req.cookies as Record<string, string>)?.[OAUTH_LINK_COOKIE] ?? "";
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
@@ -2258,7 +2258,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     }
     // Exchange authorisation code for access token.
     // redirect_uri must exactly match what was used during authorisation
-    // (getGoogleCallbackUrl is request-derived from CANONICAL_DOMAIN / host header —
+    // (getGoogleCallbackUrl is request-derived from CANONICAL_DOMAIN / host header - 
     // same value the initiation handler sent to Google).
     const tokenRes = await fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: "POST",
@@ -2352,7 +2352,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     }
 
     // Step 2: if an existing user is found, route them to their active workspace
-    // via platform_memberships — this is the new source of truth for
+    // via platform_memberships - this is the new source of truth for
     // user → company association. The platform_accounts row is checked only for
     // status (active/suspended/pending) and is NOT used to pick the company.
     if (existingUser) {
@@ -2361,14 +2361,14 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
-          // Note: legacy "pending_approval" is treated as active — the
+          // Note: legacy "pending_approval" is treated as active - the
           // signup-approval flow was removed (new signups are active
           // immediately), matching the password-login path.
           if (account.status === "suspended") {
             res.redirect(`${origin}/?oauth_status=suspended`);
             return;
           }
-          // Active — link googleId to user record then create session.
+          // Active - link googleId to user record then create session.
           let userId: string | undefined;
           let activeCompanyId: string | undefined;
           let oauthCo: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
@@ -2400,7 +2400,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       }
     }
 
-    // Step 3: no existing user or no membership — look up by email in
+    // Step 3: no existing user or no membership - look up by email in
     // platform_accounts as fallback (covers legacy accounts not yet backfilled).
     const [existing] = await db
       .select()
@@ -2412,7 +2412,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         res.redirect(`${origin}/?oauth_status=suspended`);
         return;
       }
-      // Active legacy account — ensure user/company rows, then create session.
+      // Active legacy account - ensure user/company rows, then create session.
       const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
       let userId: string | undefined;
       let activeCompanyId: string | undefined;
@@ -2441,7 +2441,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       });
       return;
     }
-    // No account — register a new pending one from the Google profile
+    // No account - register a new pending one from the Google profile
     const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
     const emailDomain = userInfo.email.split("@")[1] ?? "";
     let baseSlug = (emailDomain.split(".")[0] ?? "user")
@@ -2508,7 +2508,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
   }
 });
 
-// --- Microsoft OAuth (Entra ID) — mirrors the Google flow exactly -----------
+// --- Microsoft OAuth (Entra ID) - mirrors the Google flow exactly -----------
 
 const MICROSOFT_AUTH_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MICROSOFT_TOKEN_ENDPOINT = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -2542,7 +2542,7 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
 });
 
 // GET callback: scanner/bot guard + interstitial page (mirrors Google logic).
-// The aio_ms_state cookie is validated but NOT cleared here — the POST clears it.
+// The aio_ms_state cookie is validated but NOT cleared here - the POST clears it.
 // The action flag embedded in state ("login:..." / "link:...") is preserved
 // because state travels as a hidden field in the interstitial form.
 router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) => {
@@ -2568,13 +2568,13 @@ router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) =>
     return;
   }
   // Serve the auto-submit interstitial.
-  // redirect_uri for Microsoft is getAppBaseUrl()-based (env var) — same path,
+  // redirect_uri for Microsoft is getAppBaseUrl()-based (env var) - same path,
   // same method split, so no Azure app registration change is needed.
   const postUrl = `${origin}/api/platform/auth/microsoft/callback`;
   const nonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  // Global CSP blocks inline scripts — add a per-response nonce (see Google callback).
+  // Global CSP blocks inline scripts - add a per-response nonce (see Google callback).
   res.setHeader("Content-Security-Policy", cspHeaderWithScriptNonce(nonce));
   res.status(200).send(buildOauthInterstitial(postUrl, code, state, nonce));
 });
@@ -2604,7 +2604,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     // action is embedded in the state value ("login:nonce" or "link:nonce").
     const action = (state as string).split(":")[0] ?? "login";
     // redirect_uri must exactly match the one used during authorisation.
-    // Microsoft uses getAppBaseUrl() (env var) — same value as the initiation handler.
+    // Microsoft uses getAppBaseUrl() (env var) - same value as the initiation handler.
     const redirect_uri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
 
     // Exchange code for access token
@@ -2796,7 +2796,7 @@ router.post("/platform/logout", async (req: Request, res: Response) => {
 // gets a normal (single-use) session, which - like a real login - ends any
 // session that account already had open.
 
-// POST /api/platform/accounts/:username/impersonate — admin only.
+// POST /api/platform/accounts/:username/impersonate - admin only.
 router.post(
   "/platform/accounts/:username/impersonate",
   requirePlatformAuth,
@@ -2856,7 +2856,7 @@ router.post(
   },
 );
 
-// POST /api/platform/exit-impersonation — restores the stashed admin session.
+// POST /api/platform/exit-impersonation - restores the stashed admin session.
 router.post("/platform/exit-impersonation", async (req: Request, res: Response) => {
   try {
     const stashSid = getImpersonationStashId(req);
@@ -2890,7 +2890,7 @@ router.post("/platform/exit-impersonation", async (req: Request, res: Response) 
   }
 });
 
-// GET /platform/admin/master-owners — admin only. Returns the set of usernames
+// GET /platform/admin/master-owners - admin only. Returns the set of usernames
 // that currently have masterOwner=true.
 router.get(
   "/platform/admin/master-owners",
@@ -2909,7 +2909,7 @@ router.get(
   },
 );
 
-// GET /platform/admin/accounts/:username/master-owner — admin only.
+// GET /platform/admin/accounts/:username/master-owner - admin only.
 router.get(
   "/platform/admin/accounts/:username/master-owner",
   requirePlatformAuth,
@@ -2930,7 +2930,7 @@ router.get(
   },
 );
 
-// POST /platform/admin/accounts/:username/master-owner — admin only.
+// POST /platform/admin/accounts/:username/master-owner - admin only.
 // Body: { masterOwner: boolean }
 router.post(
   "/platform/admin/accounts/:username/master-owner",
@@ -2967,7 +2967,7 @@ router.post(
   },
 );
 
-// POST /platform/switch-to-master — for agency accounts with masterOwner=true.
+// POST /platform/switch-to-master - for agency accounts with masterOwner=true.
 // Stashes the current (agency) session and issues a fresh admin session, using
 // the same stash-and-replace cookie pattern as impersonation so the banner's
 // "Exit" flow automatically restores the agency session.
@@ -3029,7 +3029,7 @@ router.post(
 
 // --- Pending invites for the signed-in user ----------------------------------
 
-// GET /platform/my-invites — list pending invites addressed to the signed-in
+// GET /platform/my-invites - list pending invites addressed to the signed-in
 // user's email. Only works for new-auth sessions that carry a userId. Legacy
 // sessions (no userId) return an empty list.
 router.get(
@@ -3077,7 +3077,7 @@ router.get(
         .orderBy(desc(platformInvitationsTable.createdAt));
 
       // Resolve display names from platform_meta (account:profile:{slug})
-      // for any row whose companies.display_name column is null — password
+      // for any row whose companies.display_name column is null - password
       // signup stores the name there, not in the companies table directly.
       const slugsNeedingMeta = rows
         .filter((r) => !r.companyDisplayName)
@@ -3117,7 +3117,7 @@ router.get(
   },
 );
 
-// POST /platform/my-invites/:token/accept — in-app accept for an already
+// POST /platform/my-invites/:token/accept - in-app accept for an already
 // signed-in user. Adds the membership without issuing a new session (the
 // caller stays logged in to their current workspace). The client should offer
 // a "Switch to workspace" button separately after success.
@@ -3184,7 +3184,7 @@ router.post(
   },
 );
 
-// POST /platform/switch-workspace — switch the signed-in user's active
+// POST /platform/switch-workspace - switch the signed-in user's active
 // workspace. Requires a platform_memberships row for (userId, companyId).
 // Issues a fresh session pointing at the new workspace; createPlatformSession
 // revokes prior sessions for this userId (single-session-per-user model).
@@ -3408,7 +3408,7 @@ router.post(
       // after an admin-set password change.
       await clearTrustedDevices(target);
 
-      // Security alert to the target account — non-fatal, fire-and-forget.
+      // Security alert to the target account - non-fatal, fire-and-forget.
       // Recipient is the target's email, resolved from platform_users (for the
       // name) then falling back to platform_accounts email. Never sent to the
       // actor (admin/manager performing the reset).
@@ -3473,7 +3473,7 @@ router.post(
 );
 
 // Archive (or unarchive) an account. Archived accounts cannot log in and are
-// shown separately in the parent's UI. Projects are NOT reassigned — the parent
+// shown separately in the parent's UI. Projects are NOT reassigned - the parent
 // keeps visibility. Only the parent or an admin may archive a sub-account.
 router.post(
   "/platform/accounts/archive",
@@ -3543,7 +3543,7 @@ router.post(
       try { await clearTrustedDevices(target); } catch { /* non-fatal */ }
       // Security alert to the affected user (fail-soft: never blocks the reset).
       // The recipient must be the workspace OWNER (or the canonical account
-      // contact email) — never an arbitrary/latest team member, who could
+      // contact email) - never an arbitrary/latest team member, who could
       // otherwise intercept a security notice meant for the account holder.
       void (async () => {
         try {
@@ -3559,7 +3559,7 @@ router.post(
             .limit(1);
           const toEmail = ownerRow?.email || existing.email;
           if (!toEmail) {
-            logger.warn({ target }, "reset-mfa: no owner/account email on record — security alert not sent");
+            logger.warn({ target }, "reset-mfa: no owner/account email on record - security alert not sent");
             return;
           }
           await sendMfaAdminResetEmail({ toEmail, toName: ownerRow?.name || target });
@@ -3653,7 +3653,7 @@ router.post(
 // account may call this on itself. Requires the caller to re-enter their own
 // password as a confirmation step for such a destructive, irreversible action.
 // An account with active (non-archived) sub-accounts must remove or reassign
-// them first — we never silently cascade-delete another account's data as a
+// them first - we never silently cascade-delete another account's data as a
 // side effect of someone else's deletion request.
 router.post(
   "/platform/account/self-delete",
@@ -3732,7 +3732,7 @@ router.post(
 
 // Set (or clear) the seat cap for an agency account. Admin-only.
 // PATCH /api/platform/accounts/:username/seat-cap
-// Body: { maxSeats: number | null }   — null clears the limit
+// Body: { maxSeats: number | null } - null clears the limit
 router.patch(
   "/platform/accounts/:username/seat-cap",
   requirePlatformAuth,
@@ -3979,7 +3979,7 @@ router.post(
   }
 });
 
-// Change an account's role. Admin-only — only an admin may escalate or
+// Change an account's role. Admin-only - only an admin may escalate or
 // demote another account's role. Cannot be used to demote the last admin.
 router.post(
   "/platform/accounts/role",
@@ -4150,7 +4150,7 @@ function buildAuditConditions(query: Request["query"]) {
   return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
-// Column set for admin events queries — includes human identity fields
+// Column set for admin events queries - includes human identity fields
 // resolved from platform_users via a LEFT JOIN on actorId.
 const AUDIT_COLS = {
   id: adminEventsTable.id,
@@ -4252,7 +4252,7 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
-// PROFILE IMAGES — user photo ("avatar") and brand/agency logo ("logo").
+// PROFILE IMAGES - user photo ("avatar") and brand/agency logo ("logo").
 // Stored as data URLs in platform_meta (small, client-side resized images)
 // so no extra storage infrastructure is needed and they survive deploys.
 // ---------------------------------------------------------------------------
@@ -4260,7 +4260,7 @@ const IMAGE_KINDS = ["avatar", "logo"] as const;
 type ImageKind = (typeof IMAGE_KINDS)[number];
 const profileImageKey = (kind: ImageKind, username: string) =>
   `account:image:${kind}:${normUsername(username)}`;
-// ~600KB of base64 ≈ 450KB image — plenty for a resized avatar/logo.
+// ~600KB of base64 ≈ 450KB image - plenty for a resized avatar/logo.
 const MAX_IMAGE_DATA_URL_LENGTH = 800_000;
 const DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 
@@ -4276,7 +4276,7 @@ router.post("/platform/profile/image", requirePlatformAuth, async (req: Request,
       return;
     }
     if (dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
-      res.status(400).json({ error: "Image is too large — please use a smaller photo" });
+      res.status(400).json({ error: "Image is too large - please use a smaller photo" });
       return;
     }
     const key = profileImageKey(kind as ImageKind, req.account!.username);

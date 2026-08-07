@@ -69,7 +69,7 @@ router.post(
         res.status(400).json({ error: "Missing category name" });
         return;
       }
-      // Custom categories are always scoped to the creating account —
+      // Custom categories are always scoped to the creating account - 
       // there is no global category concept.
       const accountId = normUsername(req.account!.username);
       const [created] = await db
@@ -286,7 +286,7 @@ router.get(
         .orderBy(mediaContactsTable.lastName, mediaContactsTable.firstName);
 
       // Global contacts (accountId null) are visible to all; otherwise filter by hierarchy.
-      // Mask outlet metadata when the joined outlet belongs to a non-visible account —
+      // Mask outlet metadata when the joined outlet belongs to a non-visible account - 
       // prevents leaking private outlet names through the contacts join.
       const results = rows
         .filter((r) => {
@@ -304,7 +304,7 @@ router.get(
       // Since the join only returns a name (not the outlet's accountId), we do a
       // conservative allow-list: expose outlet fields only for outlets we can
       // confirm are visible (globally or via the caller's hierarchy).
-      // We need the outlet accountId — re-fetch outlet IDs visible to this caller.
+      // We need the outlet accountId - re-fetch outlet IDs visible to this caller.
       const visibleOutletIds = new Set<number>();
       if (results.some((r) => r.outletId)) {
         const outletRows = await db
@@ -404,7 +404,7 @@ router.put(
         return;
       }
       const { outletId, firstName, lastName, role, email, phone, notes } = req.body ?? {};
-      // Validate outletId if supplied — caller must be able to see that outlet.
+      // Validate outletId if supplied - caller must be able to see that outlet.
       let resolvedOutletId = row.outletId;
       if (outletId !== undefined) {
         if (!outletId) {

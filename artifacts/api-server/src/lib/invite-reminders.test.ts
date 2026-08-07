@@ -160,7 +160,7 @@ describe("sendInviteReminders()", () => {
     expect(stamped).not.toBeNull();
   });
 
-  it("does not send for an invite expiring in >25h (outside window — too early)", async () => {
+  it("does not send for an invite expiring in >25h (outside window - too early)", async () => {
     await seedInvite("tok-too-early", new Date(Date.now() + 48 * HOUR));
     await sendInviteReminders();
     expect(mockSendInviteReminderEmail).not.toHaveBeenCalled();
@@ -243,7 +243,7 @@ describe("sendInviteReminders()", () => {
     const expiresAt = new Date(Date.now() + 24 * HOUR);
     await seedInvite("tok-provider-fail", expiresAt);
 
-    // First sweep: provider throws — claim must be rolled back to NULL.
+    // First sweep: provider throws - claim must be rolled back to NULL.
     mockSendInviteReminderEmail.mockRejectedValueOnce(new Error("SMTP timeout"));
     await sendInviteReminders();
 

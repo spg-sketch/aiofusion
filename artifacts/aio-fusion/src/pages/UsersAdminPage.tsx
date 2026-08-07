@@ -172,7 +172,7 @@ function UsersAdminPage({
   // ── 2FA filter + active/archived section split ────────────────────────────
   const [only2FAOff, setOnly2FAOff] = useState(false);
 
-  // Two section-scoped mfa filter sets — propagation never crosses the
+  // Two section-scoped mfa filter sets - propagation never crosses the
   // archived/active boundary, so an archived parent is not surfaced because
   // of an active descendant that won't actually be rendered under it.
   //
@@ -227,7 +227,7 @@ function UsersAdminPage({
   }, [only2FAOff, users, childrenByParent]);
 
   // Active section roots: non-archived top-level users PLUS non-archived users
-  // whose direct parent is archived (they'd otherwise be invisible — the
+  // whose direct parent is archived (they'd otherwise be invisible - the
   // archived section skips non-archived children and they have no active path).
   const activeTopLevel = useMemo(() => {
     const topActive = topLevelUsers.filter((u) => !u.archived);
@@ -1430,7 +1430,7 @@ function UsersAdminPage({
             </h2>
             <button
               onClick={() => setOnly2FAOff((v) => !v)}
-              title={only2FAOff ? "Showing accounts without 2FA — click to clear" : "Show only accounts without 2FA enabled"}
+              title={only2FAOff ? "Showing accounts without 2FA - click to clear" : "Show only accounts without 2FA enabled"}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all"
               style={
                 only2FAOff
@@ -1446,7 +1446,7 @@ function UsersAdminPage({
           {/* Active accounts */}
           <div className="p-5 sm:p-6">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g500 }}>
-              Active{only2FAOff ? ` — ${visibleActiveTopLevel.length} without 2FA` : ` (${activeTopLevel.length})`}
+              Active{only2FAOff ? ` - ${visibleActiveTopLevel.length} without 2FA` : ` (${activeTopLevel.length})`}
             </p>
             {visibleActiveTopLevel.length > 0 ? (
               <div className="flex flex-col gap-3">
@@ -1466,7 +1466,7 @@ function UsersAdminPage({
             <div className="px-5 sm:px-6 pb-5 sm:pb-6">
               <div className="pt-4 border-t" style={{ borderColor: vars.g200 }}>
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g400 }}>
-                  Archived{only2FAOff ? ` — ${visibleArchivedTopLevel.length} without 2FA` : ` (${archivedTopLevel.length})`}
+                  Archived{only2FAOff ? ` - ${visibleArchivedTopLevel.length} without 2FA` : ` (${archivedTopLevel.length})`}
                 </p>
                 {visibleArchivedTopLevel.length > 0 ? (
                   <div className="flex flex-col gap-3 opacity-60">

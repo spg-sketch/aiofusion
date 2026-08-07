@@ -77,7 +77,7 @@ describe("auth sub-accounts and visibility", () => {
 });
 
 // ---------------------------------------------------------------------------
-// bootstrapAuth — accountProfile flows from /api/platform/me to the caller
+// bootstrapAuth - accountProfile flows from /api/platform/me to the caller
 // ---------------------------------------------------------------------------
 
 /** Stub fetch to return a shaped /api/platform/me response; all other calls 401. */
@@ -91,7 +91,7 @@ function stubMeResponse(body: object) {
           headers: { "Content-Type": "application/json" },
         });
       }
-      // status / accounts-cache / migrate — all 401 no-ops.
+      // status / accounts-cache / migrate - all 401 no-ops.
       return new Response(JSON.stringify({ error: "unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
@@ -100,7 +100,7 @@ function stubMeResponse(body: object) {
   );
 }
 
-describe("bootstrapAuth — accountProfile server→client path", () => {
+describe("bootstrapAuth - accountProfile server→client path", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();

@@ -7,7 +7,7 @@ import { logger } from "./logger";
 // automatically delete the matching platform_companies row, which in turn
 // cascades to platform_memberships via its existing FK on company_id.
 //
-// Idempotent — the DO block checks pg_constraint before adding so repeated
+// Idempotent - the DO block checks pg_constraint before adding so repeated
 // server restarts are safe.
 export async function ensurePlatformCompanyCascade(): Promise<void> {
   try {

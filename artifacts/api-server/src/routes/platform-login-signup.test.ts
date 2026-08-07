@@ -189,7 +189,7 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
-// Pass-through rate limiter — avoids the express-rate-limit in-memory store
+// Pass-through rate limiter - avoids the express-rate-limit in-memory store
 // from interfering with repeated test requests.
 vi.mock("../middleware/rate-limit", () => {
   const passThrough = (_req: unknown, _res: unknown, next: () => void) => next();
@@ -286,9 +286,9 @@ async function stopServer(server: Server): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/platform/login — integration tests
+// POST /api/platform/login - integration tests
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/login — new user-table auth path", () => {
+describe("POST /api/platform/login - new user-table auth path", () => {
   let server: Server;
   let baseUrl: string;
   const EMAIL = "login-test@example.com";
@@ -395,9 +395,9 @@ describe("POST /api/platform/login — new user-table auth path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/platform/login — new-path (platform_users as primary)
+// POST /api/platform/login - new-path (platform_users as primary)
 // ---------------------------------------------------------------------------
-describe("POST /api/platform/login — platform_users primary path", () => {
+describe("POST /api/platform/login - platform_users primary path", () => {
   let server: Server;
   let baseUrl: string;
   const EMAIL = "primary-login@example.com";
@@ -464,7 +464,7 @@ describe("POST /api/platform/login — platform_users primary path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/platform/signup — integration tests
+// POST /api/platform/signup - integration tests
 // ---------------------------------------------------------------------------
 describe("POST /api/platform/signup", () => {
   let server: Server;
@@ -518,7 +518,7 @@ describe("POST /api/platform/signup", () => {
     });
     expect(status).toBe(201);
     expect(body.ok).toBe(true);
-    // Email verification is now required — no immediate session.
+    // Email verification is now required - no immediate session.
     expect(body.needsVerification).toBe(true);
     expect(body.email).toBe(EMAIL);
     expect(setCookies.some((c) => c.startsWith("aio_sid="))).toBe(false);
@@ -625,7 +625,7 @@ describe("POST /api/platform/signup", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/platform/auth/google/callback — OAuth integration tests
+// GET /api/platform/auth/google/callback - OAuth integration tests
 // ---------------------------------------------------------------------------
 // The route calls fetch() twice: once to exchange the auth code for a token,
 // and once to retrieve userinfo. We stub global fetch so that calls to
@@ -799,7 +799,7 @@ describe("GET /api/platform/auth/google/callback", () => {
   });
 
   it("registers and immediately logs in a brand-new Google sign-up (redirects to oauth_status=ok)", async () => {
-    // No account in the DB — this is a first-time Google user. They should be
+    // No account in the DB - this is a first-time Google user. They should be
     // created as active and redirected to oauth_status=ok, not oauth_status=pending.
     vi.stubGlobal(
       "fetch",
@@ -886,7 +886,7 @@ describe("GET /api/platform/auth/google/callback", () => {
       const location = res.headers.get("location") ?? "";
       expect(location).toContain("oauth_status=ok");
 
-      // Still matched via googleId — no duplicate platform_users row created
+      // Still matched via googleId - no duplicate platform_users row created
       // for the new email address.
       const usersByGoogleId = await db
         .select()
@@ -1247,7 +1247,7 @@ describe("POST /api/platform/forgot-password + reset-password", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/platform/change-password — signed-in credential change
+// POST /api/platform/change-password - signed-in credential change
 // ---------------------------------------------------------------------------
 describe("POST /api/platform/change-password", () => {
   let server: Server;
@@ -1259,7 +1259,7 @@ describe("POST /api/platform/change-password", () => {
   let userId: string;
 
   // The shared buildApp injects req.account = null, but change-password needs
-  // a real signed-in account — so this suite resolves the session cookie /
+  // a real signed-in account - so this suite resolves the session cookie /
   // Bearer sid like production's resolvePlatformAccount does.
   async function startAuthedServer(): Promise<{ server: Server; baseUrl: string }> {
     const app = express();
@@ -1445,7 +1445,7 @@ describe("POST /api/platform/change-password", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/platform/request-set-password — first-password flow for SSO accounts
+// POST /api/platform/request-set-password - first-password flow for SSO accounts
 // ---------------------------------------------------------------------------
 describe("POST /api/platform/request-set-password", () => {
   let server: Server;
@@ -1520,7 +1520,7 @@ describe("POST /api/platform/request-set-password", () => {
   // Create a real session for the SSO user (they're already signed in via OAuth).
   async function createSsoSession(): Promise<string> {
     const { createPlatformSession: cps, setPlatformCookie: spc } = await import("../lib/platform-auth");
-    void spc; // unused — we just need the sid
+    void spc; // unused - we just need the sid
     const sid = await cps(USERNAME, "127.0.0.1", userId, undefined);
     return sid;
   }

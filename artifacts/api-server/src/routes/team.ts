@@ -42,7 +42,7 @@ const router: IRouter = Router();
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Resolve the caller's active company row, or null. Team management always
-// operates on the caller's own workspace — never on a sub-account's.
+// operates on the caller's own workspace - never on a sub-account's.
 async function getActiveCompany(req: Request) {
   if (req.company) return req.company;
   return getCompanyBySlug(normUsername(req.account!.username));
@@ -266,7 +266,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
 
     const oldToken = String(req.params.token || "").trim();
 
-    // Look up the existing invite — scoped to this company, not yet used/revoked.
+    // Look up the existing invite - scoped to this company, not yet used/revoked.
     const [existing] = await db
       .select()
       .from(platformInvitationsTable)
@@ -286,13 +286,13 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     }
 
     // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat
-    // cap (still-pending invites already hold their seat — no check needed).
+    // cap (still-pending invites already hold their seat - no check needed).
     if (existing.expiresAt <= new Date()) {
       const { members, pendingInvites } = await countSeatsUsed(company.id);
       const seatLimit = await getTeamSeatLimit(company.slug);
       if (members + pendingInvites >= seatLimit) {
         res.status(403).json({
-          error: "Seat limit reached — remove a member or invite before resending this expired invitation.",
+          error: "Seat limit reached - remove a member or invite before resending this expired invitation.",
           limitReached: true,
         });
         return;
@@ -611,7 +611,7 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
     }
 
     // Issue the session directly into the inviting workspace. Invited users
-    // skip account-type selection — the workspace is already set up.
+    // skip account-type selection - the workspace is already set up.
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
     const sid = await createPlatformSession(invite.companySlug, makeIpHint(rawIp), userId, invite.companyId);

@@ -68,7 +68,7 @@ if (deploymentEnv === "staging") {
 
   logger.info(
     { identifiersChecked: productionIdentifiers.length },
-    "Staging isolation check passed — DATABASE_URL does not reference production.",
+    "Staging isolation check passed - DATABASE_URL does not reference production.",
   );
 }
 
@@ -89,7 +89,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 // Schema migrations that request handlers depend on (membership columns,
-// invitations table, ...) must be complete before the server accepts traffic —
+// invitations table, ...) must be complete before the server accepts traffic - 
 // otherwise a request arriving during rollout can hit a missing column/table.
 // Each step is idempotent; a failure is logged and startup continues so a
 // transient DB hiccup can't hard-lock deploys of otherwise-healthy code.
@@ -137,7 +137,7 @@ app.listen(port, (err) => {
   });
 
   // Backfill platform_users rows for every existing platform_accounts row.
-  // Idempotent — gated by a platform_meta flag, safe to call on every restart.
+  // Idempotent - gated by a platform_meta flag, safe to call on every restart.
   backfillPlatformUsers().catch((err) => {
     logger.error({ err }, "Failed to backfill platform users (non-fatal)");
   });
@@ -156,7 +156,7 @@ app.listen(port, (err) => {
 
   // One-time data migration: move the 'patrick' demo account under the
   // 'aiodemo' (AIO Demonstration) agency so it can share the demo projects.
-  // Safe to run repeatedly — it only fires when the parent is still 'admin'.
+  // Safe to run repeatedly - it only fires when the parent is still 'admin'.
   db.update(platformAccountsTable)
     .set({ parent: "aiodemo" })
     .where(and(

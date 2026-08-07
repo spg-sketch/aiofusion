@@ -6,7 +6,7 @@ import { MEMBERSHIP_ROLE_LABELS } from "./team-invites";
 import { sendInviteReminderEmail, getAppBaseUrl } from "./notify-email";
 
 // Any unsent reminder for an invite expiring within the next 25 hours is eligible.
-// There is no lower bound — a failed send keeps reminder_sent_at NULL so the
+// There is no lower bound - a failed send keeps reminder_sent_at NULL so the
 // next hourly sweep retries until the invite actually expires.
 const REMINDER_WINDOW_MS = 25 * 60 * 60 * 1000;
 
@@ -128,13 +128,13 @@ export async function sendInviteReminders(): Promise<void> {
         )
         .returning({ token: platformInvitationsTable.token });
     } catch (err) {
-      logger.warn({ err, token: row.token }, "invite-reminders: failed to claim invite — skipping");
+      logger.warn({ err, token: row.token }, "invite-reminders: failed to claim invite - skipping");
       continue;
     }
 
     if (claimed.length === 0) {
       // Another concurrent sweep already claimed this invite.
-      logger.debug({ token: row.token }, "invite-reminders: invite already claimed by another sweep — skipping");
+      logger.debug({ token: row.token }, "invite-reminders: invite already claimed by another sweep - skipping");
       continue;
     }
 
@@ -158,16 +158,16 @@ export async function sendInviteReminders(): Promise<void> {
       if (delivered) {
         logger.info({ token: row.token, email: row.email }, "invite-reminders: reminder sent and stamped");
       } else {
-        // Resend not configured — roll back the claim so the invite is retried
+        // Resend not configured - roll back the claim so the invite is retried
         // once the API key is set.
         await db
           .update(platformInvitationsTable)
           .set({ reminderSentAt: null })
           .where(eq(platformInvitationsTable.token, row.token));
-        logger.warn({ token: row.token, email: row.email }, "invite-reminders: reminder skipped (Resend not configured) — claim rolled back, will retry");
+        logger.warn({ token: row.token, email: row.email }, "invite-reminders: reminder skipped (Resend not configured) - claim rolled back, will retry");
       }
     } catch (err) {
-      // Provider error — roll back the claim so the invite is retried.
+      // Provider error - roll back the claim so the invite is retried.
       try {
         await db
           .update(platformInvitationsTable)
@@ -176,7 +176,7 @@ export async function sendInviteReminders(): Promise<void> {
       } catch (rollbackErr) {
         logger.error({ rollbackErr, token: row.token }, "invite-reminders: failed to roll back claim after send error");
       }
-      logger.warn({ err, token: row.token, email: row.email }, "invite-reminders: failed to send reminder — claim rolled back, will retry");
+      logger.warn({ err, token: row.token, email: row.email }, "invite-reminders: failed to send reminder - claim rolled back, will retry");
     }
   }
 }

@@ -2,20 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
-// Mocks — must be declared before component import
+// Mocks - must be declared before component import
 // ---------------------------------------------------------------------------
 
 vi.mock("../lib/contentAi", () => ({ apiBase: () => "" }));
 vi.mock("../lib/projectStore", () => ({ loadStoredProjects: () => [] }));
 vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
 
-// Plain vi.fn() — no tuple-style generic — avoids the Vitest 3.x incompatibility
+// Plain vi.fn() - no tuple-style generic - avoids the Vitest 3.x incompatibility
 // where forwarding unknown[] to a narrowly typed mock produces a "never" error.
 // Return type is inferred from mockReturnValue calls.
 const mockGetLocalUsers = vi.fn();
 
 vi.mock("../lib/auth", () => ({
-  getUsers: () => mockGetLocalUsers(),   // no args forwarding — getUsers takes none
+  getUsers: () => mockGetLocalUsers(),   // no args forwarding - getUsers takes none
   serverGetPendingAccounts: async () => ({ ok: true as const, accounts: [] }),
   serverGetMasterOwners: async () => ({ ok: true as const, usernames: [] }),
   serverAddUser: async () => ({ ok: true as const }),
@@ -76,7 +76,7 @@ function mkUser(
     password: "",
     role: "agency" as const,
     createdAt: 0,
-    // No displayName — accountLabel falls back to username, keeping text unique.
+    // No displayName - accountLabel falls back to username, keeping text unique.
     mfaEnabled: opts.mfaEnabled ?? false,
     archived: opts.archived ?? false,
     ...(opts.parent ? { parent: opts.parent } : {}),
@@ -98,7 +98,7 @@ function renderPage(users: User[]) {
 // 1. Top-level filter tests
 // ---------------------------------------------------------------------------
 
-describe("UsersAdminPage — 2FA filter: top-level accounts", () => {
+describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
   it("shows all top-level users when filter is off", async () => {
     renderPage([
       mkUser("alice", { mfaEnabled: true }),
@@ -171,10 +171,10 @@ describe("UsersAdminPage — 2FA filter: top-level accounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Nested account filter tests — same-section children
+// 2. Nested account filter tests - same-section children
 // ---------------------------------------------------------------------------
 
-describe("UsersAdminPage — 2FA filter: nested accounts", () => {
+describe("UsersAdminPage - 2FA filter: nested accounts", () => {
   it("hides a nested mfaEnabled child when both parent and child have mfaEnabled", async () => {
     renderPage([
       mkUser("parent", { mfaEnabled: true }),
@@ -233,10 +233,10 @@ describe("UsersAdminPage — 2FA filter: nested accounts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Hierarchy visibility — archived parent with active child
+// 3. Hierarchy visibility - archived parent with active child
 // ---------------------------------------------------------------------------
 
-describe("UsersAdminPage — hierarchy: archived parent / active child", () => {
+describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
   it("shows an active child of an archived parent in the ACTIVE section", async () => {
     renderPage([
       mkUser("archivedparent", { archived: true }),
@@ -268,7 +268,7 @@ describe("UsersAdminPage — hierarchy: archived parent / active child", () => {
   it("archived parent with mfaEnabled does NOT appear in archived section due to active child (no cross-boundary propagation)", async () => {
     // The archived parent has mfaEnabled; its only child is active (not archived).
     // The archived-section filter must NOT include archivedparent just because
-    // activechild passes the active filter — that would be misleading.
+    // activechild passes the active filter - that would be misleading.
     renderPage([
       mkUser("archivedparent", { archived: true, mfaEnabled: true }),
       mkUser("activechild", { parent: "archivedparent" }),

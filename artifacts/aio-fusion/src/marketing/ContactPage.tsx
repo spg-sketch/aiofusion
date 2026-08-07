@@ -339,7 +339,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
     >
       <PageHead meta={PAGE_META.contact} />
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
-        Book a demo or send us a message — we'd love to hear from you.
+        Book a demo or send us a message - we'd love to hear from you.
       </p>
 
       <div className="flex flex-col gap-8 mb-12">

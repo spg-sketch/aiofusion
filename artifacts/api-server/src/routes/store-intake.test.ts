@@ -27,7 +27,7 @@ vi.mock("@workspace/db", async () => {
 
   // Mirror lib/db/src/schema/projects.ts and project-snapshots.ts. The
   // intake route calls snapshotProject() on every save, which reads and
-  // writes project_snapshots — both tables must exist.
+  // writes project_snapshots - both tables must exist.
   await client.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id varchar PRIMARY KEY,

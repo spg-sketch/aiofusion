@@ -725,7 +725,7 @@ describe("resend invite endpoint", () => {
     expect(inv.status).toBe(201);
     const tokenA = inv.json.token as string;
 
-    // Company B tries to resend it — scoped lookup must return 404.
+    // Company B tries to resend it - scoped lookup must return 404.
     const r = await api(`/api/platform/team/invites/${tokenA}/resend`, { sid: sidB, body: {} });
     expect(r.status).toBe(404);
   });
@@ -741,7 +741,7 @@ describe("resend invite endpoint", () => {
     await api(`/api/platform/team/invites/${inv1.json.token}/revoke`, { sid, body: {} });
     expect((await api(`/api/platform/team/invites/${inv1.json.token}/resend`, { sid, body: {} })).status).toBe(404);
 
-    // Used (accepted) token — need a seat free; revoke freed one above.
+    // Used (accepted) token - need a seat free; revoke freed one above.
     const inv2 = await api("/api/platform/team/invite", { sid, body: { email: "used@resend-404.test", role: "viewer" } });
     expect(inv2.status).toBe(201);
     await api("/api/platform/invite/accept", { body: { token: inv2.json.token, password: "used-pass-resend-1" } });
@@ -759,7 +759,7 @@ describe("resend invite endpoint", () => {
     // Confirm we're at the limit.
     expect((await api("/api/platform/team/invite", { sid, body: { email: "extra@resend-seatcap.test", role: "viewer" } })).status).toBe(403);
 
-    // Insert an expired invite — it is NOT counted in seatsUsed.
+    // Insert an expired invite - it is NOT counted in seatsUsed.
     const expiredTok = "seatcap-expired-tok";
     await db.insert(platformInvitationsTable).values({
       token: expiredTok,
@@ -822,9 +822,9 @@ describe("GET /team: expired invite visibility", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /platform/me — hasPassword reflects the individual member, not the owner
+// GET /platform/me - hasPassword reflects the individual member, not the owner
 // ---------------------------------------------------------------------------
-describe("GET /platform/me — hasPassword is per-member, not per-workspace", () => {
+describe("GET /platform/me - hasPassword is per-member, not per-workspace", () => {
   // Seed a workspace with three distinct credential states and verify that
   // /platform/me returns the right hasPassword for each session.
 
@@ -889,7 +889,7 @@ describe("GET /platform/me — hasPassword is per-member, not per-workspace", ()
     expect(pwMe.status).toBe(200);
     expect(pwMe.json.hasPassword).toBe(true);
 
-    // Workspace owner is unaffected — still sees true.
+    // Workspace owner is unaffected - still sees true.
     const ownerMe = await api("/api/platform/me", { sid: ownerSid });
     expect(ownerMe.status).toBe(200);
     expect(ownerMe.json.hasPassword).toBe(true);
@@ -957,7 +957,7 @@ describe("GET /platform/me — hasPassword is per-member, not per-workspace", ()
       company2!.id,
     );
 
-    // SSO member: 200 — token issued, email queued.
+    // SSO member: 200 - token issued, email queued.
     const ssoReq = await api("/api/platform/request-set-password", {
       sid: ssoSid2,
       body: {},
@@ -965,7 +965,7 @@ describe("GET /platform/me — hasPassword is per-member, not per-workspace", ()
     expect(ssoReq.status).toBe(200);
     expect(ssoReq.json.ok).toBe(true);
 
-    // Password member: 409 — already has a password, use change-password instead.
+    // Password member: 409 - already has a password, use change-password instead.
     const pwReq = await api("/api/platform/request-set-password", {
       sid: pwSid2,
       body: {},
@@ -975,9 +975,9 @@ describe("GET /platform/me — hasPassword is per-member, not per-workspace", ()
 });
 
 // ---------------------------------------------------------------------------
-// GET /platform/me — accountProfile (displayName + website) prefill data
+// GET /platform/me - accountProfile (displayName + website) prefill data
 // ---------------------------------------------------------------------------
-describe("GET /platform/me — accountProfile carries displayName and website", () => {
+describe("GET /platform/me - accountProfile carries displayName and website", () => {
   it("modern client session: returns both displayName and website", async () => {
     // Modern path: platform_users row exists + userId stored in session.
     await db.insert(platformAccountsTable).values({

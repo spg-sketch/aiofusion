@@ -393,7 +393,7 @@ describe("GET /api/support/faq", () => {
     expect(Array.isArray(json.faq)).toBe(true);
     // Should not include the inactive entry
     expect(json.faq.every((f: any) => f.isActive !== false)).toBe(true);
-    // Inactive row has category "Hidden" — must not appear
+    // Inactive row has category "Hidden" - must not appear
     expect(json.faq.find((f: any) => f.category === "Hidden")).toBeUndefined();
   });
 
@@ -431,7 +431,7 @@ describe("GET /api/support/faq", () => {
   });
 
   it("does not include inactive entries in search results (soft-keyword match)", async () => {
-    // "internal hidden" matches the inactive row's keywords — the guard is
+    // "internal hidden" matches the inactive row's keywords - the guard is
     // unconditional so a regression that returns the inactive row is always caught
     const { status, json } = await req(baseUrl, "GET", "/api/support/faq?q=internal%20hidden");
     expect(status).toBe(200);
@@ -463,7 +463,7 @@ describe("GET /api/support/faq", () => {
 
   it("non-admin + category=Hidden returns 0 results (inactive entries excluded by category filter)", async () => {
     // The seeded "Hidden" entry is inactive. A non-admin explicitly requesting
-    // that category must still get nothing — the isActive guard must fire before
+    // that category must still get nothing - the isActive guard must fire before
     // the category filter, not be bypassed by an explicit category param.
     const { status, json } = await req(baseUrl, "GET", "/api/support/faq?category=Hidden");
     expect(status).toBe(200);
@@ -473,7 +473,7 @@ describe("GET /api/support/faq", () => {
 
   it("admin=1 from a non-admin authenticated session is treated as a regular (active-only) request", async () => {
     // An authenticated non-admin (role: "client") passing admin=1 must not
-    // unlock the full list — the check must be role === "admin", not just
+    // unlock the full list - the check must be role === "admin", not just
     // !!req.account. If that distinction regresses, the inactive "Hidden"
     // entry would leak through.
     const clientApp = buildApp({ username: "user1", role: "client" });
@@ -552,7 +552,7 @@ describe("POST /api/support/tickets", () => {
     expect(json.error).toMatch(/description/i);
   });
 
-  it("requires authentication — returns 401 when no account is set", async () => {
+  it("requires authentication - returns 401 when no account is set", async () => {
     const unauthApp = buildApp(undefined);
     const { server: s2, baseUrl: url2 } = await listen(unauthApp);
     try {
@@ -687,7 +687,7 @@ describe("GET /api/support/tickets", () => {
     expect(json.tickets[0].userSeenReply).toBe(false);
   });
 
-  it("requires authentication — returns 401 when no account is set", async () => {
+  it("requires authentication - returns 401 when no account is set", async () => {
     const unauthApp = buildApp(undefined);
     const { server: s2, baseUrl: url2 } = await listen(unauthApp);
     try {
@@ -828,7 +828,7 @@ describe("PATCH /api/support/tickets/:id", () => {
   });
 
   it("closing a ticket with no messages is allowed (no thread yet)", async () => {
-    // No messages seeded — ticket can be closed freely
+    // No messages seeded - ticket can be closed freely
     const { status, json } = await req(baseUrl, "PATCH", "/api/support/tickets/1", {
       status: "closed",
     });
@@ -842,7 +842,7 @@ describe("PATCH /api/support/tickets/:id", () => {
       ticketId: 1,
       authorType: "admin",
       authorUsername: "admin",
-      body: "Issue resolved — closing now.",
+      body: "Issue resolved - closing now.",
       createdAt: new Date(),
     });
 
@@ -898,7 +898,7 @@ describe("PATCH /api/support/tickets/:id", () => {
     expect(json.ticket.adminNotes).toBe("Keep this.");
   });
 
-  it("non-admin cannot clear the emailFailed flag — returns 403", async () => {
+  it("non-admin cannot clear the emailFailed flag - returns 403", async () => {
     Object.assign(h.state.tickets[0], { emailFailed: true });
 
     const nonAdminApp = buildApp({ username: "user1", role: "client" });
@@ -1329,7 +1329,7 @@ describe("Ticket thread renders correctly with multiple user and admin messages"
     if (server) await close(server);
   });
 
-  it("full reply cycle: user sends two messages, admin sends two replies — thread GET returns all four in order", async () => {
+  it("full reply cycle: user sends two messages, admin sends two replies - thread GET returns all four in order", async () => {
     // Each step uses its own ephemeral server so the shared `server` variable
     // (used by the other two tests via afterEach) is never touched here.
 
@@ -1472,7 +1472,7 @@ describe("Ticket thread renders correctly with multiple user and admin messages"
     expect(json.messages[3].id).toBe(4);
   });
 
-  it("authorType='admin' messages have different username to the ticket owner — no bubble identity collision", async () => {
+  it("authorType='admin' messages have different username to the ticket owner - no bubble identity collision", async () => {
     // Guards against a regression where admin replies appear as if sent by the user
     h.state.messages.push(
       {

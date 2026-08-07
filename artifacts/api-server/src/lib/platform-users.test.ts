@@ -87,7 +87,7 @@ import { ensurePlatformUser, ensurePlatformCompany, getUserByEmail, backfillPlat
 // client) then calls backfillPlatformUsers() and verifies that corresponding
 // platform_users, platform_companies, and platform_memberships rows exist with
 // correct role, status, parentSlug, and maxSeats fidelity.
-describe("backfillPlatformUsers — migration smoke test", () => {
+describe("backfillPlatformUsers - migration smoke test", () => {
   it("creates users + companies + memberships for seeded platform_accounts", async () => {
     // Seed test accounts (unique slugs to avoid conflicts with other tests).
     await db.insert(platformAccountsTable).values([
@@ -122,7 +122,7 @@ describe("backfillPlatformUsers — migration smoke test", () => {
 
     await backfillPlatformUsers();
 
-    // Admin — user + company + membership created.
+    // Admin - user + company + membership created.
     const adminUser = await getUserByEmail("backfill-admin@example.com");
     expect(adminUser).not.toBeNull();
     expect(adminUser!.email).toBe("backfill-admin@example.com");
@@ -144,7 +144,7 @@ describe("backfillPlatformUsers — migration smoke test", () => {
     expect(adminMembership).toBeDefined();
     expect(adminMembership!.companySlug).toBe("backfill-admin");
 
-    // Agency — maxSeats preserved in platform_companies.
+    // Agency - maxSeats preserved in platform_companies.
     const [agencyCompany] = await db
       .select()
       .from(platformCompaniesTable)
@@ -154,7 +154,7 @@ describe("backfillPlatformUsers — migration smoke test", () => {
     expect(agencyCompany!.role).toBe("agency");
     expect(agencyCompany!.maxSeats).toBe(10);
 
-    // Client — parentSlug hierarchy preserved in platform_companies.
+    // Client - parentSlug hierarchy preserved in platform_companies.
     const [clientCompany] = await db
       .select()
       .from(platformCompaniesTable)
@@ -165,7 +165,7 @@ describe("backfillPlatformUsers — migration smoke test", () => {
     expect(clientCompany!.parentSlug).toBe("backfill-agency");
     expect(clientCompany!.status).toBe("active");
 
-    // Three distinct users created — no duplicates.
+    // Three distinct users created - no duplicates.
     const clientUser = await getUserByEmail("backfill-client@example.com");
     const agencyUser = await getUserByEmail("backfill-agency@example.com");
     expect(clientUser).not.toBeNull();
@@ -174,7 +174,7 @@ describe("backfillPlatformUsers — migration smoke test", () => {
   });
 });
 
-describe("ensurePlatformCompany — company row creation", () => {
+describe("ensurePlatformCompany - company row creation", () => {
   it("creates a company row with the correct slug", async () => {
     await ensurePlatformCompany({ slug: "acme", role: "agency", status: "active" });
 
@@ -189,14 +189,14 @@ describe("ensurePlatformCompany — company row creation", () => {
     expect(row!.role).toBe("agency");
   });
 
-  it("is idempotent — calling twice returns the same UUID", async () => {
+  it("is idempotent - calling twice returns the same UUID", async () => {
     const id1 = await ensurePlatformCompany({ slug: "idempotent-co", status: "active" });
     const id2 = await ensurePlatformCompany({ slug: "idempotent-co", status: "active" });
     expect(id1).toBe(id2);
   });
 });
 
-describe("ensurePlatformUser — user + company + membership creation", () => {
+describe("ensurePlatformUser - user + company + membership creation", () => {
   it("creates a user row, a company row, and a membership row", async () => {
     const userId = await ensurePlatformUser({
       email: "alice@example.com",
@@ -238,7 +238,7 @@ describe("ensurePlatformUser — user + company + membership creation", () => {
     expect(membership!.companyId).toBe(companyRow!.id);
   });
 
-  it("is idempotent — calling twice with same email returns the same user UUID", async () => {
+  it("is idempotent - calling twice with same email returns the same user UUID", async () => {
     const id1 = await ensurePlatformUser({
       email: "bob@example.com",
       companyUsername: "bob-co",

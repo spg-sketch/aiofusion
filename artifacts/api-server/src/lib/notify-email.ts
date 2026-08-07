@@ -33,7 +33,7 @@ export async function sendVerificationEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — verification email not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - verification email not sent");
     return;
   }
 
@@ -82,7 +82,7 @@ export async function sendMfaAdminResetEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — MFA admin reset alert not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - MFA admin reset alert not sent");
     return;
   }
 
@@ -137,7 +137,7 @@ export async function sendMfaAdminResetEmail(opts: {
  * Send an invite reminder email.
  *
  * Returns `true` when the email was delivered, `false` when Resend is not
- * configured (no RESEND_API_KEY — caller should not stamp reminder_sent_at so
+ * configured (no RESEND_API_KEY - caller should not stamp reminder_sent_at so
  * the invite is retried once the key is set), and throws on provider errors
  * (caller should also not stamp so the invite is retried next sweep).
  */
@@ -151,7 +151,7 @@ export async function sendInviteReminderEmail(opts: {
 }): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — invite reminder email not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - invite reminder email not sent");
     return false;
   }
 
@@ -195,7 +195,7 @@ export async function sendInviteReminderEmail(opts: {
     cta: { text: "Accept invitation", href: opts.inviteUrl },
   });
 
-  // Let provider errors propagate — the sweep will catch them and skip stamping.
+  // Let provider errors propagate - the sweep will catch them and skip stamping.
   await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
   logger.info({ toEmail: opts.toEmail }, "notify-email: invite reminder email sent");
   return true;
@@ -207,7 +207,7 @@ export async function sendMfaChangedEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — MFA changed alert not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - MFA changed alert not sent");
     return;
   }
 
@@ -290,7 +290,7 @@ export async function sendTeamInviteEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — team invite email not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - team invite email not sent");
     return;
   }
 
@@ -318,7 +318,7 @@ export async function sendTeamInviteEmail(opts: {
       </p>
       <p style="margin: 0 0 16px 0;">
         You've been invited as <strong>${escHtml(opts.roleLabel)}</strong>. Click the button below to accept
-        the invitation and set your password — or sign in with Google or Microsoft.
+        the invitation and set your password - or sign in with Google or Microsoft.
         This link is single-use and expires in <strong>7 days</strong>.
       </p>
       <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
@@ -345,14 +345,14 @@ export async function sendNewSignupAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ username: opts.username }, "notify-email: RESEND_API_KEY not set — signup alert not sent");
+    logger.warn({ username: opts.username }, "notify-email: RESEND_API_KEY not set - signup alert not sent");
     return;
   }
 
   const methodLabel = opts.method === "google" ? "Google OAuth" : opts.method === "microsoft" ? "Microsoft SSO" : "Email & password";
   const adminPanel = getAppBaseUrl();
 
-  const subject = `[AIO Fusion] New signup — ${opts.companyName}`;
+  const subject = `[AIO Fusion] New signup - ${opts.companyName}`;
   const text = [
     `A new account has been registered.`,
     ``,
@@ -395,7 +395,7 @@ export async function sendApprovalEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — approval email not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - approval email not sent");
     return;
   }
 
@@ -403,7 +403,7 @@ export async function sendApprovalEmail(opts: {
   const text = [
     `Hi ${opts.toName},`,
     ``,
-    `Great news — your AIO Fusion account has been approved and is ready to use.`,
+    `Great news - your AIO Fusion account has been approved and is ready to use.`,
     ``,
     `Sign in here: ${opts.loginUrl}`,
     ``,
@@ -421,7 +421,7 @@ export async function sendApprovalEmail(opts: {
     bodyHtml: `
       <p style="margin: 0 0 12px 0;">Hi ${escHtml(opts.toName)},</p>
       <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
-        Great news — your AIO Fusion account has been approved and is ready to use.
+        Great news - your AIO Fusion account has been approved and is ready to use.
       </p>
       <p style="margin: 0 0 16px 0;">
         You can sign in now and start exploring the platform. If you signed up with Google,
@@ -452,11 +452,11 @@ export async function sendSpikeAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — spike alert not sent");
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set - spike alert not sent");
     return;
   }
 
-  const subject = `[AIO Fusion] Spend spike detected — ${opts.slug}`;
+  const subject = `[AIO Fusion] Spend spike detected - ${opts.slug}`;
   const text = [
     `A content AI spend spike has been detected on account: ${opts.slug}`,
     ``,
@@ -504,11 +504,11 @@ export async function sendQuotaBreachAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — quota breach alert not sent");
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set - quota breach alert not sent");
     return;
   }
 
-  const subject = `[AIO Fusion] Fair usage limit reached — ${opts.slug}`;
+  const subject = `[AIO Fusion] Fair usage limit reached - ${opts.slug}`;
   const text = [
     `Account ${opts.slug} has reached their 30-day content AI fair usage limit.`,
     ``,
@@ -555,11 +555,11 @@ export async function sendSpendCapAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set — spend cap alert not sent");
+    logger.warn({ slug: opts.slug }, "notify-email: RESEND_API_KEY not set - spend cap alert not sent");
     return;
   }
 
-  const subject = `[AIO Fusion] Monthly spend cap reached — ${opts.slug}`;
+  const subject = `[AIO Fusion] Monthly spend cap reached - ${opts.slug}`;
   const text = [
     `Account ${opts.slug} has hit their monthly GBP spend cap.`,
     ``,
@@ -603,7 +603,7 @@ export async function sendSpendCapAlert(opts: {
 // Sends TWO emails:
 //   1. Security notice to the OLD address: "your email was changed to X"
 //   2. Confirmation to the NEW address:    "this address is now linked to your account"
-// Both are fail-soft — a delivery failure on one must not prevent the other.
+// Both are fail-soft - a delivery failure on one must not prevent the other.
 // ──────────────────────────────────────────────────────────────────────────────
 export async function sendEmailChangedEmail(opts: {
   oldEmail: string;
@@ -612,7 +612,7 @@ export async function sendEmailChangedEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ oldEmail: opts.oldEmail }, "notify-email: RESEND_API_KEY not set — email changed alerts not sent");
+    logger.warn({ oldEmail: opts.oldEmail }, "notify-email: RESEND_API_KEY not set - email changed alerts not sent");
     return;
   }
 
@@ -685,7 +685,7 @@ export async function sendEmailChangedEmail(opts: {
     cta: { text: "Open AIO Fusion", href: securityUrl },
   });
 
-  // Send both — fail-soft independently so one failure doesn't suppress the other.
+  // Send both - fail-soft independently so one failure doesn't suppress the other.
   await Promise.allSettled([
     resend.emails.send({ from: fromAddress(), to: [opts.oldEmail], subject: noticeSubject, text: noticeText, html: noticeHtml })
       .then(() => logger.info({ toEmail: opts.oldEmail }, "notify-email: email changed notice sent to old address"))
@@ -702,7 +702,7 @@ export async function sendPasswordChangedEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — password changed alert not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - password changed alert not sent");
     return;
   }
 
@@ -756,11 +756,11 @@ export async function sendBookDemoInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({}, "notify-email: RESEND_API_KEY not set — book demo internal alert not sent");
+    logger.warn({}, "notify-email: RESEND_API_KEY not set - book demo internal alert not sent");
     return;
   }
 
-  const subject = `[AIO Fusion] Demo request — ${opts.company || opts.name}`;
+  const subject = `[AIO Fusion] Demo request - ${opts.company || opts.name}`;
   const text = [
     `A new demo request has been submitted via the website.`,
     ``,
@@ -800,11 +800,11 @@ export async function sendBookDemoConfirmation(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — book demo confirmation not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - book demo confirmation not sent");
     return;
   }
 
-  const subject = `We've received your demo request — AIO Fusion`;
+  const subject = `We've received your demo request - AIO Fusion`;
   const text = [
     `Hi ${opts.name},`,
     ``,
@@ -848,11 +848,11 @@ export async function sendEnquiryInternalAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({}, "notify-email: RESEND_API_KEY not set — enquiry internal alert not sent");
+    logger.warn({}, "notify-email: RESEND_API_KEY not set - enquiry internal alert not sent");
     return;
   }
 
-  const emailSubject = `[AIO Fusion] Enquiry — ${opts.subject}`;
+  const emailSubject = `[AIO Fusion] Enquiry - ${opts.subject}`;
   const text = [
     `A new general enquiry has been submitted via the website.`,
     ``,
@@ -904,7 +904,7 @@ export async function sendSupportTicketAlert(opts: {
 }): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket alert not sent");
+    logger.warn({ ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set - support ticket alert not sent");
     return false;
   }
 
@@ -912,7 +912,7 @@ export async function sendSupportTicketAlert(opts: {
     ? `${opts.displayName} (${opts.accountUsername})`
     : opts.accountUsername;
 
-  const emailSubject = `[AIO Fusion] New support ticket #${opts.ticketId} — ${opts.subject}`;
+  const emailSubject = `[AIO Fusion] New support ticket #${opts.ticketId} - ${opts.subject}`;
   const text = [
     `A new support ticket has been submitted.`,
     ``,
@@ -967,13 +967,13 @@ export async function sendSupportTicketAck(opts: {
 }): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket ack not sent");
+    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set - support ticket ack not sent");
     return false;
   }
 
   const greeting = opts.displayName || opts.toName;
 
-  const emailSubject = `We've received your support request — AIO Fusion [#${opts.ticketId}]`;
+  const emailSubject = `We've received your support request - AIO Fusion [#${opts.ticketId}]`;
   const text = [
     `Hi ${greeting},`,
     ``,
@@ -1030,13 +1030,13 @@ export async function sendSupportTicketReplyNotification(opts: {
 }): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set — support ticket reply notification not sent");
+    logger.warn({ toEmail: opts.toEmail, ticketId: opts.ticketId }, "notify-email: RESEND_API_KEY not set - support ticket reply notification not sent");
     return false;
   }
 
   const greeting = opts.displayName || opts.toName;
 
-  const emailSubject = `Re: Your support request [#${opts.ticketId}] — ${opts.subject}`;
+  const emailSubject = `Re: Your support request [#${opts.ticketId}] - ${opts.subject}`;
   const text = [
     `Hi ${greeting},`,
     ``,
@@ -1099,12 +1099,12 @@ export async function sendContactFormFailedAlert(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ submissionId: opts.submissionId }, "notify-email: RESEND_API_KEY not set — contact form failed alert not sent");
+    logger.warn({ submissionId: opts.submissionId }, "notify-email: RESEND_API_KEY not set - contact form failed alert not sent");
     return;
   }
 
   const typeLabel = opts.type === "book-demo" ? "Demo Request" : "General Enquiry";
-  const subject = `[AIO Fusion] ALERT — Contact form email delivery failed (#${opts.submissionId})`;
+  const subject = `[AIO Fusion] ALERT - Contact form email delivery failed (#${opts.submissionId})`;
   const text = [
     `A contact form submission was received and saved to the database, but`,
     `the confirmation and alert emails failed to send.`,
@@ -1128,7 +1128,7 @@ export async function sendContactFormFailedAlert(opts: {
     bodyHtml: `
       <p style="margin: 0 0 16px 0;">
         A contact form submission was saved to the database but email delivery failed.
-        The lead is safe — use the admin panel to re-send once Resend is back online.
+        The lead is safe - use the admin panel to re-send once Resend is back online.
       </p>
       ${buildDataRows([
         ["Submission ID", `#${opts.submissionId}`],
@@ -1161,11 +1161,11 @@ export async function sendEnquiryConfirmation(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — enquiry confirmation not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - enquiry confirmation not sent");
     return;
   }
 
-  const subject = `We've received your message — AIO Fusion`;
+  const subject = `We've received your message - AIO Fusion`;
   const text = [
     `Hi ${opts.name},`,
     ``,
@@ -1206,7 +1206,7 @@ export async function sendNewTrustedDeviceEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — new trusted device alert not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - new trusted device alert not sent");
     return;
   }
 
@@ -1256,7 +1256,7 @@ export async function sendPasswordResetEmail(opts: {
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set — password reset email not sent");
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - password reset email not sent");
     return;
   }
 
@@ -1270,7 +1270,7 @@ export async function sendPasswordResetEmail(opts: {
     opts.resetUrl,
     ``,
     `This link can be used once and expires in 1 hour. If you didn't request a`,
-    `password reset, you can safely ignore this email — your password will not change.`,
+    `password reset, you can safely ignore this email - your password will not change.`,
     ``,
     `The AIO Fusion team`,
   ].join("\n");
@@ -1287,7 +1287,7 @@ export async function sendPasswordResetEmail(opts: {
         <strong>once</strong> and expires in <strong>1 hour</strong>.
       </p>
       <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
-        If you didn't request a password reset, you can safely ignore this email —
+        If you didn't request a password reset, you can safely ignore this email - 
         your password will not change.
       </p>
     `,
