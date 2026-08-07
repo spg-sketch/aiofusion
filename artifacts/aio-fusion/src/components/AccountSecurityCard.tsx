@@ -280,15 +280,17 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
               <form onSubmit={handleChangePassword} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
                 {/* Hidden username field so password managers link the new
                     password to the right saved login and offer to update it. */}
+                {/* Kept visually hidden (not display:none) - Chrome ignores
+                    hidden inputs, which stops it offering the saved password. */}
                 <input
                   type="text"
                   name="username"
                   autoComplete="username"
                   value={session.username}
                   readOnly
-                  hidden
                   aria-hidden="true"
                   tabIndex={-1}
+                  style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}
                 />
                 {changePasswordDone ? (
                   <div className="flex items-center gap-2 text-[14px] font-medium" style={{ color: "#1B7A3E" }}>
