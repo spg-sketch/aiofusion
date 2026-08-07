@@ -94,11 +94,15 @@ describe("ImpersonationBanner - exit flow", () => {
     });
   });
 
-  it("shows 'Exit to my account' label for a master switch-up (byRole !== admin)", async () => {
+  it("shows agency wording when an agency is viewing one of its client accounts", async () => {
+    // Session role is 'client' (mocked above) and the stashed session belongs
+    // to an agency - this must NOT be labelled 'master'.
     mockGetImpersonationState.mockResolvedValue({ by: "agency-account", byRole: "agency" });
     render(<ImpersonationBanner />);
     await waitFor(() => {
-      expect(screen.getByText(/exit to my account/i)).toBeInTheDocument();
+      expect(screen.getByText(/viewing client account/i)).toBeInTheDocument();
+      expect(screen.getByText(/back to my agency account/i)).toBeInTheDocument();
+      expect(screen.queryByText(/master/i)).toBeNull();
     });
   });
 });

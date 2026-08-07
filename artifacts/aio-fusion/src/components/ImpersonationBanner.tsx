@@ -54,14 +54,22 @@ export function ImpersonationBanner() {
     window.location.replace("/?aio_exit_impersonation=1");
   };
 
-  // When a master-owner agency account switches up to admin, the stashed
-  // session belongs to their agency account (byRole !== "admin"). Show a
-  // distinct, clearer message so they know they're operating as master.
-  const isMasterSwitchUp = state.byRole && state.byRole !== "admin";
+  // Three distinct situations share this banner:
+  // 1. A master-owner switches UP to the admin (master) session - the current
+  //    session is admin but the stashed one isn't. Only then do we say "master".
+  // 2. An agency logs into one of its client accounts - say so in plain terms.
+  // 3. The master admin views another account for support ("support mode").
+  const sessionRole = getSession()?.role;
+  const isMasterSwitchUp = sessionRole === "admin" && !!state.byRole && state.byRole !== "admin";
+  const isAgencyViewingClient = !isMasterSwitchUp && state.byRole === "agency";
 
   const bannerText = isMasterSwitchUp ? (
     <span>
-      Signed in as <strong>master</strong> · Exit back to {state.by}
+      Signed in as <strong>master admin</strong> · Exit back to {state.by}
+    </span>
+  ) : isAgencyViewingClient ? (
+    <span>
+      Viewing client account <strong>{getSession()?.username ?? "this account"}</strong> · signed in as {state.by}
     </span>
   ) : (
     <span>
@@ -69,7 +77,11 @@ export function ImpersonationBanner() {
     </span>
   );
 
-  const exitLabel = isMasterSwitchUp ? "Exit to my account" : "Exit view-as";
+  const exitLabel = isMasterSwitchUp
+    ? "Exit to my account"
+    : isAgencyViewingClient
+      ? "Back to my agency account"
+      : "Exit view-as";
 
   return (
     <div
