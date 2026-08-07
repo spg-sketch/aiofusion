@@ -2365,6 +2365,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
           // Active — link googleId to user record then create session.
           let userId: string | undefined;
           let activeCompanyId: string | undefined;
+          let oauthCo: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
             userId = await ensurePlatformUser({
               email: userInfo.email,
@@ -2375,13 +2376,12 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
               companyRole: account.role,
               companyStatus: account.status,
             });
-            const company = await getCompanyBySlug(account.username);
-            activeCompanyId = company?.id;
+            oauthCo = await getCompanyBySlug(account.username);
+            activeCompanyId = oauthCo?.id;
           } catch {
             // Non-fatal.
             userId = existingUser.id;
           }
-          const oauthCo = activeCompanyId ? await getCompanyBySlug(account.username) : null;
           await finishOauthLoginOrChallenge(req, res, origin, {
             username: account.username,
             role: account.role,
@@ -2410,6 +2410,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
       let userId: string | undefined;
       let activeCompanyId: string | undefined;
+      let legacyOauthCo: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
       try {
         userId = await ensurePlatformUser({
           email: userInfo.email,
@@ -2420,12 +2421,11 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
           companyRole: existing.role,
           companyStatus: existing.status,
         });
-        const company = await getCompanyBySlug(existing.username);
-        activeCompanyId = company?.id;
+        legacyOauthCo = await getCompanyBySlug(existing.username);
+        activeCompanyId = legacyOauthCo?.id;
       } catch {
         // Non-fatal.
       }
-      const legacyOauthCo = activeCompanyId ? await getCompanyBySlug(existing.username) : null;
       await finishOauthLoginOrChallenge(req, res, origin, {
         username: existing.username,
         role: existing.role,
@@ -2673,12 +2673,12 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         if (account) {
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
+          let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
             userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
             await linkMicrosoftId(userId, microsoftId);
-            const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
+            co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byMsId.id; }
-          const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
           await finishOauthLoginOrChallenge(req, res, origin, {
             username: account.username,
             role: account.role,
@@ -2701,11 +2701,11 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         if (account) {
           if (account.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
           let userId: string | undefined; let activeCompanyId: string | undefined;
+          let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
           try {
             userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: account.username, membershipRole: membership.role, companyRole: account.role, companyStatus: account.status });
-            const co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
+            co = await getCompanyBySlug(account.username); activeCompanyId = co?.id;
           } catch { userId = byEmail.id; }
-          const co = activeCompanyId ? await getCompanyBySlug(account.username) : null;
           await finishOauthLoginOrChallenge(req, res, origin, {
             username: account.username,
             role: account.role,
@@ -2723,12 +2723,12 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     if (legacyMs) {
       if (legacyMs.status === "suspended") { res.redirect(`${origin}/?oauth_status=suspended`); return; }
       let userId: string | undefined; let activeCompanyId: string | undefined;
+      let co: Awaited<ReturnType<typeof getCompanyBySlug>> = null;
       try {
         userId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: legacyMs.username, membershipRole: legacyMs.role === "admin" ? "admin" : "owner", companyRole: legacyMs.role, companyStatus: legacyMs.status });
         await linkMicrosoftId(userId, microsoftId);
-        const co = await getCompanyBySlug(legacyMs.username); activeCompanyId = co?.id;
+        co = await getCompanyBySlug(legacyMs.username); activeCompanyId = co?.id;
       } catch { /* non-fatal */ }
-      const co = activeCompanyId ? await getCompanyBySlug(legacyMs.username) : null;
       await finishOauthLoginOrChallenge(req, res, origin, {
         username: legacyMs.username,
         role: legacyMs.role,
