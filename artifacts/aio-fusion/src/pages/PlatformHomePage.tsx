@@ -544,16 +544,16 @@ function PlatformHomePage({
                   {verificationEmail ? "Check your inbox" : "Verification link expired"}
                 </h2>
                 {verificationEmail ? (
-                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "white" }}>
                     We've sent a verification link to <strong>{verificationEmail}</strong>.
                     Click it to finish creating your account.
                   </p>
                 ) : (
-                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "rgba(255,255,255,0.8)" }}>
+                  <p className="text-[15px] mb-2 leading-[1.7]" style={{ color: "white" }}>
                     Your link has expired. Enter your email below to get a new one.
                   </p>
                 )}
-                <p className="text-[13.5px] mb-6" style={{ color: "rgba(255,255,255,0.5)" }}>
+                <p className="text-[13.5px] mb-6" style={{ color: "white" }}>
                   Didn't receive the email? Check your spam folder, then use the button below.
                 </p>
                 {loginError && (
@@ -581,8 +581,8 @@ function PlatformHomePage({
                     type="button"
                     onClick={handleResendVerification}
                     disabled={resendLoading || !verificationEmail}
-                    className="flex items-center justify-center gap-2 mx-auto px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10 disabled:opacity-40"
-                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                    className="flex items-center justify-center gap-2 mx-auto px-6 py-3.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ background: accent }}
                   >
                     {resendLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     Resend verification email
@@ -592,7 +592,7 @@ function PlatformHomePage({
                   type="button"
                   onClick={() => { setSignupAwaitingVerification(false); setShowSignup(false); setLoginError(null); setResendSent(false); }}
                   className="mt-5 text-[13px] hover:opacity-70 transition-opacity block mx-auto"
-                  style={{ color: "rgba(255,255,255,0.5)" }}
+                  style={{ color: "white" }}
                 >
                   ← Back to sign in
                 </button>
