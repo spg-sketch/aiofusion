@@ -22,7 +22,7 @@ const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
 
 const ROLE_OPTIONS: { value: MembershipRole; label: string; hint: string }[] = [
-  { value: "admin", label: "Admin", hint: "Full access, can manage the team" },
+  { value: "admin", label: "Admin", hint: "Full access, can manage team and billing" },
   { value: "content", label: "Content Team Member", hint: "Works on assigned projects only" },
   { value: "billing", label: "Billing", hint: "Invoices and billing only - no project access" },
   { value: "viewer", label: "Viewer", hint: "Read-only access" },
