@@ -27,7 +27,7 @@ export const MEMBERSHIP_ROLE_LABELS: Record<MembershipRole, string> = {
   owner: "Owner",
   admin: "Admin",
   billing: "Billing",
-  content: "Content staff",
+  content: "Content Team Member",
   viewer: "Viewer",
 };
 

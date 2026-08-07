@@ -77,7 +77,7 @@ vi.mock("./platform-auth", () => ({
 // Mock team-invites constants used by invite-reminders
 vi.mock("./team-invites", () => ({
   MEMBERSHIP_ROLE_LABELS: {
-    owner: "Owner", admin: "Admin", billing: "Billing", content: "Content staff", viewer: "Viewer",
+    owner: "Owner", admin: "Admin", billing: "Billing", content: "Content Team Member", viewer: "Viewer",
   },
 }));
 
