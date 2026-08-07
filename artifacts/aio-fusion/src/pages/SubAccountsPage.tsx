@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   ChevronRight, Lock, Search, FileEdit, BarChart3, Archive, Send, LineChart, ArrowRight, Sparkles, Loader2,
   TrendingUp, FileText, FileCheck2, Target, Code2, HelpCircle, MessageSquareQuote, Bot, ShieldCheck,
@@ -61,7 +61,10 @@ function SubAccountsPage({
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
+  const [logoProcessing, setLogoProcessing] = useState(false);
   const [addingClient, setAddingClient] = useState(false);
+  // Guards against a slow earlier image load overwriting a later selection.
+  const logoRequestRef = useRef(0);
 
   /** Downscale the chosen client logo to a data URL for the create form. */
   const handleNewClientLogo = (file: File) => {
@@ -70,21 +73,27 @@ function SubAccountsPage({
       setAddError("The logo must be a PNG, JPEG or WebP image.");
       return;
     }
+    const requestId = ++logoRequestRef.current;
+    setLogoProcessing(true);
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
+      if (requestId !== logoRequestRef.current) return; // a newer file was chosen
       const scale = Math.min(1, 512 / Math.max(img.width, img.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(img.width * scale));
       canvas.height = Math.max(1, Math.round(img.height * scale));
       const ctx = canvas.getContext("2d");
-      if (!ctx) { setAddError("Could not process the logo image."); return; }
+      if (!ctx) { setLogoProcessing(false); setAddError("Could not process the logo image."); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       setNewLogoDataUrl(file.type === "image/jpeg" ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png"));
+      setLogoProcessing(false);
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
+      if (requestId !== logoRequestRef.current) return;
+      setLogoProcessing(false);
       setAddError("Could not read that logo file.");
     };
     img.src = objectUrl;
@@ -752,7 +761,7 @@ function SubAccountsPage({
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-[13px] font-semibold cursor-pointer transition-all hover:opacity-80"
                   style={{ borderColor: vars.g200, color: ink }}
                 >
-                  {newLogoDataUrl ? "Replace logo" : "Upload logo"}
+                  {logoProcessing ? "Processing..." : newLogoDataUrl ? "Replace logo" : "Upload logo"}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
@@ -779,7 +788,8 @@ function SubAccountsPage({
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
               <input
-                type="text"
+                type="password"
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="min 8 characters"
@@ -791,7 +801,7 @@ function SubAccountsPage({
             <div className="md:col-span-6 flex items-end">
               <button
                 type="submit"
-                disabled={addingClient}
+                disabled={addingClient || logoProcessing}
                 className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
                 style={{ background: accent }}
               >

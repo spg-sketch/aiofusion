@@ -64,6 +64,18 @@ vi.mock("@workspace/db", () => {
             push();
             return Promise.resolve();
           },
+          // Mirrors Postgres: insert nothing on a username conflict and return
+          // the inserted rows (empty array when skipped).
+          onConflictDoNothing: () => ({
+            returning: () => {
+              const rows = h.rowsFor(table);
+              if (rows.some((r) => r.username === values.username)) {
+                return Promise.resolve([]);
+              }
+              push();
+              return Promise.resolve([{ username: values.username }]);
+            },
+          }),
           then: (resolve: (v: unknown) => unknown) => {
             push();
             return resolve(undefined);

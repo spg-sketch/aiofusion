@@ -3351,18 +3351,9 @@ router.post(
         res.status(403).json({ error: "Your account cannot create other accounts." });
         return;
       }
-      const existing = await getAccount(username);
-      if (existing) {
-        if (autoUsername) {
-          const base = username.slice(0, 28);
-          let attempt = 1;
-          let candidate = `${base}-${attempt}`;
-          while (await getAccount(candidate)) {
-            attempt++;
-            candidate = `${base}-${attempt}`;
-          }
-          username = candidate;
-        } else {
+      if (!autoUsername) {
+        const existing = await getAccount(username);
+        if (existing) {
           res.status(409).json({ error: "That username already exists." });
           return;
         }
@@ -3386,14 +3377,39 @@ router.post(
         }
       }
 
-      await db.insert(platformAccountsTable).values({
-        username,
-        passwordHash: hashPassword(password),
-        role,
-        parent: normUsername(actor.username),
-        ...(website ? { website } : {}),
-        ...(contactEmail ? { email: contactEmail } : {}),
-      });
+      // Insert relying on the primary key for uniqueness. With autoUsername we
+      // retry with a numeric suffix on conflict, so concurrent creates cannot
+      // race a check-then-insert into a 500.
+      const base = username.slice(0, 28);
+      let inserted = false;
+      for (let attempt = 0; attempt <= 50; attempt++) {
+        const candidate = attempt === 0 ? username : `${base}-${attempt}`;
+        const rows = await db
+          .insert(platformAccountsTable)
+          .values({
+            username: candidate,
+            passwordHash: hashPassword(password),
+            role,
+            parent: normUsername(actor.username),
+            ...(website ? { website } : {}),
+            ...(contactEmail ? { email: contactEmail } : {}),
+          })
+          .onConflictDoNothing({ target: platformAccountsTable.username })
+          .returning({ username: platformAccountsTable.username });
+        if (rows.length > 0) {
+          username = candidate;
+          inserted = true;
+          break;
+        }
+        if (!autoUsername) {
+          res.status(409).json({ error: "That username already exists." });
+          return;
+        }
+      }
+      if (!inserted) {
+        res.status(409).json({ error: "Could not find a free username - please choose one manually." });
+        return;
+      }
       if (displayName.trim() || contactName) {
         const value = JSON.stringify({
           ...(displayName.trim() ? { displayName: displayName.trim().slice(0, 64) } : {}),
