@@ -2,7 +2,7 @@
 
 ## User preferences
 
-- NEVER use em dashes (U+2014) anywhere in site content, UI copy, emails, or AI-generated text. Use a plain hyphen ( - ) instead. Guard tests (`no-em-dash.test.ts` in both aio-fusion and api-server) fail the build if one appears. British spelling, no emojis.
+- NEVER use em dashes (U+2014) anywhere in site content, UI copy, emails, or AI-generated text. Use a plain hyphen ( - ) instead. Guard tests (`no-em-dash.test.ts` in both aio-fusion and api-server) fail the build if one appears. En dashes (–) in numeric ranges (e.g. "1–3 minutes") are fine and should stay (user confirmed 7 Aug 2026). British spelling, no emojis.
 
 ## Overview
 
