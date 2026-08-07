@@ -1901,6 +1901,10 @@ router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, a
       .update(platformAccountsTable)
       .set({ status: "active" })
       .where(eq(platformAccountsTable.username, target));
+    await db
+      .update(platformCompaniesTable)
+      .set({ status: "active" })
+      .where(eq(platformCompaniesTable.slug, target));
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
@@ -1929,7 +1933,7 @@ router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, a
   }
 });
 
-// --- Admin: reject (delete) a pending account -------------------------------
+// --- Admin: reject (suspend) a pending account -------------------------------
 
 router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
@@ -1945,9 +1949,19 @@ router.post("/platform/admin/accounts/:username/reject", requirePlatformAuth, as
       res.status(400).json({ error: "Only pending accounts can be rejected." });
       return;
     }
-    // Hard-delete the rejected application — no data was ever created.
-    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, target));
-    await db.delete(platformMetaTable).where(like(platformMetaTable.key, `%:${target}`));
+    // Suspend rather than hard-delete: legacy pending accounts can sign in
+    // (pending_approval is treated as active since the approval flow was
+    // retired), so they may already hold data. Suspension blocks access
+    // everywhere while preserving data; an admin can still delete the
+    // account through the normal account-deletion flow if appropriate.
+    await db
+      .update(platformAccountsTable)
+      .set({ status: "suspended" })
+      .where(eq(platformAccountsTable.username, target));
+    await db
+      .update(platformCompaniesTable)
+      .set({ status: "suspended" })
+      .where(eq(platformCompaniesTable.slug, target));
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
       "account_reject",
