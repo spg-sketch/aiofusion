@@ -5,6 +5,12 @@ description: How/where em dashes are stripped from AI-generated content, and why
 
 # Em-dash sanitisation
 
+**Guard tests (Aug 2026):** `no-em-dash.test.ts` in both aio-fusion and
+api-server scan their src (and aio-fusion public/) for literal U+2014/U+2015
+and fail the suite. When sweeping, NEVER blind-replace inside regex character
+classes (use `\u2014` escapes; a sweep once broke extractCompetitors' numbered
+list regex in llm-check.ts) and exclude binary files from the sweep.
+
 The owner does not want em dashes anywhere in content ("double em dash" is their
 term for the em dash character `—`, U+2014). British spelling, no emojis.
 

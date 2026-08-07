@@ -538,16 +538,21 @@ export async function serverAddUser(
   password: string,
   role: Role,
   displayName?: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  extra?: { website?: string; contactName?: string; contactEmail?: string; autoUsername?: boolean },
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts", {
     username,
     password,
     role,
     ...(displayName ? { displayName } : {}),
+    ...(extra?.website ? { website: extra.website } : {}),
+    ...(extra?.contactName ? { contactName: extra.contactName } : {}),
+    ...(extra?.contactEmail ? { contactEmail: extra.contactEmail } : {}),
+    ...(extra?.autoUsername ? { autoUsername: true } : {}),
   });
   if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
   await refreshAccountsCache();
-  return { ok: true };
+  return { ok: true, username: (json as { username?: string })?.username || username };
 }
 
 // Set (or clear, when blank) an account's friendly display name.

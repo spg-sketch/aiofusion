@@ -336,6 +336,66 @@ export async function sendTeamInviteEmail(opts: {
   }
 }
 
+// Sent to a client's key contact when an agency creates a login for them.
+export async function sendClientAccountCreatedEmail(opts: {
+  toEmail: string;
+  contactName: string;
+  companyName: string;
+  agencyName: string;
+  username: string;
+  loginUrl: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - client account created email not sent");
+    return;
+  }
+
+  const greeting = opts.contactName ? `Hi ${opts.contactName},` : "Hi,";
+  const subject = `${opts.agencyName} has set up an AIO Fusion account for ${opts.companyName}`;
+  const text = [
+    greeting,
+    ``,
+    `${opts.agencyName} has created an AIO Fusion account for ${opts.companyName}.`,
+    ``,
+    `Your username is: ${opts.username}`,
+    ``,
+    `${opts.agencyName} will share your password with you directly. Once you have it, sign in here:`,
+    ``,
+    opts.loginUrl,
+    ``,
+    `If you weren't expecting this, you can safely ignore this email.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Account Created",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        ${escHtml(opts.agencyName)} has created an AIO Fusion account for ${escHtml(opts.companyName)}.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Your username is <strong>${escHtml(opts.username)}</strong>.
+        ${escHtml(opts.agencyName)} will share your password with you directly. Once you have it,
+        use the button below to sign in.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you weren't expecting this, you can safely ignore this email.
+      </p>
+    `,
+    cta: { text: "Sign in to AIO Fusion", href: opts.loginUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: client account created email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send client account created email (non-fatal)");
+  }
+}
+
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;

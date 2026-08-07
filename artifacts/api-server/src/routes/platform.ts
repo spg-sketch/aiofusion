@@ -89,7 +89,7 @@ import {
 } from "../lib/mfa";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -3304,9 +3304,21 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const actor = req.account!;
-      const username = normUsername(req.body?.username);
+      let username = normUsername(req.body?.username);
       const password = typeof req.body?.password === "string" ? req.body.password : "";
       const requestedRole = normalizeRole(req.body?.role);
+      // Optional client-company details captured at creation time.
+      let website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 200) : "";
+      if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
+      const contactName = typeof req.body?.contactName === "string" ? req.body.contactName.trim().slice(0, 80) : "";
+      const contactEmail = typeof req.body?.contactEmail === "string" ? req.body.contactEmail.trim().slice(0, 200) : "";
+      if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+        res.status(400).json({ error: "Key contact email address doesn't look valid." });
+        return;
+      }
+      // When set, the username is a suggestion derived from the company name;
+      // append a numeric suffix instead of failing on a collision.
+      const autoUsername = req.body?.autoUsername === true;
       // The master (admin) may create an agency, a direct client, or another
       // admin. Everyone else can only ever create a leaf client account, so we
       // coerce the requested role rather than trusting it.
@@ -3335,8 +3347,19 @@ router.post(
       }
       const existing = await getAccount(username);
       if (existing) {
-        res.status(409).json({ error: "That username already exists." });
-        return;
+        if (autoUsername) {
+          const base = username.slice(0, 28);
+          let attempt = 1;
+          let candidate = `${base}-${attempt}`;
+          while (await getAccount(candidate)) {
+            attempt++;
+            candidate = `${base}-${attempt}`;
+          }
+          username = candidate;
+        } else {
+          res.status(409).json({ error: "That username already exists." });
+          return;
+        }
       }
 
       // Seat-cap enforcement: if the parent account has a maxSeats limit, count
@@ -3362,9 +3385,44 @@ router.post(
         passwordHash: hashPassword(password),
         role,
         parent: normUsername(actor.username),
+        ...(website ? { website } : {}),
+        ...(contactEmail ? { email: contactEmail } : {}),
       });
-      if (displayName.trim()) await setDisplayName(username, displayName);
-      res.json({ ok: true });
+      if (displayName.trim() || contactName) {
+        const value = JSON.stringify({
+          ...(displayName.trim() ? { displayName: displayName.trim().slice(0, 64) } : {}),
+          ...(contactName ? { ownerName: contactName } : {}),
+        });
+        await db
+          .insert(platformMetaTable)
+          .values({ key: profileKey(username), value })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+      }
+      // Tell the key contact they have a login. Fail-soft: account creation
+      // succeeds even if the email cannot be sent.
+      if (contactEmail) {
+        let agencyName = actor.username;
+        try {
+          const [metaRow] = await db
+            .select()
+            .from(platformMetaTable)
+            .where(eq(platformMetaTable.key, profileKey(normUsername(actor.username))))
+            .limit(1);
+          if (metaRow?.value) {
+            const parsed = JSON.parse(metaRow.value) as { displayName?: unknown };
+            if (typeof parsed.displayName === "string" && parsed.displayName.trim()) agencyName = parsed.displayName;
+          }
+        } catch { /* fall back to username */ }
+        void sendClientAccountCreatedEmail({
+          toEmail: contactEmail,
+          contactName,
+          companyName: displayName.trim() || username,
+          agencyName,
+          username,
+          loginUrl: getAppBaseUrl(),
+        });
+      }
+      res.json({ ok: true, username });
     } catch {
       res.status(500).json({ error: "Failed to create account" });
     }

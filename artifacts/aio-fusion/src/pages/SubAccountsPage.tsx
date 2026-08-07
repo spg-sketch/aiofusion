@@ -55,8 +55,12 @@ function SubAccountsPage({
     });
   }, [session.username, subUsernames, tick]);
 
-  const [newUsername, setNewUsername] = useState("");
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [newWebsite, setNewWebsite] = useState("");
+  const [newContactName, setNewContactName] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [addingClient, setAddingClient] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [pwUser, setPwUser] = useState<string | null>(null);
@@ -216,11 +220,42 @@ function SubAccountsPage({
     e.preventDefault();
     setAddError(null);
     setAddSuccess(null);
+    const companyName = newCompanyName.trim();
+    if (!companyName) { setAddError("Enter the client's company name."); return; }
+    let website = newWebsite.trim();
+    if (!website) { setAddError("Enter the client's company website."); return; }
+    if (!/^https?:\/\//i.test(website)) website = `https://${website}`;
+    const contactEmail = newContactEmail.trim();
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      setAddError("The key contact email address doesn't look valid.");
+      return;
+    }
+    // Suggest a username from the company name; the server makes it unique.
+    const usernameSuggestion = companyName
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9_.-]/g, "")
+      .replace(/-+/g, "-")
+      .slice(0, 28)
+      .replace(/^[-.]+|[-.]+$/g, "") || "client";
+    setAddingClient(true);
     void (async () => {
-      const result = await serverAddUser(newUsername, newPassword, "client");
+      const result = await serverAddUser(usernameSuggestion, newPassword, "client", companyName, {
+        website,
+        contactName: newContactName.trim(),
+        contactEmail,
+        autoUsername: true,
+      });
+      setAddingClient(false);
       if (result.ok) {
-        setAddSuccess(`Created client account '${newUsername.trim()}'.`);
-        setNewUsername("");
+        setAddSuccess(
+          `Created client account '${result.username}' for ${companyName}.` +
+          (contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
+        );
+        setNewCompanyName("");
+        setNewWebsite("");
+        setNewContactName("");
+        setNewContactEmail("");
         setNewPassword("");
         refresh();
       } else {
@@ -628,38 +663,80 @@ function SubAccountsPage({
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
         {canCreateSubAccounts(session.role) && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
-          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
-            <div className="md:col-span-5">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username</label>
+          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
               <input
                 type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="e.g. acme-client"
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                placeholder="e.g. Acme Ltd"
+                required
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
-            <div className="md:col-span-5">
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website</label>
+              <input
+                type="text"
+                inputMode="url"
+                value={newWebsite}
+                onChange={(e) => setNewWebsite(e.target.value)}
+                placeholder="e.g. https://www.acme.com"
+                required
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact name <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <input
+                type="text"
+                value={newContactName}
+                onChange={(e) => setNewContactName(e.target.value)}
+                placeholder="e.g. Jane Smith"
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Key contact email <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <input
+                type="text"
+                inputMode="email"
+                value={newContactEmail}
+                onChange={(e) => setNewContactEmail(e.target.value)}
+                placeholder="e.g. jane@acme.com"
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+            </div>
+            <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
               <input
                 type="text"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="min 4 characters"
+                required
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-6 flex items-end">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                disabled={addingClient}
+                className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
                 style={{ background: accent }}
               >
-                <Plus size={14} /> Add
+                {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add client
               </button>
             </div>
+            <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
+              If you add a key contact email, we'll let them know their account has been created. You share the password with them directly.
+            </p>
             {addError && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>}
             {addSuccess && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>}
           </form>
