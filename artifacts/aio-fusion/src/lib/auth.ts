@@ -538,7 +538,7 @@ export async function serverAddUser(
   password: string,
   role: Role,
   displayName?: string,
-  extra?: { website?: string; contactName?: string; contactEmail?: string; autoUsername?: boolean },
+  extra?: { website?: string; contactName?: string; contactEmail?: string; autoUsername?: boolean; logoDataUrl?: string },
 ): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts", {
     username,
@@ -549,6 +549,7 @@ export async function serverAddUser(
     ...(extra?.contactName ? { contactName: extra.contactName } : {}),
     ...(extra?.contactEmail ? { contactEmail: extra.contactEmail } : {}),
     ...(extra?.autoUsername ? { autoUsername: true } : {}),
+    ...(extra?.logoDataUrl ? { logoDataUrl: extra.logoDataUrl } : {}),
   });
   if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
   await refreshAccountsCache();

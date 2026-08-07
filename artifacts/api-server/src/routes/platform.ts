@@ -3319,6 +3319,12 @@ router.post(
       // When set, the username is a suggestion derived from the company name;
       // append a numeric suffix instead of failing on a collision.
       const autoUsername = req.body?.autoUsername === true;
+      // Optional client logo, validated exactly like the profile-image route.
+      const logoDataUrl = typeof req.body?.logoDataUrl === "string" ? req.body.logoDataUrl : "";
+      if (logoDataUrl && (!DATA_URL_RE.test(logoDataUrl) || logoDataUrl.length > MAX_IMAGE_DATA_URL_LENGTH)) {
+        res.status(400).json({ error: "Logo must be a PNG, JPEG or WebP image (max ~450KB after resizing)." });
+        return;
+      }
       // The master (admin) may create an agency, a direct client, or another
       // admin. Everyone else can only ever create a leaf client account, so we
       // coerce the requested role rather than trusting it.
@@ -3397,6 +3403,13 @@ router.post(
           .insert(platformMetaTable)
           .values({ key: profileKey(username), value })
           .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+      }
+      if (logoDataUrl) {
+        const logoKey = profileImageKey("logo", username);
+        await db
+          .insert(platformMetaTable)
+          .values({ key: logoKey, value: logoDataUrl })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: logoDataUrl } });
       }
       // Tell the key contact they have a login. Fail-soft: account creation
       // succeeds even if the email cannot be sent.

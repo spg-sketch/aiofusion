@@ -60,7 +60,35 @@ function SubAccountsPage({
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
   const [addingClient, setAddingClient] = useState(false);
+
+  /** Downscale the chosen client logo to a data URL for the create form. */
+  const handleNewClientLogo = (file: File) => {
+    setAddError(null);
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      setAddError("The logo must be a PNG, JPEG or WebP image.");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, 512 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { setAddError("Could not process the logo image."); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      setNewLogoDataUrl(file.type === "image/jpeg" ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setAddError("Could not read that logo file.");
+    };
+    img.src = objectUrl;
+  };
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
   const [pwUser, setPwUser] = useState<string | null>(null);
@@ -245,6 +273,7 @@ function SubAccountsPage({
         contactName: newContactName.trim(),
         contactEmail,
         autoUsername: true,
+        ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
       });
       setAddingClient(false);
       if (result.ok) {
@@ -257,6 +286,7 @@ function SubAccountsPage({
         setNewContactName("");
         setNewContactEmail("");
         setNewPassword("");
+        setNewLogoDataUrl(null);
         refresh();
       } else {
         setAddError(result.error);
@@ -711,6 +741,40 @@ function SubAccountsPage({
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
+            </div>
+            <div className="md:col-span-6">
+              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Client logo <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
+              <div className="flex items-center gap-3">
+                {newLogoDataUrl && (
+                  <img src={newLogoDataUrl} alt="Client logo preview" className="h-10 w-10 rounded-lg object-contain" style={{ border: `1px solid ${vars.g200}`, background: "white" }} />
+                )}
+                <label
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border text-[13px] font-semibold cursor-pointer transition-all hover:opacity-80"
+                  style={{ borderColor: vars.g200, color: ink }}
+                >
+                  {newLogoDataUrl ? "Replace logo" : "Upload logo"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleNewClientLogo(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {newLogoDataUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setNewLogoDataUrl(null)}
+                    className="text-[12px] font-semibold underline"
+                    style={{ color: vars.g500 }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </div>
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
