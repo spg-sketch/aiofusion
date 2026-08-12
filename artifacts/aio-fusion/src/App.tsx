@@ -648,7 +648,9 @@ function App() {
   // Deep-link target section on the account settings page
   // (/?account_section=security from security emails). Captured once on load,
   // before the history-sync effect rewrites the URL and drops the query string.
-  const [accountSection] = useState<string | null>(() =>
+  // Also kept in sync while the settings page is open so the section survives
+  // a refresh and participates in Back/Forward history navigation.
+  const [accountSection, setAccountSection] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("account_section"),
   );
 
@@ -734,13 +736,19 @@ function App() {
   pageRef.current = currentPage;
   const insightsArticleIdRef = useRef(insightsArticleId);
   insightsArticleIdRef.current = insightsArticleId;
+  const accountSectionRef = useRef(accountSection);
+  accountSectionRef.current = accountSection;
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
 
   useEffect(() => {
-    const navState = { __aioNav: true, view, currentPage, insightsArticleId };
-    const url = viewToUrl(view, insightsArticleId);
+    const navState = { __aioNav: true, view, currentPage, insightsArticleId, accountSection };
+    // Reflect the active settings section in the URL so a refresh restores it
+    // (matches the email deep-link format /?account_section=security).
+    const url = view === "sub-accounts" && accountSection
+      ? viewToUrl(view, insightsArticleId) + "?account_section=" + encodeURIComponent(accountSection)
+      : viewToUrl(view, insightsArticleId);
     if (!navInitDone.current) {
       navInitDone.current = true;
       window.history.replaceState(navState, "", url);
@@ -756,11 +764,11 @@ function App() {
       return;
     }
     window.history.pushState(navState, "", url);
-  }, [view, currentPage, insightsArticleId]);
+  }, [view, currentPage, insightsArticleId, accountSection]);
 
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
-      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string; insightsArticleId?: string | null } | null;
+      const s = e.state as { __aioNav?: boolean; view?: string; currentPage?: string; insightsArticleId?: string | null; accountSection?: string | null } | null;
       // Prefer the navigation state we pushed; fall back to deriving a public
       // page from the URL (e.g. a directly typed /about or a forward nav).
       const targetView = (
@@ -770,13 +778,17 @@ function App() {
       const targetArticleId = s && s.__aioNav
         ? (s.insightsArticleId ?? null)
         : (targetView === "insights" ? articleIdFromLocation() : null);
+      const targetAccountSection = s && s.__aioNav
+        ? (s.accountSection ?? null)
+        : new URLSearchParams(window.location.search).get("account_section");
       // Only apply (and arm the skip guard) when something actually changes,
       // otherwise the guard could stay armed and swallow the next real push.
-      if (targetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current) {
+      if (targetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
         skipHistoryPush.current = true;
         setView(targetView);
         setCurrentPage(targetPage);
         setInsightsArticleId(targetArticleId);
+        setAccountSection(targetAccountSection);
       }
       window.scrollTo(0, 0);
     };
@@ -1055,6 +1067,7 @@ function App() {
     return (
       <SubAccountsPage
         initialSection={accountSection ?? undefined}
+        onSectionChange={(s) => setAccountSection(s)}
         session={session}
         onBack={() => setView("platform-home")}
         onAssignProjectOwner={handleAssignProjectOwner}

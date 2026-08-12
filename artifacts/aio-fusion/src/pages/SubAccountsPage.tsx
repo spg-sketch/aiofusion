@@ -30,6 +30,7 @@ function SubAccountsPage({
   onWorkspacesChanged,
   onSignOut,
   initialSection,
+  onSectionChange,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -41,6 +42,8 @@ function SubAccountsPage({
   onSignOut?: () => void;
   /** Deep-link target (e.g. from an email link ?account_section=security). Falls back to profile if not allowed. */
   initialSection?: string;
+  /** Reports section changes so the parent can mirror them into the URL/history (refresh + Back support). */
+  onSectionChange?: (section: string) => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -80,12 +83,28 @@ function SubAccountsPage({
       ? (initialSection as SettingsSection)
       : "profile",
   );
+  // Central section switcher: updates local state and reports the change to
+  // the parent so it can mirror the section into the URL/history stack.
+  const selectSection = (next: SettingsSection) => {
+    setSection(next);
+    onSectionChange?.(next);
+  };
   // If a role change removes the active section (e.g. switching Agency -> Client
   // while on a client section), fall back to the profile view.
   useEffect(() => {
-    if (!allowedSections.includes(section)) setSection("profile");
+    if (!allowedSections.includes(section)) selectSection("profile");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowedSections.join(",")]);
+  // Follow external section changes (browser Back/Forward restoring a
+  // previously viewed section via the parent's history sync).
+  useEffect(() => {
+    const target: SettingsSection =
+      initialSection && (allowedSections as string[]).includes(initialSection)
+        ? (initialSection as SettingsSection)
+        : "profile";
+    if (target !== section) setSection(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSection]);
 
   // Re-read on every refresh tick so adds, deletes and assignments show at once.
   const allSubAccounts = useMemo(() => getLocalSubAccounts(session.username), [session.username, tick]);
@@ -651,7 +670,7 @@ function SubAccountsPage({
                       <li key={item.id}>
                         <button
                           type="button"
-                          onClick={() => setSection(item.id)}
+                          onClick={() => selectSection(item.id)}
                           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[13px] transition-all"
                           style={{
                             background: active ? accentSoft : "transparent",
@@ -680,7 +699,7 @@ function SubAccountsPage({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSection(item.id)}
+                    onClick={() => selectSection(item.id)}
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold whitespace-nowrap transition-all"
                     style={{
                       background: active ? accent : "white",
