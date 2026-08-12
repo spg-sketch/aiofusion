@@ -75,6 +75,67 @@ describe("syncIntakeForProject - blank can never overwrite populated", () => {
   });
 });
 
+describe("syncProjectsOnLoad - owner column is authoritative", () => {
+  it("overwrites the stale owner inside the data blob with the server's owner column after a hand-off", async () => {
+    // The agency created the project (data blob says owner: "agency"), then
+    // assigned it to its client: the server's owner COLUMN now says "client1"
+    // but the blob still carries the stale creator.
+    const serverProject = {
+      id: "p1",
+      name: "Handed Off",
+      data: { id: "p1", name: "Handed Off", owner: "agency" },
+      logo: null,
+      owner: "Client1", // authoritative column (mixed case to check normalisation)
+      updatedAt: new Date().toISOString(),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown, opts?: { method?: string }) => {
+        const u = String(url);
+        const method = (opts?.method || "GET").toUpperCase();
+        if (method === "GET" && u.endsWith("/store/projects")) {
+          return { ok: true, status: 200, json: async () => ({ projects: [serverProject], deletedIds: [] }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    const { syncProjectsOnLoad } = await import("./projectSync");
+    const result = await syncProjectsOnLoad();
+    expect(result).not.toBeNull();
+    expect(result).not.toBe("unauthorized");
+    const projects = (result as { projects: Array<{ id: string; owner?: string }> }).projects;
+    expect(projects.find((p) => p.id === "p1")?.owner).toBe("client1");
+    // The merged copy in localStorage carries the corrected owner too.
+    const stored = JSON.parse(localStorage.getItem("aio.projects.v1")!) as Array<{ id: string; owner?: string }>;
+    expect(stored.find((p) => p.id === "p1")?.owner).toBe("client1");
+  });
+
+  it("keeps the blob owner when the server column is a legacy NULL", async () => {
+    const serverProject = {
+      id: "p2",
+      name: "Legacy",
+      data: { id: "p2", name: "Legacy", owner: "agency" },
+      logo: null,
+      owner: null,
+      updatedAt: new Date().toISOString(),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown, opts?: { method?: string }) => {
+        const u = String(url);
+        if ((opts?.method || "GET").toUpperCase() === "GET" && u.endsWith("/store/projects")) {
+          return { ok: true, status: 200, json: async () => ({ projects: [serverProject], deletedIds: [] }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response;
+      }),
+    );
+    const { syncProjectsOnLoad } = await import("./projectSync");
+    const result = await syncProjectsOnLoad();
+    const projects = (result as { projects: Array<{ id: string; owner?: string }> }).projects;
+    expect(projects.find((p) => p.id === "p2")?.owner).toBe("agency");
+  });
+});
+
 describe("default project key migration + recovery", () => {
   it("copies the legacy bare-key Set-Up onto the namespaced default key without deleting the bare key", () => {
     localStorage.setItem("aio.intake.v2", JSON.stringify(FULL));

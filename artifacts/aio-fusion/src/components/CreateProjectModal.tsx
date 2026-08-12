@@ -5,8 +5,15 @@ import { vars } from "../marketing/vars";
 const ink = "#0a1628";
 const accent = "#C8497A";
 
-export function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => void; onCreate: (name: string, logo?: string) => void }) {
-  const [name, setName] = useState("");
+export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName }: {
+  onCancel: () => void;
+  onCreate: (name: string, logo?: string) => void;
+  /** Pre-fills the project name (e.g. the client's company name when starting from a hub placeholder card). */
+  initialName?: string;
+  /** When set, the modal notes the project will be created under this client's account. */
+  forClientName?: string;
+}) {
+  const [name, setName] = useState(initialName ?? "");
   const [logo, setLogo] = useState<string | null>(null);
   const canSubmit = name.trim().length > 0;
   const submit = () => { if (canSubmit) onCreate(name.trim(), logo ?? undefined); };
@@ -46,6 +53,11 @@ export function CreateProjectModal({ onCancel, onCreate }: { onCancel: () => voi
         <p className="text-[14px] font-light mb-5 leading-relaxed" style={{ color: vars.g500 }}>
           This is the brand, product or campaign you want to optimise. You can refine the rest of the details during set-up.
         </p>
+        {forClientName && (
+          <p className="text-[13px] font-medium mb-5 px-4 py-3 rounded-xl" style={{ background: "#FBE3ED", color: accent }}>
+            This project will be created under <strong>{forClientName}</strong>'s client account.
+          </p>
+        )}
         <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>
           Project name
         </label>

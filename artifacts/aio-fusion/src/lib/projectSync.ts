@@ -160,6 +160,9 @@ type ServerProject = {
   name?: string | null;
   data: StoredProject;
   logo: string | null;
+  /** Authoritative owner from the server's owner column (reassignments update
+   * this column, not the data blob), so it must win over data.owner. */
+  owner?: string | null;
   updatedAt: string | null;
 };
 
@@ -193,6 +196,12 @@ function hydrateServerProject(sp: ServerProject, fallbackName = ""): StoredProje
     // caller's local fallback) over a stale placeholder or empty value, so the
     // merge never overwrites a good name with "New Project".
     name: pickName(dataName, colName, fallbackName),
+    // The owner column is authoritative: assigning a project to another account
+    // updates the column but leaves the stale creator inside the data blob, so
+    // the column must overwrite it or the new owner never sees the project.
+    ...(typeof sp.owner === "string" && sp.owner.trim()
+      ? { owner: sp.owner.trim().toLowerCase() }
+      : {}),
   };
 }
 

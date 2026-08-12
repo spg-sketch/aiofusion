@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, Building2, Plus, Archive, BookOpen, ArrowRight,
   Trash2, Activity, Zap, Upload, LogIn,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
+import { apiBase } from "../lib/apiHelpers";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
 import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
 import type { Client } from "../types";
@@ -46,6 +47,8 @@ export default function ClientSelectorPage({
   session,
   onGenerateFromUrl,
   workspaceSwitcher,
+  pendingClients,
+  onStartProjectForClient,
 }: {
   projects: Client[];
   onSelectClient: (client: Client) => void;
@@ -58,6 +61,10 @@ export default function ClientSelectorPage({
   onDeleteProject: (id: string) => void;
   session?: { username: string; role: string } | null;
   onGenerateFromUrl?: () => void;
+  /** Client sub-accounts with no projects yet - shown as "Start project" placeholder cards. */
+  pendingClients?: { username: string; name: string }[];
+  /** Starts a new project under the given client's account. */
+  onStartProjectForClient?: (client: { username: string; name: string }) => void;
   /** Rendered inside the header right section - workspace switcher when the user belongs to >1 workspace. */
   workspaceSwitcher?: React.ReactNode;
 }) {
@@ -65,6 +72,49 @@ export default function ClientSelectorPage({
   const displayClients = projects;
   const isAdmin = session?.role === "admin";
   const isClient = session?.role === "client";
+  const pending = pendingClients ?? [];
+
+  // Logos for pending client accounts, served from platform_meta via the
+  // accounts logo endpoint. null = checked, none; missing = not yet fetched.
+  const [pendingLogos, setPendingLogos] = useState<Record<string, string | null>>({});
+  const pendingLogoBlobsRef = useRef<Map<string, string>>(new Map());
+  const pendingUsernamesKey = pending.map((p) => p.username).join(",");
+  useEffect(() => {
+    const usernames = pendingUsernamesKey ? pendingUsernamesKey.split(",") : [];
+    if (usernames.length === 0) {
+      pendingLogoBlobsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      pendingLogoBlobsRef.current = new Map();
+      setPendingLogos({});
+      return;
+    }
+    let cancelled = false;
+    const newBlobs = new Map<string, string>();
+    Promise.all(
+      usernames.map(async (username) => {
+        try {
+          const res = await fetch(`${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/logo`, {
+            credentials: "include",
+          });
+          if (!res.ok || cancelled) return;
+          const blob = await res.blob();
+          if (cancelled) return;
+          newBlobs.set(username, URL.createObjectURL(blob));
+        } catch { /* non-fatal: no logo or not authorized */ }
+      }),
+    ).then(() => {
+      if (cancelled) {
+        newBlobs.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+      pendingLogoBlobsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      pendingLogoBlobsRef.current = newBlobs;
+      const next: Record<string, string | null> = {};
+      usernames.forEach((u) => { next[u] = newBlobs.get(u) ?? null; });
+      setPendingLogos(next);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingUsernamesKey]);
 
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: teal }}>
@@ -171,7 +221,7 @@ export default function ClientSelectorPage({
           </div>
         </div>
 
-        {displayClients.length === 0 ? (
+        {displayClients.length === 0 && pending.length === 0 ? (
           <div
             className="rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center"
             style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.25)" }}
@@ -315,6 +365,59 @@ export default function ClientSelectorPage({
                         style={{ background: accent }}
                       >
                         <LogIn size={13} /> Enter
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {pending.map((client) => {
+              const logoUrl = pendingLogos[client.username];
+              const initial = (client.name.trim().charAt(0) || client.username.charAt(0)).toUpperCase();
+              return (
+                <div
+                  key={`pending-${client.username}`}
+                  className="rounded-2xl flex flex-col border-2 border-dashed"
+                  style={{ background: "rgba(255,255,255,0.82)", borderColor: "rgba(255,255,255,0.6)", boxShadow: "0 4px 24px rgba(0,0,0,0.10)" }}
+                >
+                  <div className="p-6 flex-1 flex flex-col">
+                    <div className="flex flex-col items-center text-center mb-5">
+                      <div className="relative flex-shrink-0 mb-3 opacity-80">
+                        {logoUrl ? (
+                          <ClientLogoBox logoUrl={logoUrl} alt={`${client.name} logo`} />
+                        ) : (
+                          <div
+                            className="w-[140px] h-[140px] rounded-xl flex items-center justify-center text-[40px] font-bold border"
+                            style={{ background: vars.g50, color: vars.g400, borderColor: vars.g200 }}
+                          >
+                            {initial}
+                          </div>
+                        )}
+                      </div>
+                      <h3 className="text-[17px] font-bold" style={{ color: ink }}>
+                        {client.name}
+                      </h3>
+                      <span
+                        className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.16em]"
+                        style={{ background: vars.g50, color: vars.g400, border: `1px solid ${vars.g200}` }}
+                      >
+                        <Building2 size={11} /> Client account
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl border border-dashed" style={{ background: "transparent", borderColor: vars.g200 }}>
+                      <p className="text-[13px] font-medium leading-snug text-center" style={{ color: vars.g400 }}>
+                        No project yet - start their first project to begin optimising.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center mt-auto pt-2">
+                      <button
+                        onClick={() => onStartProjectForClient?.(client)}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5 hover:shadow-md hover:ring-2 hover:ring-[#C8497A]"
+                        style={{ background: accent }}
+                      >
+                        <Plus size={13} /> Start project
                       </button>
                     </div>
                   </div>

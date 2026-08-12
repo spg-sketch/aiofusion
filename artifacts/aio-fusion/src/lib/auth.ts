@@ -95,6 +95,13 @@ export function saveUsers(users: User[]): void {
   } catch {
     /* noop */
   }
+  // Let live views (e.g. the project hub's pending-client placeholder cards)
+  // know the cached account list changed, so they recompute without a reload.
+  try {
+    window.dispatchEvent(new Event("aio:accounts-changed"));
+  } catch {
+    /* noop (non-browser test envs) */
+  }
 }
 
 export function seedAdminIfEmpty(): void {

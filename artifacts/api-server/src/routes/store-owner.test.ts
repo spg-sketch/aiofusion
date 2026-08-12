@@ -195,6 +195,22 @@ describe("POST /api/store/projects/owner (owner reassignment authorization)", ()
     expect(state.projects.find((p) => p.id === "p-agency")?.owner).toBe("agency");
   });
 
+  it("hands the project to the client: after reassignment the client's project list includes it with the authoritative owner", async () => {
+    // Agency assigns its project to its client sub-account...
+    actor = { username: "agency", role: "agency" };
+    expect((await reassign({ id: "p-agency", owner: "client1" })).status).toBe(200);
+    // ...then the client signs in and pulls the shared list: the project must
+    // be visible and carry the owner column so the client hydrates ownership
+    // from it (the stale data blob still names the agency as owner).
+    actor = { username: "client1", role: "client" };
+    const res = await fetch(`${baseUrl}/api/store/projects`);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { projects: Array<{ id: string; owner?: string | null }> };
+    const project = json.projects.find((p) => p.id === "p-agency");
+    expect(project).toBeTruthy();
+    expect(project!.owner).toBe("client1");
+  });
+
   it("validates required fields", async () => {
     expect((await reassign({ owner: "agency" })).status).toBe(400);
     expect((await reassign({ id: "p-agency" })).status).toBe(400);

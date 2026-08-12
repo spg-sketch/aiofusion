@@ -156,7 +156,10 @@ router.get(
       );
       const projects = mine
         .filter((r) => !r.deletedAt)
-        .map((r) => ({ id: r.id, name: r.name, data: r.data, logo: r.logo, updatedAt: r.updatedAt }));
+        // owner is the authoritative ownership record (reassignment updates the
+        // column, not the data blob) - clients must hydrate from it so a
+        // handed-off project shows up for its new owner everywhere.
+        .map((r) => ({ id: r.id, name: r.name, data: r.data, logo: r.logo, owner: r.owner ?? null, updatedAt: r.updatedAt }));
       const deletedIds = mine.filter((r) => r.deletedAt).map((r) => r.id);
 
       res.json({ projects, deletedIds });

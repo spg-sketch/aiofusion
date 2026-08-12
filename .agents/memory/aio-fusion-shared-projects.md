@@ -173,3 +173,7 @@ source, but `tsc --noEmit` resolves db TYPES from `lib/db/dist/*.d.ts` (project
 references, `emitDeclarationOnly`). So after adding a NEW export to `@workspace/db`
 (e.g. a new table), api-server typecheck reports "no exported member" until you
 regenerate the declarations: `pnpm --filter @workspace/db exec tsc -b`.
+
+## Owner column is authoritative on sync
+GET /api/store/projects returns the `owner` column; client hydration (projectSync hydrateServerProject) must overwrite the stale `data.owner` blob value with it (reassignment updates the column only). Legacy NULL column keeps the blob owner.
+**Why:** without this, a project handed to a client account stays invisible to that client cross-device (visibleProjects filters on owner).
