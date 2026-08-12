@@ -31,6 +31,9 @@ export type User = {
   archived?: boolean;
   // Whether the account has two-factor login (TOTP) fully enabled.
   mfaEnabled?: boolean;
+  // Managed client accounts have no sign-in access - the agency works on
+  // their behalf via "Login as client".
+  managed?: boolean;
   // Optional cap on the number of client seats an agency account may create.
   seatCap?: number | null;
 };
@@ -244,7 +247,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -278,6 +281,7 @@ function cacheAccounts(accounts: ServerAccount[]): void {
     ...(a.parent ? { parent: a.parent } : {}),
     ...(a.archived ? { archived: true } : {}),
     ...(a.mfaEnabled ? { mfaEnabled: true } : {}),
+    ...(a.managed ? { managed: true } : {}),
   }));
   saveUsers(users);
 }
@@ -609,6 +613,25 @@ export async function serverResetMfa(
   const { ok, json } = await postJson("/api/platform/accounts/reset-mfa", { username });
   if (!ok) return { ok: false, error: json?.error || "Failed to reset two-factor login." };
   return { ok: true };
+}
+
+// Grant or revoke a client account's sign-in access. Granting without a
+// password emails the key contact a set-password link; with a password the
+// agency sets it directly. Revoking scrambles the password and signs the
+// client out everywhere.
+export async function serverSetClientAccess(
+  username: string,
+  action: "grant" | "revoke",
+  password?: string,
+): Promise<{ ok: true; emailSent?: boolean } | { ok: false; error: string }> {
+  const { ok, json } = await postJson("/api/platform/accounts/access", {
+    username,
+    action,
+    ...(password ? { password } : {}),
+  });
+  if (!ok) return { ok: false, error: json?.error || "Failed to change client access." };
+  await refreshAccountsCache();
+  return { ok: true, emailSent: (json as { emailSent?: boolean })?.emailSent };
 }
 
 export async function serverChangePassword(

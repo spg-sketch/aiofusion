@@ -106,6 +106,7 @@ function publicAccount(
   displayName?: string,
   archived?: boolean,
   mfaEnabled?: boolean,
+  managed?: boolean,
 ) {
   return {
     username: row.username,
@@ -114,6 +115,7 @@ function publicAccount(
     ...(displayName ? { displayName } : {}),
     ...(archived ? { archived: true } : {}),
     ...(mfaEnabled ? { mfaEnabled: true } : {}),
+    ...(managed ? { managed: true } : {}),
   };
 }
 
@@ -153,6 +155,64 @@ async function isMasterOwner(username: string): Promise<boolean> {
 async function setMasterOwner(username: string, value: boolean): Promise<void> {
   const key = masterOwnerKey(username);
   if (value) {
+    await db
+      .insert(platformMetaTable)
+      .values({ key, value: "true" })
+      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+  } else {
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
+  }
+}
+
+// Managed client accounts: the agency runs the account on the client's
+// behalf and the client has no sign-in access. Flag stored as a
+// platform_meta row (same pattern as archived).
+const MANAGED_PREFIX = "account:managed:";
+const managedKey = (username: string) => `${MANAGED_PREFIX}${normUsername(username)}`;
+
+async function getManagedSet(): Promise<Set<string>> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${MANAGED_PREFIX}%`));
+  return new Set(rows.map((r) => r.key.slice(MANAGED_PREFIX.length)));
+}
+
+async function isManaged(username: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, managedKey(username)));
+  return rows.length > 0;
+}
+
+// Pick the workspace a signing-in human should land in: their most recent
+// membership whose company is NOT a managed (access-disabled) client account.
+// Falls back to the primary membership when every workspace is managed, so
+// the downstream managed check still rejects the login with a clear error.
+async function pickLoginMembership(
+  userId: string,
+): Promise<typeof platformMembershipsTable.$inferSelect | null> {
+  const primary = await getPrimaryMembership(userId);
+  if (!primary) return null;
+  if (!(await isManaged(primary.companySlug))) return primary;
+  const mems = await db
+    .select()
+    .from(platformMembershipsTable)
+    .where(eq(platformMembershipsTable.userId, userId))
+    .orderBy(desc(platformMembershipsTable.createdAt));
+  for (const m of mems) {
+    if (!(await isManaged(m.companySlug))) return m;
+  }
+  return primary;
+}
+
+const MANAGED_LOGIN_ERROR =
+  "This account is managed by your agency. Contact them for access.";
+
+async function setManaged(username: string, managed: boolean): Promise<void> {
+  const key = managedKey(username);
+  if (managed) {
     await db
       .insert(platformMetaTable)
       .values({ key, value: "true" })
@@ -399,6 +459,12 @@ async function finishLoginOrChallenge(
   rawIp: string | undefined,
   trustedDeviceCookie?: string,
 ): Promise<void> {
+  // Managed (access-disabled) client accounts cannot be signed into at all -
+  // the agency works on the client's behalf via "View account" instead.
+  if (await isManaged(identity.username)) {
+    res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+    return;
+  }
   const isMaster = normalizeRole(identity.role) === "admin";
   let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
   try {
@@ -468,6 +534,11 @@ async function completeMfaLogin(
   rawIp: string | undefined,
   extra?: Record<string, unknown>,
 ): Promise<void> {
+  // Access may have been revoked between the password check and the MFA code.
+  if (await isManaged(payload.u)) {
+    res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+    return;
+  }
   // Full authentication complete: clear the MFA-stage lockout counter.
   try { await clearLoginFailures("mfa:" + payload.u); } catch { /* non-fatal */ }
   const sid = await createPlatformSession(payload.u, makeIpHint(rawIp), payload.uid, payload.cid);
@@ -497,6 +568,12 @@ async function finishOauthLoginOrChallenge(
   origin: string,
   identity: LoginIdentity,
 ): Promise<void> {
+  // Managed (access-disabled) client accounts cannot be signed into via SSO
+  // either - reuse the suspended redirect so the frontend shows a clear error.
+  if (await isManaged(identity.username)) {
+    res.redirect(`${origin}/?oauth_status=managed`);
+    return;
+  }
   const isMaster = normalizeRole(identity.role) === "admin";
   let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
   try {
@@ -605,7 +682,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       : await getUserByCompanySlug(identifier);
     if (newUser && newUser.passwordHash && verifyPassword(password, newUser.passwordHash)) {
       // Credential verified via platform_users. Resolve company for status check.
-      const membership = await getPrimaryMembership(newUser.id);
+      const membership = await pickLoginMembership(newUser.id);
       const companySlug = membership?.companySlug ?? normUsername(identifier);
       const acct = companySlug ? await getAccount(companySlug) : null;
       if (acct) {
@@ -2420,7 +2497,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     // status (active/suspended/pending) and is NOT used to pick the company.
     if (existingUser) {
       const displayName = userInfo.name || userInfo.given_name || userInfo.email.split("@")[0];
-      const membership = await getPrimaryMembership(existingUser.id);
+      const membership = await pickLoginMembership(existingUser.id);
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
@@ -2736,7 +2813,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     // Step 1: look up by Microsoft ID (fastest path for returning users)
     const byMsId = await getUserByMicrosoftId(microsoftId);
     if (byMsId) {
-      const membership = await getPrimaryMembership(byMsId.id);
+      const membership = await pickLoginMembership(byMsId.id);
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
@@ -2764,7 +2841,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     const byEmail = msEmail ? await getUserByEmail(msEmail) : null;
     if (byEmail) {
       await linkMicrosoftId(byEmail.id, microsoftId);
-      const membership = await getPrimaryMembership(byEmail.id);
+      const membership = await pickLoginMembership(byEmail.id);
       if (membership) {
         const account = await getAccount(membership.companySlug);
         if (account) {
@@ -3291,6 +3368,12 @@ router.post(
         res.status(403).json({ error: "You do not have access to that workspace." });
         return;
       }
+      // Managed (access-disabled) client workspaces cannot be entered by
+      // multi-workspace humans either - only the agency's "View account".
+      if (await isManaged(mem.companySlug)) {
+        res.status(403).json({ error: MANAGED_LOGIN_ERROR });
+        return;
+      }
       const rawIp =
         (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
         ?? req.socket.remoteAddress;
@@ -3338,10 +3421,11 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
-      const [names, archivedSet, mfaSet] = await Promise.all([
+      const [names, archivedSet, mfaSet, managedSet] = await Promise.all([
         getDisplayNames(),
         getArchivedSet(),
         getMfaEnabledSet(),
+        getManagedSet(),
       ]);
       res.json({
         accounts: filtered.map((r) =>
@@ -3350,6 +3434,7 @@ router.get(
             names.get(normUsername(r.username)),
             archivedSet.has(normUsername(r.username)),
             mfaSet.has(normUsername(r.username)),
+            managedSet.has(normUsername(r.username)),
           ),
         ),
       });
@@ -3358,6 +3443,119 @@ router.get(
     }
   },
 );
+
+// Whether the given platform_users row belongs ONLY to the target company
+// (single membership, pointing at the target slug). Used to make sure access
+// grant/revoke operations on a client account never touch the credentials of
+// a human who also belongs to other workspaces.
+async function userBelongsOnlyTo(userId: string, targetUsername: string): Promise<boolean> {
+  const mems = await db
+    .select({ companySlug: platformMembershipsTable.companySlug })
+    .from(platformMembershipsTable)
+    .where(eq(platformMembershipsTable.userId, userId));
+  return mems.length === 1 && normUsername(mems[0]!.companySlug) === normUsername(targetUsername);
+}
+
+// Send the welcome "set your password" email to a client's key contact.
+// Issues a single-use 7-day reset token only for brand-new users; if the
+// contact email already belongs to a platform_users row we must NOT issue a
+// reset token - their existing password must not be threatened by an emailed
+// link. We still send the email, just without the set-password button.
+// Fail-soft throughout: the caller's operation succeeds even when the email
+// cannot be sent or the token insertion fails.
+async function sendWelcomeSetPasswordEmail(opts: {
+  targetUsername: string;
+  contactEmail: string;
+  contactName: string;
+  companyName: string;
+  actorUsername: string;
+  companyRole: Role;
+  // Grant-access flow: also issue a token when the contact already has a
+  // platform_users row, provided their ONLY membership is the target client
+  // account (so an emailed link can never threaten an unrelated account's
+  // password). Needed to re-grant access after a revoke scrambled it.
+  allowExistingUserToken?: boolean;
+  // When true, no email is sent unless a usable set-password token was issued
+  // (the grant-access flow must never claim access was granted without a
+  // working credential path; the create flow keeps its fail-soft email).
+  requireToken?: boolean;
+}): Promise<{ tokenIssued: boolean }> {
+  const { targetUsername, contactEmail, contactName, companyName, actorUsername } = opts;
+  let agencyName = actorUsername;
+  try {
+    const [metaRow] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, profileKey(normUsername(actorUsername))))
+      .limit(1);
+    if (metaRow?.value) {
+      const parsed = JSON.parse(metaRow.value) as { displayName?: unknown };
+      if (typeof parsed.displayName === "string" && parsed.displayName.trim()) agencyName = parsed.displayName;
+    }
+  } catch { /* fall back to username */ }
+
+  let setPasswordUrl: string | undefined;
+  try {
+    const existingUser = await getUserByEmail(contactEmail);
+    if (existingUser && opts.allowExistingUserToken) {
+      if (await userBelongsOnlyTo(existingUser.id, targetUsername)) {
+        await db
+          .delete(platformPasswordResetsTable)
+          .where(eq(platformPasswordResetsTable.userId, existingUser.id));
+        const welcomeToken = crypto.randomBytes(32).toString("hex");
+        await db.insert(platformPasswordResetsTable).values({
+          token: welcomeToken,
+          userId: existingUser.id,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        });
+        setPasswordUrl = `${getAppBaseUrl()}/?reset_token=${welcomeToken}&welcome=1`;
+      }
+    } else if (!existingUser) {
+      // Eagerly create the platform_users + platform_companies +
+      // platform_memberships rows so the FK in platform_password_resets
+      // is satisfied.  The membership role is "owner" (the contact owns
+      // their client account).  ensurePlatformUser is idempotent on
+      // conflict so a concurrent login on the same email is safe.
+      const account = await getAccount(targetUsername);
+      const newUserId = await ensurePlatformUser({
+        email: contactEmail,
+        name: contactName || null,
+        passwordHash: account?.passwordHash ?? null,
+        companyUsername: targetUsername,
+        membershipRole: "owner",
+        companyRole: opts.companyRole,
+        companyParentSlug: normUsername(actorUsername),
+      });
+      // Invalidate any pre-existing tokens for this user (mirrors
+      // forgot-password behaviour) then issue a fresh 7-day welcome token.
+      await db
+        .delete(platformPasswordResetsTable)
+        .where(eq(platformPasswordResetsTable.userId, newUserId));
+      const welcomeToken = crypto.randomBytes(32).toString("hex");
+      await db.insert(platformPasswordResetsTable).values({
+        token: welcomeToken,
+        userId: newUserId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      });
+      setPasswordUrl = `${getAppBaseUrl()}/?reset_token=${welcomeToken}&welcome=1`;
+    }
+  } catch (err) {
+    logger.warn({ err, contactEmail }, "accounts: failed to issue welcome token (non-fatal) - email sent without set-password link");
+  }
+
+  if (opts.requireToken && !setPasswordUrl) return { tokenIssued: false };
+
+  void sendClientAccountCreatedEmail({
+    toEmail: contactEmail,
+    contactName,
+    companyName,
+    agencyName,
+    username: targetUsername,
+    loginUrl: getAppBaseUrl(),
+    setPasswordUrl,
+  });
+  return { tokenIssued: Boolean(setPasswordUrl) };
+}
 
 // Create a sub-account. The new account's parent is the caller (so it joins the
 // caller's visibility subtree). Only an admin may create another admin.
@@ -3500,72 +3698,20 @@ router.post(
           .values({ key: logoKey, value: logoDataUrl })
           .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: logoDataUrl } });
       }
+      // Managed accounts are flagged so the UI can offer "Give client access"
+      // later, and so the flag survives restarts.
+      if (managed) await setManaged(username, true);
       // Tell the key contact they have a login. Fail-soft: account creation
       // succeeds even if the email cannot be sent or the token insertion fails.
       // Managed accounts skip this entirely - the client is not given access.
       if (contactEmail && !managed) {
-        let agencyName = actor.username;
-        try {
-          const [metaRow] = await db
-            .select()
-            .from(platformMetaTable)
-            .where(eq(platformMetaTable.key, profileKey(normUsername(actor.username))))
-            .limit(1);
-          if (metaRow?.value) {
-            const parsed = JSON.parse(metaRow.value) as { displayName?: unknown };
-            if (typeof parsed.displayName === "string" && parsed.displayName.trim()) agencyName = parsed.displayName;
-          }
-        } catch { /* fall back to username */ }
-
-        // Issue a single-use 7-day "Set your password" link only for new users.
-        // If the contact email already belongs to a platform_users row we must
-        // NOT issue a reset token - their existing password must not be
-        // threatened by an emailed link.  We still send the email, just without
-        // the set-password button.
-        let setPasswordUrl: string | undefined;
-        try {
-          const existingUser = await getUserByEmail(contactEmail);
-          if (!existingUser) {
-            // Eagerly create the platform_users + platform_companies +
-            // platform_memberships rows so the FK in platform_password_resets
-            // is satisfied.  The membership role is "owner" (the contact owns
-            // their client account).  ensurePlatformUser is idempotent on
-            // conflict so a concurrent login on the same email is safe.
-            const account = await getAccount(username);
-            const newUserId = await ensurePlatformUser({
-              email: contactEmail,
-              name: contactName || null,
-              passwordHash: account?.passwordHash ?? null,
-              companyUsername: username,
-              membershipRole: "owner",
-              companyRole: role,
-              companyParentSlug: normUsername(actor.username),
-            });
-            // Invalidate any pre-existing tokens for this user (mirrors
-            // forgot-password behaviour) then issue a fresh 7-day welcome token.
-            await db
-              .delete(platformPasswordResetsTable)
-              .where(eq(platformPasswordResetsTable.userId, newUserId));
-            const welcomeToken = crypto.randomBytes(32).toString("hex");
-            await db.insert(platformPasswordResetsTable).values({
-              token: welcomeToken,
-              userId: newUserId,
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-            });
-            setPasswordUrl = `${getAppBaseUrl()}/?reset_token=${welcomeToken}&welcome=1`;
-          }
-        } catch (err) {
-          logger.warn({ err, contactEmail }, "accounts: failed to issue welcome token (non-fatal) - email sent without set-password link");
-        }
-
-        void sendClientAccountCreatedEmail({
-          toEmail: contactEmail,
+        await sendWelcomeSetPasswordEmail({
+          targetUsername: username,
+          contactEmail,
           contactName,
           companyName: displayName.trim() || username,
-          agencyName,
-          username,
-          loginUrl: getAppBaseUrl(),
-          setPasswordUrl,
+          actorUsername: actor.username,
+          companyRole: role,
         });
       }
       res.json({ ok: true, username });
@@ -3648,6 +3794,174 @@ router.post(
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change password" });
+    }
+  },
+);
+
+// Grant or revoke a client account's sign-in access. Agencies use this to hand
+// a managed account over to the client (welcome set-password email, or a
+// password chosen by the agency) - or to withdraw access again (scramble the
+// password and revoke all active sessions). Enforced within the caller's own
+// subtree via canManage.
+router.post(
+  "/platform/accounts/access",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      // Destructive credential/session operation: only the workspace owner or
+      // a team admin may grant/revoke client access. Viewer, billing and
+      // regular members are refused even inside their own subtree. Master
+      // admins (role "admin") always pass - their membershipRole is owner/null.
+      const actorMemRole = actor.membershipRole;
+      if (actorMemRole !== null && actorMemRole !== undefined && actorMemRole !== "owner" && actorMemRole !== "admin") {
+        res.status(403).json({ error: "Only the account owner or a team admin can change client access." });
+        return;
+      }
+      const target = normUsername(req.body?.username);
+      const action = req.body?.action;
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (!target) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+      if (action !== "grant" && action !== "revoke") {
+        res.status(400).json({ error: "Action must be 'grant' or 'revoke'." });
+        return;
+      }
+      if (target === normUsername(actor.username)) {
+        res.status(400).json({ error: "You cannot change access on your own account." });
+        return;
+      }
+      if (!(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot change this account." });
+        return;
+      }
+      const existing = await getAccount(target);
+      if (!existing) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (normalizeRole(existing.role) !== "client") {
+        res.status(400).json({ error: "Access can only be changed on client accounts." });
+        return;
+      }
+
+      if (action === "grant") {
+        if (password) {
+          // Agency sets the password directly and shares it with the client.
+          if (password.length < 8) {
+            res.status(400).json({ error: "Password must be at least 8 characters." });
+            return;
+          }
+          const ph = hashPassword(password);
+          await db
+            .update(platformAccountsTable)
+            .set({ passwordHash: ph })
+            .where(eq(platformAccountsTable.username, target));
+          // Keep the modern credential store in step so email logins work -
+          // but only when the user belongs solely to this client account.
+          if (existing.email) {
+            try {
+              const u = await getUserByEmail(existing.email);
+              if (u && (await userBelongsOnlyTo(u.id, target))) {
+                await db
+                  .update(platformUsersTable)
+                  .set({ passwordHash: ph })
+                  .where(eq(platformUsersTable.id, u.id));
+              }
+            } catch { /* non-fatal - slug login still works */ }
+          }
+          await setManaged(target, false);
+          res.json({ ok: true, emailSent: false });
+          return;
+        }
+        // Email flow: send the welcome set-password email to the key contact.
+        if (!existing.email) {
+          res.status(400).json({ error: "This account has no key contact email. Set a password instead." });
+          return;
+        }
+        // If the contact email already belongs to a human with OTHER
+        // workspace memberships, an emailed set-password link is off the
+        // table (it would threaten their unrelated credential). Refuse
+        // up-front instead of claiming access was granted without a usable
+        // credential path.
+        try {
+          const existingContact = await getUserByEmail(existing.email);
+          if (existingContact && !(await userBelongsOnlyTo(existingContact.id, target))) {
+            res.status(409).json({
+              error: "The key contact's email already belongs to a user with other workspaces, so a set-password link can't be sent. Set a password directly instead.",
+            });
+            return;
+          }
+        } catch { /* fall through - requireToken below still protects */ }
+        let contactName = "";
+        let companyName = target;
+        try {
+          const [metaRow] = await db
+            .select()
+            .from(platformMetaTable)
+            .where(eq(platformMetaTable.key, profileKey(target)))
+            .limit(1);
+          if (metaRow?.value) {
+            const parsed = JSON.parse(metaRow.value) as { displayName?: unknown; ownerName?: unknown };
+            if (typeof parsed.displayName === "string" && parsed.displayName.trim()) companyName = parsed.displayName.trim();
+            if (typeof parsed.ownerName === "string" && parsed.ownerName.trim()) contactName = parsed.ownerName.trim();
+          }
+        } catch { /* fall back to username */ }
+        const { tokenIssued } = await sendWelcomeSetPasswordEmail({
+          targetUsername: target,
+          contactEmail: existing.email,
+          contactName,
+          companyName,
+          actorUsername: actor.username,
+          companyRole: "client",
+          allowExistingUserToken: true,
+          requireToken: true,
+        });
+        if (!tokenIssued) {
+          // No usable credential path was created - do NOT enable access or
+          // claim success. The agency can retry or set a password directly.
+          res.status(502).json({ error: "Couldn't create the set-password link. Try again, or set a password directly." });
+          return;
+        }
+        await setManaged(target, false);
+        res.json({ ok: true, emailSent: true });
+        return;
+      }
+
+      // action === "revoke": scramble the password and revoke active sessions.
+      const scrambled = hashPassword(crypto.randomBytes(32).toString("hex"));
+      await db
+        .update(platformAccountsTable)
+        .set({ passwordHash: scrambled })
+        .where(eq(platformAccountsTable.username, target));
+      if (existing.email) {
+        try {
+          const u = await getUserByEmail(existing.email);
+          if (u && (await userBelongsOnlyTo(u.id, target))) {
+            await db
+              .update(platformUsersTable)
+              .set({ passwordHash: scrambled })
+              .where(eq(platformUsersTable.id, u.id));
+            // Kill any outstanding set-password / reset links.
+            await db
+              .delete(platformPasswordResetsTable)
+              .where(eq(platformPasswordResetsTable.userId, u.id));
+            // Fast-revoke any session stamped with this user's version.
+            await incrementSessionVersion(u.id);
+          }
+        } catch { /* non-fatal - sessions are still deleted below */ }
+      }
+      // Revoke every active session on this client account.
+      await db
+        .delete(platformSessionsTable)
+        .where(eq(platformSessionsTable.username, target));
+      await clearTrustedDevices(target);
+      await setManaged(target, true);
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Failed to change client access" });
     }
   },
 );

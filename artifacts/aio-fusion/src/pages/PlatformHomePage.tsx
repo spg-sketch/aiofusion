@@ -175,6 +175,8 @@ function PlatformHomePage({
       setLoginError("Your account is awaiting approval. Please try again later or contact support.");
     } else if (status === "suspended") {
       setLoginError("Your account has been suspended. Please contact support.");
+    } else if (status === "managed") {
+      setLoginError("This account is managed by your agency. Contact them for access.");
     } else if (status === "error") {
       const msg = params.get("oauth_msg") ?? "unknown";
       const friendly: Record<string, string> = {

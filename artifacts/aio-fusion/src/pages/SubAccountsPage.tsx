@@ -10,7 +10,6 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, canCreateSubAccounts } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -19,6 +18,7 @@ import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
+import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, serverSetClientAccess, canCreateSubAccounts } from "../lib/auth";
 function SubAccountsPage({
   session,
   onBack,
@@ -152,6 +152,44 @@ function SubAccountsPage({
   const [pwUser, setPwUser] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+
+  // "Give client access" inline panel state (per managed client account).
+  const [accessUser, setAccessUser] = useState<string | null>(null);
+  const [accessPassword, setAccessPassword] = useState("");
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  // Per-username success note shown in the row after granting/removing access.
+  const [accessNotice, setAccessNotice] = useState<{ username: string; text: string } | null>(null);
+
+  const handleGrantAccess = (username: string, password?: string) => {
+    if (accessBusy) return;
+    setAccessError(null);
+    setAccessBusy(true);
+    void (async () => {
+      const result = await serverSetClientAccess(username, "grant", password);
+      setAccessBusy(false);
+      if (!result.ok) { setAccessError(result.error); return; }
+      setAccessUser(null);
+      setAccessPassword("");
+      setAccessNotice({
+        username,
+        text: result.emailSent
+          ? "Access granted - we've emailed the key contact a set-password link (valid 7 days)."
+          : "Access granted - share the password with the client directly.",
+      });
+      refresh();
+    })();
+  };
+
+  const handleRevokeAccess = (username: string) => {
+    if (!confirm(`Remove sign-in access for '${username}'? Their password will be invalidated and they will be signed out everywhere. You can give access back at any time.`)) return;
+    void (async () => {
+      const result = await serverSetClientAccess(username, "revoke");
+      if (!result.ok) { alert(result.error); return; }
+      setAccessNotice({ username, text: "Client access removed - this is now a managed account." });
+      refresh();
+    })();
+  };
 
   // Account Type section state
   const isOwner = session.membershipRole == null || session.membershipRole === "owner";
@@ -1080,7 +1118,12 @@ function SubAccountsPage({
                           {u.displayName && (
                             <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
                           )}
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
+                            {u.managed && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g500 }}>Managed</span>
+                            )}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1099,6 +1142,23 @@ function SubAccountsPage({
                         >
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
                         </button>
+                        {u.managed ? (
+                          <button
+                            onClick={() => { setAccessUser(accessUser === u.username ? null : u.username); setAccessPassword(""); setAccessError(null); setAccessNotice(null); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                            style={{ color: vars.green, border: `1.5px solid ${vars.green}40` }}
+                          >
+                            <Shield size={12} /> {accessUser === u.username ? "Cancel" : "Give client access"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleRevokeAccess(u.username)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                            style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                          >
+                            <Lock size={12} /> Remove client access
+                          </button>
+                        )}
                         <button
                           onClick={() => handleArchive(u.username, true)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -1117,6 +1177,47 @@ function SubAccountsPage({
                     </div>
                     {enterError && enteringUsername === null && (
                       <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
+                    )}
+                    {accessNotice?.username === u.username && (
+                      <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: vars.green }}>{accessNotice.text}</p>
+                    )}
+                    {accessUser === u.username && (
+                      <div className="mt-3 rounded-xl p-4 sm:ml-[52px]" style={{ background: vars.g100 + "60", border: `1px solid ${vars.g200}` }}>
+                        <p className="text-[12px] font-semibold mb-2" style={{ color: ink }}>Give this client sign-in access</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={accessBusy}
+                            onClick={() => handleGrantAccess(u.username)}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-60"
+                            style={{ background: accent }}
+                          >
+                            {accessBusy ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Email set-password link
+                          </button>
+                          <span className="text-[11px] font-light" style={{ color: vars.g500 }}>or</span>
+                          <input
+                            type="text"
+                            value={accessPassword}
+                            onChange={(e) => setAccessPassword(e.target.value)}
+                            placeholder="Set a password (min 8 chars)"
+                            className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                          />
+                          <button
+                            type="button"
+                            disabled={accessBusy || accessPassword.length < 8}
+                            onClick={() => handleGrantAccess(u.username, accessPassword)}
+                            className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] disabled:opacity-50"
+                            style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                          >
+                            Set password
+                          </button>
+                        </div>
+                        <p className="mt-2 text-[11px] font-light" style={{ color: vars.g500 }}>
+                          Emailing sends the key contact a single-use set-password link (valid 7 days). Setting a password yourself means you share it with the client directly.
+                        </p>
+                        {accessError && <p className="mt-2 text-[12px] font-semibold" style={{ color: accent }}>{accessError}</p>}
+                      </div>
                     )}
                     <div className="mt-3 sm:pl-[52px]">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: vars.g500 }}>Their projects ({owned.length})</p>
