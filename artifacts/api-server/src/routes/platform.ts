@@ -1930,7 +1930,7 @@ router.post("/platform/admin/accounts/:username/approve", requirePlatformAuth, a
       void sendApprovalEmail({
         toEmail: account.email,
         toName: profileMeta?.ownerName ?? target,
-        loginUrl: "https://www.aiofusion.ai",
+        loginUrl: getAppBaseUrl(),
       });
     }
     res.json({ ok: true });

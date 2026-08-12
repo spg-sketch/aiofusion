@@ -18,6 +18,7 @@ import {
   sendEnquiryInternalAlert,
   sendEnquiryConfirmation,
   sendContactFormFailedAlert,
+  getAppBaseUrl,
 } from "../lib/notify-email";
 
 const adminRouter = Router();
@@ -934,7 +935,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const quotaHtml = buildEmailHtml({
@@ -950,7 +951,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const capHtml = buildEmailHtml({
@@ -966,7 +967,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const backupHtml = buildEmailHtml({
@@ -977,7 +978,7 @@ adminRouter.post(
         </p>
         <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const backupSuccessHtml = buildEmailHtml({
@@ -993,7 +994,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const signupHtml = buildEmailHtml({
@@ -1009,7 +1010,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const approvalHtml = buildEmailHtml({
@@ -1024,7 +1025,7 @@ adminRouter.post(
         </p>
         <p style="margin:24px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Sign in to AIO Fusion", href: "https://aiofusion.ai" },
+      cta: { text: "Sign in to AIO Fusion", href: getAppBaseUrl() },
     });
 
     const bookDemoInternalHtml = buildEmailHtml({
@@ -1052,7 +1053,7 @@ adminRouter.post(
         </p>
         <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+      cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
     });
 
     const enquiryInternalHtml = buildEmailHtml({
@@ -1084,7 +1085,7 @@ adminRouter.post(
         </p>
         <p style="margin:0 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+      cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
     });
 
     const supportTicketAlertHtml = buildEmailHtml({
@@ -1103,7 +1104,7 @@ adminRouter.post(
           This is a smoke-test support ticket. No action needed.
         </div>
       `,
-      cta: { text: "Open Admin Panel", href: "https://aiofusion.ai" },
+      cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
     });
 
     const supportTicketAckHtml = buildEmailHtml({
@@ -1120,7 +1121,7 @@ adminRouter.post(
         ])}
         <p style="margin:16px 0 0 0;font-size:13px;color:#475569;">No action needed - this is a smoke test.</p>
       `,
-      cta: { text: "Visit AIO Fusion", href: "https://aiofusion.ai" },
+      cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
     });
 
     try {

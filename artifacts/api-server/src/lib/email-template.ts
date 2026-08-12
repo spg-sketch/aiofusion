@@ -11,6 +11,8 @@
  *   Cream      #FBF6EC
  */
 
+import { getAppBaseUrl } from "./app-url";
+
 export interface EmailTemplateOpts {
   /** Short header label, e.g. "New Signup" or "Account Approved". */
   label: string;
@@ -25,8 +27,9 @@ export interface EmailTemplateOpts {
   footerNote?: string;
 }
 
+// LOGO_URL is intentionally always the production URL: the logo asset only
+// exists on www.aiofusion.ai, and email clients need a stable absolute URL.
 const LOGO_URL = "https://www.aiofusion.ai/images/logo-color.png";
-const SITE_URL = "https://www.aiofusion.ai";
 const CONTACT_EMAIL = "info@aiofusion.ai";
 
 const RASPBERRY = "#C8497A";
@@ -37,6 +40,9 @@ const MUTED = "#64748B";
 const BORDER = "#E2E8F0";
 
 export function buildEmailHtml(opts: EmailTemplateOpts): string {
+  // Compute at call-time so staging/dev deployments link to the right environment.
+  const siteUrl = getAppBaseUrl();
+
   const ctaBlock = opts.cta
     ? `
       <tr>
@@ -88,7 +94,7 @@ export function buildEmailHtml(opts: EmailTemplateOpts): string {
                style="max-width: 600px; width: 100%;">
           <tr>
             <td style="padding-bottom: 24px; text-align: center;">
-              <a href="${SITE_URL}" style="text-decoration: none;">
+              <a href="${siteUrl}" style="text-decoration: none;">
                 <img src="${LOGO_URL}" alt="AIO Fusion" width="160"
                      style="height: auto; max-width: 160px;" />
               </a>
@@ -134,7 +140,7 @@ export function buildEmailHtml(opts: EmailTemplateOpts): string {
           <tr>
             <td style="text-align: center; font-family: Inter, Arial, sans-serif;
                        font-size: 12px; color: ${MUTED}; line-height: 1.8;">
-              <a href="${SITE_URL}" style="color: ${MUTED}; text-decoration: none;">${SITE_URL}</a>
+              <a href="${siteUrl}" style="color: ${MUTED}; text-decoration: none;">${siteUrl}</a>
               &nbsp;&nbsp;|&nbsp;&nbsp;
               <a href="mailto:${CONTACT_EMAIL}" style="color: ${MUTED}; text-decoration: none;">${CONTACT_EMAIL}</a>
               <br />

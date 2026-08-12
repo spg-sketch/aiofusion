@@ -1,6 +1,11 @@
 import { Resend } from "resend";
 import { logger } from "./logger";
 import { buildEmailHtml, buildDataRows, textToHtml, escHtml } from "./email-template";
+import { getAppBaseUrl } from "./app-url";
+
+// Re-export so existing callers (platform.ts, invite-reminders.ts, tests) do
+// not need to change their import paths.
+export { getAppBaseUrl };
 
 const ALERT_RECIPIENTS = [
   "patrick@aiofusion.ai",
@@ -16,14 +21,6 @@ function getClient(): Resend | null {
 
 function fromAddress(): string {
   return process.env.RESEND_FROM ?? "AIO Fusion Alerts <info@aiofusion.ai>";
-}
-
-// Returns the canonical base URL for this deployment so email links always
-// point to the right environment (staging vs. live).
-export function getAppBaseUrl(): string {
-  const canonical = process.env.CANONICAL_DOMAIN?.trim();
-  if (canonical) return `https://${canonical}`;
-  return "https://www.aiofusion.ai";
 }
 
 export async function sendVerificationEmail(opts: {
@@ -566,7 +563,7 @@ export async function sendSpikeAlert(opts: {
     `Log in to the admin panel to review the account's usage, adjust their quota,`,
     `or block the account if the activity looks abusive.`,
     ``,
-    `Admin token usage panel: https://www.aiofusion.ai`,
+    `Admin token usage panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -585,7 +582,7 @@ export async function sendSpikeAlert(opts: {
         Review the account's usage, adjust their quota, or block the account if the activity looks abusive.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
   });
 
   try {
@@ -618,7 +615,7 @@ export async function sendQuotaBreachAlert(opts: {
     `Log in to the admin panel to adjust their quota multiplier (e.g. grant 2× headroom)`,
     `or block the account if needed.`,
     ``,
-    `Admin token usage panel: https://www.aiofusion.ai`,
+    `Admin token usage panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -636,7 +633,7 @@ export async function sendQuotaBreachAlert(opts: {
         Adjust their quota multiplier or block the account if needed.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
   });
 
   try {
@@ -668,7 +665,7 @@ export async function sendSpendCapAlert(opts: {
     `The account is now receiving 429 responses on all AI routes until the cap is raised`,
     `or the calendar month resets.`,
     ``,
-    `Admin token usage panel: https://www.aiofusion.ai`,
+    `Admin token usage panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -686,7 +683,7 @@ export async function sendSpendCapAlert(opts: {
         or the calendar month resets.
       </p>
     `,
-    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
   });
 
   try {
@@ -931,7 +928,7 @@ export async function sendBookDemoConfirmation(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
   await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
@@ -1025,7 +1022,7 @@ export async function sendSupportTicketAlert(opts: {
     ``,
     `Log in to the admin panel to view and respond to this ticket.`,
     ``,
-    `Admin panel: https://www.aiofusion.ai`,
+    `Admin panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -1044,7 +1041,7 @@ export async function sendSupportTicketAlert(opts: {
         ${textToHtml(opts.description)}
       </div>
     `,
-    cta: { text: "Open Admin Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Admin Panel", href: getAppBaseUrl() },
   });
 
   try {
@@ -1106,7 +1103,7 @@ export async function sendSupportTicketAck(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
   try {
@@ -1171,11 +1168,11 @@ export async function sendSupportTicketReplyNotification(opts: {
       </div>
       <p style="margin: 16px 0 0 0; font-size: 13px; color: #475569;">
         Reply to this email or log in to
-        <a href="https://www.aiofusion.ai" style="color: #C8497A;">AIO Fusion</a>
+        <a href="${getAppBaseUrl()}" style="color: #C8497A;">AIO Fusion</a>
         to view the full thread.
       </p>
     `,
-    cta: { text: "View your support thread", href: "https://www.aiofusion.ai" },
+    cta: { text: "View your support thread", href: getAppBaseUrl() },
   });
 
   try {
@@ -1219,7 +1216,7 @@ export async function sendContactFormFailedAlert(opts: {
     `The lead is safe in the database. Log in to the admin panel → Leads to`,
     `re-send the emails once Resend is back online.`,
     ``,
-    `Admin panel: https://www.aiofusion.ai`,
+    `Admin panel: ${getAppBaseUrl()}`,
   ].join("\n");
 
   const html = buildEmailHtml({
@@ -1243,7 +1240,7 @@ export async function sendContactFormFailedAlert(opts: {
         ${escHtml(opts.error)}
       </div>
     `,
-    cta: { text: "Open Leads Panel", href: "https://www.aiofusion.ai" },
+    cta: { text: "Open Leads Panel", href: getAppBaseUrl() },
   });
 
   try {
@@ -1290,7 +1287,7 @@ export async function sendEnquiryConfirmation(opts: {
         <a href="mailto:info@aiofusion.ai" style="color: #C8497A;">info@aiofusion.ai</a>.
       </p>
     `,
-    cta: { text: "Visit AIO Fusion", href: "https://www.aiofusion.ai" },
+    cta: { text: "Visit AIO Fusion", href: getAppBaseUrl() },
   });
 
   await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
