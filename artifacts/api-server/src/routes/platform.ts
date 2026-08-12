@@ -3305,7 +3305,12 @@ router.post(
     try {
       const actor = req.account!;
       let username = normUsername(req.body?.username);
-      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      // Managed accounts are run by the agency on the client's behalf: no
+      // welcome email, no set-password link, and a random unguessable password
+      // is generated server-side (the agency uses "View account" instead).
+      const managed = req.body?.managed === true;
+      let password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (managed && !password) password = crypto.randomBytes(24).toString("hex");
       const requestedRole = normalizeRole(req.body?.role);
       // Optional client-company details captured at creation time.
       let website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 200) : "";
@@ -3429,7 +3434,8 @@ router.post(
       }
       // Tell the key contact they have a login. Fail-soft: account creation
       // succeeds even if the email cannot be sent or the token insertion fails.
-      if (contactEmail) {
+      // Managed accounts skip this entirely - the client is not given access.
+      if (contactEmail && !managed) {
         let agencyName = actor.username;
         try {
           const [metaRow] = await db

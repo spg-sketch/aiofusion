@@ -60,6 +60,9 @@ function SubAccountsPage({
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  // Managed account: the agency runs the project on the client's behalf and
+  // the client is NOT given sign-in access (no password, no welcome email).
+  const [newManaged, setNewManaged] = useState(false);
   const [newLogoDataUrl, setNewLogoDataUrl] = useState<string | null>(null);
   const [logoProcessing, setLogoProcessing] = useState(false);
   const [addingClient, setAddingClient] = useState(false);
@@ -401,24 +404,28 @@ function SubAccountsPage({
       .replace(/^[-.]+|[-.]+$/g, "") || "client";
     setAddingClient(true);
     void (async () => {
-      const result = await serverAddUser(usernameSuggestion, newPassword, "client", companyName, {
+      const result = await serverAddUser(usernameSuggestion, newManaged ? "" : newPassword, "client", companyName, {
         website,
         contactName: newContactName.trim(),
         contactEmail,
         autoUsername: true,
         ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
+        ...(newManaged ? { managed: true } : {}),
       });
       setAddingClient(false);
       if (result.ok) {
         setAddSuccess(
           `Created client account '${result.username}' for ${companyName}.` +
-          (contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
+          (newManaged
+            ? " This is a managed account - the client has not been given sign-in access. Use 'View account' to work on their behalf."
+            : contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
         );
         setNewCompanyName("");
         setNewWebsite("");
         setNewContactName("");
         setNewContactEmail("");
         setNewPassword("");
+        setNewManaged(false);
         setNewLogoDataUrl(null);
         refresh();
       } else {
@@ -953,6 +960,21 @@ function SubAccountsPage({
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
+            <label className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
+              <input
+                type="checkbox"
+                checked={newManaged}
+                onChange={(e) => setNewManaged(e.target.checked)}
+                className="mt-0.5"
+                style={{ accentColor: accent }}
+              />
+              <span>
+                <span className="block text-[13px] font-bold" style={{ color: ink }}>We'll manage this account on the client's behalf</span>
+                <span className="block text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
+                  The client won't be given sign-in access - no password to share and no email is sent. You work on their projects through "View account". You can give them access later by setting a password on their account.
+                </span>
+              </span>
+            </label>
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Client logo <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <div className="flex items-center gap-3">
@@ -987,19 +1009,21 @@ function SubAccountsPage({
                 )}
               </div>
             </div>
-            <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="min 8 characters"
-                required
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
+            {!newManaged && (
+              <div className="md:col-span-6">
+                <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="min 8 characters"
+                  required
+                  className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                />
+              </div>
+            )}
             <div className="md:col-span-6 flex items-end">
               <button
                 type="submit"
@@ -1011,7 +1035,9 @@ function SubAccountsPage({
               </button>
             </div>
             <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
-              If you add a key contact email, we'll let them know their account has been created. You share the password with them directly.
+              {newManaged
+                ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
+                : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
             </p>
             {addError && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>}
             {addSuccess && <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>}
