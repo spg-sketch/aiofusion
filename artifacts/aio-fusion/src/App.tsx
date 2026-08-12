@@ -331,6 +331,7 @@ function App() {
   const [tokenDailyRows, setTokenDailyRows] = useState<TokenDailyRow[] | null>(null);
   const [tokenUsageUsersByAccount, setTokenUsageUsersByAccount] = useState<Record<string, TokenUserInfo> | undefined>(undefined);
   const [tokenStatusByAccount, setTokenStatusByAccount] = useState<Record<string, string> | undefined>(undefined);
+  const [tokenFreeAccessByAccount, setTokenFreeAccessByAccount] = useState<Record<string, boolean> | undefined>(undefined);
   const [tokenSpikeFlags, setTokenSpikeFlags] = useState<Record<string, SpikeInfo> | undefined>(undefined);
   const [tokenThirtyDayCosts, setTokenThirtyDayCosts] = useState<Record<string, number> | undefined>(undefined);
   const [tokenCurrentMonthSpends, setTokenCurrentMonthSpends] = useState<Record<string, number> | undefined>(undefined);
@@ -351,6 +352,7 @@ function App() {
           dailyRows?: TokenDailyRow[];
           usersByAccount?: Record<string, TokenUserInfo>;
           statusByAccount?: Record<string, string>;
+          freeAccessByAccount?: Record<string, boolean>;
           spikeFlags?: Record<string, SpikeInfo>;
           thirtyDayCosts?: Record<string, number>;
           currentMonthSpends?: Record<string, number>;
@@ -362,6 +364,7 @@ function App() {
         setTokenDailyRows(data.dailyRows ?? []);
         setTokenUsageUsersByAccount(data.usersByAccount ?? {});
         setTokenStatusByAccount(data.statusByAccount ?? {});
+        setTokenFreeAccessByAccount(data.freeAccessByAccount ?? {});
         setTokenSpikeFlags(data.spikeFlags ?? {});
         setTokenThirtyDayCosts(data.thirtyDayCosts ?? {});
         setTokenCurrentMonthSpends(data.currentMonthSpends ?? {});
@@ -998,6 +1001,7 @@ function App() {
         dailyRows={tokenDailyRows}
         usersByAccount={tokenUsageUsersByAccount}
         statusByAccount={tokenStatusByAccount}
+        freeAccessByAccount={tokenFreeAccessByAccount}
         spikeFlags={tokenSpikeFlags}
         thirtyDayCosts={tokenThirtyDayCosts}
         currentMonthSpends={tokenCurrentMonthSpends}

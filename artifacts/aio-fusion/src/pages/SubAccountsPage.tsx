@@ -18,6 +18,7 @@ import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
+import { BillingDetailsCard } from "../components/BillingDetailsCard";
 function SubAccountsPage({
   session,
   onBack,
@@ -902,6 +903,11 @@ function SubAccountsPage({
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
         {onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
+
+        {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
+        {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing") && (
+          <BillingDetailsCard />
+        )}
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
         {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin") && (

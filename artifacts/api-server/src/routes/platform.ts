@@ -46,6 +46,10 @@ import {
   setPlatformCookie,
   clearPlatformCookie,
   getImpersonationStashId,
+  isImpersonatedRequest,
+  IMPERSONATION_BLOCKED_MESSAGE,
+  isRestrictedMaster,
+  MASTER_OWNER_REQUIRED_MESSAGE,
   setImpersonationStashCookie,
   clearImpersonationStashCookie,
   getPlatformSessionAccount,
@@ -87,6 +91,7 @@ import {
   clearTrustedDevices,
   verifyTrustedDeviceToken,
 } from "../lib/mfa";
+import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMessage } from "../lib/login-lockout";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, getAppBaseUrl } from "../lib/notify-email";
@@ -543,6 +548,24 @@ async function finishOauthLoginOrChallenge(
   res.redirect(`${origin}/?oauth_status=ok${identity.needsSetup ? "&needs_setup=true" : ""}`);
 }
 
+// Login message for a suspended account. If the suspension was cascaded from
+// the account's agency (suspended-via flag), show the neutral "contact your
+// agency" wording - the agency's own status is never disclosed to its clients.
+async function suspendedLoginMessage(slug: string): Promise<string> {
+  try {
+    const [row] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `suspended-via:${slug}`))
+      .limit(1);
+    if (row?.value) {
+      const parsed = JSON.parse(row.value) as { label?: string };
+      if (parsed?.label) return `Access is currently unavailable. Please contact ${parsed.label}.`;
+    }
+  } catch { /* fall through to the generic message */ }
+  return "This account has been suspended. Contact your administrator.";
+}
+
 function clientIp(req: Request): string | undefined {
   return (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
     ?? req.socket.remoteAddress ?? undefined;
@@ -556,6 +579,15 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!identifier || !password) {
       res.status(400).json({ error: "Enter your username (or email) and password." });
+      return;
+    }
+    // Progressive lockout: after 5 failed attempts the identifier is locked
+    // for a doubling delay. Checked before any credential work; the message
+    // never reveals whether the account exists.
+    const lockedMs = await lockoutRemainingMs(identifier);
+    if (lockedMs > 0) {
+      res.setHeader("Retry-After", Math.ceil(lockedMs / 1000));
+      res.status(429).json({ error: lockoutMessage(lockedMs) });
       return;
     }
     // --- Primary credential lookup: platform_users (new source of truth) ----
@@ -584,7 +616,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           res.status(403).json({ error: "This account has been archived. Contact your administrator." });
           return;
         }
-        if (acct.status === "suspended") { res.status(403).json({ error: "This account has been suspended. Contact your administrator." }); return; }
+        if (acct.status === "suspended") { res.status(403).json({ error: await suspendedLoginMessage(acct.username) }); return; }
         let activeCompanyId: string | undefined;
         try {
           const company = await getCompanyBySlug(acct.username);
@@ -595,6 +627,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           const loginCo = await getCompanyBySlug(acct.username);
           if (loginCo?.setupComplete === false) loginNeedsSetup = true;
         } catch { /* non-fatal */ }
+        await clearLoginFailures(identifier);
         await finishLoginOrChallenge(res, {
           username: acct.username,
           role: acct.role,
@@ -611,6 +644,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
     // accounts without an email address set).
     const account = await getAccountByIdentifier(identifier);
     if (!account || !verifyPassword(password, account.passwordHash)) {
+      await recordLoginFailure(identifier);
       res.status(401).json({ error: "Incorrect username or password." });
       return;
     }
@@ -625,7 +659,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       return;
     }
     if (account.status === "suspended") {
-      res.status(403).json({ error: "This account has been suspended. Contact your administrator." });
+      res.status(403).json({ error: await suspendedLoginMessage(account.username) });
       return;
     }
     // Ensure a platform_users row exists and is linked to this account, then
@@ -654,6 +688,7 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
       const legacyCo = await getCompanyBySlug(account.username);
       if (legacyCo?.setupComplete === false) legacyNeedsSetup = true;
     } catch { /* non-fatal */ }
+    await clearLoginFailures(identifier);
     await finishLoginOrChallenge(res, {
       username: account.username,
       role: account.role,
@@ -803,6 +838,12 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       res.status(400).json({ error: "Enter the 6-digit code from your authenticator app." });
       return;
     }
+    const mfaLockedMs = await lockoutRemainingMs(pending.u);
+    if (mfaLockedMs > 0) {
+      res.setHeader("Retry-After", Math.ceil(mfaLockedMs / 1000));
+      res.status(429).json({ error: lockoutMessage(mfaLockedMs) });
+      return;
+    }
     const state = await getMfaState(pending.u);
     if (!state?.enabled) {
       // MFA was disabled between password check and this call - let them in.
@@ -873,6 +914,10 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       await completeMfaLogin(res, pending, clientIp(req), { recoveryCodesRemaining: remaining.length });
       return;
     }
+    // Wrong TOTP + not a recovery code: count towards the progressive lockout
+    // for this account so an attacker with a stolen password cannot brute-force
+    // the 6-digit code either.
+    await recordLoginFailure(pending.u);
     res.status(401).json({ error: "That code is not valid. Try again, or use a recovery code." });
   } catch {
     res.status(500).json({ error: "Could not verify the code" });
@@ -1347,6 +1392,11 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
 // and revoke every other session while keeping the current one alive.
 router.post("/platform/change-password", requirePlatformAuth, loginLimiter, async (req: Request, res: Response) => {
   try {
+    // Guardrail: never allow password changes while impersonating an account.
+    if (await isImpersonatedRequest(req)) {
+      res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+      return;
+    }
     const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
     const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
     if (!currentPassword) {
@@ -1505,6 +1555,11 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
 // the NEW address. Enforces uniqueness: the new email must not already exist.
 router.post("/platform/change-email", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
+    // Guardrail: never allow email changes while impersonating an account.
+    if (await isImpersonatedRequest(req)) {
+      res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+      return;
+    }
     const actor = req.account!;
     const newEmail = typeof req.body?.newEmail === "string" ? req.body.newEmail.trim().toLowerCase() : "";
     if (!newEmail || !EMAIL_RE.test(newEmail)) {
@@ -3608,6 +3663,98 @@ router.post(
   },
 );
 
+// --- Billing details (billing email + VAT number) ---------------------------
+//
+// Stored on platform_companies (billing_email / vat_number, schema v2).
+// Read/write allowed for the account itself when the member is owner, admin,
+// or billing (the Billing role exists precisely to maintain these fields),
+// and for anyone who can manage the account (agency parent, master admin).
+
+function canEditBillingDetails(account: { membershipRole?: string }): boolean {
+  const r = account.membershipRole;
+  // Undefined = legacy full-access session; content/viewer are excluded.
+  return r === undefined || r === "owner" || r === "admin" || r === "billing";
+}
+
+router.get(
+  "/platform/billing-details",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(typeof req.query.username === "string" ? req.query.username : actor.username);
+      const isSelf = target === normUsername(actor.username);
+      if (isSelf) {
+        if (!canEditBillingDetails(actor)) {
+          res.status(403).json({ error: "You do not have access to billing details." });
+          return;
+        }
+      } else if (!(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot view this account's billing details." });
+        return;
+      }
+      const company = await getCompanyBySlug(target);
+      if (!company) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        billingEmail: company.billingEmail ?? "",
+        vatNumber: company.vatNumber ?? "",
+      });
+    } catch {
+      res.status(500).json({ error: "Could not load billing details" });
+    }
+  },
+);
+
+router.post(
+  "/platform/billing-details",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(typeof req.body?.username === "string" ? req.body.username : actor.username);
+      const isSelf = target === normUsername(actor.username);
+      if (isSelf) {
+        if (!canEditBillingDetails(actor)) {
+          res.status(403).json({ error: "You do not have access to billing details." });
+          return;
+        }
+      } else if (!(await canManage(actor, target))) {
+        res.status(403).json({ error: "You cannot change this account's billing details." });
+        return;
+      }
+      const billingEmailRaw = typeof req.body?.billingEmail === "string" ? req.body.billingEmail.trim().toLowerCase() : "";
+      const vatNumberRaw = typeof req.body?.vatNumber === "string" ? req.body.vatNumber.trim().toUpperCase() : "";
+      if (billingEmailRaw && !EMAIL_RE.test(billingEmailRaw)) {
+        res.status(400).json({ error: "Enter a valid billing email address." });
+        return;
+      }
+      if (vatNumberRaw.length > 64) {
+        res.status(400).json({ error: "VAT number is too long." });
+        return;
+      }
+      const company = await getCompanyBySlug(target);
+      if (!company) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      await db
+        .update(platformCompaniesTable)
+        .set({
+          billingEmail: billingEmailRaw || null,
+          vatNumber: vatNumberRaw || null,
+        })
+        .where(eq(platformCompaniesTable.slug, target));
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: "Could not save billing details" });
+    }
+  },
+);
+
 // Archive (or unarchive) an account. Archived accounts cannot log in and are
 // shown separately in the parent's UI. Projects are NOT reassigned - the parent
 // keeps visibility. Only the parent or an admin may archive a sub-account.
@@ -3724,7 +3871,18 @@ router.post(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
+      // Guardrail: no account deletions while impersonating.
+      if (await isImpersonatedRequest(req)) {
+        res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+        return;
+      }
       const actor = req.account!;
+      // Master sub-roles: Technical / Operational Support members of the
+      // master workspace may not delete accounts.
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       const target = normUsername(req.body?.username);
       if (!target) {
         res.status(400).json({ error: "Username is required." });
@@ -3796,6 +3954,11 @@ router.post(
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     try {
+      // Guardrail: no account deletions while impersonating.
+      if (await isImpersonatedRequest(req)) {
+        res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+        return;
+      }
       const actor = req.account!;
       const username = normUsername(actor.username);
       const password = typeof req.body?.password === "string" ? req.body.password : "";
@@ -4047,6 +4210,10 @@ router.post(
   try {
     if (req.account!.role !== "admin") {
       res.status(403).json({ error: "Only an admin can run the migration." });
+      return;
+    }
+    if (isRestrictedMaster(req.account!)) {
+      res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
       return;
     }
     const [flag] = await db

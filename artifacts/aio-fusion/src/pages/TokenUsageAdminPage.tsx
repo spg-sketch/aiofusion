@@ -39,6 +39,7 @@ export function TokenUsageAdminPage({
   dailyRows,
   usersByAccount,
   statusByAccount,
+  freeAccessByAccount,
   spikeFlags,
   thirtyDayCosts,
   currentMonthSpends,
@@ -54,6 +55,7 @@ export function TokenUsageAdminPage({
   dailyRows?: TokenDailyRow[] | null;
   usersByAccount?: Record<string, TokenUserInfo>;
   statusByAccount?: Record<string, string>;
+  freeAccessByAccount?: Record<string, boolean>;
   spikeFlags?: Record<string, SpikeInfo>;
   thirtyDayCosts?: Record<string, number>;
   currentMonthSpends?: Record<string, number>;
@@ -85,6 +87,11 @@ export function TokenUsageAdminPage({
   const [spendLimitSaving, setSpendLimitSaving] = useState(false);
   const [spendLimitError, setSpendLimitError] = useState<string | null>(null);
   const [localSpendLimits, setLocalSpendLimits] = useState<Record<string, number | null>>({});
+
+  // Free-access flag state
+  const [freeAccessSlug, setFreeAccessSlug] = useState<string | null>(null);
+  const [freeAccessError, setFreeAccessError] = useState<string | null>(null);
+  const [localFreeAccess, setLocalFreeAccess] = useState<Record<string, boolean>>({});
 
   function effectiveStatus(slug: string): string {
     return localStatus[slug] ?? statusByAccount?.[slug] ?? "active";
@@ -267,6 +274,49 @@ export function TokenUsageAdminPage({
     );
   }
 
+  function effectiveFreeAccess(slug: string): boolean {
+    return localFreeAccess[slug] ?? freeAccessByAccount?.[slug] ?? false;
+  }
+
+  async function handleFreeAccess(slug: string, enabled: boolean) {
+    setFreeAccessSlug(slug);
+    setFreeAccessError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/admin/account/${encodeURIComponent(slug)}/free-access`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setFreeAccessError(json.error ?? "Failed"); return; }
+      setLocalFreeAccess((prev) => ({ ...prev, [slug]: json.freeAccess }));
+    } catch {
+      setFreeAccessError("Network error");
+    } finally {
+      setFreeAccessSlug(null);
+    }
+  }
+
+  function renderFreeAccessButton(slug: string) {
+    const enabled = effectiveFreeAccess(slug);
+    const busy = freeAccessSlug === slug;
+    return (
+      <button
+        onClick={() => void handleFreeAccess(slug, !enabled)}
+        disabled={busy}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition-all hover:opacity-80 disabled:opacity-40"
+        style={enabled
+          ? { background: "#FEF9C3", color: "#854D0E", borderColor: "#FDE047" }
+          : { background: "#F8FAFC", color: "#475569", borderColor: "#CBD5E1" }
+        }
+        title={enabled ? "Free access is ON - this account bypasses the payment gate. Click to revoke." : "Grant free access (bypasses the payment gate)"}
+      >
+        {enabled ? "Free access: on" : "Free access"}
+      </button>
+    );
+  }
+
   function renderBlockButton(slug: string) {
     const status = effectiveStatus(slug);
     const isBlocking = blockingSlug === slug;
@@ -348,6 +398,10 @@ export function TokenUsageAdminPage({
 
         {blockError && (
           <div className="mb-4 px-4 py-3 rounded-xl text-[13px]" style={{ background: "#FEF2F2", color: "#991B1B" }}>{blockError}</div>
+        )}
+
+        {freeAccessError && (
+          <div className="mb-4 px-4 py-3 rounded-xl text-[13px]" style={{ background: "#FEF2F2", color: "#991B1B" }}>{freeAccessError}</div>
         )}
 
         {error && (
@@ -486,6 +540,7 @@ export function TokenUsageAdminPage({
                             {renderBlockButton(slug)}
                             {renderQuotaButton(slug)}
                             {renderSpendLimitButton(slug)}
+                            {renderFreeAccessButton(slug)}
                             <button
                               onClick={() => setExpandedAccounts((prev) => {
                                 const next = new Set(prev);

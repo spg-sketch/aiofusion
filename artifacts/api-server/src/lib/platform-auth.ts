@@ -930,6 +930,55 @@ export function clearImpersonationStashCookie(res: Response): void {
   res.clearCookie(PLATFORM_IMPERSONATION_STASH_COOKIE, { path: "/" });
 }
 
+// True when the current request is an impersonation ("view account") session:
+// a stash cookie is present AND it still resolves to a live original session.
+// A stale/expired stash does not count - the visitor is then just a normal
+// signed-in user and must not be locked out of their own account controls.
+export async function isImpersonatedRequest(req: Request): Promise<boolean> {
+  const stashSid = getImpersonationStashId(req);
+  if (!stashSid) return false;
+  try {
+    const original = await getPlatformSessionAccount(stashSid);
+    return original !== null;
+  } catch {
+    // If we cannot verify, err on the side of blocking the sensitive action.
+    return true;
+  }
+}
+
+// --- Master account sub-roles ------------------------------------------------
+//
+// Members of the master (admin-role) workspace are tiered by their membership
+// role rather than a separate table:
+//   owner (or legacy session without membership)  -> "owner"    full control
+//   admin membership                              -> "technical" dashboards,
+//        impersonation (debug), audit data - no flags, no account blocking,
+//        no deletions, no migration
+//   any other membership (billing/content/viewer) -> "support"  view accounts,
+//        impersonation (support), read-only dashboards
+// Non-master accounts return null.
+export type MasterSubrole = "owner" | "technical" | "support";
+
+export function masterSubrole(account: { role: string; membershipRole?: MembershipRole }): MasterSubrole | null {
+  if (normalizeRole(account.role) !== "admin") return null;
+  const m = account.membershipRole;
+  if (m === undefined || m === "owner") return "owner";
+  if (m === "admin") return "technical";
+  return "support";
+}
+
+/** True when the actor is the master workspace but lacks owner-level control. */
+export function isRestrictedMaster(account: { role: string; membershipRole?: MembershipRole }): boolean {
+  const sub = masterSubrole(account);
+  return sub === "technical" || sub === "support";
+}
+
+export const MASTER_OWNER_REQUIRED_MESSAGE =
+  "Only the master account owner can perform this action.";
+
+export const IMPERSONATION_BLOCKED_MESSAGE =
+  "This action is unavailable while viewing another account. Exit the account view first.";
+
 // --- One-time backfill: create platform_companies + platform_users rows -----
 //
 // For every existing platform_accounts row we need:

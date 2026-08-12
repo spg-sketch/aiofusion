@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, sql, gte } from "drizzle-orm";
 import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { normUsername } from "../lib/platform-auth";
+import { normUsername, isRestrictedMaster, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
 import { fetchSiteContentWithSubpages, fetchGeoAuditContext } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import {
@@ -653,6 +653,7 @@ adminRouter.get(
       const slugs = [...new Set(rows.map((r) => r.accountId.toLowerCase()).filter(Boolean))];
       const usersByAccount: Record<string, { userId: string; userEmail: string | null; userName: string | null }> = {};
       const statusByAccount: Record<string, string> = {};
+      const freeAccessByAccount: Record<string, boolean> = {};
 
       const [spikeFlags, thirtyDayCosts, currentMonthSpends] = await Promise.all([
         computeSpikeFlagsForAccounts(slugs),
@@ -676,6 +677,13 @@ adminRouter.get(
           for (const a of accountRows) {
             statusByAccount[a.username] = a.status;
           }
+          try {
+            const companyRows = await db
+              .select({ slug: platformCompaniesTable.slug, freeAccess: platformCompaniesTable.freeAccess })
+              .from(platformCompaniesTable)
+              .where(inArray(platformCompaniesTable.slug, slugs));
+            for (const c of companyRows) freeAccessByAccount[c.slug] = c.freeAccess === true;
+          } catch { /* non-fatal: column may not exist on older DBs */ }
           const userIds = [...new Set(memberships.map((m) => m.userId).filter(Boolean))];
           if (userIds.length > 0) {
             const users = await db
@@ -704,6 +712,7 @@ adminRouter.get(
         dailyRows,
         usersByAccount,
         statusByAccount,
+        freeAccessByAccount,
         spikeFlags,
         thirtyDayCosts,
         currentMonthSpends,
@@ -726,6 +735,10 @@ adminRouter.patch(
   async (req: Request, res: Response) => {
     if (req.account?.role !== "admin") {
       res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    if (isRestrictedMaster(req.account)) {
+      res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
       return;
     }
     const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
@@ -761,6 +774,47 @@ adminRouter.patch(
   },
 );
 
+// Grant or revoke free access for an account. A free-access account bypasses
+// the payment gate entirely (enforced when billing lands - the flag is the
+// master-controlled source of truth). Master admin only.
+adminRouter.patch(
+  "/admin/account/:slug/free-access",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    if (isRestrictedMaster(req.account)) {
+      res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+      return;
+    }
+    const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
+    if (!slug) { res.status(400).json({ error: "Account slug is required" }); return; }
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled must be true or false" });
+      return;
+    }
+    try {
+      const updated = await db
+        .update(platformCompaniesTable)
+        .set({ freeAccess: enabled })
+        .where(eq(platformCompaniesTable.slug, slug))
+        .returning({ slug: platformCompaniesTable.slug });
+      if (updated.length === 0) {
+        res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      logger.info({ slug, enabled, by: req.account.username }, "admin free-access: updated");
+      res.json({ ok: true, slug, freeAccess: enabled });
+    } catch (err) {
+      logger.error({ err, slug }, "admin free-access: DB error");
+      res.status(500).json({ error: "Could not update free access." });
+    }
+  },
+);
+
 // Set or clear a per-account monthly GBP spending cap.
 // limitGbp=50 sets a £50/month cap; limitGbp=null clears the override and
 // restores the system default; limitGbp=0 explicitly removes all limits.
@@ -770,6 +824,10 @@ adminRouter.patch(
   async (req: Request, res: Response) => {
     if (req.account?.role !== "admin") {
       res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    if (isRestrictedMaster(req.account)) {
+      res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
       return;
     }
     const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
@@ -818,6 +876,10 @@ adminRouter.patch(
       res.status(403).json({ error: "Admin access required" });
       return;
     }
+    if (isRestrictedMaster(req.account)) {
+      res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+      return;
+    }
     const slug = (typeof req.params.slug === "string" ? req.params.slug : "").toLowerCase().trim();
     if (!slug) { res.status(400).json({ error: "Account slug is required" }); return; }
     const action = req.body?.action;
@@ -837,14 +899,119 @@ adminRouter.patch(
           .set({ status: newStatus })
           .where(eq(platformCompaniesTable.slug, slug)),
       ]);
-      logger.info({ slug, newStatus, by: req.account.username }, `admin block: account ${action}ed`);
-      res.json({ ok: true, slug, status: newStatus });
+
+      // Suspension cascade: blocking an agency also suspends every descendant
+      // account (its clients, and their clients if any). Cascaded accounts are
+      // marked with a `suspended-via:<child>` meta flag so that (a) unblocking
+      // the agency restores ONLY accounts we suspended as part of the cascade
+      // (never one an admin suspended individually), and (b) the login screen
+      // can show the neutral "contact your agency" message instead of exposing
+      // the agency's own status.
+      let cascaded: string[] = [];
+      if (action === "block") {
+        cascaded = await cascadeSuspendDescendants(slug);
+      } else {
+        cascaded = await cascadeRestoreDescendants(slug);
+      }
+
+      logger.info({ slug, newStatus, cascaded, by: req.account.username }, `admin block: account ${action}ed`);
+      res.json({ ok: true, slug, status: newStatus, cascaded });
     } catch (err) {
       logger.error({ err, slug }, "admin block: DB error");
       res.status(500).json({ error: `Could not ${action} account.` });
     }
   },
 );
+
+// Collect all descendants of an account via the `parent` column (breadth-first,
+// cycle-safe). Returns slugs only.
+async function collectDescendantSlugs(rootSlug: string): Promise<string[]> {
+  const out: string[] = [];
+  const seen = new Set<string>([rootSlug]);
+  let frontier = [rootSlug];
+  while (frontier.length > 0) {
+    const children = await db
+      .select({ username: platformAccountsTable.username })
+      .from(platformAccountsTable)
+      .where(inArray(platformAccountsTable.parent, frontier));
+    frontier = [];
+    for (const c of children) {
+      if (seen.has(c.username)) continue;
+      seen.add(c.username);
+      out.push(c.username);
+      frontier.push(c.username);
+    }
+  }
+  return out;
+}
+
+const suspendedViaKey = (childSlug: string) => `suspended-via:${childSlug}`;
+
+// Suspend all descendants of an agency that are currently active, marking each
+// with a suspended-via flag. Returns the slugs actually cascaded.
+async function cascadeSuspendDescendants(agencySlug: string): Promise<string[]> {
+  const descendants = await collectDescendantSlugs(agencySlug);
+  if (descendants.length === 0) return [];
+  // Resolve a friendly agency label for the client-facing login message.
+  let agencyLabel = agencySlug;
+  try {
+    const [profileRow] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:profile:${agencySlug}`))
+      .limit(1);
+    if (profileRow?.value) {
+      const parsed = JSON.parse(profileRow.value) as { displayName?: string };
+      if (parsed?.displayName) agencyLabel = parsed.displayName;
+    }
+  } catch { /* fall back to slug */ }
+  const cascaded: string[] = [];
+  for (const child of descendants) {
+    const [row] = await db
+      .select({ status: platformAccountsTable.status })
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, child))
+      .limit(1);
+    // Only cascade over accounts that are not already suspended - an account
+    // an admin suspended individually keeps its own suspension (no flag).
+    if (!row || row.status === "suspended") continue;
+    await Promise.all([
+      db.update(platformAccountsTable).set({ status: "suspended" }).where(eq(platformAccountsTable.username, child)),
+      db.update(platformCompaniesTable).set({ status: "suspended" }).where(eq(platformCompaniesTable.slug, child)),
+      db.insert(platformMetaTable)
+        .values({ key: suspendedViaKey(child), value: JSON.stringify({ agency: agencySlug, label: agencyLabel }) })
+        .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify({ agency: agencySlug, label: agencyLabel }) } }),
+    ]);
+    cascaded.push(child);
+  }
+  return cascaded;
+}
+
+// Restore only the descendants that were suspended BY the cascade for this
+// agency (identified by the suspended-via flag), then clear the flags.
+async function cascadeRestoreDescendants(agencySlug: string): Promise<string[]> {
+  const descendants = await collectDescendantSlugs(agencySlug);
+  const restored: string[] = [];
+  for (const child of descendants) {
+    const [flag] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, suspendedViaKey(child)))
+      .limit(1);
+    if (!flag?.value) continue;
+    try {
+      const parsed = JSON.parse(flag.value) as { agency?: string };
+      if (parsed?.agency !== agencySlug) continue;
+    } catch { continue; }
+    await Promise.all([
+      db.update(platformAccountsTable).set({ status: "active" }).where(eq(platformAccountsTable.username, child)),
+      db.update(platformCompaniesTable).set({ status: "active" }).where(eq(platformCompaniesTable.slug, child)),
+      db.delete(platformMetaTable).where(eq(platformMetaTable.key, suspendedViaKey(child))),
+    ]);
+    restored.push(child);
+  }
+  return restored;
+}
 
 // List all audit locks (admin only).
 adminRouter.get(
