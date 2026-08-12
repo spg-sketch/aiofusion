@@ -1061,3 +1061,90 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
     expect(me.json.accountProfile.website).toBe("https://legacy-brand.example");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-member session isolation (Task: session listing/revocation scoping)
+// ---------------------------------------------------------------------------
+describe("cross-member session isolation", () => {
+  it("members only see their own sessions and cannot revoke a colleague's", async () => {
+    const { sid: ownerSid, user: ownerUser } = await seedAgency("iso-agency", "owner@iso.test");
+
+    // Invite a read-only viewer who accepts and gets their own session.
+    const inv = await api("/api/platform/team/invite", { sid: ownerSid, body: { email: "viewer@iso.test", role: "viewer" } });
+    expect(inv.status).toBe(201);
+    const acc = await api("/api/platform/invite/accept", { body: { token: inv.json.token, password: "viewer-pass-1" } });
+    const viewerSid = /aio_sid=([^;]+)/.exec(acc.setCookie ?? "")?.[1];
+    expect(viewerSid).toBeTruthy();
+
+    // Viewer lists sessions: must see ONLY their own, never the owner's
+    // email/name/IP or session suffix.
+    const vList = await api("/api/platform/sessions", { sid: viewerSid });
+    expect(vList.status).toBe(200);
+    expect(vList.json.sessions).toHaveLength(1);
+    expect(vList.json.sessions[0].isCurrent).toBe(true);
+    expect(vList.json.sessions[0].userEmail).toBe("viewer@iso.test");
+    expect(vList.json.sessions.some((s: any) => s.userEmail === "owner@iso.test")).toBe(false);
+
+    // Owner lists sessions: sees only their own, not the viewer's.
+    const oList = await api("/api/platform/sessions", { sid: ownerSid });
+    expect(oList.status).toBe(200);
+    expect(oList.json.sessions).toHaveLength(1);
+    expect(oList.json.sessions[0].userEmail).toBe("owner@iso.test");
+    expect(oList.json.sessions[0].userId).toBe(ownerUser.id);
+
+    // Viewer attempts to revoke the owner's session by masked suffix.
+    const ownerMasked = "*".repeat(ownerSid!.length - 8) + ownerSid!.slice(-8);
+    const revoke = await api(`/api/platform/sessions/${encodeURIComponent(ownerMasked)}`, {
+      sid: viewerSid,
+      method: "DELETE",
+    });
+    expect([403, 404]).toContain(revoke.status);
+
+    // Owner's session must still be alive.
+    const stillAlive = await api("/api/platform/me", { sid: ownerSid });
+    expect(stillAlive.status).toBe(200);
+  });
+});
+
+describe("cross-member session isolation: legacy userId-less sessions", () => {
+  it("a legacy owner session never sees or revokes userId-backed member sessions", async () => {
+    const { sid: ownerSid } = await seedAgency("legacy-iso-agency", "owner@legacy-iso.test");
+
+    // Invite a viewer (userId-backed session).
+    const inv = await api("/api/platform/team/invite", { sid: ownerSid, body: { email: "viewer@legacy-iso.test", role: "viewer" } });
+    expect(inv.status).toBe(201);
+    const acc = await api("/api/platform/invite/accept", { body: { token: inv.json.token, password: "viewer-pass-1" } });
+    const viewerSid = /aio_sid=([^;]+)/.exec(acc.setCookie ?? "")?.[1];
+    expect(viewerSid).toBeTruthy();
+
+    // Legacy session for the same workspace: no userId on the session row.
+    const legacySid = await createPlatformSession("legacy-iso-agency", null, null, null);
+
+    // Legacy session list must not disclose any userId-backed sessions.
+    const lList = await api("/api/platform/sessions", { sid: legacySid });
+    expect(lList.status).toBe(200);
+    expect(lList.json.sessions.every((s: any) => s.userId === null)).toBe(true);
+    expect(lList.json.sessions.some((s: any) => s.userEmail === "viewer@legacy-iso.test")).toBe(false);
+    expect(lList.json.sessions.some((s: any) => s.userEmail === "owner@legacy-iso.test")).toBe(false);
+
+    // Legacy session cannot revoke the viewer's userId-backed session.
+    const viewerMasked = "*".repeat(viewerSid!.length - 8) + viewerSid!.slice(-8);
+    const revoke = await api(`/api/platform/sessions/${encodeURIComponent(viewerMasked)}`, {
+      sid: legacySid,
+      method: "DELETE",
+    });
+    expect([403, 404]).toContain(revoke.status);
+    expect((await api("/api/platform/me", { sid: viewerSid })).status).toBe(200);
+
+    // And the viewer cannot see or revoke the legacy (userId-less) session.
+    const vList = await api("/api/platform/sessions", { sid: viewerSid });
+    expect(vList.json.sessions.every((s: any) => s.userId !== null)).toBe(true);
+    const legacyMasked = "*".repeat(legacySid.length - 8) + legacySid.slice(-8);
+    const revoke2 = await api(`/api/platform/sessions/${encodeURIComponent(legacyMasked)}`, {
+      sid: viewerSid,
+      method: "DELETE",
+    });
+    expect([403, 404]).toContain(revoke2.status);
+    expect((await api("/api/platform/me", { sid: legacySid })).status).toBe(200);
+  });
+});

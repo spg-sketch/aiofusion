@@ -4593,7 +4593,16 @@ router.get(
     try {
       const account = req.account!;
       const currentSid = getPlatformSessionId(req) ?? "";
-      const sessions = await listPlatformSessions(account.username);
+      // Scope to the calling human user's own sessions. Multiple members of a
+      // workspace share the slug, so slug-only scoping would expose other
+      // members' sessions (email, name, IP hint). Legacy sessions without a
+      // userId must never fall back to slug-wide listing: show only sessions
+      // that are equally userId-less (i.e. other legacy logins of the same
+      // legacy credential), never userId-backed member sessions.
+      const all = await listPlatformSessions(account.username, account.userId);
+      const sessions = account.userId
+        ? all
+        : all.filter((s) => !s.userId);
       res.json({ sessions: sessions.map((s) => sessionToPublic(s, currentSid)) });
     } catch {
       res.status(500).json({ error: "Failed to load sessions" });
@@ -4656,11 +4665,37 @@ router.delete(
       }
 
       const maskedParam = req.params.sid;
-      const sessions = await listPlatformSessions(targetUsername);
+      // Non-admins may only resolve (and therefore revoke) sessions belonging
+      // to their own userId. Workspace slugs are shared across members, so a
+      // slug-scoped lookup would let any member revoke a colleague's session.
+      let sessions;
+      if (actor.role === "admin") {
+        sessions = await listPlatformSessions(targetUsername);
+      } else if (actor.userId) {
+        sessions = await listPlatformSessions(targetUsername, actor.userId);
+      } else {
+        // Legacy session with no userId: never resolve against the slug-wide
+        // list (it would include other members' sessions). Only sessions that
+        // are equally userId-less (other logins of the same legacy credential)
+        // are eligible.
+        sessions = (await listPlatformSessions(targetUsername)).filter((s) => !s.userId);
+      }
       const match = sessions.find((s) => maskSid(s.sid) === maskedParam);
       if (!match) {
         res.status(404).json({ error: "Session not found." });
         return;
+      }
+      // Defense in depth: even if the lookup ever widens, never let a
+      // non-admin revoke a session owned by a different human user. For
+      // legacy (userId-less) actors this also blocks any userId-backed target.
+      if (actor.role !== "admin") {
+        const sameHuman = actor.userId
+          ? match.userId === actor.userId
+          : !match.userId;
+        if (!sameHuman) {
+          res.status(403).json({ error: "You can only revoke your own sessions." });
+          return;
+        }
       }
       // Non-admins cannot revoke their current session here (they use logout).
       if (match.sid === currentSid && actor.role !== "admin") {

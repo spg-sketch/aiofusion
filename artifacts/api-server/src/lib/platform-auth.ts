@@ -851,7 +851,14 @@ export async function deletePlatformSession(sid: string): Promise<void> {
 // List active (non-expired) sessions for a given username. Returns them newest
 // first. The sid is returned in full for revoke operations; callers that expose
 // it to the browser should mask all but the last 8 chars.
-export async function listPlatformSessions(username: string): Promise<SessionInfo[]> {
+// When `userId` is provided, results are restricted to sessions belonging to
+// that specific human user (platform_sessions.user_id). This matters because
+// multiple human members of the same workspace share the slug in the
+// `username` column, so slug-only scoping would leak other members' sessions.
+export async function listPlatformSessions(
+  username: string,
+  userId?: string,
+): Promise<SessionInfo[]> {
   const u = normUsername(username);
   const now = new Date();
   const rows = await db
@@ -866,7 +873,14 @@ export async function listPlatformSessions(username: string): Promise<SessionInf
     })
     .from(platformSessionsTable)
     .leftJoin(platformUsersTable, eq(platformSessionsTable.userId, platformUsersTable.id))
-    .where(eq(platformSessionsTable.username, u));
+    .where(
+      userId
+        ? and(
+            eq(platformSessionsTable.username, u),
+            eq(platformSessionsTable.userId, userId),
+          )
+        : eq(platformSessionsTable.username, u),
+    );
   return rows
     .filter((r) => r.expiresAt > now)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

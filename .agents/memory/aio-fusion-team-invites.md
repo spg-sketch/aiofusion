@@ -14,3 +14,5 @@ description: How agency team invitations, 5-tier membership roles, and per-membe
 - `BillingOnlyPage` full-page gate in App.tsx for billing members.
 - `index.ts` awaits `runStartupMigrations()` BEFORE `app.listen` — never race schema DDL.
 - PGlite test fixtures for membership must include `project_access` column in all DDL fixtures; new membership columns must be added to all fixtures.
+
+- Session list/revoke endpoints must scope by per-human `userId`, never the shared workspace slug (`platform_sessions.username`) - slug scoping leaks and lets any member revoke colleagues' sessions.
