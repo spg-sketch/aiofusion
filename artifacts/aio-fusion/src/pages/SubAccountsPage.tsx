@@ -548,6 +548,66 @@ function SubAccountsPage({
     return match ? match.username : owner || "Unassigned";
   };
 
+  // ---------------------------------------------------------------------
+  // Left-hand section navigation. The page had grown to nine stacked
+  // sections on one long scroll; each nav item now shows one section at a
+  // time. Items respect the same role gates the sections always had.
+  // ---------------------------------------------------------------------
+  type SectionKey = "profile" | "security" | "billing" | "team" | "clients" | "archived" | "assign";
+  const canManageClients = canCreateSubAccounts(session.role);
+  const canSeeBilling = session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing";
+  const canSeeTeam = session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin";
+  const [activeSection, setActiveSection] = useState<SectionKey>("profile");
+
+  const navGroups: { label: string; items: { key: SectionKey; label: string; icon: React.ReactNode }[] }[] = [
+    {
+      label: "My Account",
+      items: [
+        { key: "profile", label: "Profile", icon: <User size={14} /> },
+        ...(onSignOut ? [{ key: "security" as SectionKey, label: "Sign-in & security", icon: <Shield size={14} /> }] : []),
+        ...(canSeeBilling ? [{ key: "billing" as SectionKey, label: "Billing details", icon: <FileText size={14} /> }] : []),
+        ...(canSeeTeam ? [{ key: "team" as SectionKey, label: "Team members", icon: <Users size={14} /> }] : []),
+      ],
+    },
+    ...(canManageClients
+      ? [{
+          label: "My Client Accounts",
+          items: [
+            { key: "clients" as SectionKey, label: "Client accounts", icon: <Building2 size={14} /> },
+            ...(archivedSubAccounts.length > 0 ? [{ key: "archived" as SectionKey, label: "Archived clients", icon: <Archive size={14} /> }] : []),
+            { key: "assign" as SectionKey, label: "Assign projects", icon: <FolderOpen size={14} /> },
+          ],
+        }]
+      : []),
+  ];
+
+  // If the active section disappears (e.g. the last archived client is
+  // restored, or a role change hides a section), fall back to Profile.
+  const visibleKeys = useMemo(() => new Set(navGroups.flatMap((g) => g.items.map((i) => i.key))), [onSignOut, canSeeBilling, canSeeTeam, canManageClients, archivedSubAccounts.length]);
+  useEffect(() => {
+    if (!visibleKeys.has(activeSection)) setActiveSection("profile");
+  }, [visibleKeys, activeSection]);
+
+  const navButton = (item: { key: SectionKey; label: string; icon: React.ReactNode }) => {
+    const active = activeSection === item.key;
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={() => setActiveSection(item.key)}
+        className="flex items-center gap-2.5 w-auto lg:w-full px-3.5 py-2.5 rounded-xl text-[13px] font-semibold transition-all whitespace-nowrap"
+        style={{
+          background: active ? accentSoft : "transparent",
+          color: active ? accent : vars.g600,
+          border: active ? `1px solid ${accent}40` : "1px solid transparent",
+        }}
+      >
+        <span style={{ color: active ? accent : vars.g400 }}>{item.icon}</span>
+        {item.label}
+      </button>
+    );
+  };
+
   return (
     <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: paper, borderBottom: `1px solid ${vars.g200}` }}>
@@ -581,6 +641,20 @@ function SubAccountsPage({
           </p>
         </div>
 
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-start">
+        {/* SECTION NAVIGATION - sidebar on desktop, horizontal pills on mobile */}
+        <nav className="w-full lg:w-56 flex-shrink-0 flex flex-row lg:flex-col gap-1.5 lg:gap-0 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 lg:sticky lg:top-6">
+          {navGroups.map((group, gi) => (
+            <div key={group.label} className={`flex flex-row lg:flex-col gap-1.5 lg:gap-1 flex-shrink-0 ${gi > 0 ? "lg:mt-6 ml-3 pl-3 lg:ml-0 lg:pl-0" : ""}`} style={gi > 0 ? { borderLeft: `1px solid ${vars.g200}` } : undefined}>
+              <p className="hidden lg:block px-3.5 mb-1.5 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: vars.g400 }}>{group.label}</p>
+              {group.items.map(navButton)}
+            </div>
+          ))}
+        </nav>
+
+        <div className="flex-1 min-w-0 w-full">
+
+        {activeSection === "profile" && (<>
         {/* ACCOUNT TYPE */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
@@ -938,22 +1012,23 @@ function SubAccountsPage({
             </div>
           </div>
         )}
+        </>)}
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
-        {onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
+        {activeSection === "security" && onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
 
         {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
-        {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing") && (
+        {activeSection === "billing" && canSeeBilling && (
           <BillingDetailsCard />
         )}
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
-        {(session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin") && (
+        {activeSection === "team" && canSeeTeam && (
           <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
         )}
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
-        {canCreateSubAccounts(session.role) && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {activeSection === "clients" && canManageClients && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
@@ -1088,9 +1163,9 @@ function SubAccountsPage({
           </form>
         </div>}
 
-        {canCreateSubAccounts(session.role) && (<>
+        {canManageClients && (<>
         {/* CLIENT ACCOUNTS LIST */}
-        <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {activeSection === "clients" && <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your client accounts ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
           </div>
@@ -1253,10 +1328,10 @@ function SubAccountsPage({
               })}
             </ul>
           )}
-        </div>
+        </div>}
 
         {/* ARCHIVED ACCOUNTS */}
-        {archivedSubAccounts.length > 0 && (
+        {activeSection === "archived" && archivedSubAccounts.length > 0 && (
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
               <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Archived clients ({archivedSubAccounts.length})</h2>
@@ -1323,7 +1398,7 @@ function SubAccountsPage({
         )}
 
         {/* PROJECT ASSIGNMENT */}
-        <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {activeSection === "assign" && <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Assign projects</h2>
             <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Hand a project to a client so it shows up in their own account. You keep access either way.</p>
@@ -1363,8 +1438,11 @@ function SubAccountsPage({
               ))}
             </ul>
           )}
-        </div>
+        </div>}
         </>)}
+
+        </div>{/* end content column */}
+        </div>{/* end sidebar + content layout */}
       </div>
     </div>
   );
