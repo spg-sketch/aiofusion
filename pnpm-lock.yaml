@@ -77,8 +77,9 @@ overrides:
   qs: ^6.15.2
   esbuild: 0.28.1
   uuid: '>=11.1.1'
-  js-yaml: '>=4.2.0'
-  undici: '>=8.5.0'
+  js-yaml: '>=4.3.0'
+  undici: '>=8.6.0'
+  ip-address: '>=10.3.0'
   markdown-it: '>=14.2.0'
 
 importers:
@@ -435,8 +436,8 @@ importers:
         specifier: ^6.17.2
         version: 6.17.2
       undici:
-        specifier: '>=8.5.0'
-        version: 8.5.0
+        specifier: '>=8.6.0'
+        version: 8.10.0
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.5.2
@@ -3330,8 +3331,8 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
-  ip-address@10.2.0:
-    resolution: {integrity: sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA==}
+  ip-address@10.5.0:
+    resolution: {integrity: sha512-R5SnVLJmgYYvf2F2ZgwSBnelz5G4q5AxIC277GDfUaNbrZKNANcBC7RHqYYePlszf4kBolVkJauG0ZjHHFh55g==}
     engines: {node: '>= 12'}
 
   ipaddr.js@1.9.1:
@@ -3403,8 +3404,8 @@ packages:
   js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
 
-  js-yaml@4.2.0:
-    resolution: {integrity: sha512-ePWsvanv0DWuDRsW8dnt+R4jQ31SCRCQ7hhNcPXZPsoBZiemuZNYGf7adZdqX2D86j6rvKp3RpCxVTSb8WQlOw==}
+  js-yaml@5.2.3:
+    resolution: {integrity: sha512-n+mUVyUX5bVv7G/G2zyIHOhdxfuU1dY2NOFzTQUWiMUbFss8b57NFlgCCaggU78wSw5KVS9cllzeLyzyR+n5nw==}
     hasBin: true
 
   jsdom@25.0.1:
@@ -4493,8 +4494,8 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
-  undici@8.5.0:
-    resolution: {integrity: sha512-xamtWoB1EshgjpmlXd7GGm2VfdDtw1+rD8uhry8pSNW3If6S8E0m2T2+orSKeZXEn/aPJMviCpDBA65WJt8zhg==}
+  undici@8.10.0:
+    resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
     engines: {node: '>=22.19.0'}
 
   unicorn-magic@0.3.0:
@@ -6692,7 +6693,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 8.5.0
+      undici: 8.10.0
       whatwg-mimetype: 4.0.0
 
   chokidar@4.0.3:
@@ -7067,7 +7068,7 @@ snapshots:
   express-rate-limit@8.5.1(express@5.2.1):
     dependencies:
       express: 5.2.1
-      ip-address: 10.2.0
+      ip-address: 10.5.0
 
   express@5.2.1:
     dependencies:
@@ -7400,7 +7401,7 @@ snapshots:
 
   internmap@2.0.3: {}
 
-  ip-address@10.2.0: {}
+  ip-address@10.5.0: {}
 
   ipaddr.js@1.9.1: {}
 
@@ -7447,7 +7448,7 @@ snapshots:
 
   js-tokens@9.0.1: {}
 
-  js-yaml@4.2.0:
+  js-yaml@5.2.3:
     dependencies:
       argparse: 2.0.1
 
@@ -7770,7 +7771,7 @@ snapshots:
       fs-extra: 11.3.4
       get-tsconfig: 4.14.0
       jiti: 2.6.1
-      js-yaml: 4.2.0
+      js-yaml: 5.2.3
       remeda: 2.33.6
       string-argv: 0.3.2
       typedoc: 0.28.19(typescript@5.9.3)
@@ -8528,7 +8529,7 @@ snapshots:
 
   undici-types@7.18.2: {}
 
-  undici@8.5.0: {}
+  undici@8.10.0: {}
 
   unicorn-magic@0.3.0: {}
 
