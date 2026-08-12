@@ -654,7 +654,9 @@ function SubAccountsPage({
 
         <div className="flex-1 min-w-0 w-full">
 
-        {activeSection === "profile" && (<>
+        {/* Sections stay mounted and are hidden with CSS so unsaved form
+            input and open panels survive switching between nav items. */}
+        <div className={activeSection === "profile" ? "" : "hidden"}>
         {/* ACCOUNT TYPE */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
@@ -1012,23 +1014,31 @@ function SubAccountsPage({
             </div>
           </div>
         )}
-        </>)}
+        </div>
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
-        {activeSection === "security" && onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
+        {onSignOut && (
+          <div className={activeSection === "security" ? "" : "hidden"}>
+            <AccountSecurityCard session={session} onSignOut={onSignOut} />
+          </div>
+        )}
 
         {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
-        {activeSection === "billing" && canSeeBilling && (
-          <BillingDetailsCard />
+        {canSeeBilling && (
+          <div className={activeSection === "billing" ? "" : "hidden"}>
+            <BillingDetailsCard />
+          </div>
         )}
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
-        {activeSection === "team" && canSeeTeam && (
-          <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
+        {canSeeTeam && (
+          <div className={activeSection === "team" ? "" : "hidden"}>
+            <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
+          </div>
         )}
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
-        {activeSection === "clients" && canManageClients && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {canManageClients && <div className={`${activeSection === "clients" ? "" : "hidden"} rounded-2xl p-6 sm:p-8 mb-6`} style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
@@ -1165,7 +1175,7 @@ function SubAccountsPage({
 
         {canManageClients && (<>
         {/* CLIENT ACCOUNTS LIST */}
-        {activeSection === "clients" && <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        <div className={`${activeSection === "clients" ? "" : "hidden"} rounded-2xl overflow-hidden mb-6`} style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your client accounts ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
           </div>
@@ -1328,11 +1338,11 @@ function SubAccountsPage({
               })}
             </ul>
           )}
-        </div>}
+        </div>
 
         {/* ARCHIVED ACCOUNTS */}
-        {activeSection === "archived" && archivedSubAccounts.length > 0 && (
-          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        {archivedSubAccounts.length > 0 && (
+          <div className={`${activeSection === "archived" ? "" : "hidden"} rounded-2xl overflow-hidden mb-6`} style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
               <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Archived clients ({archivedSubAccounts.length})</h2>
               <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
@@ -1398,7 +1408,7 @@ function SubAccountsPage({
         )}
 
         {/* PROJECT ASSIGNMENT */}
-        {activeSection === "assign" && <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        <div className={`${activeSection === "assign" ? "" : "hidden"} rounded-2xl overflow-hidden`} style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Assign projects</h2>
             <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Hand a project to a client so it shows up in their own account. You keep access either way.</p>
@@ -1438,7 +1448,7 @@ function SubAccountsPage({
               ))}
             </ul>
           )}
-        </div>}
+        </div>
         </>)}
 
         </div>{/* end content column */}
