@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, sql, gte } from "drizzle-orm";
 import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { normUsername, isRestrictedMaster, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
+import { normUsername, isRestrictedMaster, masterSubrole, MASTER_OWNER_REQUIRED_MESSAGE } from "../lib/platform-auth";
 import { fetchSiteContentWithSubpages, fetchGeoAuditContext } from "../lib/safe-fetch";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import {
@@ -182,6 +182,11 @@ adminRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     if (!req.account || req.account.role !== "admin") {
       res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    // Operational Support members are read-only: no content generation.
+    if (masterSubrole(req.account) === "support") {
+      res.status(403).json({ error: "Your team role does not allow this action." });
       return;
     }
 
@@ -889,6 +894,23 @@ adminRouter.patch(
     }
     const newStatus = action === "block" ? "suspended" : "active";
     try {
+      // Safety: never allow blocking the master (admin) account or yourself -
+      // that would lock the platform's operators out entirely.
+      if (action === "block") {
+        if (slug === normUsername(req.account.username)) {
+          res.status(400).json({ error: "You cannot block your own account." });
+          return;
+        }
+        const [targetRow] = await db
+          .select({ role: platformAccountsTable.role })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.username, slug))
+          .limit(1);
+        if (targetRow?.role === "admin") {
+          res.status(400).json({ error: "The master account cannot be blocked." });
+          return;
+        }
+      }
       await Promise.all([
         db
           .update(platformAccountsTable)
@@ -909,6 +931,9 @@ adminRouter.patch(
       // the agency's own status.
       let cascaded: string[] = [];
       if (action === "block") {
+        // An explicit block takes precedence over any earlier cascade flag:
+        // drop the flag so unblocking a parent never restores this account.
+        await db.delete(platformMetaTable).where(eq(platformMetaTable.key, suspendedViaKey(slug)));
         cascaded = await cascadeSuspendDescendants(slug);
       } else {
         cascaded = await cascadeRestoreDescendants(slug);
@@ -1049,6 +1074,11 @@ adminRouter.delete(
       res.status(403).json({ error: "Admin access required" });
       return;
     }
+    // Operational Support members are read-only: no lock removal.
+    if (masterSubrole(req.account) === "support") {
+      res.status(403).json({ error: "Your team role does not allow this action." });
+      return;
+    }
     const { projectId, auditType } = req.body as { projectId?: string; auditType?: string };
     if (!projectId || !auditType) {
       res.status(400).json({ error: "projectId and auditType are required" });
@@ -1076,6 +1106,11 @@ adminRouter.post(
   async (req: Request, res: Response) => {
     if (req.account?.role !== "admin") {
       res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    // Operational Support members are read-only: no test email sends.
+    if (masterSubrole(req.account) === "support") {
+      res.status(403).json({ error: "Your team role does not allow this action." });
       return;
     }
     const key = process.env.RESEND_API_KEY;

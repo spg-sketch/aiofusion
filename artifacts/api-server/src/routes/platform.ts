@@ -468,6 +468,8 @@ async function completeMfaLogin(
   rawIp: string | undefined,
   extra?: Record<string, unknown>,
 ): Promise<void> {
+  // Full authentication complete: clear the MFA-stage lockout counter.
+  try { await clearLoginFailures("mfa:" + payload.u); } catch { /* non-fatal */ }
   const sid = await createPlatformSession(payload.u, makeIpHint(rawIp), payload.uid, payload.cid);
   setPlatformCookie(res, sid);
   res.json({
@@ -838,7 +840,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
       res.status(400).json({ error: "Enter the 6-digit code from your authenticator app." });
       return;
     }
-    const mfaLockedMs = await lockoutRemainingMs(pending.u);
+    const mfaLockedMs = await lockoutRemainingMs("mfa:" + pending.u);
     if (mfaLockedMs > 0) {
       res.setHeader("Retry-After", Math.ceil(mfaLockedMs / 1000));
       res.status(429).json({ error: lockoutMessage(mfaLockedMs) });
@@ -916,8 +918,9 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
     }
     // Wrong TOTP + not a recovery code: count towards the progressive lockout
     // for this account so an attacker with a stolen password cannot brute-force
-    // the 6-digit code either.
-    await recordLoginFailure(pending.u);
+    // the 6-digit code either. Scoped under "mfa:" so a fresh password login
+    // (which clears the plain login counter) cannot reset the MFA lockout.
+    await recordLoginFailure("mfa:" + pending.u);
     res.status(401).json({ error: "That code is not valid. Try again, or use a recovery code." });
   } catch {
     res.status(500).json({ error: "Could not verify the code" });
@@ -1656,6 +1659,11 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const actor = req.account!;
+      // Master Technical / Operational Support members cannot manage accounts.
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       const target = normUsername(req.body?.username);
       const newEmail = typeof req.body?.newEmail === "string" ? req.body.newEmail.trim().toLowerCase() : "";
 
@@ -3359,6 +3367,11 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const actor = req.account!;
+      // Master Technical / Operational Support members cannot create accounts.
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       let username = normUsername(req.body?.username);
       // Managed accounts are run by the agency on the client's behalf: no
       // welcome email, no set-password link, and a random unguessable password
@@ -3581,6 +3594,16 @@ router.post(
         res.status(400).json({ error: "Password must be at least 8 characters." });
         return;
       }
+      // Guardrails: no credential changes while impersonating, and master
+      // Technical / Operational Support members cannot manage credentials.
+      if (await isImpersonatedRequest(req)) {
+        res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+        return;
+      }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       const isSelf = target === normUsername(actor.username);
       if (!isSelf && !(await canManage(actor, target))) {
         res.status(403).json({ error: "You cannot change this account." });
@@ -3689,7 +3712,10 @@ router.get(
           res.status(403).json({ error: "You do not have access to billing details." });
           return;
         }
-      } else if (!(await canManage(actor, target))) {
+      } else if (!canEditBillingDetails(actor) || !(await canManage(actor, target))) {
+        // Managing a descendant still requires a billing-capable membership
+        // role on the actor's own workspace (viewer/content members cannot
+        // reach a child's billing details through canManage alone).
         res.status(403).json({ error: "You cannot view this account's billing details." });
         return;
       }
@@ -3722,7 +3748,9 @@ router.post(
           res.status(403).json({ error: "You do not have access to billing details." });
           return;
         }
-      } else if (!(await canManage(actor, target))) {
+      } else if (!canEditBillingDetails(actor) || !(await canManage(actor, target))) {
+        // Same rule as the GET: the actor's own membership role must allow
+        // billing access before they can edit a managed account's details.
         res.status(403).json({ error: "You cannot change this account's billing details." });
         return;
       }
@@ -3764,6 +3792,11 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const actor = req.account!;
+      // Master Technical / Operational Support members cannot archive accounts.
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       const target = normUsername(req.body?.username);
       const archive = req.body?.archive !== false;
       if (!target) {
@@ -3815,6 +3848,16 @@ router.post(
       }
       if (!(await canManage(actor, target))) {
         res.status(403).json({ error: "You cannot reset two-factor login for this account." });
+        return;
+      }
+      // Guardrails: no credential changes while impersonating, and master
+      // Technical / Operational Support members cannot manage credentials.
+      if (await isImpersonatedRequest(req)) {
+        res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+        return;
+      }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
         return;
       }
       const state = await getMfaState(target);
@@ -4040,6 +4083,10 @@ router.patch(
       const actor = req.account!;
       if (actor.role !== "admin") {
         res.status(403).json({ error: "Only an admin can set seat caps." });
+        return;
+      }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
         return;
       }
       const target = normUsername(req.params.username);
@@ -4294,6 +4341,10 @@ router.post(
         res.status(403).json({ error: "Only an admin can change account roles." });
         return;
       }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+        return;
+      }
       const target = normUsername(req.body?.username);
       const newRole = normalizeRole(req.body?.role);
       if (!target) {
@@ -4369,6 +4420,10 @@ router.post(
       const actor = req.account!;
       if (actor.role !== "admin") {
         res.status(403).json({ error: "Only an admin can move accounts." });
+        return;
+      }
+      if (isRestrictedMaster(actor)) {
+        res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
         return;
       }
       const target = normUsername(req.body?.username);

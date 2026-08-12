@@ -554,6 +554,113 @@ describe("free access flag and master sub-roles", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Review regressions: further bypass paths closed
+// ---------------------------------------------------------------------------
+describe("review regressions", () => {
+  it("blocks admin password reset of another account while impersonating", async () => {
+    await seedAccount("masteradmin", { role: "admin" });
+    await seedAccount("victim3", { role: "client" });
+    const sid = "stash-sid-regression-1";
+    await db.insert(platformSessionsTable).values({
+      sid,
+      username: "masteradmin",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/accounts/password`, {
+        method: "POST",
+        headers: {
+          ...acctHeader({ username: "victim3", role: "client" }),
+          Cookie: `aio_admin_sid=${sid}`,
+        },
+        body: JSON.stringify({ username: "victim3", newPassword: "sneaky-password-1" }),
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  it("restricted master members cannot create accounts, reset passwords, or reset MFA", async () => {
+    await seedAccount("target2", { role: "client" });
+    await withServer(async (base) => {
+      for (const membershipRole of ["admin", "viewer"]) {
+        const actor = { username: "master", role: "admin", membershipRole };
+        const create = await fetch(`${base}/api/platform/accounts`, {
+          method: "POST",
+          headers: acctHeader(actor),
+          body: JSON.stringify({ username: "newclient", password: "some-password-1" }),
+        });
+        expect(create.status).toBe(403);
+        const pw = await fetch(`${base}/api/platform/accounts/password`, {
+          method: "POST",
+          headers: acctHeader(actor),
+          body: JSON.stringify({ username: "target2", newPassword: "some-password-2" }),
+        });
+        expect(pw.status).toBe(403);
+        const mfa = await fetch(`${base}/api/platform/accounts/reset-mfa`, {
+          method: "POST",
+          headers: acctHeader(actor),
+          body: JSON.stringify({ username: "target2" }),
+        });
+        expect(mfa.status).toBe(403);
+      }
+    });
+  });
+
+  it("the master account and yourself cannot be blocked", async () => {
+    await seedAccount("masterroot", { role: "admin" });
+    await withServer(async (base) => {
+      const self = await fetch(`${base}/api/admin/account/masterroot/block`, {
+        method: "PATCH",
+        headers: acctHeader({ username: "masterroot", role: "admin" }),
+        body: JSON.stringify({ action: "block" }),
+      });
+      expect(self.status).toBe(400);
+      await seedAccount("otheradmin", { role: "admin" });
+      const other = await fetch(`${base}/api/admin/account/otheradmin/block`, {
+        method: "PATCH",
+        headers: acctHeader({ username: "masterroot", role: "admin" }),
+        body: JSON.stringify({ action: "block" }),
+      });
+      expect(other.status).toBe(400);
+    });
+  });
+
+  it("an explicit block survives a parent unblock (cascade flag cleared)", async () => {
+    await seedAccount("agency2", { role: "agency" });
+    await seedAccount("child-c", { role: "client", parent: "agency2" });
+    await withServer(async (base) => {
+      const headers = acctHeader({ username: "master", role: "admin" });
+      // Cascade-suspend via the parent, then explicitly block the child.
+      await fetch(`${base}/api/admin/account/agency2/block`, {
+        method: "PATCH", headers, body: JSON.stringify({ action: "block" }),
+      });
+      await fetch(`${base}/api/admin/account/child-c/block`, {
+        method: "PATCH", headers, body: JSON.stringify({ action: "block" }),
+      });
+      // Unblocking the parent must NOT restore the explicitly blocked child.
+      await fetch(`${base}/api/admin/account/agency2/block`, {
+        method: "PATCH", headers, body: JSON.stringify({ action: "unblock" }),
+      });
+      const [c] = await db.select().from(platformAccountsTable).where(eq(platformAccountsTable.username, "child-c"));
+      expect(c.status).toBe("suspended");
+    });
+  });
+
+  it("a viewer member of an agency cannot edit a managed client's billing details", async () => {
+    await seedAccount("agency3", { role: "agency" });
+    await seedAccount("managed-client", { role: "client", parent: "agency3" });
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/billing-details`, {
+        method: "POST",
+        headers: acctHeader({ username: "agency3", role: "agency", membershipRole: "viewer" }),
+        body: JSON.stringify({ username: "managed-client", billingEmail: "x@y.com" }),
+      });
+      expect(res.status).toBe(403);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Billing details
 // ---------------------------------------------------------------------------
 describe("billing details", () => {
