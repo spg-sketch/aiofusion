@@ -97,6 +97,34 @@ export async function getValidInvite(token: string): Promise<PlatformInvitationR
   return row;
 }
 
+// Why a specific invite link is not usable. "unknown" also covers tokens that
+// were replaced by a re-sent invitation (each resend issues a fresh token).
+export type InviteInvalidReason = "unknown" | "used" | "revoked" | "expired" | "inactive";
+
+export const INVITE_INVALID_MESSAGES: Record<InviteInvalidReason, string> = {
+  unknown:
+    "This invitation link isn't valid. If the invitation was re-sent, only the link in the newest email works - older links stop working.",
+  used: "This invitation has already been used. If that was you, just sign in with your email and password.",
+  revoked: "This invitation was withdrawn. Ask your team admin to send a new one.",
+  expired: "This invitation has expired - links last 7 days. Ask your team admin to re-send it.",
+  inactive: "This workspace is no longer active, so the invitation can't be accepted.",
+};
+
+// Explain why getValidInvite() returned null for this token.
+export async function getInviteInvalidReason(token: string): Promise<InviteInvalidReason> {
+  if (!token) return "unknown";
+  const [row] = await db
+    .select()
+    .from(platformInvitationsTable)
+    .where(eq(platformInvitationsTable.token, token))
+    .limit(1);
+  if (!row) return "unknown";
+  if (row.usedAt) return "used";
+  if (row.revokedAt) return "revoked";
+  if (row.expiresAt < new Date()) return "expired";
+  return "inactive";
+}
+
 // Consume an invitation for a resolved platform user: mark the token used
 // (atomically - a second concurrent accept loses) and create the membership
 // with the invite's role and project access.

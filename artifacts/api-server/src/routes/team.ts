@@ -30,6 +30,8 @@ import {
   setTeamSeatLimit,
   countSeatsUsed,
   getValidInvite,
+  getInviteInvalidReason,
+  INVITE_INVALID_MESSAGES,
   consumeInvite,
 } from "../lib/team-invites";
 import { sendTeamInviteEmail, getAppBaseUrl } from "../lib/notify-email";
@@ -523,7 +525,8 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
     const token = String(req.params.token || "").trim();
     const invite = await getValidInvite(token);
     if (!invite) {
-      res.status(404).json({ error: "This invitation is invalid, expired, or has already been used." });
+      const reason = await getInviteInvalidReason(token);
+      res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
       return;
     }
     const [company] = await db
@@ -559,7 +562,8 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const invite = await getValidInvite(token);
     if (!invite) {
-      res.status(404).json({ error: "This invitation is invalid, expired, or has already been used." });
+      const reason = await getInviteInvalidReason(token);
+      res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
       return;
     }
 

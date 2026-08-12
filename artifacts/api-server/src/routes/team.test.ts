@@ -748,6 +748,49 @@ describe("resend invite endpoint", () => {
     expect((await api(`/api/platform/team/invites/${inv2.json.token}/resend`, { sid, body: {} })).status).toBe(404);
   });
 
+  it("public invite lookup explains WHY a link no longer works (reason codes)", async () => {
+    const { sid, company } = await seedAgency("invite-reasons", "owner@invite-reasons.test");
+
+    // Unknown token.
+    const unknown = await api("/api/platform/invite/definitely-not-a-token");
+    expect(unknown.status).toBe(404);
+    expect(unknown.json.reason).toBe("unknown");
+    expect(String(unknown.json.error)).toMatch(/newest email/i);
+
+    // Revoked token.
+    const inv1 = await api("/api/platform/team/invite", { sid, body: { email: "r@invite-reasons.test", role: "viewer" } });
+    await api(`/api/platform/team/invites/${inv1.json.token}/revoke`, { sid, body: {} });
+    const revoked = await api(`/api/platform/invite/${inv1.json.token}`);
+    expect(revoked.status).toBe(404);
+    expect(revoked.json.reason).toBe("revoked");
+
+    // Used token.
+    const inv2 = await api("/api/platform/team/invite", { sid, body: { email: "u@invite-reasons.test", role: "viewer" } });
+    await api("/api/platform/invite/accept", { body: { token: inv2.json.token, password: "used-pass-reasons-1" } });
+    const used = await api(`/api/platform/invite/${inv2.json.token}`);
+    expect(used.status).toBe(404);
+    expect(used.json.reason).toBe("used");
+    // Accept endpoint reports the same reason.
+    const usedAccept = await api("/api/platform/invite/accept", { body: { token: inv2.json.token, password: "used-pass-reasons-2" } });
+    expect(usedAccept.status).toBe(404);
+    expect(usedAccept.json.reason).toBe("used");
+
+    // Expired token (inserted directly with a past expiry).
+    const expiredTok = "invite-reasons-expired-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expiredTok,
+      email: "e@invite-reasons.test",
+      companyId: company.id,
+      companySlug: "invite-reasons",
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    const expired = await api(`/api/platform/invite/${expiredTok}`);
+    expect(expired.status).toBe(404);
+    expect(expired.json.reason).toBe("expired");
+    expect(String(expired.json.error)).toMatch(/7 days/);
+  });
+
   it("resending an expired invite at a full workspace returns 403 limitReached; resending a still-pending invite succeeds", async () => {
     const { sid, company } = await seedAgency("resend-seatcap", "owner@resend-seatcap.test");
 

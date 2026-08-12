@@ -136,6 +136,19 @@ function SubAccountsPage({
   // Per-client logo blob URLs. null = checked but none; undefined = not yet fetched.
   const [clientLogos, setClientLogos] = useState<Map<string, string | null>>(new Map());
   const clientLogoBlobsRef = useRef<Map<string, string>>(new Map());
+  // Bumped whenever a logo may have changed (own upload, another tab/session,
+  // returning from "View account") so the list refetches without a reload.
+  const [logoTick, setLogoTick] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setLogoTick((t) => t + 1);
+    window.addEventListener("aio:logo-changed", bump);
+    window.addEventListener("focus", bump);
+    return () => {
+      window.removeEventListener("aio:logo-changed", bump);
+      window.removeEventListener("focus", bump);
+    };
+  }, []);
 
   // Fetch logos for all sub-accounts (active + archived) whenever the list changes.
   useEffect(() => {
@@ -176,7 +189,7 @@ function SubAccountsPage({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allSubAccounts]);
+  }, [allSubAccounts, logoTick]);
 
   /** Downscale the chosen client logo to a data URL for the create form. */
   const handleNewClientLogo = (file: File) => {
@@ -370,6 +383,8 @@ function SubAccountsPage({
           return;
         }
         (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+        // Let any client-list views refetch their logos straight away.
+        if (kind === "logo") window.dispatchEvent(new Event("aio:logo-changed"));
       })
       .catch(() => setImageError("Failed to save the image."))
       .finally(() => setUploadingImage(null));
