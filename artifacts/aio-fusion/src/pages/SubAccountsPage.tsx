@@ -66,6 +66,51 @@ function SubAccountsPage({
   // Guards against a slow earlier image load overwriting a later selection.
   const logoRequestRef = useRef(0);
 
+  // Per-client logo blob URLs. null = checked but none; undefined = not yet fetched.
+  const [clientLogos, setClientLogos] = useState<Map<string, string | null>>(new Map());
+  const clientLogoBlobsRef = useRef<Map<string, string>>(new Map());
+
+  // Fetch logos for all sub-accounts (active + archived) whenever the list changes.
+  useEffect(() => {
+    const usernames = allSubAccounts.map((u) => u.username);
+    if (usernames.length === 0) return;
+    let cancelled = false;
+    const newBlobs = new Map<string, string>();
+    Promise.all(
+      usernames.map(async (username) => {
+        try {
+          const res = await fetch(`${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/logo`, {
+            credentials: "include",
+          });
+          if (!res.ok || cancelled) return;
+          const blob = await res.blob();
+          if (cancelled) return;
+          const blobUrl = URL.createObjectURL(blob);
+          newBlobs.set(username, blobUrl);
+        } catch {
+          /* non-fatal: no logo or not authorized */
+        }
+      }),
+    ).then(() => {
+      if (cancelled) {
+        newBlobs.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+      // Revoke old blobs before replacing.
+      clientLogoBlobsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      clientLogoBlobsRef.current = newBlobs;
+      const map = new Map<string, string | null>();
+      usernames.forEach((u) => {
+        map.set(u, newBlobs.get(u) ?? null);
+      });
+      setClientLogos(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSubAccounts]);
+
   /** Downscale the chosen client logo to a data URL for the create form. */
   const handleNewClientLogo = (file: File) => {
     setAddError(null);
@@ -986,15 +1031,23 @@ function SubAccountsPage({
               {subAccounts.map((u) => {
                 const editingPw = pwUser === u.username;
                 const owned = manageable.filter((p) => (p.owner || "").toLowerCase() === u.username.toLowerCase());
+                const clientLogoUrl = clientLogos.get(u.username);
                 return (
                   <li key={u.username} className="px-6 py-4">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: accentSoft, color: accent }}>
-                          <User size={16} />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: accentSoft, color: accent, border: clientLogoUrl ? `1px solid ${vars.g200}` : undefined }}>
+                          {clientLogoUrl ? (
+                            <img src={clientLogoUrl} alt={`${u.displayName ?? u.username} logo`} className="w-full h-full object-contain p-0.5" />
+                          ) : (
+                            <User size={16} />
+                          )}
                         </div>
                         <div>
-                          <p className="text-[14px] font-bold" style={{ color: ink }}>{u.username}</p>
+                          <p className="text-[14px] font-bold" style={{ color: ink }}>{u.displayName ?? u.username}</p>
+                          {u.displayName && (
+                            <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
+                          )}
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
                         </div>
                       </div>
@@ -1079,15 +1132,23 @@ function SubAccountsPage({
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {archivedSubAccounts.map((u) => {
                 const owned = manageable.filter((p) => (p.owner || "").toLowerCase() === u.username.toLowerCase());
+                const clientLogoUrl = clientLogos.get(u.username);
                 return (
                   <li key={u.username} className="px-6 py-4" style={{ background: vars.g100 + "40" }}>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="flex items-center gap-3 opacity-60">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: vars.g200, color: vars.g400 }}>
-                          <User size={16} />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: clientLogoUrl ? "white" : vars.g200, color: vars.g400, border: `1px solid ${vars.g200}` }}>
+                          {clientLogoUrl ? (
+                            <img src={clientLogoUrl} alt={`${u.displayName ?? u.username} logo`} className="w-full h-full object-contain p-0.5" style={{ filter: "grayscale(0.5) opacity(0.7)" }} />
+                          ) : (
+                            <User size={16} />
+                          )}
                         </div>
                         <div>
-                          <p className="text-[14px] font-bold" style={{ color: vars.g500 }}>{u.username}</p>
+                          <p className="text-[14px] font-bold" style={{ color: vars.g500 }}>{u.displayName ?? u.username}</p>
+                          {u.displayName && (
+                            <p className="text-[11px] font-light" style={{ color: vars.g400 }}>@{u.username}</p>
+                          )}
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g400 }}>Archived</span>
                         </div>
                       </div>

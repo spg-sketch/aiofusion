@@ -207,3 +207,80 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
     expect((await create({ username: "x9", password: "no", role: "client" })).status).toBe(400);
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/platform/accounts/:username/logo
+// ---------------------------------------------------------------------------
+
+describe("GET /api/platform/accounts/:username/logo", () => {
+  let server: Server;
+  let baseUrl: string;
+  let actor: { username: string; role: string };
+
+  // Minimal valid PNG data URL (1×1 transparent pixel).
+  const SAMPLE_DATA_URL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  async function getLogo(username: string) {
+    return fetch(`${baseUrl}/api/platform/accounts/${username}/logo`, {
+      credentials: "include",
+    });
+  }
+
+  beforeEach(async () => {
+    h.state.accounts = [
+      { username: "admin", passwordHash: "", role: "admin", parent: null },
+      { username: "agency", passwordHash: "", role: "agency", parent: null },
+      { username: "otheragency", passwordHash: "", role: "agency", parent: null },
+      { username: "client1", passwordHash: "", role: "client", parent: "agency" },
+    ];
+    h.state.meta = [];
+    actor = { username: "agency", role: "agency" };
+
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.account = { ...actor } as any;
+      next();
+    });
+    app.use("/api", platformRouter);
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, () => {
+        baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        resolve();
+      });
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it("returns 404 when the managed client has no logo", async () => {
+    const res = await getLogo("client1");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns the binary image when the managed client has a logo", async () => {
+    h.state.meta.push({ key: "account:image:logo:client1", value: SAMPLE_DATA_URL });
+    const res = await getLogo("client1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^image\//);
+    const buf = await res.arrayBuffer();
+    expect(buf.byteLength).toBeGreaterThan(0);
+  });
+
+  it("returns 403 when the actor does not manage the target account", async () => {
+    actor = { username: "otheragency", role: "agency" };
+    h.state.meta.push({ key: "account:image:logo:client1", value: SAMPLE_DATA_URL });
+    const res = await getLogo("client1");
+    expect(res.status).toBe(403);
+  });
+
+  it("allows an admin to fetch any account's logo", async () => {
+    actor = { username: "admin", role: "admin" };
+    h.state.meta.push({ key: "account:image:logo:client1", value: SAMPLE_DATA_URL });
+    const res = await getLogo("client1");
+    expect(res.status).toBe(200);
+  });
+});

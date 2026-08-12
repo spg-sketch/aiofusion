@@ -628,6 +628,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/accounts/reparent",
   "POST /platform/accounts/role",
   "PATCH /platform/accounts/:username/seat-cap",
+  "GET /platform/accounts/:username/logo",
   "GET /platform/accounts/:username/sessions",
   "DELETE /platform/sessions/:sid",
   "GET /platform/sessions",

@@ -4463,4 +4463,44 @@ router.get("/platform/profile/image/:kind", requirePlatformAuth, async (req: Req
   }
 });
 
+// Fetch the logo of a managed client account. The caller must be the parent
+// agency (or an admin) for the requested account - same canManage hierarchy
+// as other managed-account endpoints. Returns the binary image or 404.
+router.get(
+  "/platform/accounts/:username/logo",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const actor = req.account!;
+      const target = normUsername(req.params.username);
+      if (!target) {
+        res.status(400).json({ error: "Invalid username" });
+        return;
+      }
+      // An account may always fetch its own logo; others require canManage.
+      if (normUsername(actor.username) !== target && !(await canManage(actor, target))) {
+        res.status(403).json({ error: "You are not authorised to view that account's logo." });
+        return;
+      }
+      const [row] = await db
+        .select()
+        .from(platformMetaTable)
+        .where(eq(platformMetaTable.key, profileImageKey("logo", target)))
+        .limit(1);
+      if (!row?.value || !DATA_URL_RE.test(row.value)) {
+        res.status(404).json({ error: "No logo" });
+        return;
+      }
+      const [, mime] = row.value.match(/^data:(image\/[a-z]+);base64,/) ?? [];
+      const base64 = row.value.slice(row.value.indexOf(",") + 1);
+      const buf = Buffer.from(base64, "base64");
+      res.setHeader("Content-Type", mime || "image/png");
+      res.setHeader("Cache-Control", "private, no-store");
+      res.send(buf);
+    } catch {
+      res.status(500).json({ error: "Failed to load logo" });
+    }
+  },
+);
+
 export default router;
