@@ -3428,7 +3428,7 @@ router.post(
           .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: logoDataUrl } });
       }
       // Tell the key contact they have a login. Fail-soft: account creation
-      // succeeds even if the email cannot be sent.
+      // succeeds even if the email cannot be sent or the token insertion fails.
       if (contactEmail) {
         let agencyName = actor.username;
         try {
@@ -3442,6 +3442,48 @@ router.post(
             if (typeof parsed.displayName === "string" && parsed.displayName.trim()) agencyName = parsed.displayName;
           }
         } catch { /* fall back to username */ }
+
+        // Issue a single-use 7-day "Set your password" link only for new users.
+        // If the contact email already belongs to a platform_users row we must
+        // NOT issue a reset token - their existing password must not be
+        // threatened by an emailed link.  We still send the email, just without
+        // the set-password button.
+        let setPasswordUrl: string | undefined;
+        try {
+          const existingUser = await getUserByEmail(contactEmail);
+          if (!existingUser) {
+            // Eagerly create the platform_users + platform_companies +
+            // platform_memberships rows so the FK in platform_password_resets
+            // is satisfied.  The membership role is "owner" (the contact owns
+            // their client account).  ensurePlatformUser is idempotent on
+            // conflict so a concurrent login on the same email is safe.
+            const account = await getAccount(username);
+            const newUserId = await ensurePlatformUser({
+              email: contactEmail,
+              name: contactName || null,
+              passwordHash: account?.passwordHash ?? null,
+              companyUsername: username,
+              membershipRole: "owner",
+              companyRole: role,
+              companyParentSlug: normUsername(actor.username),
+            });
+            // Invalidate any pre-existing tokens for this user (mirrors
+            // forgot-password behaviour) then issue a fresh 7-day welcome token.
+            await db
+              .delete(platformPasswordResetsTable)
+              .where(eq(platformPasswordResetsTable.userId, newUserId));
+            const welcomeToken = crypto.randomBytes(32).toString("hex");
+            await db.insert(platformPasswordResetsTable).values({
+              token: welcomeToken,
+              userId: newUserId,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+            });
+            setPasswordUrl = `${getAppBaseUrl()}/?reset_token=${welcomeToken}&welcome=1`;
+          }
+        } catch (err) {
+          logger.warn({ err, contactEmail }, "accounts: failed to issue welcome token (non-fatal) - email sent without set-password link");
+        }
+
         void sendClientAccountCreatedEmail({
           toEmail: contactEmail,
           contactName,
@@ -3449,6 +3491,7 @@ router.post(
           agencyName,
           username,
           loginUrl: getAppBaseUrl(),
+          setPasswordUrl,
         });
       }
       res.json({ ok: true, username });

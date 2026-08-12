@@ -30,6 +30,7 @@ function PlatformHomePage({
   onOpenGeorge,
   initialNotice,
   resetToken: resetTokenProp,
+  isWelcomeLink,
   hasPassword,
   oauthRedirectParams,
   onOauthParamsConsumed,
@@ -49,6 +50,9 @@ function PlatformHomePage({
   onOpenGeorge?: () => void;
   initialNotice?: string;
   resetToken?: string | null;
+  /** True when reset_token arrived via a welcome email (?welcome=1). Shows
+   *  "Set your password" copy instead of "Choose a new password". */
+  isWelcomeLink?: boolean;
   /** Whether the signed-in account already has a password hash. false = SSO-only
    *  (Google/Microsoft only, no password set yet). undefined = not yet resolved. */
   hasPassword?: boolean;
@@ -324,11 +328,12 @@ function PlatformHomePage({
                         <KeyRound size={28} color="white" />
                       </div>
                       <h2 className="text-[26px] font-bold mb-2" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
-                        Choose a new password
+                        {isWelcomeLink ? "Set your password" : "Choose a new password"}
                       </h2>
                       <p className="text-[14px] leading-[1.7]" style={{ color: "rgba(255,255,255,0.7)" }}>
-                        Enter a new password for your account. Once saved, you'll be signed
-                        out of all devices and can sign in with the new password.
+                        {isWelcomeLink
+                          ? "Choose a password for your account. Once saved, sign in with your new password."
+                          : "Enter a new password for your account. Once saved, you'll be signed out of all devices and can sign in with the new password."}
                       </p>
                     </div>
                     <form onSubmit={handleResetPassword} className="flex flex-col gap-3">

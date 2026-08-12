@@ -337,6 +337,9 @@ export async function sendTeamInviteEmail(opts: {
 }
 
 // Sent to a client's key contact when an agency creates a login for them.
+// When setPasswordUrl is provided the contact receives a "Set your password"
+// CTA (single-use, 7-day expiry). Without it, the legacy "get credentials
+// from your agency" copy is used as a fallback.
 export async function sendClientAccountCreatedEmail(opts: {
   toEmail: string;
   contactName: string;
@@ -344,6 +347,7 @@ export async function sendClientAccountCreatedEmail(opts: {
   agencyName: string;
   username: string;
   loginUrl: string;
+  setPasswordUrl?: string;
 }): Promise<void> {
   const resend = getClient();
   if (!resend) {
@@ -353,25 +357,56 @@ export async function sendClientAccountCreatedEmail(opts: {
 
   const greeting = opts.contactName ? `Hi ${opts.contactName},` : "Hi,";
   const subject = `${opts.agencyName} has set up an AIO Fusion account for ${opts.companyName}`;
-  const text = [
-    greeting,
-    ``,
-    `${opts.agencyName} has created an AIO Fusion account for ${opts.companyName}.`,
-    ``,
-    `Your username is: ${opts.username}`,
-    ``,
-    `${opts.agencyName} will share your password with you directly. Once you have it, sign in here:`,
-    ``,
-    opts.loginUrl,
-    ``,
-    `If you weren't expecting this, you can safely ignore this email.`,
-    ``,
-    `The AIO Fusion team`,
-  ].join("\n");
 
-  const html = buildEmailHtml({
-    label: "Account Created",
-    bodyHtml: `
+  const text = opts.setPasswordUrl
+    ? [
+        greeting,
+        ``,
+        `${opts.agencyName} has created an AIO Fusion account for ${opts.companyName}.`,
+        ``,
+        `Your username is: ${opts.username}`,
+        ``,
+        `Click the link below to set your password and access your account.`,
+        `This link is single-use and expires in 7 days.`,
+        ``,
+        opts.setPasswordUrl,
+        ``,
+        `If you weren't expecting this, you can safely ignore this email.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n")
+    : [
+        greeting,
+        ``,
+        `${opts.agencyName} has created an AIO Fusion account for ${opts.companyName}.`,
+        ``,
+        `Your username is: ${opts.username}`,
+        ``,
+        `${opts.agencyName} will share your password with you directly. Once you have it, sign in here:`,
+        ``,
+        opts.loginUrl,
+        ``,
+        `If you weren't expecting this, you can safely ignore this email.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n");
+
+  const bodyHtml = opts.setPasswordUrl
+    ? `
+      <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        ${escHtml(opts.agencyName)} has created an AIO Fusion account for ${escHtml(opts.companyName)}.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Your username is <strong>${escHtml(opts.username)}</strong>.
+        Click the button below to set your password and access your account.
+        This link is <strong>single-use</strong> and expires in <strong>7 days</strong>.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you weren't expecting this, you can safely ignore this email.
+      </p>
+    `
+    : `
       <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
       <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
         ${escHtml(opts.agencyName)} has created an AIO Fusion account for ${escHtml(opts.companyName)}.
@@ -384,13 +419,17 @@ export async function sendClientAccountCreatedEmail(opts: {
       <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
         If you weren't expecting this, you can safely ignore this email.
       </p>
-    `,
-    cta: { text: "Sign in to AIO Fusion", href: opts.loginUrl },
-  });
+    `;
+
+  const cta = opts.setPasswordUrl
+    ? { text: "Set your password", href: opts.setPasswordUrl }
+    : { text: "Sign in to AIO Fusion", href: opts.loginUrl };
+
+  const html = buildEmailHtml({ label: "Account Created", bodyHtml, cta });
 
   try {
     await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
-    logger.info({ toEmail: opts.toEmail }, "notify-email: client account created email sent");
+    logger.info({ toEmail: opts.toEmail, hasSetPasswordUrl: !!opts.setPasswordUrl }, "notify-email: client account created email sent");
   } catch (err) {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send client account created email (non-fatal)");
   }

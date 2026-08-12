@@ -653,6 +653,13 @@ function App() {
   const [passwordResetToken] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get("reset_token"),
   );
+  // Whether the reset_token arrived via a welcome email (?welcome=1). When
+  // true PlatformHomePage shows "Set your password" copy instead of "Choose a
+  // new password". Captured alongside reset_token before history-sync strips
+  // the query string.
+  const [isWelcomeLink] = useState<boolean>(
+    () => new URLSearchParams(window.location.search).get("welcome") === "1",
+  );
   // OAuth/verification redirect params (/?oauth_status=mfa&mfa_token=... etc).
   // Captured once on load, before the history-sync effect rewrites the URL and
   // drops the query string, then handed to PlatformHomePage as a prop. Without
@@ -939,6 +946,7 @@ function App() {
           onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
           initialNotice={sessionExpiredNotice}
           resetToken={passwordResetToken}
+          isWelcomeLink={isWelcomeLink}
           hasPassword={hasPassword}
         />
         {!session && (
