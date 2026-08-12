@@ -645,6 +645,13 @@ function App() {
   // session and the user is redirected back to sign in.
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | undefined>(undefined);
 
+  // Deep-link target section on the account settings page
+  // (/?account_section=security from security emails). Captured once on load,
+  // before the history-sync effect rewrites the URL and drops the query string.
+  const [accountSection] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("account_section"),
+  );
+
   // Team invite token from /?invite=<token> - captured once on mount (the
   // history-sync effect rewrites the URL soon after).
   const [inviteToken] = useState<string | null>(() =>
@@ -693,6 +700,13 @@ function App() {
     }
     if (params.has("needs_setup")) {
       setNeedsSetup(true);
+    }
+    if (params.has("account_section")) {
+      // Land on the account settings page (the target section is passed to
+      // SubAccountsPage via the captured accountSection state). If the user
+      // is not signed in yet, the sub-accounts guard sends them to the login
+      // page and accountSectionPending re-navigates after sign-in.
+      setView("platform-home");
     }
     if (params.has("aio_session_expired")) {
       setSessionExpiredNotice(
@@ -769,6 +783,16 @@ function App() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  // Navigate to the account settings page once the session is confirmed when
+  // the page was opened via an email deep link (/?account_section=...).
+  const accountSectionNavDone = useRef(false);
+  useEffect(() => {
+    if (!accountSection || accountSectionNavDone.current) return;
+    if (authLoading || !session) return;
+    accountSectionNavDone.current = true;
+    setView("sub-accounts");
+  }, [accountSection, authLoading, session]);
 
   // Access guard for the admin-only users page. Done in an effect (not during
   // render) and as a history-replacing redirect so Back does not loop back
@@ -1030,6 +1054,7 @@ function App() {
     };
     return (
       <SubAccountsPage
+        initialSection={accountSection ?? undefined}
         session={session}
         onBack={() => setView("platform-home")}
         onAssignProjectOwner={handleAssignProjectOwner}

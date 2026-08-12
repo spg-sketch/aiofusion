@@ -966,7 +966,7 @@ router.post("/platform/mfa/verify", loginLimiter, async (req: Request, res: Resp
               .limit(1);
             const toEmail = ownerRow?.email || accRow?.email;
             if (!toEmail) return;
-            const securitySettingsUrl = `${getAppBaseUrl()}/`;
+            const securitySettingsUrl = `${getAppBaseUrl()}/?account_section=security`;
             await sendNewTrustedDeviceEmail({
               toEmail,
               toName: ownerRow?.name || pending.u,

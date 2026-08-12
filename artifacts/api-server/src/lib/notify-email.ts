@@ -83,7 +83,7 @@ export async function sendMfaAdminResetEmail(opts: {
     return;
   }
 
-  const securityUrl = `${getAppBaseUrl()}/`;
+  const securityUrl = `${getAppBaseUrl()}/?account_section=security`;
   const subject = `Security alert: two-factor login was reset on your AIO Fusion account`;
   const text = [
     `Hi ${opts.toName},`,
@@ -208,7 +208,7 @@ export async function sendMfaChangedEmail(opts: {
     return;
   }
 
-  const securityUrl = `${getAppBaseUrl()}/`;
+  const securityUrl = `${getAppBaseUrl()}/?account_section=security`;
   const action = opts.enabled ? "enabled" : "disabled";
   const subject = `Security alert: two-factor login ${action} on your AIO Fusion account`;
 
@@ -803,7 +803,7 @@ export async function sendEmailChangedEmail(opts: {
     return;
   }
 
-  const securityUrl = `${getAppBaseUrl()}/`;
+  const securityUrl = `${getAppBaseUrl()}/?account_section=security`;
 
   // --- Notice to old address ---
   const noticeSubject = `Security alert: your AIO Fusion email address was changed`;
@@ -893,7 +893,7 @@ export async function sendPasswordChangedEmail(opts: {
     return;
   }
 
-  const securityUrl = `${getAppBaseUrl()}/`;
+  const securityUrl = `${getAppBaseUrl()}/?account_section=security`;
   const subject = `Security alert: your AIO Fusion password was changed`;
   const text = [
     `Hi ${opts.toName},`,
