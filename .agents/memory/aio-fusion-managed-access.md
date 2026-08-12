@@ -17,3 +17,4 @@ A platform_meta flag marks a client workspace as access-disabled ("managed" by t
 - Grant-by-email must refuse (409) when the contact email belongs to a human with other workspaces, and must not clear the flag unless a usable set-password token was actually issued.
 - Destructive access routes need membership-role gating (owner/team-admin only), not just subtree checks.
 - Any new sign-in surface must add the managed check.
+- Backfill for accounts created before the flag existed: the access route's `mark-managed` action (alias of revoke behaviour) + a "Mark as managed" button in the client list; there is no reliable heuristic (pre-flag managed accounts got a random password hash indistinguishable from an agency-set one).

@@ -621,7 +621,7 @@ export async function serverResetMfa(
 // client out everywhere.
 export async function serverSetClientAccess(
   username: string,
-  action: "grant" | "revoke",
+  action: "grant" | "revoke" | "mark-managed",
   password?: string,
 ): Promise<{ ok: true; emailSent?: boolean } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts/access", {

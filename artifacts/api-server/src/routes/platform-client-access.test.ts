@@ -569,6 +569,28 @@ describe("POST /api/platform/accounts/access", () => {
     expect(await managedFlagExists()).toBe(true);
   });
 
+  it("mark-managed: sets the managed flag and scrambles credentials (backfill for pre-flag managed accounts)", async () => {
+    // Pre-existing managed account: no users row, no flag - just an account
+    // with a random password that was never shared with the client.
+    expect(await managedFlagExists()).toBe(false);
+
+    const res = await callAccess({ username: CLIENT, action: "mark-managed" });
+    expect(res.status).toBe(200);
+
+    expect(await managedFlagExists()).toBe(true);
+    const [acct] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, CLIENT))
+      .limit(1);
+    expect(verifyPassword(INITIAL_PASSWORD, acct!.passwordHash)).toBe(false);
+  });
+
+  it("rejects unknown actions", async () => {
+    const res = await callAccess({ username: CLIENT, action: "toggle" });
+    expect(res.status).toBe(400);
+  });
+
   it("revoke: leaves platform_users untouched when the human belongs to other workspaces too", async () => {
     await db.insert(platformUsersTable).values({
       email: CONTACT_EMAIL,

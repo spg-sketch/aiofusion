@@ -181,6 +181,18 @@ function SubAccountsPage({
     })();
   };
 
+  // Backfill for client accounts created as managed before the flag was
+  // persisted: records the Managed badge and makes sure no credential remains.
+  const handleMarkManaged = (username: string) => {
+    if (!confirm(`Mark '${username}' as a managed account? Use this when the client was never given (or should not have) sign-in access. Any existing password will be invalidated and active sessions signed out. You can give client access back at any time.`)) return;
+    void (async () => {
+      const result = await serverSetClientAccess(username, "mark-managed");
+      if (!result.ok) { alert(result.error); return; }
+      setAccessNotice({ username, text: "Marked as managed - the client has no sign-in access." });
+      refresh();
+    })();
+  };
+
   const handleRevokeAccess = (username: string) => {
     if (!confirm(`Remove sign-in access for '${username}'? Their password will be invalidated and they will be signed out everywhere. You can give access back at any time.`)) return;
     void (async () => {
@@ -1236,13 +1248,23 @@ function SubAccountsPage({
                             <Shield size={12} /> {accessUser === u.username ? "Cancel" : "Give client access"}
                           </button>
                         ) : (
-                          <button
-                            onClick={() => handleRevokeAccess(u.username)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
-                            style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
-                          >
-                            <Lock size={12} /> Remove client access
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleRevokeAccess(u.username)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                              style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                            >
+                              <Lock size={12} /> Remove client access
+                            </button>
+                            <button
+                              onClick={() => handleMarkManaged(u.username)}
+                              title="Use this if the client account is run by your agency and was never given sign-in access."
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                              style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+                            >
+                              <Shield size={12} /> Mark as managed
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => handleArchive(u.username, true)}

@@ -3825,8 +3825,11 @@ router.post(
         res.status(400).json({ error: "Username is required." });
         return;
       }
-      if (action !== "grant" && action !== "revoke") {
-        res.status(400).json({ error: "Action must be 'grant' or 'revoke'." });
+      // "mark-managed" is the agency-facing backfill for client accounts that
+      // were created as managed before the flag existed: it records the flag
+      // and (like revoke) makes sure no sign-in credential remains usable.
+      if (action !== "grant" && action !== "revoke" && action !== "mark-managed") {
+        res.status(400).json({ error: "Action must be 'grant', 'revoke' or 'mark-managed'." });
         return;
       }
       if (target === normUsername(actor.username)) {
@@ -3930,7 +3933,10 @@ router.post(
         return;
       }
 
-      // action === "revoke": scramble the password and revoke active sessions.
+      // action === "revoke" | "mark-managed": scramble the password and
+      // revoke active sessions, then record the managed flag. mark-managed is
+      // behaviourally identical - it exists so pre-existing managed accounts
+      // (created before the flag was persisted) can be labelled truthfully.
       const scrambled = hashPassword(crypto.randomBytes(32).toString("hex"));
       await db
         .update(platformAccountsTable)
