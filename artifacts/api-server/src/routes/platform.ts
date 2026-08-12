@@ -94,7 +94,7 @@ import {
 import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMessage } from "../lib/login-lockout";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -3798,6 +3798,42 @@ router.post(
   },
 );
 
+// Best-effort lookup of the friendly names used in client-access emails:
+// the target's company/contact names and the acting agency's display name.
+async function getAccessEmailNames(target: string, actorUsername: string): Promise<{
+  contactName: string;
+  companyName: string;
+  agencyName: string;
+}> {
+  let contactName = "";
+  let companyName = target;
+  let agencyName = actorUsername;
+  try {
+    const [metaRow] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, profileKey(target)))
+      .limit(1);
+    if (metaRow?.value) {
+      const parsed = JSON.parse(metaRow.value) as { displayName?: unknown; ownerName?: unknown };
+      if (typeof parsed.displayName === "string" && parsed.displayName.trim()) companyName = parsed.displayName.trim();
+      if (typeof parsed.ownerName === "string" && parsed.ownerName.trim()) contactName = parsed.ownerName.trim();
+    }
+  } catch { /* fall back to username */ }
+  try {
+    const [actorRow] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, profileKey(normUsername(actorUsername))))
+      .limit(1);
+    if (actorRow?.value) {
+      const parsed = JSON.parse(actorRow.value) as { displayName?: unknown };
+      if (typeof parsed.displayName === "string" && parsed.displayName.trim()) agencyName = parsed.displayName.trim();
+    }
+  } catch { /* fall back to username */ }
+  return { contactName, companyName, agencyName };
+}
+
 // Grant or revoke a client account's sign-in access. Agencies use this to hand
 // a managed account over to the client (welcome set-password email, or a
 // password chosen by the agency) - or to withdraw access again (scramble the
@@ -3876,6 +3912,15 @@ router.post(
             } catch { /* non-fatal - slug login still works */ }
           }
           await setManaged(target, false);
+          // Courtesy notice to the key contact (fail-soft, never blocks).
+          if (existing.email) {
+            const names = await getAccessEmailNames(target, actor.username);
+            void sendClientAccessChangedEmail({
+              toEmail: existing.email,
+              ...names,
+              action: "restored",
+            });
+          }
           res.json({ ok: true, emailSent: false });
           return;
         }
@@ -3965,6 +4010,15 @@ router.post(
         .where(eq(platformSessionsTable.username, target));
       await clearTrustedDevices(target);
       await setManaged(target, true);
+      // Courtesy/security notice to the key contact (fail-soft, never blocks).
+      if (existing.email) {
+        const names = await getAccessEmailNames(target, actor.username);
+        void sendClientAccessChangedEmail({
+          toEmail: existing.email,
+          ...names,
+          action: "revoked",
+        });
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change client access" });

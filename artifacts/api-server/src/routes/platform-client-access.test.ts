@@ -20,6 +20,17 @@ const clientAccountCreatedCalls = vi.hoisted(
     }>,
 );
 
+const accessChangedCalls = vi.hoisted(
+  () =>
+    [] as Array<{
+      toEmail: string;
+      contactName: string;
+      companyName: string;
+      agencyName: string;
+      action: "revoked" | "restored";
+    }>,
+);
+
 // ---------------------------------------------------------------------------
 // PGlite-backed in-memory database
 // ---------------------------------------------------------------------------
@@ -267,6 +278,10 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
     clientAccountCreatedCalls.push(opts);
     return Promise.resolve();
   };
+  mock.sendClientAccessChangedEmail = (opts: (typeof accessChangedCalls)[number]) => {
+    accessChangedCalls.push(opts);
+    return Promise.resolve();
+  };
   return mock;
 });
 
@@ -328,6 +343,7 @@ describe("POST /api/platform/accounts/access", () => {
 
   beforeEach(async () => {
     clientAccountCreatedCalls.length = 0;
+    accessChangedCalls.length = 0;
 
     await db.insert(platformAccountsTable).values([
       { username: AGENCY, passwordHash: hashPassword("agencypass1"), role: "agency", status: "active" },
@@ -490,6 +506,10 @@ describe("POST /api/platform/accounts/access", () => {
     expect(verifyPassword("ClientChosen99", acct!.passwordHash)).toBe(true);
     expect(await managedFlagExists()).toBe(false);
     expect(clientAccountCreatedCalls.length).toBe(0);
+    // Courtesy "access restored" notice goes to the key contact.
+    expect(accessChangedCalls.length).toBe(1);
+    expect(accessChangedCalls[0]!.toEmail).toBe(CONTACT_EMAIL);
+    expect(accessChangedCalls[0]!.action).toBe("restored");
   });
 
   it("grant (password): rejects passwords shorter than 8 characters", async () => {
@@ -567,6 +587,12 @@ describe("POST /api/platform/accounts/access", () => {
     expect(tokens.length).toBe(0);
 
     expect(await managedFlagExists()).toBe(true);
+
+    // Courtesy/security notice goes to the key contact.
+    await flushAsync();
+    expect(accessChangedCalls.length).toBe(1);
+    expect(accessChangedCalls[0]!.toEmail).toBe(CONTACT_EMAIL);
+    expect(accessChangedCalls[0]!.action).toBe("revoked");
   });
 
   it("mark-managed: sets the managed flag and scrambles credentials (backfill for pre-flag managed accounts)", async () => {

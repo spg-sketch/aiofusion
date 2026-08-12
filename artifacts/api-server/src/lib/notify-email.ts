@@ -432,6 +432,97 @@ export async function sendClientAccountCreatedEmail(opts: {
   }
 }
 
+// Courtesy/security notice to the client's key contact when the agency
+// revokes (or restores via a directly-set password) their sign-in access.
+export async function sendClientAccessChangedEmail(opts: {
+  toEmail: string;
+  contactName: string;
+  companyName: string;
+  agencyName: string;
+  action: "revoked" | "restored";
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - client access changed email not sent");
+    return;
+  }
+
+  const greeting = opts.contactName ? `Hi ${opts.contactName},` : "Hi,";
+  const loginUrl = `${getAppBaseUrl()}/`;
+  const revoked = opts.action === "revoked";
+  const subject = revoked
+    ? `Your AIO Fusion account access has been changed by ${opts.agencyName}`
+    : `Your AIO Fusion account access has been restored by ${opts.agencyName}`;
+
+  const text = revoked
+    ? [
+        greeting,
+        ``,
+        `${opts.agencyName} has withdrawn sign-in access to the AIO Fusion account for ${opts.companyName}.`,
+        ``,
+        `You will no longer be able to sign in, and any active sessions have been signed out.`,
+        `${opts.agencyName} will continue to manage the account on your behalf.`,
+        ``,
+        `If you weren't expecting this change, please contact ${opts.agencyName}.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n")
+    : [
+        greeting,
+        ``,
+        `${opts.agencyName} has restored sign-in access to the AIO Fusion account for ${opts.companyName}.`,
+        ``,
+        `${opts.agencyName} will share your new password with you directly. Once you have it, sign in here:`,
+        ``,
+        loginUrl,
+        ``,
+        `If you weren't expecting this change, please contact ${opts.agencyName}.`,
+        ``,
+        `The AIO Fusion team`,
+      ].join("\n");
+
+  const bodyHtml = revoked
+    ? `
+      <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        ${escHtml(opts.agencyName)} has withdrawn sign-in access to the AIO Fusion account for ${escHtml(opts.companyName)}.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        You will no longer be able to sign in, and any active sessions have been signed out.
+        ${escHtml(opts.agencyName)} will continue to manage the account on your behalf.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you weren't expecting this change, please contact ${escHtml(opts.agencyName)}.
+      </p>
+    `
+    : `
+      <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
+      <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+        ${escHtml(opts.agencyName)} has restored sign-in access to the AIO Fusion account for ${escHtml(opts.companyName)}.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        ${escHtml(opts.agencyName)} will share your new password with you directly.
+        Once you have it, use the button below to sign in.
+      </p>
+      <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+        If you weren't expecting this change, please contact ${escHtml(opts.agencyName)}.
+      </p>
+    `;
+
+  const html = buildEmailHtml({
+    label: revoked ? "Account Access Changed" : "Account Access Restored",
+    bodyHtml,
+    ...(revoked ? {} : { cta: { text: "Sign in to AIO Fusion", href: loginUrl } }),
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail, action: opts.action }, "notify-email: client access changed email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail, action: opts.action }, "notify-email: failed to send client access changed email (non-fatal)");
+  }
+}
+
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;
