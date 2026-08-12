@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts, loadLastSignIn, saveLastSignIn } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts, loadLastSignIn, saveLastSignIn, markPendingSso, clearPendingSso } from "../lib/auth";
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
@@ -143,6 +143,8 @@ function PlatformHomePage({
     const status = params.get("oauth_status");
     const linkGoogle = params.get("link_google");
     if (!status && !linkGoogle && !params.get("verify_status")) return;
+    // A failed/cancelled SSO attempt must not overwrite the remembered method.
+    if (status && status !== "ok") clearPendingSso();
     onOauthParamsConsumed?.();
     // Clean the OAuth params from the URL without a reload
     window.history.replaceState({}, "", window.location.pathname + window.location.hash);
@@ -672,7 +674,7 @@ function PlatformHomePage({
                 <div className="flex flex-col sm:flex-row gap-3 mb-5">
                   <a
                     href={`${apiBase()}/api/platform/auth/google`}
-                    onClick={() => saveLastSignIn({ method: "google" })}
+                    onClick={() => markPendingSso("google")}
                     className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg border"
                     style={{ background: "white", color: "#3c4043", borderColor: "#dadce0" }}
                   >
@@ -686,7 +688,7 @@ function PlatformHomePage({
                   </a>
                   <a
                     href={`${apiBase()}/api/platform/auth/microsoft`}
-                    onClick={() => saveLastSignIn({ method: "microsoft" })}
+                    onClick={() => markPendingSso("microsoft")}
                     className="flex items-center justify-center gap-3 flex-1 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg border"
                     style={{ background: "white", color: "#0a1628", borderColor: "#e2e8f0" }}
                   >

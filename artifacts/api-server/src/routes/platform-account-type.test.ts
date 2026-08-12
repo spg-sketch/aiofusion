@@ -307,15 +307,16 @@ describe("POST /api/platform/settings/account-type", () => {
     expect(acct?.role).toBe("agency");
   });
 
-  it("emails the owner when the type actually changes (self-service)", async () => {
+  it("emails the owner when the type actually changes (self-service, email resolved from DB)", async () => {
     vi.mocked(sendAccountTypeChangedEmail).mockClear();
     await seed("emailed-agency", "agency", true);
-    const app = makeApp({
-      username: "emailed-agency",
-      role: "agency",
-      membershipRole: null,
-      email: "owner@emailed.test",
-    } as any);
+    // The session account does NOT carry an email in production - the route
+    // must resolve it from the accounts table itself.
+    await db
+      .update(platformAccountsTable)
+      .set({ email: "owner@emailed.test" })
+      .where(eq(platformAccountsTable.username, "emailed-agency"));
+    const app = makeApp({ username: "emailed-agency", role: "agency", membershipRole: null });
     const srv = app.listen(0);
     await new Promise<void>((r) => srv.once("listening", r));
     const { port } = srv.address() as AddressInfo;

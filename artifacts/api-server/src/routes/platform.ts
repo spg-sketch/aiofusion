@@ -2035,14 +2035,41 @@ router.post("/platform/settings/account-type", requirePlatformAuth, async (req: 
     logger.info({ username, accountType }, "settings/account-type: role updated");
     // Confirmation email to the owner - a type change reshapes the whole
     // dashboard, so it warrants the same notice as other account changes.
-    if (account.email && currentRole !== accountType) {
-      void sendAccountTypeChangedEmail({
-        toEmail: account.email,
-        contactName: account.username,
-        previousType: currentRole,
-        newType: accountType,
-        changedByAdmin: false,
-      });
+    // req.account does not carry the email, so resolve it: prefer the human
+    // user record, fall back to the legacy account row.
+    if (currentRole !== accountType) {
+      void (async () => {
+        try {
+          let toEmail: string | null = account.email ?? null;
+          if (!toEmail && account.userId) {
+            const [u] = await db
+              .select({ email: platformUsersTable.email })
+              .from(platformUsersTable)
+              .where(eq(platformUsersTable.id, account.userId))
+              .limit(1);
+            toEmail = u?.email ?? null;
+          }
+          if (!toEmail) {
+            const [a] = await db
+              .select({ email: platformAccountsTable.email })
+              .from(platformAccountsTable)
+              .where(eq(platformAccountsTable.username, username))
+              .limit(1);
+            toEmail = a?.email ?? null;
+          }
+          if (toEmail) {
+            await sendAccountTypeChangedEmail({
+              toEmail,
+              contactName: account.username,
+              previousType: currentRole,
+              newType: accountType,
+              changedByAdmin: false,
+            });
+          }
+        } catch (err) {
+          logger.warn({ err, username }, "settings/account-type: failed to send confirmation email (non-fatal)");
+        }
+      })();
     }
     res.json({ ok: true, role: accountType });
   } catch (err) {
@@ -2428,8 +2455,11 @@ router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
 });
 
 // POST callback: the real code redemption, triggered by the interstitial's
-// auto-submit form. Scanners never POST, so the authorization code is safe.
+// auto-submit form (or the no-JS Continue button). Some aggressive scanners
+// do submit visible forms, so known scanner user-agents are rejected here
+// too - they get an empty 200 and the one-time code stays unredeemed.
 router.post("/platform/auth/google/callback", async (req: Request, res: Response) => {
+  if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
   const origin = getFrontendOrigin(req);
   try {
     const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -2777,8 +2807,10 @@ router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) =>
   res.status(200).send(buildOauthInterstitial(postUrl, code, state, nonce));
 });
 
-// POST callback: actual code redemption for Microsoft.
+// POST callback: actual code redemption for Microsoft. Scanner user-agents
+// are rejected before redemption (see the Google POST callback).
 router.post("/platform/auth/microsoft/callback", async (req: Request, res: Response) => {
+  if (SCANNER_UA_RE.test(req.headers["user-agent"] ?? "")) { res.status(200).end(); return; }
   const origin = getFrontendOrigin(req);
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;

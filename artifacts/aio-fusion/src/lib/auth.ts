@@ -79,6 +79,27 @@ export function loadLastSignIn(): LastSignIn | null {
   }
 }
 
+// SSO sign-ins redirect away before we know they succeeded, so the method is
+// staged in sessionStorage on click and only promoted to LAST_SIGNIN_KEY once
+// the OAuth redirect comes back with a success status.
+const PENDING_SSO_KEY = "aio.auth.pendingSso.v1";
+
+export function markPendingSso(method: "google" | "microsoft"): void {
+  try { sessionStorage.setItem(PENDING_SSO_KEY, method); } catch { /* noop */ }
+}
+
+export function confirmPendingSso(): void {
+  try {
+    const m = sessionStorage.getItem(PENDING_SSO_KEY);
+    sessionStorage.removeItem(PENDING_SSO_KEY);
+    if (m === "google" || m === "microsoft") saveLastSignIn({ method: m });
+  } catch { /* noop */ }
+}
+
+export function clearPendingSso(): void {
+  try { sessionStorage.removeItem(PENDING_SSO_KEY); } catch { /* noop */ }
+}
+
 export function saveLastSignIn(update: LastSignIn): void {
   try {
     const prev = loadLastSignIn() ?? {};

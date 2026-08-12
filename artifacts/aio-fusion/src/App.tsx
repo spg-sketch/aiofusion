@@ -23,6 +23,7 @@ import {
   getSubAccounts as getLocalSubAccounts,
   refreshAccountsCache,
   canCreateSubAccounts,
+  confirmPendingSso,
   bootstrapAuth,
   fetchAccountProfile,
   serverGetMyInvites,
@@ -765,6 +766,11 @@ function App() {
     }
     if (params.has("needs_setup")) {
       setNeedsSetup(true);
+    }
+    // SSO round-trip succeeded - promote the staged sign-in method to the
+    // remembered "last sign-in" record. Failure statuses never promote.
+    if (params.get("oauth_status") === "ok") {
+      confirmPendingSso();
     }
     if (params.has("account_section")) {
       // Land on the account settings page (the target section is passed to
