@@ -7,7 +7,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 const mockGetImpersonationState = vi.fn();
 const mockServerExitImpersonation = vi.fn();
 
-vi.mock("../lib/auth", () => ({
+vi.mock("../lib/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/auth")>()),
   getImpersonationState: (...args: unknown[]) => mockGetImpersonationState(...args),
   serverExitImpersonation: (...args: unknown[]) => mockServerExitImpersonation(...args),
   getSession: () => ({ username: "client-account", role: "client" }),

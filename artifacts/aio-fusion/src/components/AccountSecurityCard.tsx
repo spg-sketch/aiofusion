@@ -17,16 +17,31 @@ const accent = "#C8497A";
 /** Sessions, two-factor, change/set password and account deletion - rendered
  *  as a white card on the My Account page (moved from the platform home card). */
 export function AccountSecurityCard({ session, onSignOut }: { session: LocalSession; onSignOut: () => void }) {
-  // Whether the signed-in user has a password (SSO-only accounts don't).
+  // Whether the signed-in user has a password (SSO-only accounts don't),
+  // plus which SSO providers are linked - drives the sign-in methods list.
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
+  const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
+  const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { hasPassword?: boolean } | null) => {
+      .then((data: { hasPassword?: boolean; account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null } | null) => {
         if (data && typeof data.hasPassword === "boolean") setHasPassword(data.hasPassword);
+        if (data?.account) {
+          if (typeof data.account.googleLinked === "boolean") setGoogleLinked(data.account.googleLinked);
+          if (typeof data.account.microsoftLinked === "boolean") setMicrosoftLinked(data.account.microsoftLinked);
+        }
       })
       .catch(() => { /* non-fatal */ });
   }, []);
+
+  // Active sign-in methods, shown once we know at least one flag for certain.
+  const methodsKnown = hasPassword !== null || googleLinked !== null || microsoftLinked !== null;
+  const activeMethods: string[] = [
+    ...(hasPassword ? ["Email & password"] : []),
+    ...(googleLinked ? ["Google"] : []),
+    ...(microsoftLinked ? ["Microsoft"] : []),
+  ];
 
   // Sessions
   const [showSessions, setShowSessions] = useState(false);
@@ -124,6 +139,29 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Sign-in &amp; security</h2>
+
+      {/* ACTIVE SIGN-IN METHODS */}
+      {methodsKnown && activeMethods.length > 0 && (
+        <div className="mb-5">
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: vars.g500 }}>
+            Active sign-in methods
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {activeMethods.map((m) => (
+              <span
+                key={m}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+                style={{ background: vars.g50, border: `1px solid ${vars.g200}`, color: ink }}
+              >
+                <CheckCircle2 size={13} style={{ color: "#1B7A3E" }} /> {m}
+              </span>
+            ))}
+          </div>
+          <p className="text-[12px] font-light mt-2 leading-[1.6]" style={{ color: vars.g600 }}>
+            These are the ways you can currently sign in to this account.
+          </p>
+        </div>
+      )}
 
       {/* ACCOUNT LOGIN SESSIONS */}
       <div>

@@ -78,7 +78,14 @@ vi.mock("@workspace/db", async () => {
   return { db, ...schema };
 });
 
+// Spy on the notify-email helpers without losing the rest of the module.
+vi.mock("../lib/notify-email", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/notify-email")>();
+  return { ...actual, sendAccountTypeChangedEmail: vi.fn(async () => {}) };
+});
+
 import { db, platformAccountsTable, platformCompaniesTable } from "@workspace/db";
+import { sendAccountTypeChangedEmail } from "../lib/notify-email";
 import { eq } from "drizzle-orm";
 import platformRouter from "./platform";
 
@@ -277,6 +284,82 @@ describe("POST /api/platform/settings/account-type", () => {
     });
     srv.close();
     expect(res.status).toBe(200);
+  });
+
+  it("lets a legacy 'user' role account pick a type for the first time", async () => {
+    await db.insert(platformAccountsTable).values({ username: "legacy-untyped", passwordHash: "", role: "user", status: "active" });
+    await db.insert(platformCompaniesTable).values({ id: "legacy-untyped", slug: "legacy-untyped", role: "user" });
+    const app = makeApp({ username: "legacy-untyped", role: "user", membershipRole: null });
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/settings/account-type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountType: "agency" }),
+    });
+    srv.close();
+    expect(res.status).toBe(200);
+    const [acct] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, "legacy-untyped"));
+    expect(acct?.role).toBe("agency");
+  });
+
+  it("emails the owner when the type actually changes (self-service)", async () => {
+    vi.mocked(sendAccountTypeChangedEmail).mockClear();
+    await seed("emailed-agency", "agency", true);
+    const app = makeApp({
+      username: "emailed-agency",
+      role: "agency",
+      membershipRole: null,
+      email: "owner@emailed.test",
+    } as any);
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/settings/account-type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountType: "client" }),
+    });
+    srv.close();
+    expect(res.status).toBe(200);
+    expect(sendAccountTypeChangedEmail).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendAccountTypeChangedEmail).mock.calls[0][0]).toMatchObject({
+      toEmail: "owner@emailed.test",
+      previousType: "agency",
+      newType: "client",
+      changedByAdmin: false,
+    });
+  });
+
+  it("emails the owner when an admin changes their account type", async () => {
+    vi.mocked(sendAccountTypeChangedEmail).mockClear();
+    await seed("admin-actor", "admin");
+    await db.insert(platformAccountsTable).values({ username: "target-agency", passwordHash: "", role: "agency", status: "active", email: "owner@target.test" });
+    await db.insert(platformCompaniesTable).values({ id: "target-agency", slug: "target-agency", role: "agency" });
+    // membershipRole must be undefined or "owner" - a master account with a
+    // null membershipRole is treated as a restricted support subrole.
+    const app = makeApp({ username: "admin-actor", role: "admin", membershipRole: "owner" });
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/accounts/role`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "target-agency", role: "client" }),
+    });
+    srv.close();
+    expect(res.status).toBe(200);
+    expect(sendAccountTypeChangedEmail).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendAccountTypeChangedEmail).mock.calls[0][0]).toMatchObject({
+      toEmail: "owner@target.test",
+      previousType: "agency",
+      newType: "client",
+      changedByAdmin: true,
+    });
   });
 
   it("works for explicit owner membershipRole", async () => {

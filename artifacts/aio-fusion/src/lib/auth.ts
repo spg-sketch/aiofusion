@@ -56,6 +56,37 @@ export type Impersonation = { by: string; byRole?: string };
 
 const USERS_KEY = "aio.auth.users.v3";
 const SESSION_KEY = "aio.auth.session.v3";
+// Last successful sign-in (email + method). Deliberately NOT cleared on
+// logout so the sign-in form can pre-fill for returning users. Never stores
+// passwords or tokens.
+const LAST_SIGNIN_KEY = "aio.auth.lastSignIn.v1";
+
+export type LastSignIn = { email?: string; method?: "password" | "google" | "microsoft" };
+
+export function loadLastSignIn(): LastSignIn | null {
+  try {
+    const raw = localStorage.getItem(LAST_SIGNIN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const p = parsed as Record<string, unknown>;
+    const out: LastSignIn = {};
+    if (typeof p.email === "string" && p.email.length <= 200) out.email = p.email;
+    if (p.method === "password" || p.method === "google" || p.method === "microsoft") out.method = p.method;
+    return out.email || out.method ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastSignIn(update: LastSignIn): void {
+  try {
+    const prev = loadLastSignIn() ?? {};
+    localStorage.setItem(LAST_SIGNIN_KEY, JSON.stringify({ ...prev, ...update }));
+  } catch {
+    /* noop */
+  }
+}
 
 const DEFAULT_ADMIN: User = {
   username: "admin",

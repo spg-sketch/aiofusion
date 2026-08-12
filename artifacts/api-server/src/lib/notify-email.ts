@@ -523,6 +523,67 @@ export async function sendClientAccessChangedEmail(opts: {
   }
 }
 
+/** Tell the account owner their account type (Agency/Partner vs Client) was
+ *  changed - either by an administrator or via the settings page. */
+export async function sendAccountTypeChangedEmail(opts: {
+  toEmail: string;
+  contactName: string;
+  previousType: string;
+  newType: string;
+  changedByAdmin: boolean;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - account type changed email not sent");
+    return;
+  }
+
+  const label = (t: string) =>
+    t === "agency" ? "Agency / Partner" : t === "client" ? "Client" : t === "admin" ? "Administrator" : "Standard";
+  const greeting = opts.contactName ? `Hi ${opts.contactName},` : "Hi,";
+  const who = opts.changedByAdmin ? "An AIO Fusion administrator" : "You (or someone signed in as the account owner)";
+  const subject = `Your AIO Fusion account type is now ${label(opts.newType)}`;
+  const loginUrl = `${getAppBaseUrl()}/`;
+
+  const text = [
+    greeting,
+    ``,
+    `${who} changed your AIO Fusion account type from ${label(opts.previousType)} to ${label(opts.newType)}.`,
+    ``,
+    `This controls how your dashboard is set up - whether you manage multiple clients or one brand.`,
+    ``,
+    `If you weren't expecting this change, please contact support straight away.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const bodyHtml = `
+    <p style="margin: 0 0 12px 0;">${escHtml(greeting)}</p>
+    <p style="margin: 0 0 16px 0; font-size: 17px; font-weight: 600; color: #102B36;">
+      ${escHtml(who)} changed your AIO Fusion account type from ${escHtml(label(opts.previousType))} to ${escHtml(label(opts.newType))}.
+    </p>
+    <p style="margin: 0 0 16px 0;">
+      This controls how your dashboard is set up - whether you manage multiple clients or one brand.
+    </p>
+    <p style="margin: 24px 0 0 0; font-size: 13px; color: #475569;">
+      If you weren't expecting this change, please contact support straight away.
+    </p>
+  `;
+
+  const html = buildEmailHtml({
+    label: "Account Type Changed",
+    bodyHtml,
+    cta: { text: "Sign in to AIO Fusion", href: loginUrl },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail, newType: opts.newType }, "notify-email: account type changed email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send account type changed email (non-fatal)");
+  }
+}
+
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;

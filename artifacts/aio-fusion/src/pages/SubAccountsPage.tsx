@@ -309,7 +309,9 @@ function SubAccountsPage({
 
   // Account Type section state
   const isOwner = session.membershipRole == null || session.membershipRole === "owner";
-  const isAgencyOrClient = session.role === "agency" || session.role === "client";
+  // Legacy accounts (role "user", created before account types existed) may
+  // pick a type for the first time, so they get the selector too.
+  const isAgencyOrClient = session.role === "agency" || session.role === "client" || session.role === "user";
   const [selectedType, setSelectedType] = useState<"agency" | "client" | null>(null);
   const [typeChanging, setTypeChanging] = useState(false);
   const [typeError, setTypeError] = useState<string | null>(null);
@@ -764,7 +766,9 @@ function SubAccountsPage({
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Account type</h2>
           <p className="text-[13px] font-light mb-5 leading-[1.7]" style={{ color: vars.g600 }}>
-            Controls how your dashboard is set up - whether you manage multiple clients or one brand.
+            {session.role === "user"
+              ? "Your account was created before account types existed - choose the one that fits how you work."
+              : "Controls how your dashboard is set up - whether you manage multiple clients or one brand."}
           </p>
           {!isAgencyOrClient ? (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>

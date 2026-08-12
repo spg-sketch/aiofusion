@@ -94,7 +94,7 @@ import {
 import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMessage } from "../lib/login-lockout";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
-import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, sendAccountTypeChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
@@ -1982,10 +1982,11 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
 router.post("/platform/settings/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    // Only agency/client accounts may switch type. Admins and legacy "user"
-    // accounts are excluded.
+    // Agency/client accounts may switch type, and legacy "user" accounts
+    // (created before account types existed) may pick one for the first
+    // time. Admins are excluded.
     const currentRole = normalizeRole(account.role);
-    if (currentRole !== "agency" && currentRole !== "client") {
+    if (currentRole !== "agency" && currentRole !== "client" && currentRole !== "user") {
       res.status(403).json({ error: "Only Agency/Partner or Client accounts can change account type." });
       return;
     }
@@ -2032,6 +2033,17 @@ router.post("/platform/settings/account-type", requirePlatformAuth, async (req: 
       .where(eq(platformCompaniesTable.slug, username));
 
     logger.info({ username, accountType }, "settings/account-type: role updated");
+    // Confirmation email to the owner - a type change reshapes the whole
+    // dashboard, so it warrants the same notice as other account changes.
+    if (account.email && currentRole !== accountType) {
+      void sendAccountTypeChangedEmail({
+        toEmail: account.email,
+        contactName: account.username,
+        previousType: currentRole,
+        newType: accountType,
+        changedByAdmin: false,
+      });
+    }
     res.json({ ok: true, role: accountType });
   } catch (err) {
     logger.error({ err }, "settings/account-type: unexpected error");
@@ -2295,10 +2307,15 @@ function buildOauthInterstitial(postAction: string, code: string, state: string,
     `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc}` +
     `p{color:#374151;font-size:15px}</style></head><body>` +
     `<p>Completing sign-in, please wait\u2026</p>` +
-    `<noscript><p>JavaScript is required to complete sign-in. <a href="/?oauth_status=error&amp;oauth_msg=no_js">Return to sign-in</a></p></noscript>` +
     `<form id="f" method="POST" action="${safeAction}">` +
     `<input type="hidden" name="code" value="${safeCode}">` +
     `<input type="hidden" name="state" value="${safeState}">` +
+    // No-JS fallback: a real submit button inside the form. Scanners still do
+    // not click buttons, so the one-time code remains safe; human users
+    // without JavaScript can complete the hop themselves.
+    `<noscript><p style="text-align:center">JavaScript is off, so press the button to finish signing in.</p>` +
+    `<p style="text-align:center"><button type="submit" style="padding:10px 28px;border-radius:10px;border:0;background:#C8497A;color:#fff;font-size:15px;font-weight:700;cursor:pointer">Continue</button></p>` +
+    `<p style="text-align:center"><a href="/?oauth_status=error&amp;oauth_msg=no_js" style="color:#374151;font-size:13px">Return to sign-in</a></p></noscript>` +
     `</form><script nonce="${htmlAttrEncode(nonce)}">document.getElementById('f').submit();</script></body></html>`;
 }
 
@@ -4873,6 +4890,17 @@ router.post(
         "account",
         { previousRole: prevRole, newRole },
       );
+      // Tell the account owner by email. Fire-and-forget - the role change
+      // has already been committed, so a mail failure must not fail the API.
+      if (existing.email) {
+        void sendAccountTypeChangedEmail({
+          toEmail: existing.email,
+          contactName: existing.username,
+          previousType: prevRole,
+          newType: newRole,
+          changedByAdmin: true,
+        });
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change account role" });
