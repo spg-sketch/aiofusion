@@ -34,3 +34,9 @@ description: Schema, API, and frontend patterns for email verification, account 
 - Impersonation guard isImpersonatedRequest blocks credential/destructive routes incl. /platform/accounts/password and reset-mfa (found by review as bypass).
 - Suspension cascade uses `suspended-via:<child>` meta flags; explicit block deletes the flag so parent-unblock never restores; master/self cannot be blocked.
 - Billing details on platform_companies (billingEmail/vatNumber); actor's OWN membership role must pass canEditBillingDetails even when target is a managed descendant (canManage alone is not enough).
+
+## Wave 2 gotchas (Aug 2026)
+- A master/admin account with `membershipRole: null` is classified as a restricted "support" subrole by `masterSubrole()` (only `undefined` or `"owner"` count as owner). Injected test accounts must use `membershipRole: "owner"`.
+- `req.account` never carries `email` in production sessions - routes that email the actor must resolve it from platform_users (via userId) or platform_accounts.
+- SSO "last sign-in method" is staged in sessionStorage on button click (`markPendingSso`) and only promoted to localStorage when the redirect returns `oauth_status=ok` (`confirmPendingSso` in App.tsx); failure statuses clear the pending marker.
+- Both OAuth POST callbacks reject scanner user-agents (SCANNER_UA_RE) since the no-JS Continue button means form-submitting scanners could redeem the one-time code.
