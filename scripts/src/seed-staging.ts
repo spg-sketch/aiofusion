@@ -391,7 +391,7 @@ async function printSummary(): Promise<void> {
   console.log("[seed-staging]");
   for (const account of ACCOUNTS) {
     console.log(`[seed-staging]   ${account.role.padEnd(8)} login: ${account.username}`);
-    console.log(`[seed-staging]            password: ${account.password}`);
+    console.log(`[seed-staging]            password: [set — see replit.md]`);
   }
   console.log("[seed-staging]");
   console.log("[seed-staging] Projects seeded:");
