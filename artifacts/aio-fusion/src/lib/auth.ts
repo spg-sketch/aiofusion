@@ -623,13 +623,31 @@ export async function serverSetClientAccess(
   username: string,
   action: "grant" | "revoke" | "mark-managed",
   password?: string,
-): Promise<{ ok: true; emailSent?: boolean } | { ok: false; error: string }> {
+  opts?: { confirmRecentSignIn?: boolean },
+): Promise<
+  | { ok: true; emailSent?: boolean }
+  // When the client signed in recently the server refuses destructive
+  // actions with 409 until the caller resubmits with confirmRecentSignIn.
+  | { ok: false; error: string; requiresConfirmation?: boolean; lastSignInAt?: string }
+> {
   const { ok, json } = await postJson("/api/platform/accounts/access", {
     username,
     action,
     ...(password ? { password } : {}),
+    ...(opts?.confirmRecentSignIn ? { confirmRecentSignIn: true } : {}),
   });
-  if (!ok) return { ok: false, error: json?.error || "Failed to change client access." };
+  if (!ok) {
+    const j = json as { error?: string; requiresConfirmation?: boolean; lastSignInAt?: string } | null;
+    if (j?.requiresConfirmation && typeof j.lastSignInAt === "string") {
+      return {
+        ok: false,
+        error: j.error || "This client signed in recently.",
+        requiresConfirmation: true,
+        lastSignInAt: j.lastSignInAt,
+      };
+    }
+    return { ok: false, error: j?.error || "Failed to change client access." };
+  }
   await refreshAccountsCache();
   return { ok: true, emailSent: (json as { emailSent?: boolean })?.emailSent };
 }

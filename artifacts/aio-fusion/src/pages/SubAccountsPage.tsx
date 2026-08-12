@@ -244,12 +244,28 @@ function SubAccountsPage({
     })();
   };
 
+  /** Human-friendly phrase for how recently the client last signed in. */
+  const describeLastSignIn = (iso: string): string => {
+    const then = new Date(iso).getTime();
+    if (!Number.isFinite(then)) return "recently";
+    const days = Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000));
+    if (days <= 0) return "today";
+    if (days === 1) return "yesterday";
+    return `${days} days ago`;
+  };
+
   // Backfill for client accounts created as managed before the flag was
   // persisted: records the Managed badge and makes sure no credential remains.
   const handleMarkManaged = (username: string) => {
     if (!confirm(`Mark '${username}' as a managed account? Use this when the client was never given (or should not have) sign-in access. Any existing password will be invalidated and active sessions signed out. You can give client access back at any time.`)) return;
     void (async () => {
-      const result = await serverSetClientAccess(username, "mark-managed");
+      let result = await serverSetClientAccess(username, "mark-managed");
+      // The server warns when the client signed in recently - they appear to
+      // be actively using the account, so ask before locking them out.
+      if (!result.ok && result.requiresConfirmation && result.lastSignInAt) {
+        if (!confirm(`Heads up: '${username}' last signed in ${describeLastSignIn(result.lastSignInAt)}, so the client appears to be actively using this account. Marking it as managed will lock them out immediately. Continue anyway?`)) return;
+        result = await serverSetClientAccess(username, "mark-managed", undefined, { confirmRecentSignIn: true });
+      }
       if (!result.ok) { alert(result.error); return; }
       setAccessNotice({ username, text: "Marked as managed - the client has no sign-in access." });
       refresh();
@@ -259,7 +275,11 @@ function SubAccountsPage({
   const handleRevokeAccess = (username: string) => {
     if (!confirm(`Remove sign-in access for '${username}'? Their password will be invalidated and they will be signed out everywhere. You can give access back at any time.`)) return;
     void (async () => {
-      const result = await serverSetClientAccess(username, "revoke");
+      let result = await serverSetClientAccess(username, "revoke");
+      if (!result.ok && result.requiresConfirmation && result.lastSignInAt) {
+        if (!confirm(`Heads up: '${username}' last signed in ${describeLastSignIn(result.lastSignInAt)}, so the client appears to be actively using this account. Removing access will sign them out everywhere. Continue anyway?`)) return;
+        result = await serverSetClientAccess(username, "revoke", undefined, { confirmRecentSignIn: true });
+      }
       if (!result.ok) { alert(result.error); return; }
       setAccessNotice({ username, text: "Client access removed - this is now a managed account." });
       refresh();

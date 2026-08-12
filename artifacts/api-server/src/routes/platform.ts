@@ -210,6 +210,25 @@ async function pickLoginMembership(
 const MANAGED_LOGIN_ERROR =
   "This account is managed by your agency. Contact them for access.";
 
+// Recent-sign-in warning window: destructive access changes (revoke /
+// mark-managed) on a client who signed in within this window require an
+// explicit confirmation from the agency, so an actively-signing-in client
+// isn't locked out by accident. Shared by both the "Remove client access"
+// and "Mark as managed" flows.
+const RECENT_SIGN_IN_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Most recent sign-in we know about for an account: the newest session row.
+// (Sessions are deleted on logout/revoke, so this reflects active usage.)
+async function getLastSignInAt(username: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ createdAt: platformSessionsTable.createdAt })
+    .from(platformSessionsTable)
+    .where(eq(platformSessionsTable.username, normUsername(username)))
+    .orderBy(desc(platformSessionsTable.createdAt))
+    .limit(1);
+  return row?.createdAt ?? null;
+}
+
 async function setManaged(username: string, managed: boolean): Promise<void> {
   const key = managedKey(username);
   if (managed) {
@@ -3884,6 +3903,26 @@ router.post(
       if (normalizeRole(existing.role) !== "client") {
         res.status(400).json({ error: "Access can only be changed on client accounts." });
         return;
+      }
+
+      // Destructive actions scramble the password and sign the client out
+      // everywhere. When the client signed in recently they are probably
+      // actively using the account, so surface the last sign-in and require
+      // an explicit confirmation (resubmit with confirmRecentSignIn: true)
+      // before proceeding.
+      if (
+        (action === "revoke" || action === "mark-managed") &&
+        req.body?.confirmRecentSignIn !== true
+      ) {
+        const lastSignInAt = await getLastSignInAt(target);
+        if (lastSignInAt && Date.now() - lastSignInAt.getTime() < RECENT_SIGN_IN_WINDOW_MS) {
+          res.status(409).json({
+            requiresConfirmation: true,
+            lastSignInAt: lastSignInAt.toISOString(),
+            error: "This client signed in recently. Confirm to remove their access anyway.",
+          });
+          return;
+        }
       }
 
       if (action === "grant") {

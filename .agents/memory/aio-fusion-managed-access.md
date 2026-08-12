@@ -18,3 +18,8 @@ A platform_meta flag marks a client workspace as access-disabled ("managed" by t
 - Destructive access routes need membership-role gating (owner/team-admin only), not just subtree checks.
 - Any new sign-in surface must add the managed check.
 - Backfill for accounts created before the flag existed: the access route's `mark-managed` action (alias of revoke behaviour) + a "Mark as managed" button in the client list; there is no reliable heuristic (pre-flag managed accounts got a random password hash indistinguishable from an agency-set one).
+
+## Recent-sign-in confirmation gate
+Destructive access actions (revoke, mark-managed) on POST /platform/accounts/access return 409 `{requiresConfirmation, lastSignInAt}` when the client's newest platform_sessions row is <30 days old, unless the body has `confirmRecentSignIn: true`. Signal = max(sessions.createdAt) (sessions vanish on logout; task for durable last-sign-in is separate). Client double-confirm lives in SubAccountsPage handlers via serverSetClientAccess opts.
+**Why:** so an agency tidying "Mark as managed" badges can't silently lock out an actively-signing-in client.
+**How to apply:** any new destructive credential action on client accounts should reuse this gate; note impersonation ("View account") also creates a session row for the client, so warnings can be conservative false-positives.

@@ -556,7 +556,16 @@ describe("POST /api/platform/accounts/access", () => {
       expiresAt: new Date(Date.now() + 86400000),
     });
 
-    const res = await callAccess({ username: CLIENT, action: "revoke" });
+    // The fresh session above trips the recent-sign-in warning first.
+    const warned = await callAccess({ username: CLIENT, action: "revoke" });
+    expect(warned.status).toBe(409);
+    const warnedBody = (await warned.json()) as { requiresConfirmation?: boolean; lastSignInAt?: string };
+    expect(warnedBody.requiresConfirmation).toBe(true);
+    expect(typeof warnedBody.lastSignInAt).toBe("string");
+    // Nothing destructive happened yet.
+    expect(await managedFlagExists()).toBe(false);
+
+    const res = await callAccess({ username: CLIENT, action: "revoke", confirmRecentSignIn: true });
     expect(res.status).toBe(200);
 
     const [acct] = await db
@@ -610,6 +619,46 @@ describe("POST /api/platform/accounts/access", () => {
       .where(eq(platformAccountsTable.username, CLIENT))
       .limit(1);
     expect(verifyPassword(INITIAL_PASSWORD, acct!.passwordHash)).toBe(false);
+  });
+
+  it("mark-managed: warns with 409 + lastSignInAt when the client signed in recently, proceeds with confirmRecentSignIn", async () => {
+    await db.insert(platformSessionsTable).values({
+      sid: "mark-managed-recent-sid",
+      username: CLIENT,
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+
+    const warned = await callAccess({ username: CLIENT, action: "mark-managed" });
+    expect(warned.status).toBe(409);
+    const body = (await warned.json()) as { requiresConfirmation?: boolean; lastSignInAt?: string };
+    expect(body.requiresConfirmation).toBe(true);
+    expect(typeof body.lastSignInAt).toBe("string");
+    // The warning must not have changed anything.
+    expect(await managedFlagExists()).toBe(false);
+    const [acctBefore] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, CLIENT))
+      .limit(1);
+    expect(verifyPassword(INITIAL_PASSWORD, acctBefore!.passwordHash)).toBe(true);
+
+    const confirmed = await callAccess({ username: CLIENT, action: "mark-managed", confirmRecentSignIn: true });
+    expect(confirmed.status).toBe(200);
+    expect(await managedFlagExists()).toBe(true);
+  });
+
+  it("mark-managed: no warning when the last sign-in is outside the recent window", async () => {
+    // A session created 60 days ago - long outside the 30-day window.
+    await db.insert(platformSessionsTable).values({
+      sid: "mark-managed-old-sid",
+      username: CLIENT,
+      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+
+    const res = await callAccess({ username: CLIENT, action: "mark-managed" });
+    expect(res.status).toBe(200);
+    expect(await managedFlagExists()).toBe(true);
   });
 
   it("rejects unknown actions", async () => {
