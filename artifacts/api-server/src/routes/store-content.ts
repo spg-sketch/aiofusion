@@ -256,8 +256,21 @@ router.put(
           releaseChannel: releaseChannel ?? null,
           source: source ?? null,
         })
-        .where(eq(archiveItemsTable.id, id))
+        // Atomic ownership-scoped write: re-assert the owner in the UPDATE
+        // itself so a concurrent owner change can't land the write on a
+        // record the caller is no longer entitled to modify (TOCTOU guard).
+        .where(
+          and(
+            eq(archiveItemsTable.id, id),
+            eq(archiveItemsTable.owner, existing[0].owner),
+          ),
+        )
         .returning();
+
+      if (!updated) {
+        res.status(409).json({ error: "Conflict" });
+        return;
+      }
 
       res.json({ ok: true, item: updated });
     } catch {
@@ -296,10 +309,23 @@ router.delete(
         return;
       }
 
-      await db
+      // Atomic ownership-scoped soft-delete (TOCTOU guard): the owner filter
+      // rides in the same SQL statement as the write.
+      const deleted = await db
         .update(archiveItemsTable)
         .set({ deletedAt: new Date() })
-        .where(eq(archiveItemsTable.id, id));
+        .where(
+          and(
+            eq(archiveItemsTable.id, id),
+            eq(archiveItemsTable.owner, existing[0].owner),
+          ),
+        )
+        .returning({ id: archiveItemsTable.id });
+
+      if (!deleted[0]) {
+        res.status(409).json({ error: "Conflict" });
+        return;
+      }
 
       res.json({ ok: true });
     } catch {
@@ -498,8 +524,19 @@ router.put(
           bodyCopy: bodyCopy ?? null,
           actionNotes: actionNotes ?? null,
         })
-        .where(eq(plannerItemsTable.id, id))
+        // Atomic ownership-scoped write (TOCTOU guard); see archive PUT.
+        .where(
+          and(
+            eq(plannerItemsTable.id, id),
+            eq(plannerItemsTable.owner, existing[0].owner),
+          ),
+        )
         .returning();
+
+      if (!updated) {
+        res.status(409).json({ error: "Conflict" });
+        return;
+      }
 
       res.json({ ok: true, item: updated });
     } catch {
@@ -538,10 +575,22 @@ router.delete(
         return;
       }
 
-      await db
+      // Atomic ownership-scoped soft-delete (TOCTOU guard); see archive DELETE.
+      const deleted = await db
         .update(plannerItemsTable)
         .set({ deletedAt: new Date() })
-        .where(eq(plannerItemsTable.id, id));
+        .where(
+          and(
+            eq(plannerItemsTable.id, id),
+            eq(plannerItemsTable.owner, existing[0].owner),
+          ),
+        )
+        .returning({ id: plannerItemsTable.id });
+
+      if (!deleted[0]) {
+        res.status(409).json({ error: "Conflict" });
+        return;
+      }
 
       res.json({ ok: true });
     } catch {
