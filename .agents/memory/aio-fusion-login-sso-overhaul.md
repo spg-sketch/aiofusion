@@ -27,3 +27,10 @@ description: Schema, API, and frontend patterns for email verification, account 
 ## Email base URL
 - `getAppBaseUrl()` reads `CANONICAL_DOMAIN` env var (fallback: `https://www.aiofusion.ai`).
 - **Set `CANONICAL_DOMAIN=staging.aiofusion.ai` on staging** so verification links don't point to prod.
+
+## Task #382 hardening (Aug 2026)
+- Progressive login lockout: lib/login-lockout.ts, platform_meta key `login-lockout:<id>`; MFA failures use a separate `mfa:<username>` scope so a fresh password login cannot clear the MFA lockout; cleared only in completeMfaLogin.
+- Master sub-roles are membership-role mappings (owner->owner, admin->technical, other->support) via masterSubrole/isRestrictedMaster in platform-auth.ts; guards on admin write endpoints and account-management platform routes. No separate table.
+- Impersonation guard isImpersonatedRequest blocks credential/destructive routes incl. /platform/accounts/password and reset-mfa (found by review as bypass).
+- Suspension cascade uses `suspended-via:<child>` meta flags; explicit block deletes the flag so parent-unblock never restores; master/self cannot be blocked.
+- Billing details on platform_companies (billingEmail/vatNumber); actor's OWN membership role must pass canEditBillingDetails even when target is a managed descendant (canManage alone is not enough).
