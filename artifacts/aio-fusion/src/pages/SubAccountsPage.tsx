@@ -273,8 +273,16 @@ function SubAccountsPage({
   };
 
   const handleRevokeAccess = (username: string) => {
-    if (!confirm(`Remove sign-in access for '${username}'? Their password will be invalidated and they will be signed out everywhere. You can give access back at any time.`)) return;
     void (async () => {
+      // Re-fetch the account list first so the "last signed in" warning
+      // reflects the client's CURRENT session state, not a stale cache.
+      await refreshAccountsCache();
+      const target = getLocalSubAccounts(session.username)
+        .find((u) => u.username.toLowerCase() === username.toLowerCase());
+      const lastLine = target?.lastSignInAt
+        ? `They last signed in ${formatLastSignIn(target.lastSignInAt)} - removing access will interrupt their active session.`
+        : "They have never signed in (no active session found).";
+      if (!confirm(`Remove sign-in access for '${username}'?\n\n${lastLine}\n\nTheir password will be invalidated and they will be signed out everywhere. You can give access back at any time.`)) return;
       let result = await serverSetClientAccess(username, "revoke");
       if (!result.ok && result.requiresConfirmation && result.lastSignInAt) {
         if (!confirm(`Heads up: '${username}' last signed in ${describeLastSignIn(result.lastSignInAt)}, so the client appears to be actively using this account. Removing access will sign them out everywhere. Continue anyway?`)) return;
@@ -1548,6 +1556,21 @@ function SubAccountsPage({
       </div>
     </div>
   );
+}
+
+/** Human-friendly "when did they last sign in" phrase, e.g. "2 hours ago". */
+function formatLastSignIn(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "at an unknown time";
+  const diffMs = Date.now() - then;
+  if (diffMs < 60_000) return "moments ago";
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return `on ${new Date(iso).toLocaleDateString()}`;
 }
 
 export { SubAccountsPage };

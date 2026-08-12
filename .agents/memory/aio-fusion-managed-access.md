@@ -19,6 +19,7 @@ A platform_meta flag marks a client workspace as access-disabled ("managed" by t
 - Any new sign-in surface must add the managed check.
 - Backfill for accounts created before the flag existed: the access route's `mark-managed` action (alias of revoke behaviour) + a "Mark as managed" button in the client list; there is no reliable heuristic (pre-flag managed accounts got a random password hash indistinguishable from an agency-set one).
 
+**Last sign-in exposure:** the accounts list carries a per-account last sign-in derived from LIVE (unexpired) sessions only - after logout/expiry/revoke it reads as "never". The revoke warning must re-fetch accounts right before confirming, or it shows stale state.
 ## Recent-sign-in confirmation gate
 Destructive access actions (revoke, mark-managed) on POST /platform/accounts/access return 409 `{requiresConfirmation, lastSignInAt}` when the client's newest platform_sessions row is <30 days old, unless the body has `confirmRecentSignIn: true`. Signal = max(sessions.createdAt) (sessions vanish on logout; task for durable last-sign-in is separate). Client double-confirm lives in SubAccountsPage handlers via serverSetClientAccess opts.
 **Why:** so an agency tidying "Mark as managed" badges can't silently lock out an actively-signing-in client.

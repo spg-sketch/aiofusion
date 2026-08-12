@@ -107,6 +107,7 @@ function publicAccount(
   archived?: boolean,
   mfaEnabled?: boolean,
   managed?: boolean,
+  lastSignInAt?: string,
 ) {
   return {
     username: row.username,
@@ -116,7 +117,28 @@ function publicAccount(
     ...(archived ? { archived: true } : {}),
     ...(mfaEnabled ? { mfaEnabled: true } : {}),
     ...(managed ? { managed: true } : {}),
+    ...(lastSignInAt ? { lastSignInAt } : {}),
   };
+}
+
+// Most recent sign-in per account, derived from active platform_sessions
+// (created_at is when the session was issued). Accounts with no live session
+// have no entry - the client shows "never" / unknown.
+async function getLastSignIns(): Promise<Map<string, string>> {
+  const rows = await db
+    .select({
+      username: platformSessionsTable.username,
+      lastAt: sql<string>`max(${platformSessionsTable.createdAt})`,
+    })
+    .from(platformSessionsTable)
+    // Expired rows linger until lazy cleanup; they are not live sessions.
+    .where(gt(platformSessionsTable.expiresAt, new Date()))
+    .groupBy(platformSessionsTable.username);
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    if (r.lastAt) map.set(normUsername(r.username), new Date(r.lastAt).toISOString());
+  }
+  return map;
 }
 
 // Friendly display names live in the generic platform_meta key/value table
@@ -3440,11 +3462,12 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
-      const [names, archivedSet, mfaSet, managedSet] = await Promise.all([
+      const [names, archivedSet, mfaSet, managedSet, lastSignIns] = await Promise.all([
         getDisplayNames(),
         getArchivedSet(),
         getMfaEnabledSet(),
         getManagedSet(),
+        getLastSignIns().catch(() => new Map<string, string>()),
       ]);
       res.json({
         accounts: filtered.map((r) =>
@@ -3454,6 +3477,7 @@ router.get(
             archivedSet.has(normUsername(r.username)),
             mfaSet.has(normUsername(r.username)),
             managedSet.has(normUsername(r.username)),
+            lastSignIns.get(normUsername(r.username)),
           ),
         ),
       });

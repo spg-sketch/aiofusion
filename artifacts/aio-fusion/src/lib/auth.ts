@@ -36,6 +36,9 @@ export type User = {
   managed?: boolean;
   // Optional cap on the number of client seats an agency account may create.
   seatCap?: number | null;
+  // ISO timestamp of the account's most recent sign-in (from active sessions).
+  // Undefined = no live session known (shown as "never" in warnings).
+  lastSignInAt?: string;
 };
 
 export type Session = {
@@ -247,7 +250,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean; lastSignInAt?: string };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -282,6 +285,7 @@ function cacheAccounts(accounts: ServerAccount[]): void {
     ...(a.archived ? { archived: true } : {}),
     ...(a.mfaEnabled ? { mfaEnabled: true } : {}),
     ...(a.managed ? { managed: true } : {}),
+    ...(a.lastSignInAt ? { lastSignInAt: a.lastSignInAt } : {}),
   }));
   saveUsers(users);
 }

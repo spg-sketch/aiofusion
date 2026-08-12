@@ -406,6 +406,50 @@ describe("POST /api/platform/accounts/access", () => {
   }
 
   // -------------------------------------------------------------------------
+  // Last sign-in exposure (GET /platform/accounts)
+  // -------------------------------------------------------------------------
+  it("GET /platform/accounts includes lastSignInAt for accounts with a live session and omits it otherwise", async () => {
+    const createdAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
+    await db.insert(platformSessionsTable).values({
+      sid: "ca-last-signin-sid",
+      username: CLIENT,
+      createdAt,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/accounts`, {
+      headers: { "x-test-account": JSON.stringify({ username: AGENCY, role: "agency", userId: null }) },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ username: string; lastSignInAt?: string }> };
+    const client = body.accounts.find((a) => a.username === CLIENT);
+    expect(client).toBeDefined();
+    expect(client!.lastSignInAt).toBeDefined();
+    expect(Math.abs(new Date(client!.lastSignInAt!).getTime() - createdAt.getTime())).toBeLessThan(2000);
+    const agency = body.accounts.find((a) => a.username === AGENCY);
+    expect(agency).toBeDefined();
+    expect(agency!.lastSignInAt).toBeUndefined();
+  });
+
+  it("GET /platform/accounts omits lastSignInAt when the account's only sessions have expired", async () => {
+    await db.insert(platformSessionsTable).values({
+      sid: "ca-expired-sid",
+      username: CLIENT,
+      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000), // expired an hour ago
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/accounts`, {
+      headers: { "x-test-account": JSON.stringify({ username: AGENCY, role: "agency", userId: null }) },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { accounts: Array<{ username: string; lastSignInAt?: string }> };
+    const client = body.accounts.find((a) => a.username === CLIENT);
+    expect(client).toBeDefined();
+    expect(client!.lastSignInAt).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // Grant via email
   // -------------------------------------------------------------------------
   it("grant (email): creates the user, issues a 7-day token, emails the set-password link, clears the managed flag", async () => {
