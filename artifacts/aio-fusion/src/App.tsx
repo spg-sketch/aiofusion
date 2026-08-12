@@ -386,7 +386,13 @@ function App() {
   // again whenever the tab regains focus, so a project a colleague created on
   // another device shows up without a manual page reload.
   const resyncProjects = useCallback(async () => {
-    const result = await syncProjectsOnLoad();
+    // Refresh the cached accounts list in the same breath, so a client
+    // account created by a colleague on another device shows its
+    // "Start project" placeholder card without a reload. saveUsers fires
+    // "aio:accounts-changed", which bumps the pendingClientAccounts memo.
+    // Runs in parallel with the project sync (same cadence, one extra
+    // lightweight GET) and keeps the existing cache on any failure.
+    const [result] = await Promise.all([syncProjectsOnLoad(), refreshAccountsCache()]);
     if (result === "unauthorized") {
       // Server session has expired mid-use. Re-check with /api/platform/me;
       // if it confirms the session is gone, clear local state and redirect
