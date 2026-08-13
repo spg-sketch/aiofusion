@@ -1288,6 +1288,15 @@ export function clearWorkspaceScopedCaches(): void {
     ];
     const dropExact = new Set([
       "aio.scoring.v1", // global scoring settings - not project-scoped
+      // The local project list/logo cache belongs to the OUTGOING workspace.
+      // Left in place, the post-reload sync would treat every old project as
+      // "local only" and push it into the NEW workspace's server store - a
+      // direct cross-workspace data leak. Clear them so the new workspace
+      // starts from its own server list. (aio.store.migrated.v1 is kept so the
+      // one-time legacy migration cannot re-run and re-push old data.)
+      "aio.projects.v1",
+      "aio.clientLogos.v1",
+      "aio.intake.updatedAt.v1",
     ]);
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {

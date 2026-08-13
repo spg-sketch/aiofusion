@@ -34,6 +34,7 @@ import { accountLabel } from "./lib/accountLabels";
 import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { vars } from "./marketing/vars";
+import { PUBLIC_ROUTES } from "./marketing/pageMeta";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import {
@@ -233,19 +234,13 @@ const LeadsAdminPage = lazy(() =>
 migrateStoredIntakeKeys();
 
 // --- URL <-> view mapping for the public marketing pages ------------------
-const VIEW_TO_SLUG: Record<string, string> = {
-  landing: "",
-  about: "about",
-  contact: "contact",
-  insights: "insights",
-  pricing: "pricing",
-  "for-inhouse": "for-inhouse",
-  "for-agencies": "for-agencies",
-  "for-agents": "for-agents",
-  "trust-security": "trust-security",
-  "privacy-policy": "privacy-policy",
-  "terms-conditions": "terms-conditions",
-};
+// Derived from PUBLIC_ROUTES (marketing/pageMeta.ts) - the single source of
+// truth that also drives the prerender build and sitemap. Adding a public page
+// therefore forces the pageMeta entry (and prerendered HTML) to exist, which
+// pageMeta.consistency.test.ts enforces.
+const VIEW_TO_SLUG: Record<string, string> = Object.fromEntries(
+  PUBLIC_ROUTES.map(({ slug }) => [slug === "" ? "landing" : slug, slug]),
+);
 
 const SLUG_TO_VIEW: Record<string, PublicView> = {
   "": "landing",

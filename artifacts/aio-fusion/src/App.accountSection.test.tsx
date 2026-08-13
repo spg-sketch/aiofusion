@@ -90,13 +90,12 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await renderAppAt("/?account_section=security");
 
     // The section content mounts once auth resolves and SubAccountsPage lazy
-    // loads; Security's heading is unique to that section.
+    // loads. Assert the Security panel's own heading (not the always-visible
+    // nav button) so this fails if the deep link lands on the wrong section.
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /sign-in & security/i }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(screen.queryByText("Account type")).toBeNull();
-    });
+    expect(screen.queryByText("Account type")).toBeNull();
     // History-sync must have rewritten the URL to carry the section, so a
     // second refresh reproduces the same state.
     expect(window.location.search).toContain("account_section=security");
@@ -118,7 +117,7 @@ describe("browser Back restores the previous settings section (popstate)", () =>
     await renderAppAt("/?account_section=security");
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /sign-in & security/i }).length).toBeGreaterThan(0);
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
     });
 
     // Move to the Clients section in-page.
@@ -140,8 +139,10 @@ describe("browser Back restores the previous settings section (popstate)", () =>
       }));
     });
 
+    // Back must land on the SECURITY panel specifically, not just leave Clients.
     await waitFor(() => {
-      expect(screen.queryByText("Create a client account")).toBeNull();
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
     });
+    expect(screen.queryByText("Create a client account")).toBeNull();
   });
 });

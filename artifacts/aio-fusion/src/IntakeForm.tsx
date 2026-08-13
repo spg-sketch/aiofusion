@@ -902,6 +902,32 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
     if (role === "client" && accountProfile?.website) return accountProfile.website;
     return "";
   });
+  // Apply a fresher account profile that arrives AFTER mount (App re-fetches
+  // the profile when the intake page opens, but the fetch resolves after the
+  // useState initialisers above have already prefilled from the stale value).
+  // Only overwrite values the user has not edited: blank, or still exactly the
+  // previous profile's value.
+  const prevProfileRef = useRef(accountProfile);
+  useEffect(() => {
+    const prev = prevProfileRef.current;
+    prevProfileRef.current = accountProfile;
+    if (role !== "client" || !accountProfile) return;
+    const newName = accountProfile.displayName ?? "";
+    const oldName = prev?.displayName ?? "";
+    if (newName && newName !== oldName) {
+      setFormData((fd) => {
+        const cur = typeof fd["4.1"] === "string" ? (fd["4.1"] as string) : "";
+        if (cur === "" || cur === oldName) return { ...fd, "4.1": newName };
+        return fd;
+      });
+    }
+    const newSite = accountProfile.website ?? "";
+    const oldSite = prev?.website ?? "";
+    if (newSite && newSite !== oldSite) {
+      setAiWebsite((cur) => (cur === "" || cur === oldSite ? newSite : cur));
+    }
+  }, [accountProfile, role]);
+
   // One-shot note shown only on truly fresh intakes (localStorage key absent at
   // mount time). Computed here so it captures the "was fresh" state before the
   // save useEffect writes the first blob. Value:
