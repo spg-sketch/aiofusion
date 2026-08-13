@@ -190,18 +190,41 @@ function writeRoute(outPath: string, html: string): void {
   ok++;
 }
 
+// Assert the emitted HTML is a real pre-rendered page, not the empty shell.
+// A silently-shell-only page is the exact "search engines see nothing" failure
+// this guard exists to prevent, so treat it as fatal.
+function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta): void {
+  const label = slug === "" ? "landing" : slug;
+  if (html.includes('<div id="root"></div>')) {
+    console.error(`  ✗  Route "${label}" produced shell-only HTML (empty #root)`);
+    errors++;
+    return;
+  }
+  if (!html.includes("<title>") || html.includes("<title></title>")) {
+    console.error(`  ✗  Route "${label}" is missing a <title>`);
+    errors++;
+    return;
+  }
+  if (!html.includes(`href="${meta.canonical}"`)) {
+    console.error(`  ✗  Route "${label}" is missing its canonical link (${meta.canonical})`);
+    errors++;
+  }
+}
+
 // Render each top-level route
 for (const { slug } of PUBLIC_ROUTES) {
   const metaKey = slug === "" ? "landing" : slug;
   const meta = PAGE_META[metaKey];
   if (!meta) {
-    console.warn(`  ⚠  No pageMeta for route "${metaKey}" - skipping`);
+    console.error(`  ✗  No pageMeta for route "${metaKey}" - add it to PAGE_META`);
+    errors++;
     continue;
   }
 
   const el = buildElement(slug);
   if (!el) {
-    console.warn(`  ⚠  No component for route "${slug}" - skipping`);
+    console.error(`  ✗  No component for route "${slug}" - add it to buildElement`);
+    errors++;
     continue;
   }
 
@@ -213,8 +236,14 @@ for (const { slug } of PUBLIC_ROUTES) {
     errors++;
     continue;
   }
+  if (!bodyHtml.trim()) {
+    console.error(`  ✗  Route "${slug}" rendered empty markup`);
+    errors++;
+    continue;
+  }
 
   const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
+  assertRealPage(slug, finalHtml, meta);
 
   if (slug === "") {
     // Landing page overwrites the shell index.html in-place
@@ -242,6 +271,7 @@ for (const articleSlug of ARTICLE_SLUGS) {
   }
 
   const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
+  assertRealPage(`insights/${articleSlug}`, finalHtml, meta);
   writeRoute(path.join(distPublic, "insights", articleSlug, "index.html"), finalHtml);
 }
 

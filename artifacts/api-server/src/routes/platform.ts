@@ -3796,8 +3796,12 @@ router.post(
       // Tell the key contact they have a login. Fail-soft: account creation
       // succeeds even if the email cannot be sent or the token insertion fails.
       // Managed accounts skip this entirely - the client is not given access.
+      // welcomeLinkCreated: undefined when no welcome email applies (managed
+      // or no contact email), true/false when a set-password link was/wasn't
+      // issued - the UI warns the agency when it is explicitly false.
+      let welcomeLinkCreated: boolean | undefined;
       if (contactEmail && !managed) {
-        await sendWelcomeSetPasswordEmail({
+        const { tokenIssued } = await sendWelcomeSetPasswordEmail({
           targetUsername: username,
           contactEmail,
           contactName,
@@ -3805,8 +3809,9 @@ router.post(
           actorUsername: actor.username,
           companyRole: role,
         });
+        welcomeLinkCreated = tokenIssued;
       }
-      res.json({ ok: true, username });
+      res.json({ ok: true, username, welcomeLinkCreated });
     } catch {
       res.status(500).json({ error: "Failed to create account" });
     }

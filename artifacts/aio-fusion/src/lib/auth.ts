@@ -606,7 +606,7 @@ export async function serverAddUser(
   role: Role,
   displayName?: string,
   extra?: { website?: string; contactName?: string; contactEmail?: string; autoUsername?: boolean; logoDataUrl?: string; managed?: boolean },
-): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; username: string; welcomeLinkCreated?: boolean } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts", {
     username,
     password,
@@ -621,7 +621,12 @@ export async function serverAddUser(
   });
   if (!ok) return { ok: false, error: json?.error || "Failed to create account." };
   await refreshAccountsCache();
-  return { ok: true, username: (json as { username?: string })?.username || username };
+  const j = json as { username?: string; welcomeLinkCreated?: boolean };
+  return {
+    ok: true,
+    username: j?.username || username,
+    ...(typeof j?.welcomeLinkCreated === "boolean" ? { welcomeLinkCreated: j.welcomeLinkCreated } : {}),
+  };
 }
 
 // Set (or clear, when blank) an account's friendly display name.
@@ -1269,6 +1274,33 @@ export async function serverGetMyInvites(): Promise<{
   }
 }
 
+// Remove workspace-global local caches that are not namespaced per project, so
+// switching workspaces can never surface the previous workspace's data. Keys
+// namespaced by (globally-unique) project id are deliberately left alone - the
+// incoming workspace simply won't list the old projects.
+export function clearWorkspaceScopedCaches(): void {
+  try {
+    // The active-project pointer is bare; drop it so we never briefly render the
+    // previous workspace's project before resync validates against the new list.
+    localStorage.removeItem("aio.activeProjectId");
+    const dropPrefixes = [
+      "aio.auditTiming.", // per-audit-type timing/history, not project-scoped
+    ];
+    const dropExact = new Set([
+      "aio.scoring.v1", // global scoring settings - not project-scoped
+    ]);
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (dropExact.has(key) || dropPrefixes.some((p) => key.startsWith(p))) {
+        toRemove.push(key);
+      }
+    }
+    for (const key of toRemove) localStorage.removeItem(key);
+  } catch { /* noop - best-effort cleanup */ }
+}
+
 export async function serverSwitchWorkspace(companyId: string): Promise<{
   ok: boolean;
   error?: string;
@@ -1282,6 +1314,11 @@ export async function serverSwitchWorkspace(companyId: string): Promise<{
     });
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to switch workspace." };
+    // Clear workspace-global local caches that are NOT namespaced per project,
+    // so the incoming workspace can never briefly show the previous one's data.
+    // Project-scoped keys (intake/audits keyed by globally-unique project id)
+    // are safe - the new workspace simply won't list the old projects.
+    clearWorkspaceScopedCaches();
     // New session cookie is now set. Reload so every hook and store reinitialises
     // against the new workspace's data. The fresh /platform/me call inside
     // bootstrapAuth will pick up the new session automatically.

@@ -573,11 +573,17 @@ function SubAccountsPage({
       });
       setAddingClient(false);
       if (result.ok) {
+        // welcomeLinkCreated === false means the account exists but the
+        // set-password link could not be issued - warn instead of implying
+        // the client received a working sign-in link.
+        const linkFailed = !newManaged && !!contactEmail && result.welcomeLinkCreated === false;
         setAddSuccess(
           `Created client account '${result.username}' for ${companyName}.` +
           (newManaged
             ? " This is a managed account - the client has not been given sign-in access. Use 'View account' to work on their behalf."
-            : contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
+            : linkFailed
+              ? ` However, a set-password link could not be created for ${contactEmail}. Any email they receive will not include a sign-in link - use 'Grant access' on the account, or share a password with them directly.`
+              : contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
         );
         setNewCompanyName("");
         setNewWebsite("");

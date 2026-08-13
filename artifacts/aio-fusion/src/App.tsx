@@ -507,6 +507,21 @@ function App() {
     const assignTo = startProjectFor;
     setStartProjectFor(null);
     const project = createStoredProject(name);
+    // Agency starting a project on a client's behalf: pre-fill the client's
+    // company name (intake field 4.1) into the fresh project's intake blob so
+    // the agency doesn't have to retype it. Only seed a genuinely new project
+    // (no existing intake key) and only when we have a client name to use.
+    if (assignTo?.name?.trim()) {
+      try {
+        const intakeKey = `aio.intake.v2::${project.id}`;
+        if (localStorage.getItem(intakeKey) === null) {
+          localStorage.setItem(
+            intakeKey,
+            JSON.stringify({ formData: { "4.1": assignTo.name.trim() } }),
+          );
+        }
+      } catch { /* noop - prefill is best-effort */ }
+    }
     const afterCreate = loadStoredProjects();
     setStoredProjects(afterCreate);
     // Update the known-IDs cache BEFORE setActiveProjectId so the integrity
@@ -810,6 +825,15 @@ function App() {
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
+
+  // Keep the intake prefill source fresh: when the user opens the intake page,
+  // re-fetch their account profile so a name/website change made earlier in the
+  // session (by them or by their agency) flows into the next fresh intake.
+  useEffect(() => {
+    if (currentPage !== "intake") return;
+    if (!session) return;
+    void fetchAccountProfile().then((ap) => setAccountProfile(ap));
+  }, [currentPage, session]);
 
   useEffect(() => {
     const navState = { __aioNav: true, view, currentPage, insightsArticleId, accountSection };
