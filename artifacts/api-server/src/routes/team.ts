@@ -84,6 +84,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         userId: platformMembershipsTable.userId,
         role: platformMembershipsTable.role,
         projectAccess: platformMembershipsTable.projectAccess,
+        position: platformMembershipsTable.position,
         createdAt: platformMembershipsTable.createdAt,
         email: platformUsersTable.email,
         name: platformUsersTable.name,
@@ -118,12 +119,15 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         name: m.name,
         role: normalizeMembershipRole(m.role),
         projectAccess: parseProjectAccess(m.projectAccess),
+        position: m.position ?? null,
         createdAt: m.createdAt,
         isSelf: m.userId === req.account!.userId,
       })),
       invites: inviteRows.map((i) => ({
         token: i.token,
         email: i.email,
+        name: i.invitedName ?? null,
+        position: i.position ?? null,
         role: normalizeMembershipRole(i.role),
         projectAccess: parseProjectAccess(i.projectAccess),
         expiresAt: i.expiresAt,
@@ -164,6 +168,10 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       return;
     }
     const projectAccess = normaliseProjectAccess(req.body?.projectIds);
+    const invitedName =
+      typeof req.body?.fullName === "string" ? req.body.fullName.trim().slice(0, 128) : "";
+    const position =
+      typeof req.body?.position === "string" ? req.body.position.trim().slice(0, 128) : "";
 
     // Already a member of this workspace?
     const [existingUser] = await db
@@ -226,6 +234,8 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       companySlug: company.slug,
       role,
       projectAccess,
+      invitedName: invitedName || null,
+      position: position || null,
       invitedByUserId: req.account!.userId ?? null,
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     });
@@ -542,6 +552,7 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
       email: invite.email,
+      invitedName: invite.invitedName ?? null,
       companyName: company?.displayName || company?.slug || invite.companySlug,
       role: normalizeMembershipRole(invite.role),
       roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(invite.role)],
@@ -558,7 +569,7 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
 router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: Response) => {
   try {
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
-    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 64) : "";
+    const suppliedName = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 64) : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const invite = await getValidInvite(token);
     if (!invite) {
@@ -566,6 +577,10 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
       res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
       return;
     }
+
+    // The invitee's own entry wins; otherwise fall back to the full name the
+    // inviter recorded on the invitation.
+    const name = suppliedName || (invite.invitedName ?? "").trim().slice(0, 64);
 
     // Resolve or create the user for the invited email. An existing user keeps
     // their current password (no password required); a new user must set one.

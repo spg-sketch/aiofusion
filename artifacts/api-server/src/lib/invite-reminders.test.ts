@@ -44,6 +44,8 @@ vi.mock("@workspace/db", async () => {
       company_slug varchar(64) NOT NULL,
       role varchar NOT NULL DEFAULT 'viewer',
       project_access text,
+      invited_name varchar(128),
+      position varchar(128),
       invited_by_user_id uuid,
       expires_at timestamptz NOT NULL,
       used_at timestamptz,

@@ -766,6 +766,8 @@ export type TeamMember = {
   name: string | null;
   role: MembershipRole;
   projectAccess: string[] | null;
+  /** Job title within this workspace, e.g. "Head of Content". */
+  position: string | null;
   createdAt: string;
   isSelf: boolean;
 };
@@ -1073,6 +1075,8 @@ export async function serverMfaDisable(code: string): Promise<{ ok: true } | { o
 export type TeamInvite = {
   token: string;
   email: string;
+  name: string | null;
+  position: string | null;
   role: MembershipRole;
   projectAccess: string[] | null;
   expiresAt: string;
@@ -1092,6 +1096,8 @@ export async function serverInviteTeamMember(data: {
   email: string;
   role: MembershipRole;
   projectIds?: string[] | null;
+  fullName?: string;
+  position?: string;
 }): Promise<{ ok: boolean; error?: string; limitReached?: boolean }> {
   const { ok, json } = await postJson("/api/platform/team/invite", data);
   return { ok, error: json?.error, limitReached: json?.limitReached };
@@ -1115,6 +1121,7 @@ export async function serverAcceptInvite(data: {
 
 export type InviteInfo = {
   email: string;
+  invitedName?: string | null;
   companyName: string;
   role: MembershipRole;
   roleLabel: string;

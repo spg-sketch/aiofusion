@@ -143,6 +143,10 @@ export const platformMembershipsTable = pgTable(
     //  NULL = all projects in the workspace (owner/admin/billing default).
     //  Only meaningful for "content" and "viewer" members.
     projectAccess: text("project_access"),
+    //  position — the member's job title within THIS workspace (e.g. "Head of
+    //  Content"). Workspace-specific, so it lives on the membership, not the
+    //  shared user record.
+    position: varchar("position", { length: 128 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -164,6 +168,10 @@ export const platformInvitationsTable = pgTable("platform_invitations", {
   role: varchar("role").notNull().default("viewer"),
   //  JSON array of project ids; NULL = all projects.
   projectAccess: text("project_access"),
+  //  Full name + position entered by the inviter; applied to the new user /
+  //  membership when the invite is accepted (name only if the user has none).
+  invitedName: varchar("invited_name", { length: 128 }),
+  position: varchar("position", { length: 128 }),
   invitedByUserId: uuid("invited_by_user_id"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),

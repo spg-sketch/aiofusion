@@ -157,10 +157,11 @@ export async function consumeInvite(
       companySlug: invite.companySlug,
       role,
       projectAccess: invite.projectAccess ?? null,
+      position: invite.position ?? null,
     })
     .onConflictDoUpdate({
       target: [platformMembershipsTable.userId, platformMembershipsTable.companyId],
-      set: { role, projectAccess: invite.projectAccess ?? null },
+      set: { role, projectAccess: invite.projectAccess ?? null, position: invite.position ?? null },
     });
 
   // Invited users have proven control of the invited email address by opening

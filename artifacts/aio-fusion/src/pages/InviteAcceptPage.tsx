@@ -26,7 +26,11 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
   useEffect(() => {
     void serverGetInviteInfo(token).then((r) => {
       setLoading(false);
-      if (r.ok && r.invite) setInvite(r.invite);
+      if (r.ok && r.invite) {
+        setInvite(r.invite);
+        // Prefill with the full name the inviter recorded; the invitee can edit it.
+        if (r.invite.invitedName) setName((prev) => prev || r.invite!.invitedName!);
+      }
       else setLoadError(r.error ?? "Invitation not found.");
     });
   }, [token]);

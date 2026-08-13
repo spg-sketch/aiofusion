@@ -40,6 +40,8 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [position, setPosition] = useState("");
   const [role, setRole] = useState<MembershipRole>("content");
   const [restrict, setRestrict] = useState(false);
   const [projectIds, setProjectIds] = useState<string[]>([]);
@@ -109,11 +111,15 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       email: email.trim(),
       role,
       projectIds: projectScoped && restrict ? projectIds : null,
+      fullName: fullName.trim() || undefined,
+      position: position.trim() || undefined,
     }).then((r) => {
       setSending(false);
       if (r.ok) {
         setInviteSuccess(`Invitation sent to ${email.trim()}.`);
         setEmail("");
+        setFullName("");
+        setPosition("");
         setRestrict(false);
         setProjectIds([]);
         reload();
@@ -290,6 +296,32 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
 
       {/* Invite form */}
       <form onSubmit={handleInvite} className="mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+          <div className="md:col-span-6">
+            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Full name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="e.g. Jane Smith"
+              maxLength={128}
+              className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+              style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+            />
+          </div>
+          <div className="md:col-span-6">
+            <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Position</label>
+            <input
+              type="text"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              placeholder="e.g. Head of Content"
+              maxLength={128}
+              className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+              style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
           <div className="md:col-span-5">
             <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Email address</label>
@@ -391,7 +423,11 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 <p className="text-[13px] font-bold truncate" style={{ color: ink }}>
                   {m.name || m.email || m.userId}{m.isSelf ? " (you)" : ""}
                 </p>
-                {m.email && m.name && <p className="text-[11px] truncate" style={{ color: vars.g600 }}>{m.email}</p>}
+                {(m.email && m.name) || m.position ? (
+                  <p className="text-[11px] truncate" style={{ color: vars.g600 }}>
+                    {[m.position, m.email && m.name ? m.email : null].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
                 {m.projectAccess && (
                   <p className="text-[11px]" style={{ color: vars.g600 }}>
                     {m.projectAccess.length} assigned project{m.projectAccess.length === 1 ? "" : "s"}
@@ -527,9 +563,11 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
               <div key={i.token} className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
                 <Mail size={13} color="#92400E" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold truncate" style={{ color: ink }}>{i.email}</p>
+                  <p className="text-[13px] font-semibold truncate" style={{ color: ink }}>
+                    {i.name ? `${i.name} · ${i.email}` : i.email}
+                  </p>
                   <p className="text-[11px]" style={{ color: vars.g600 }}>
-                    {roleLabel(i.role)} · expires {new Date(i.expiresAt).toLocaleDateString()}
+                    {[roleLabel(i.role), i.position, `expires ${new Date(i.expiresAt).toLocaleDateString()}`].filter(Boolean).join(" · ")}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
