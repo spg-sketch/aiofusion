@@ -147,6 +147,30 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
     });
   };
 
+  // Per-member project-access editor ("Manage access"). Only meaningful for
+  // project-scoped roles (content/viewer); null access = all projects.
+  const [accessEditor, setAccessEditor] = useState<{ userId: string; restrict: boolean; projectIds: string[] } | null>(null);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  const openAccessEditor = (userId: string, current: string[] | null) => {
+    setAccessError(null);
+    setAccessEditor({ userId, restrict: current !== null, projectIds: current ?? [] });
+  };
+
+  const handleSaveAccess = () => {
+    if (!accessEditor) return;
+    setAccessSaving(true);
+    setAccessError(null);
+    void serverUpdateTeamMember(accessEditor.userId, {
+      projectIds: accessEditor.restrict ? accessEditor.projectIds : null,
+    }).then((r) => {
+      setAccessSaving(false);
+      if (r.ok) { setAccessEditor(null); reload(); }
+      else setAccessError(r.error ?? "Failed to update project access.");
+    });
+  };
+
   const handleRoleChange = (userId: string, newRole: MembershipRole) => {
     setBusy(userId);
     void serverUpdateTeamMember(userId, { role: newRole }).then((r) => {
@@ -357,7 +381,8 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       {/* Members list */}
       <div className="space-y-2">
         {team.members.map((m) => (
-          <div key={m.userId} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3 rounded-xl" style={{ background: "#f8fafc", border: `1px solid ${vars.g200}` }}>
+          <div key={m.userId} className="px-4 py-3 rounded-xl" style={{ background: "#f8fafc", border: `1px solid ${vars.g200}` }}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: accentSoft, color: accent }}>
                 <Users size={13} />
@@ -392,6 +417,19 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                       <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
+                  {(m.role === "content" || m.role === "viewer") && (
+                    <button
+                      onClick={() =>
+                        accessEditor?.userId === m.userId
+                          ? setAccessEditor(null)
+                          : openAccessEditor(m.userId, m.projectAccess ?? null)
+                      }
+                      className="px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                      style={{ borderColor: accessEditor?.userId === m.userId ? accent : vars.g300, color: accessEditor?.userId === m.userId ? accent : ink }}
+                    >
+                      Manage access
+                    </button>
+                  )}
                   <button
                     onClick={() => handleRemove(m.userId, m.name || m.email || "this member")}
                     disabled={busy === m.userId}
@@ -404,6 +442,78 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 </>
               )}
             </div>
+          </div>
+          {accessEditor?.userId === m.userId && (
+            <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${vars.g200}` }}>
+              <label className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
+                <input
+                  type="checkbox"
+                  checked={accessEditor.restrict}
+                  onChange={(e) => setAccessEditor((prev) => prev && { ...prev, restrict: e.target.checked })}
+                  style={{ accentColor: accent }}
+                />
+                Limit to specific projects
+              </label>
+              {!accessEditor.restrict && (
+                <p className="mt-1.5 text-[12px]" style={{ color: vars.g600 }}>
+                  This member can see all of this workspace's projects.
+                </p>
+              )}
+              {accessEditor.restrict && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {projects.length === 0 && (
+                    <span className="text-[12px]" style={{ color: vars.g600 }}>No projects yet.</span>
+                  )}
+                  {projects.map((p) => {
+                    const checked = accessEditor.projectIds.includes(p.id);
+                    return (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer border"
+                        style={{ borderColor: checked ? accent : vars.g300, background: checked ? accentSoft : "white", color: checked ? accent : ink }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={checked}
+                          onChange={() =>
+                            setAccessEditor((prev) =>
+                              prev && {
+                                ...prev,
+                                projectIds: checked
+                                  ? prev.projectIds.filter((i) => i !== p.id)
+                                  : [...prev.projectIds, p.id],
+                              },
+                            )
+                          }
+                        />
+                        {p.name || p.id}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {accessError && <p className="mt-2 text-[12px] font-semibold" style={{ color: accent }}>{accessError}</p>}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={handleSaveAccess}
+                  disabled={accessSaving}
+                  className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90 disabled:opacity-50"
+                  style={{ background: ink, color: "#fff" }}
+                >
+                  {accessSaving && <Loader2 size={12} className="animate-spin" />}
+                  Save access
+                </button>
+                <button
+                  onClick={() => setAccessEditor(null)}
+                  className="px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:bg-white"
+                  style={{ borderColor: vars.g300, color: ink }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           </div>
         ))}
       </div>
