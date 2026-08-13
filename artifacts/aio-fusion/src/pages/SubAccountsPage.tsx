@@ -1295,7 +1295,7 @@ function SubAccountsPage({
                 const clientLogoUrl = clientLogos.get(u.username);
                 return (
                   <li key={u.username} className="px-6 py-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: accentSoft, color: accent, border: clientLogoUrl ? `1px solid ${vars.g200}` : undefined }}>
                           {clientLogoUrl ? (
@@ -1304,20 +1304,22 @@ function SubAccountsPage({
                             <User size={16} />
                           )}
                         </div>
-                        <div>
-                          <p className="text-[14px] font-bold" style={{ color: ink }}>{u.displayName ?? u.username}</p>
-                          {u.displayName && (
-                            <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
-                          )}
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
-                            {u.managed && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g500 }}>Managed</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[14px] font-bold" style={{ color: ink }}>{u.displayName ?? u.username}</p>
+                            {u.displayName && (
+                              <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
                             )}
-                          </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
+                              {u.managed && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g500 }}>Managed</span>
+                              )}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap sm:pl-[52px]">
                         <button
                           onClick={() => handleEnterAccount(u.username)}
                           disabled={enteringUsername === u.username}
