@@ -1326,7 +1326,7 @@ function SubAccountsPage({
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
-                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <LogIn size={12} />} Login as client
+                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <LogIn size={12} />} {u.managed ? "Open account" : "Login as client"}
                         </button>
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
