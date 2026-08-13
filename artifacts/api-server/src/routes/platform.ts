@@ -2330,7 +2330,7 @@ function buildOauthInterstitial(postAction: string, code: string, state: string,
   const safeAction = htmlAttrEncode(postAction);
   const safeCode = htmlAttrEncode(code);
   const safeState = htmlAttrEncode(state);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Completing sign-in\u2026</title>` +
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow"><title>Completing sign-in\u2026</title>` +
     `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc}` +
     `p{color:#374151;font-size:15px}</style></head><body>` +
     `<p>Completing sign-in, please wait\u2026</p>` +
@@ -2448,6 +2448,7 @@ router.get("/platform/auth/google/callback", (req: Request, res: Response) => {
   const nonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
   // The global CSP (script-src 'self') blocks inline scripts, which would
   // silently break the auto-submit form. Re-issue the header with a nonce.
   res.setHeader("Content-Security-Policy", cspHeaderWithScriptNonce(nonce));
@@ -2802,6 +2803,7 @@ router.get("/platform/auth/microsoft/callback", (req: Request, res: Response) =>
   const nonce = crypto.randomBytes(16).toString("base64");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
   // Global CSP blocks inline scripts - add a per-response nonce (see Google callback).
   res.setHeader("Content-Security-Policy", cspHeaderWithScriptNonce(nonce));
   res.status(200).send(buildOauthInterstitial(postUrl, code, state, nonce));

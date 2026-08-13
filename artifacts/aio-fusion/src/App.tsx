@@ -821,6 +821,21 @@ function App() {
 
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [currentPage]);
 
+  // SEO: authenticated platform views must never be indexed or followed by
+  // crawlers. Public marketing pages set "index, follow" via PageHead when
+  // they mount, so navigating back to a public page undoes this.
+  useEffect(() => {
+    const isPublic = view in VIEW_TO_SLUG;
+    if (isPublic) return;
+    let el = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!el) {
+      el = document.createElement("meta");
+      el.setAttribute("name", "robots");
+      document.head.appendChild(el);
+    }
+    el.setAttribute("content", "noindex, nofollow");
+  }, [view]);
+
   // Keep the intake prefill source fresh: when the user opens the intake page,
   // re-fetch their account profile so a name/website change made earlier in the
   // session (by them or by their agency) flows into the next fresh intake.

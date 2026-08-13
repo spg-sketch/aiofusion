@@ -71,6 +71,11 @@ export function PageHead({ meta }: { meta: PageMeta }) {
     upsertMeta('meta[name="description"]', "name", "description", desc);
     upsertLink("canonical", meta.canonical);
 
+    // Public marketing pages are always indexable. This also undoes the
+    // "noindex, nofollow" App sets while an authenticated platform view is
+    // open, when the user navigates back to a public page.
+    upsertMeta('meta[name="robots"]', "name", "robots", "index, follow");
+
     // Open Graph
     upsertMeta('meta[property="og:title"]', "property", "og:title", ogTitle);
     upsertMeta('meta[property="og:description"]', "property", "og:description", ogDesc);

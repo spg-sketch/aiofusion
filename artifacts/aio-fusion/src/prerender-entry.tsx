@@ -92,6 +92,7 @@ function buildHeadTags(meta: PageMeta): string {
   return `
   <title>${escHtml(meta.title)}</title>
   <meta name="description" content="${escAttr(meta.description)}" />
+  <meta name="robots" content="index, follow" />
   <link rel="canonical" href="${escAttr(meta.canonical)}" />
   <meta property="og:title" content="${escAttr(ogTitle)}" />
   <meta property="og:description" content="${escAttr(ogDesc)}" />
@@ -207,6 +208,11 @@ function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta
   }
   if (!html.includes(`href="${meta.canonical}"`)) {
     console.error(`  ✗  Route "${label}" is missing its canonical link (${meta.canonical})`);
+    errors++;
+    return;
+  }
+  if (!html.includes('name="robots" content="index, follow"')) {
+    console.error(`  ✗  Route "${label}" is missing the robots index,follow tag`);
     errors++;
   }
 }
