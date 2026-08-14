@@ -1151,7 +1151,7 @@ function SubAccountsPage({
               <input
                 type="text"
                 value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
+                onChange={(e) => { setNewCompanyName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Acme Ltd"
                 required
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
@@ -1164,7 +1164,7 @@ function SubAccountsPage({
                 type="text"
                 inputMode="url"
                 value={newWebsite}
-                onChange={(e) => setNewWebsite(e.target.value)}
+                onChange={(e) => { setNewWebsite(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. https://www.acme.com"
                 required
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
@@ -1176,7 +1176,7 @@ function SubAccountsPage({
               <input
                 type="text"
                 value={newContactName}
-                onChange={(e) => setNewContactName(e.target.value)}
+                onChange={(e) => { setNewContactName(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. Jane Smith"
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
@@ -1188,7 +1188,7 @@ function SubAccountsPage({
                 type="text"
                 inputMode="email"
                 value={newContactEmail}
-                onChange={(e) => setNewContactEmail(e.target.value)}
+                onChange={(e) => { setNewContactEmail(e.target.value); setAddSuccess(null); }}
                 placeholder="e.g. jane@acme.com"
                 className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
@@ -1198,7 +1198,7 @@ function SubAccountsPage({
               <input
                 type="checkbox"
                 checked={newManaged}
-                onChange={(e) => setNewManaged(e.target.checked)}
+                onChange={(e) => { setNewManaged(e.target.checked); setAddSuccess(null); }}
                 className="mt-0.5"
                 style={{ accentColor: accent }}
               />
