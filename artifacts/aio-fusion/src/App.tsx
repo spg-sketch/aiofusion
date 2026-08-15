@@ -1294,6 +1294,7 @@ function App() {
         onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
         onOpenGeorge={() => { setGeorgeOpen(true); setGeorgeHasUpdate(false); }}
         georgeHasUpdate={georgeHasUpdate}
+        onOpenAccount={() => setView("sub-accounts")}
       />
       <GeorgeSupport
         open={georgeOpen}

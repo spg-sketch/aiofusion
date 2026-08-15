@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronRight, Lock, BarChart3, ArrowLeft, Clock, Menu, X,
   FileEdit, Search, Globe, CalendarDays, PenTool, Wand2, Archive as ArchiveIcon,
-  Users, Database, TrendingUp, PieChart, Trash2, MessageCircle,
+  Users, Database, TrendingUp, PieChart, Trash2, MessageCircle, UserRound,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { loadSavedAudits, authorityIndexFor, type SavedAudit } from "../LlmCheckPage";
@@ -103,6 +103,7 @@ function SidebarContent({
   wide,
   onToggleWide,
   workspaceSwitcher,
+  onOpenAccount,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -119,6 +120,7 @@ function SidebarContent({
   wide?: boolean;
   onToggleWide?: () => void;
   workspaceSwitcher?: React.ReactNode;
+  onOpenAccount?: () => void;
 }) {
   const [allAudits, setAllAudits] = useState<SavedAudit[]>(
     () => loadSavedAudits(activeClient.id),
@@ -469,15 +471,20 @@ function SidebarContent({
         ))}
       </nav>
       <div className="px-4 py-4 border-t" style={{ borderColor: vars.g200 }}>
-        <div className="flex items-center gap-3 px-1">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
-            SP
+        <button
+          type="button"
+          onClick={() => { onOpenAccount?.(); onItemClick?.(); }}
+          className="w-full flex items-center gap-3 px-1 py-1 rounded-lg text-left transition-colors hover:bg-black/5"
+          title="Go to your account - your details and client accounts"
+        >
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
+            <UserRound size={15} />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold truncate" style={{ color: vars.navy }}>Admin</span>
-            <span className="text-[11px] font-medium" style={{ color: vars.g400 }}>Intelligence Tier</span>
+            <span className="text-sm font-semibold truncate" style={{ color: vars.navy }}>My account</span>
+            <span className="text-[11px] font-medium" style={{ color: vars.g400 }}>Your details & client accounts</span>
           </div>
-        </div>
+        </button>
       </div>
     </>
   );
@@ -496,6 +503,7 @@ export function Sidebar({
   onOpenGeorge,
   georgeHasUpdate,
   workspaceSwitcher,
+  onOpenAccount,
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
@@ -509,6 +517,7 @@ export function Sidebar({
   onOpenGeorge?: () => void;
   georgeHasUpdate?: boolean;
   workspaceSwitcher?: React.ReactNode;
+  onOpenAccount?: () => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [width, setWidth] = useState<number>(() => {
@@ -565,7 +574,7 @@ export function Sidebar({
         <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
           </div>
         </div>
       )}
@@ -574,7 +583,7 @@ export function Sidebar({
         className="hidden md:flex flex-col border-r flex-shrink-0 sticky relative"
         style={{ width: `${width}px`, borderColor: vars.g200, background: "white", top: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}
       >
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
         {/* Drag handle */}
         <div
           onMouseDown={onDragHandleMouseDown}
