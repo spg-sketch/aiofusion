@@ -95,16 +95,16 @@ describe("ImpersonationBanner - exit flow", () => {
     });
   });
 
-  it("shows agency wording when an agency is viewing one of its client accounts", async () => {
+  it("renders nothing when an agency is viewing one of its client accounts", async () => {
     // Session role is 'client' (mocked above) and the stashed session belongs
-    // to an agency - this must NOT be labelled 'master'.
+    // to an agency. Agencies manage their clients directly, so the full-width
+    // banner is suppressed - the way back is the BackToAgencyLink control in
+    // the sidebar/header instead.
     mockGetImpersonationState.mockResolvedValue({ by: "agency-account", byRole: "agency" });
-    render(<ImpersonationBanner />);
-    await waitFor(() => {
-      expect(screen.getByText(/viewing client account/i)).toBeInTheDocument();
-      expect(screen.getByText(/back to my agency account/i)).toBeInTheDocument();
-      expect(screen.queryByText(/master/i)).toBeNull();
-    });
+    const { container } = render(<ImpersonationBanner />);
+    // Wait for the state fetch to settle, then assert nothing rendered.
+    await waitFor(() => expect(mockGetImpersonationState).toHaveBeenCalled());
+    await waitFor(() => expect(container.firstChild).toBeNull());
   });
 });
 

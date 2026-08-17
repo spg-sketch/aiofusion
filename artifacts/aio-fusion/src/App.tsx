@@ -33,6 +33,8 @@ import {
 import { accountLabel } from "./lib/accountLabels";
 import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
+import { BackToAgencyLink } from "./components/BackToAgencyLink";
+import { getImpersonationState } from "./lib/auth";
 import { vars } from "./marketing/vars";
 import { PUBLIC_ROUTES } from "./marketing/pageMeta";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
@@ -584,10 +586,24 @@ function App() {
   const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
   // All workspaces the signed-in user belongs to (from /platform/me).
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
+  // Non-null when an agency user is working inside one of their client
+  // accounts: the agency's name, used by the BackToAgencyLink control that
+  // replaced the old full-width impersonation banner for this case.
+  const [agencyImpersonatedBy, setAgencyImpersonatedBy] = useState<string | null>(null);
   // Pending team invites addressed to the signed-in user's email.
   const [pendingInvites, setPendingInvites] = useState<PendingMyInvite[]>([]);
   // True when the user has dismissed the invite banner for this page session.
   const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false);
+
+  // Detect the agency-working-in-client-account case once per page load.
+  useEffect(() => {
+    if (!session || session.role === "admin") { setAgencyImpersonatedBy(null); return; }
+    let cancelled = false;
+    void getImpersonationState().then((imp) => {
+      if (!cancelled) setAgencyImpersonatedBy(imp?.byRole === "agency" ? imp.by : null);
+    });
+    return () => { cancelled = true; };
+  }, [session?.username, session?.role]);
 
   // Only show the projects this account is allowed to see. Admins see every
   // project; a normal account sees its own plus any belonging to its client
@@ -1126,6 +1142,7 @@ function App() {
     return (
       <>
         <PlatformHomePage
+          backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
           session={session}
           oauthRedirectParams={oauthRedirectParams}
           onOauthParamsConsumed={() => setOauthRedirectParams(null)}
@@ -1232,6 +1249,7 @@ function App() {
     };
     return (
       <SubAccountsPage
+        backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} /> : undefined}
         initialSection={accountSection ?? undefined}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
@@ -1278,7 +1296,12 @@ function App() {
       )}
       <ClientSelectorPage
         projects={visibleProjects}
-        workspaceSwitcher={workspaces.length > 1 ? <WorkspaceSwitcher workspaces={workspaces} /> : undefined}
+        workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
+          <div className="flex items-center gap-3">
+            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} />}
+            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} />}
+          </div>
+        ) : undefined}
         onSelectClient={async (client) => {
           setActiveProjectId(client.id);
           // Pull this project's latest Set-Up from the shared store before
@@ -1345,7 +1368,12 @@ function App() {
     )}
     <div className="flex w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc", marginTop: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}>
       <Sidebar
-        workspaceSwitcher={workspaces.length > 1 ? <WorkspaceSwitcher workspaces={workspaces} /> : undefined}
+        workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
+          <div className="flex flex-col items-start gap-1.5">
+            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} />}
+            {agencyImpersonatedBy && <BackToAgencyLink agencyName={agencyImpersonatedBy} />}
+          </div>
+        ) : undefined}
         currentPage={currentPage}
         onNavigate={setCurrentPage}
         activeClient={activeClient}

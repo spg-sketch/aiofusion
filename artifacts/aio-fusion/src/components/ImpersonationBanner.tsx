@@ -63,6 +63,10 @@ export function ImpersonationBanner() {
   const isMasterSwitchUp = sessionRole === "admin" && !!state.byRole && state.byRole !== "admin";
   const isAgencyViewingClient = !isMasterSwitchUp && state.byRole === "agency";
 
+  // Agencies managing their own clients don't get the full-width banner any
+  // more - the way back lives in the sidebar/header as BackToAgencyLink.
+  if (isAgencyViewingClient) return null;
+
   const bannerText = isMasterSwitchUp ? (
     <span>
       Signed in as <strong>master admin</strong> · Exit back to {state.by}

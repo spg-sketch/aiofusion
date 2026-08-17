@@ -31,6 +31,7 @@ function SubAccountsPage({
   onSignOut,
   initialSection,
   onSectionChange,
+  backToAgency,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -42,6 +43,8 @@ function SubAccountsPage({
   onSignOut?: () => void;
   /** Deep-link target (e.g. from an email link ?account_section=security). Falls back to profile if not allowed. */
   initialSection?: string;
+  /** "Back to my agency account" control, present while an agency user is working inside a client account. */
+  backToAgency?: React.ReactNode;
   /** Reports section changes so the parent can mirror them into the URL/history (refresh + Back support). */
   onSectionChange?: (section: string) => void;
 }) {
@@ -704,13 +707,16 @@ function SubAccountsPage({
         <button onClick={onBack} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="h-16 sm:h-24" />
         </button>
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
-          style={{ background: ink, color: paper }}
-        >
-          <ArrowLeft size={16} /> Back to platform
-        </button>
+        <div className="flex items-center gap-4 sm:gap-6">
+          {backToAgency}
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80"
+            style={{ background: ink, color: paper }}
+          >
+            <ArrowLeft size={16} /> Back to platform
+          </button>
+        </div>
       </header>
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-6xl mx-auto">

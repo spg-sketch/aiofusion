@@ -34,12 +34,15 @@ function PlatformHomePage({
   hasPassword,
   oauthRedirectParams,
   onOauthParamsConsumed,
+  backToAgency,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
   onArchivedProjects: () => void;
   onGuidance: () => void;
   onBackToLanding: () => void;
+  /** "Back to my agency account" control, present while an agency user is working inside a client account. */
+  backToAgency?: React.ReactNode;
   session: LocalSession | null;
   onLoginSuccess: (s: LocalSession) => void;
   onNeedsSetup?: () => void;
@@ -276,13 +279,16 @@ function PlatformHomePage({
         <button onClick={onBackToLanding} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
         </button>
-        <button
-          onClick={onBackToLanding}
-          className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
-          style={{ background: accent, color: "white" }}
-        >
-          <ArrowLeft size={16} /> Back to website
-        </button>
+        <div className="flex items-center gap-4 sm:gap-6">
+          {backToAgency}
+          <button
+            onClick={onBackToLanding}
+            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
+            style={{ background: accent, color: "white" }}
+          >
+            <ArrowLeft size={16} /> Back to website
+          </button>
+        </div>
       </header>
 
       <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
