@@ -1162,6 +1162,38 @@ describe("agency partner clients are permanently managed", () => {
     expect(clientAccountCreatedCalls.length).toBe(0);
   });
 
+  it("creation by an agency partner discards a caller-supplied password (direct API call)", async () => {
+    const supplied = "AttackerChosenPass123";
+    const res = await fetch(`${baseUrl}/api/platform/accounts`, {
+      method: "POST",
+      headers: partnerHeaders,
+      body: JSON.stringify({
+        username: "ap-pw-client",
+        role: "client",
+        password: supplied,
+        displayName: "AP PW Client",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; username: string; welcomeLinkCreated?: boolean };
+    expect(body.ok).toBe(true);
+    // Server must have replaced the supplied password with a random one.
+    const [acct] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, body.username))
+      .limit(1);
+    expect(verifyPassword(supplied, acct!.passwordHash)).toBe(false);
+    // Still managed, no welcome link.
+    const [flag] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:managed:${body.username}`))
+      .limit(1);
+    expect(flag?.value).toBe("true");
+    expect(body.welcomeLinkCreated).toBeUndefined();
+  });
+
   it("change-password: a leftover client session cannot mint its own password", async () => {
     const res = await fetch(`${baseUrl}/api/platform/change-password`, {
       method: "POST",

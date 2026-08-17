@@ -3725,7 +3725,11 @@ router.post(
       const actorIsAgencyPartner = normalizeRole(actor.role) === "agency";
       const managed = req.body?.managed === true || actorIsAgencyPartner;
       let password = typeof req.body?.password === "string" ? req.body.password : "";
-      if (managed && !password) password = crypto.randomBytes(24).toString("hex");
+      // Agency partners can never choose a client password - even a direct API
+      // call with a supplied password gets a server-generated one instead.
+      if (actorIsAgencyPartner || (managed && !password)) {
+        password = crypto.randomBytes(24).toString("hex");
+      }
       const requestedRole = normalizeRole(req.body?.role);
       // Optional client-company details captured at creation time.
       let website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 200) : "";
