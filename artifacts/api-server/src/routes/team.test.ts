@@ -320,6 +320,7 @@ import {
   platformMembershipsTable,
   platformInvitationsTable,
   platformMetaTable,
+  projectsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
@@ -591,6 +592,7 @@ describe("team invitations", () => {
 
   it("lets owners update a member's role and remove them", async () => {
     const { sid, company } = await seedAgency("mgmt-agency", "owner@mgmt.test");
+    await seedProject("p-1", "mgmt-agency");
     const inv = await api("/api/platform/team/invite", { sid, body: { email: "m@mgmt.test", role: "viewer" } });
     await api("/api/platform/invite/accept", { body: { token: inv.json.token, password: "member-pass-1" } });
 
@@ -1263,9 +1265,15 @@ async function seedWorkspace(slug: string, email: string, role: string, parent?:
   return { company: company!, user: user!, sid };
 }
 
+// Team routes verify project ownership, so tests must seed real project rows.
+async function seedProject(id: string, owner: string) {
+  await db.insert(projectsTable).values({ id, name: id, owner });
+}
+
 describe("agency two-pool seat model", () => {
   it("GET /team reports agency mode with account-pool seat counts and per-project usage", async () => {
     const { sid } = await seedWorkspace("pool-agency", "owner@pool.test", "agency");
+    await seedProject("p1", "pool-agency");
     // One account-level invite + one project-scoped invite.
     await api("/api/platform/team/invite", { sid, body: { email: "acct@pool.test", role: "billing" } });
     await api("/api/platform/team/invite", { sid, body: { email: "proj@pool.test", role: "content", projectIds: ["p1"] } });
@@ -1281,6 +1289,8 @@ describe("agency two-pool seat model", () => {
 
   it("a full account pool still allows project-seat invites; per-project pool caps at 3 with holder names", async () => {
     const { sid } = await seedWorkspace("pool2-agency", "owner@pool2.test", "agency");
+    await seedProject("proj-x", "pool2-agency");
+    await seedProject("proj-y", "pool2-agency");
     // Fill the account pool: owner + 2 pending account invites = 3.
     expect((await api("/api/platform/team/invite", { sid, body: { email: "a@pool2.test", role: "admin" } })).status).toBe(201);
     expect((await api("/api/platform/team/invite", { sid, body: { email: "b@pool2.test", role: "billing" } })).status).toBe(201);
@@ -1316,9 +1326,10 @@ describe("agency two-pool seat model", () => {
 
   it("project-seat invites must be content members and name at least one project", async () => {
     const { sid } = await seedWorkspace("pool3-agency", "owner@pool3.test", "agency");
+    await seedProject("p1-pool3", "pool3-agency");
     const badRole = await api("/api/platform/team/invite", {
       sid,
-      body: { email: "v@pool3.test", role: "viewer", projectIds: ["p1"] },
+      body: { email: "v@pool3.test", role: "viewer", projectIds: ["p1-pool3"] },
     });
     expect(badRole.status).toBe(400);
     const noProject = await api("/api/platform/team/invite", {
@@ -1330,6 +1341,8 @@ describe("agency two-pool seat model", () => {
 
   it("member updates respect the pools: no non-content project members, full projects blocked, account pool checked on unscope", async () => {
     const { sid, company } = await seedWorkspace("pool4-agency", "owner@pool4.test", "agency");
+    await seedProject("pa", "pool4-agency");
+    await seedProject("pb", "pool4-agency");
 
     // Accept a project-scoped content member.
     const inv = await api("/api/platform/team/invite", {
@@ -1385,6 +1398,7 @@ describe("agency two-pool seat model", () => {
 
   it("resending an expired project-seat invite re-checks that project's pool", async () => {
     const { sid, company } = await seedWorkspace("pool5-agency", "owner@pool5.test", "agency");
+    await seedProject("pz", "pool5-agency");
     const first = await api("/api/platform/team/invite", {
       sid,
       body: { email: "old@pool5.test", role: "content", projectIds: ["pz"] },
@@ -1465,5 +1479,66 @@ describe("direct-client teams", () => {
     });
     const resend = await api("/api/platform/team/invites/legacy-admin-invite/resend", { sid, body: {} });
     expect(resend.status).toBe(409);
+  });
+});
+
+describe("project ownership enforcement on team invites", () => {
+  it("rejects invites and access changes referencing projects the workspace does not own", async () => {
+    // Another agency owns a project; ours owns a different one.
+    await seedWorkspace("other-agency", "owner@other-ag.test", "agency");
+    await seedProject("their-proj", "other-agency");
+    const { sid } = await seedWorkspace("own-check-agency", "owner@own-check.test", "agency");
+    await seedProject("our-proj", "own-check-agency");
+
+    // Foreign project id -> rejected.
+    const foreign = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "f@own-check.test", role: "content", projectIds: ["their-proj"] },
+    });
+    expect(foreign.status).toBe(400);
+    expect(foreign.json.error).toContain("don't belong");
+
+    // Mixed list -> rejected too.
+    const mixed = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "f@own-check.test", role: "content", projectIds: ["our-proj", "their-proj"] },
+    });
+    expect(mixed.status).toBe(400);
+
+    // Own project -> fine.
+    const own = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "ok@own-check.test", role: "content", projectIds: ["our-proj"] },
+    });
+    expect(own.status).toBe(201);
+
+    // PATCH cannot smuggle a foreign project in either.
+    const accept = await api("/api/platform/invite/accept", { body: { token: own.json.token, password: "member-pass-1" } });
+    expect(accept.status).toBe(200);
+    const [member] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "ok@own-check.test"));
+    const patch = await api(`/api/platform/team/members/${member!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { projectIds: ["our-proj", "their-proj"] },
+    });
+    expect(patch.status).toBe(400);
+  });
+
+  it("a client sub-account's projects count as the agency's own", async () => {
+    const { sid } = await seedWorkspace("parent-ag", "owner@parent-ag.test", "agency");
+    await db.insert(platformAccountsTable).values({
+      username: "child-client",
+      passwordHash: hashPassword("child-pass-1"),
+      role: "client",
+      status: "active",
+      email: "child@parent-ag.test",
+      parent: "parent-ag",
+    });
+    await seedProject("child-proj", "child-client");
+    const r = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "staff@parent-ag.test", role: "content", projectIds: ["child-proj"] },
+    });
+    expect(r.status).toBe(201);
   });
 });

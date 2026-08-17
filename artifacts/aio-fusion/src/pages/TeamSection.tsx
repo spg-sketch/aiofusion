@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Mail, Users, Trash2, X, CheckCircle2, RefreshCw, Clock, Building2 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import {
@@ -16,6 +16,7 @@ import {
   serverSwitchWorkspace,
 } from "../lib/auth";
 import { loadStoredProjects } from "../lib/projectStore";
+import { apiBase } from "../lib/apiHelpers";
 
 const ink = "#0a1628";
 const accent = "#C8497A";
@@ -57,7 +58,26 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const [myInviteError, setMyInviteError] = useState<string | null>(null);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
 
-  const projects = useMemo(() => loadStoredProjects(), []);
+  // Project chips must come from the SERVER (which only returns projects this
+  // workspace owns), not the browser's cached list - the cache can hold stale
+  // projects from a previously used workspace on the same device. Fall back to
+  // the cache only while loading / if the request fails.
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>(() => loadStoredProjects());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}/api/store/projects`, { credentials: "include" });
+        if (!res.ok) return;
+        const json = (await res.json()) as { projects?: { id: string; name?: string }[] };
+        if (cancelled || !Array.isArray(json.projects)) return;
+        setProjects(json.projects.map((p) => ({ id: p.id, name: p.name ?? "" })));
+      } catch {
+        /* keep the cached fallback */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Which team model this workspace runs (see TeamOverview.teamMode):
   //  - "agency": two pools - account seats (any role) + 3 content seats/project.

@@ -6,6 +6,7 @@ import {
   platformMembershipsTable,
   platformUsersTable,
   platformCompaniesTable,
+  projectsTable,
 } from "@workspace/db";
 import { and, desc, eq, isNull, gt } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -22,6 +23,7 @@ import {
   getCompanyBySlug,
   getAccount,
   normalizeRole,
+  getVisibleUsernames,
   type MembershipRole,
 } from "../lib/platform-auth";
 import {
@@ -81,6 +83,41 @@ async function resolveTeamMode(company: { slug: string; role: string }): Promise
 }
 
 const NO_TEAM_MESSAGE = "Team management is not available for this account.";
+
+// The set of live project ids this workspace actually owns (its own projects
+// plus those of its descendant client sub-accounts). Team invites and access
+// changes must never reference a project outside this set - the browser's
+// project list is a cache and cannot be trusted.
+async function getOwnedProjectIds(companySlug: string): Promise<Set<string> | null> {
+  const account = await getAccount(companySlug);
+  if (!account) return new Set();
+  const visible = await getVisibleUsernames(account);
+  const rows = await db
+    .select({ id: projectsTable.id, owner: projectsTable.owner })
+    .from(projectsTable)
+    .where(isNull(projectsTable.deletedAt));
+  if (visible === null) return null; // master admin: any project
+  const allowed = new Set(visible.map((v) => normUsername(v)));
+  return new Set(rows.filter((r) => allowed.has(normUsername(r.owner))).map((r) => r.id));
+}
+
+// 400 when any of the given project ids is not owned by this workspace.
+async function rejectForeignProjects(
+  companySlug: string,
+  projectIds: string[],
+  res: Response,
+): Promise<boolean> {
+  const owned = await getOwnedProjectIds(companySlug);
+  if (owned === null) return false;
+  const foreign = projectIds.filter((id) => !owned.has(id));
+  if (foreign.length > 0) {
+    res.status(400).json({
+      error: "One or more selected projects don't belong to this account. Refresh the page and try again.",
+    });
+    return true;
+  }
+  return false;
+}
 
 // Human-readable "project is full" error listing who holds the seats.
 function projectFullError(projectId: string, holders: ProjectSeatHolder[]): string {
@@ -237,6 +274,11 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     // projects, must be a content member, and each chosen project has its own
     // PROJECT_TEAM_SEATS-seat pool (it does not consume account seats).
     const projectIdsParsed = parseProjectAccess(projectAccess);
+    // Never trust the browser's project list: every referenced project must
+    // actually belong to this workspace (or its client sub-accounts).
+    if (projectIdsParsed && projectIdsParsed.length > 0) {
+      if (await rejectForeignProjects(company.slug, projectIdsParsed, res)) return;
+    }
     const isAgencyProjectSeat = teamMode === "agency" && projectAccess !== null;
     if (isAgencyProjectSeat) {
       if (!projectIdsParsed || projectIdsParsed.length === 0) {
@@ -565,6 +607,9 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     if (teamMode === "client" && resultingRole !== "content") {
       res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
       return;
+    }
+    if (updates.projectAccess !== undefined && resultingAccess && resultingAccess.length > 0) {
+      if (await rejectForeignProjects(company.slug, resultingAccess, res)) return;
     }
     if (teamMode === "agency") {
       const wasProjectSeat = parseProjectAccess(target.projectAccess) !== null;
