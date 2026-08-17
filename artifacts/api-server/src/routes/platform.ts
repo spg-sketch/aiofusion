@@ -4221,6 +4221,7 @@ router.get(
       res.json({
         billingEmail: company.billingEmail ?? "",
         vatNumber: company.vatNumber ?? "",
+        billingAddress: company.billingAddress ?? "",
       });
     } catch {
       res.status(500).json({ error: "Could not load billing details" });
@@ -4257,6 +4258,11 @@ router.post(
         res.status(400).json({ error: "VAT number is too long." });
         return;
       }
+      const billingAddressRaw = typeof req.body?.billingAddress === "string" ? req.body.billingAddress.trim() : "";
+      if (billingAddressRaw.length > 512) {
+        res.status(400).json({ error: "Billing address is too long (512 characters max)." });
+        return;
+      }
       const company = await getCompanyBySlug(target);
       if (!company) {
         res.status(404).json({ error: "Account not found." });
@@ -4267,6 +4273,7 @@ router.post(
         .set({
           billingEmail: billingEmailRaw || null,
           vatNumber: vatNumberRaw || null,
+          billingAddress: billingAddressRaw || null,
         })
         .where(eq(platformCompaniesTable.slug, target));
       res.json({ ok: true });

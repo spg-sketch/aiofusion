@@ -63,6 +63,7 @@ vi.mock("@workspace/db", async () => {
       email varchar(255),
       billing_email varchar(255),
       vat_number varchar(64),
+      billing_address varchar(512),
       website varchar(512),
       display_name varchar(128),
       free_access boolean NOT NULL DEFAULT false,

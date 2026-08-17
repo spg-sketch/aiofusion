@@ -74,6 +74,7 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   email: varchar("email", { length: 255 }),
   billingEmail: varchar("billing_email", { length: 255 }),
   vatNumber: varchar("vat_number", { length: 64 }),
+  billingAddress: varchar("billing_address", { length: 512 }),
   website: varchar("website", { length: 512 }),
   displayName: varchar("display_name", { length: 128 }),
   freeAccess: boolean("free_access").notNull().default(false),

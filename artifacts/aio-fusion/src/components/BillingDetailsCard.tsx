@@ -12,6 +12,7 @@ const accent = vars.accent;
 export function BillingDetailsCard() {
   const [billingEmail, setBillingEmail] = useState("");
   const [vatNumber, setVatNumber] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -22,10 +23,11 @@ export function BillingDetailsCard() {
       try {
         const res = await fetch(`${apiBase()}/api/platform/billing-details`, { credentials: "include" });
         if (!res.ok) return;
-        const json = (await res.json()) as { billingEmail?: string; vatNumber?: string };
+        const json = (await res.json()) as { billingEmail?: string; vatNumber?: string; billingAddress?: string };
         if (cancelled) return;
         setBillingEmail(json.billingEmail ?? "");
         setVatNumber(json.vatNumber ?? "");
+        setBillingAddress(json.billingAddress ?? "");
       } catch {
         /* card still renders; saving will surface errors */
       } finally {
@@ -44,7 +46,7 @@ export function BillingDetailsCard() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billingEmail, vatNumber }),
+        body: JSON.stringify({ billingEmail, vatNumber, billingAddress }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -63,7 +65,7 @@ export function BillingDetailsCard() {
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Billing details</h2>
       <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-        Invoices are sent to the billing email below. If you have a VAT number, it will appear on your invoices.
+        Invoices are sent to the billing email below. If you add a VAT number or billing address, they will appear on your invoices.
       </p>
       <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-12 gap-3">
         <div className="md:col-span-6">
@@ -91,6 +93,21 @@ export function BillingDetailsCard() {
             placeholder="e.g. GB123456789"
             disabled={!loaded}
             className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
+            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+          />
+        </div>
+        <div className="md:col-span-12">
+          <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>
+            Billing address <span className="normal-case font-normal tracking-normal" style={{ color: vars.g400 }}>(optional)</span>
+          </label>
+          <textarea
+            value={billingAddress}
+            onChange={(e) => setBillingAddress(e.target.value)}
+            placeholder={"e.g. Acme Ltd\n1 High Street\nLondon\nSW1A 1AA"}
+            rows={4}
+            maxLength={512}
+            disabled={!loaded}
+            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50 resize-y"
             style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
           />
         </div>

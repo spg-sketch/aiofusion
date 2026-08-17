@@ -19,6 +19,7 @@ import { and, eq } from "drizzle-orm";
 import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
 import { ensurePlatformSchemaV5 } from "./lib/ensure-platform-schema-v5";
 import { ensurePlatformSchemaV6 } from "./lib/ensure-platform-schema-v6";
+import { ensurePlatformSchemaV7 } from "./lib/ensure-platform-schema-v7";
 import { sendInviteReminders } from "./lib/invite-reminders";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -107,6 +108,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v4 additions", ensurePlatformSchemaV4],
     ["platform schema v5 additions", ensurePlatformSchemaV5],
     ["platform schema v6 additions", ensurePlatformSchemaV6],
+    ["platform schema v7 additions", ensurePlatformSchemaV7],
     ["platform_password_resets table", ensurePasswordResetsTable],
   ];
   for (const [label, step] of steps) {
