@@ -11,11 +11,9 @@ import { and, eq, isNull, isNotNull, gt, sql } from "drizzle-orm";
 import { normalizeMembershipRole, parseProjectAccess, type MembershipRole } from "./platform-auth";
 import { logger } from "./logger";
 
-// Team invitations: single-use tokens that let an Agency/Partner owner/admin
-// bring a colleague into their workspace with a pre-assigned membership role
-// and project access. Consumed either via password set-up or via Google /
-// Microsoft SSO on the invite landing page.
-
+// Structural type that covers both the real `db` instance and a Drizzle
+// transaction object (they share the same query builder interface at runtime).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export const DEFAULT_TEAM_SEATS = 3;
 
@@ -64,12 +62,18 @@ export async function setTeamSeatLimit(companySlug: string, seats: number): Prom
 
 // Count seats in use: active memberships + pending (unexpired, unused,
 // unrevoked) invitations.
-export async function countSeatsUsed(companyId: string): Promise<{ members: number; pendingInvites: number }> {
-  const [memberRow] = await db
+//
+// Pass a Drizzle transaction as `dbOrTx` to run this query inside an existing
+// transaction (e.g. for atomic seat-cap enforcement).
+export async function countSeatsUsed(
+  companyId: string,
+  dbOrTx: DbOrTx = db,
+): Promise<{ members: number; pendingInvites: number }> {
+  const [memberRow] = await dbOrTx
     .select({ count: sql<number>`count(*)::int` })
     .from(platformMembershipsTable)
     .where(eq(platformMembershipsTable.companyId, companyId));
-  const [inviteRow] = await db
+  const [inviteRow] = await dbOrTx
     .select({ count: sql<number>`count(*)::int` })
     .from(platformInvitationsTable)
     .where(
@@ -103,8 +107,11 @@ export function normalizeInviteToken(raw: string): string {
 // Account-pool seats on an Agency/Partner workspace: memberships and pending
 // invites with NO project restriction (project_access IS NULL). Project-scoped
 // members sit in the per-project pool instead and do not consume these seats.
-export async function countAccountPoolSeats(companyId: string): Promise<{ members: number; pendingInvites: number }> {
-  const [memberRow] = await db
+export async function countAccountPoolSeats(
+  companyId: string,
+  dbOrTx: DbOrTx = db,
+): Promise<{ members: number; pendingInvites: number }> {
+  const [memberRow] = await dbOrTx
     .select({ count: sql<number>`count(*)::int` })
     .from(platformMembershipsTable)
     .where(
@@ -113,7 +120,7 @@ export async function countAccountPoolSeats(companyId: string): Promise<{ member
         isNull(platformMembershipsTable.projectAccess),
       ),
     );
-  const [inviteRow] = await db
+  const [inviteRow] = await dbOrTx
     .select({ count: sql<number>`count(*)::int` })
     .from(platformInvitationsTable)
     .where(
@@ -137,10 +144,65 @@ export type ProjectSeatHolder = {
   inviteToken: string | null;
 };
 
+// Lightweight COUNT-only version of the per-project seat check - no JOINs.
+// Use inside transactions (where a LEFT JOIN may deadlock on some PGlite builds)
+// when only the seat count is needed, not the holder labels.
+//
+// Returns the number of seats currently held for `projectId`.
+export async function countProjectSeatHolders(
+  companyId: string,
+  projectId: string,
+  dbOrTx: DbOrTx = db,
+): Promise<number> {
+  // IMPORTANT: we can't use `sql` tagged templates with JSONB @> inside PGlite
+  // reliably across all versions, so we do a full-table scan + JS filter.  The
+  // tables are small (per-company) so the overhead is negligible.
+  const memberRows = await dbOrTx
+    .select({
+      projectAccess: platformMembershipsTable.projectAccess,
+    })
+    .from(platformMembershipsTable)
+    .where(
+      and(
+        eq(platformMembershipsTable.companyId, companyId),
+        isNotNull(platformMembershipsTable.projectAccess),
+      ),
+    );
+  const memberCount = memberRows.filter((r: { projectAccess: string | null }) =>
+    (parseProjectAccess(r.projectAccess) ?? []).includes(projectId),
+  ).length;
+
+  const inviteRows = await dbOrTx
+    .select({
+      projectAccess: platformInvitationsTable.projectAccess,
+    })
+    .from(platformInvitationsTable)
+    .where(
+      and(
+        eq(platformInvitationsTable.companyId, companyId),
+        isNotNull(platformInvitationsTable.projectAccess),
+        isNull(platformInvitationsTable.usedAt),
+        isNull(platformInvitationsTable.revokedAt),
+        gt(platformInvitationsTable.expiresAt, new Date()),
+      ),
+    );
+  const inviteCount = inviteRows.filter((r: { projectAccess: string | null }) =>
+    (parseProjectAccess(r.projectAccess) ?? []).includes(projectId),
+  ).length;
+
+  return memberCount + inviteCount;
+}
+
 // Per-project seat holders on an Agency/Partner workspace: every member or
 // pending invite whose projectAccess lists a project holds one seat in EACH
 // listed project.
-export async function getProjectSeatHolders(companyId: string): Promise<Map<string, ProjectSeatHolder[]>> {
+//
+// Pass a Drizzle transaction as `dbOrTx` to run this query inside an existing
+// transaction (e.g. for atomic seat-cap enforcement).
+export async function getProjectSeatHolders(
+  companyId: string,
+  dbOrTx: DbOrTx = db,
+): Promise<Map<string, ProjectSeatHolder[]>> {
   const holders = new Map<string, ProjectSeatHolder[]>();
   const add = (projectIds: string[] | null, holder: ProjectSeatHolder) => {
     for (const id of projectIds ?? []) {
@@ -150,7 +212,7 @@ export async function getProjectSeatHolders(companyId: string): Promise<Map<stri
     }
   };
 
-  const memberRows = await db
+  const memberRows = await dbOrTx
     .select({
       userId: platformMembershipsTable.userId,
       projectAccess: platformMembershipsTable.projectAccess,
@@ -173,7 +235,7 @@ export async function getProjectSeatHolders(companyId: string): Promise<Map<stri
     });
   }
 
-  const inviteRows = await db
+  const inviteRows = await dbOrTx
     .select({
       token: platformInvitationsTable.token,
       email: platformInvitationsTable.email,
@@ -346,3 +408,5 @@ export async function consumeInvite(
 
   return true;
 }
+
+export type DbOrTx = typeof db | any;

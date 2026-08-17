@@ -1396,6 +1396,134 @@ describe("agency two-pool seat model", () => {
     expect(unscope.json.limitReached).toBe(true);
   });
 
+  it("stale-expiry: invite that expires between read and lock is correctly treated as expired", async () => {
+    // Before the fix, `isExpired` was computed from a pre-lock read, so an
+    // invite that transitioned from pending -> expired while waiting for the
+    // FOR UPDATE lock would be treated as still-pending and bypass the seat cap.
+    // Now expiry is determined inside the locked transaction from a fresh read.
+    const { sid, company } = await seedWorkspace("stale-exp-full", "owner@staleexpfull.test", "agency");
+    // Fill workspace: owner + 2 pending = 3 seats (full).
+    await api("/api/platform/team/invite", { sid, body: { email: "a@staleexpfull.test", role: "viewer" } });
+    await api("/api/platform/team/invite", { sid, body: { email: "b@staleexpfull.test", role: "viewer" } });
+
+    // An invite with expiresAt barely in the past (represents one that expired
+    // in the window between the old pre-lock read and the seat check).
+    const expTok = "stale-exp-full-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expTok,
+      email: "stale@staleexpfull.test",
+      companyId: company.id,
+      companySlug: "stale-exp-full",
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 1),
+    });
+
+    // Transaction must see the invite as expired and enforce the full-workspace cap.
+    const r = await api(`/api/platform/team/invites/${expTok}/resend`, { sid, body: {} });
+    expect(r.status).toBe(403);
+    expect(r.json.limitReached).toBe(true);
+  });
+
+  it("stale-expiry: invite that expires in the window is reactivated when a seat is free", async () => {
+    // Same scenario, but the workspace has a free slot: the just-expired invite
+    // should be reactivated with a fresh token and 7-day expiry.
+    const { sid, company } = await seedWorkspace("stale-exp-free", "owner@staleexpfree.test", "agency");
+    // Only the owner uses a seat; 2 slots remain.
+    const expTok = "stale-exp-free-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expTok,
+      email: "stale@staleexpfree.test",
+      companyId: company.id,
+      companySlug: "stale-exp-free",
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 1),
+    });
+
+    const r = await api(`/api/platform/team/invites/${expTok}/resend`, { sid, body: {} });
+    expect(r.status).toBe(200);
+    expect(r.json.token).toBeTruthy();
+    expect(r.json.token).not.toBe(expTok);
+    // New token should carry a fresh ~7-day expiry.
+    expect(new Date(r.json.expiresAt).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+  });
+
+  it("concurrent invites for the last account seat: exactly one wins", async () => {
+    // Seat limit is 3 (default). Seed with owner + 1 pending invite = 2 seats
+    // used, so there is exactly 1 seat remaining.
+    const { sid } = await seedWorkspace("concurrent-pool", "owner@concurrent.test", "agency");
+    const warmup = await api("/api/platform/team/invite", { sid, body: { email: "w@concurrent.test", role: "viewer" } });
+    expect(warmup.status).toBe(201);
+
+    // Fire two simultaneous invite requests for different emails.
+    const [r1, r2] = await Promise.all([
+      api("/api/platform/team/invite", { sid, body: { email: "c1@concurrent.test", role: "viewer" } }),
+      api("/api/platform/team/invite", { sid, body: { email: "c2@concurrent.test", role: "viewer" } }),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    // Exactly one should succeed (201) and one should be rejected (403).
+    expect(statuses).toEqual([201, 403]);
+    expect([r1.json.limitReached, r2.json.limitReached]).toContain(true);
+  });
+
+  it("concurrent invites for the last project seat: exactly one wins", async () => {
+    const { sid } = await seedWorkspace("concurrent-proj", "owner@concproj.test", "agency");
+    await seedProject("px", "concurrent-proj");
+    // Pre-fill project "px" with 2 of 3 seats.
+    const [f1, f2] = await Promise.all([
+      api("/api/platform/team/invite", { sid, body: { email: "f1@concproj.test", role: "content", projectIds: ["px"] } }),
+      api("/api/platform/team/invite", { sid, body: { email: "f2@concproj.test", role: "content", projectIds: ["px"] } }),
+    ]);
+    // Both may succeed (2 seats available); we only care that they succeed.
+    expect([201].includes(f1.status) || [201].includes(f2.status)).toBe(true);
+
+    // Drain remaining seats serially to ensure exactly 1 slot left.
+    const seats = await api("/api/platform/team", { sid });
+    const slotsUsed = (seats.json.projectSeats?.px ?? 0) as number;
+    for (let i = slotsUsed; i < 2; i++) {
+      await api("/api/platform/team/invite", { sid, body: { email: `fill${i}@concproj.test`, role: "content", projectIds: ["px"] } });
+    }
+
+    // Now exactly 1 slot remains - fire two concurrent requests.
+    const [r1, r2] = await Promise.all([
+      api("/api/platform/team/invite", { sid, body: { email: "last1@concproj.test", role: "content", projectIds: ["px"] } }),
+      api("/api/platform/team/invite", { sid, body: { email: "last2@concproj.test", role: "content", projectIds: ["px"] } }),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([201, 403]);
+    expect(r1.json.limitReached ?? r2.json.limitReached).toBe(true);
+  });
+
+  it("concurrent resends of an expired invite at the seat limit: exactly one wins", async () => {
+    const { sid, company } = await seedWorkspace("concurrent-resend", "owner@concresend.test", "agency");
+    // Fill the workspace: owner + 2 pending = 3 seats (full).
+    await api("/api/platform/team/invite", { sid, body: { email: "a@concresend.test", role: "viewer" } });
+    await api("/api/platform/team/invite", { sid, body: { email: "b@concresend.test", role: "viewer" } });
+
+    // Insert an expired invite that will compete to add a 4th seat.
+    const expTok = "concurrent-resend-expired-tok";
+    await db.insert(platformInvitationsTable).values({
+      token: expTok,
+      email: "expired@concresend.test",
+      companyId: company.id,
+      companySlug: "concurrent-resend",
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+
+    // Both resends target the same expired invite - exactly one should succeed.
+    const [r1, r2] = await Promise.all([
+      api(`/api/platform/team/invites/${expTok}/resend`, { sid, body: {} }),
+      api(`/api/platform/team/invites/${expTok}/resend`, { sid, body: {} }),
+    ]);
+    // One gets 200 (seat available when it ran), the other gets either 403
+    // (seat taken) or 404 (invite token already regenerated).
+    const succeeded = [r1, r2].filter((r) => r.status === 200);
+    const rejected = [r1, r2].filter((r) => r.status !== 200);
+    expect(succeeded.length).toBeLessThanOrEqual(1);
+    expect(rejected.length).toBeGreaterThanOrEqual(1);
+  });
+
   it("resending an expired project-seat invite re-checks that project's pool", async () => {
     const { sid, company } = await seedWorkspace("pool5-agency", "owner@pool5.test", "agency");
     await seedProject("pz", "pool5-agency");

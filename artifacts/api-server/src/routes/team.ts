@@ -9,7 +9,7 @@ import {
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, isNull, isNotNull, gt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, isNotNull, gt, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   normUsername,
@@ -37,6 +37,7 @@ import {
   countSeatsUsed,
   countAccountPoolSeats,
   getProjectSeatHolders,
+  countProjectSeatHolders,
   type ProjectSeatHolder,
   getValidInvite,
   getInviteInvalidReason,
@@ -47,7 +48,6 @@ import { sendTeamInviteEmail, sendTeamRoleDowngradedEmail, getAppBaseUrl } from 
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { logger } from "../lib/logger";
-
 const router: IRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -207,7 +207,6 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
 
     const now = new Date();
     const pendingCount = inviteRows.filter((i) => i.expiresAt > now).length;
-
         const seatLimit = await getTeamSeatLimit(company.slug);
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
@@ -272,7 +271,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     }
 
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-      const role = normalizeMembershipRole(req.body.role);
+    let role = normalizeMembershipRole(req.body.role);
     if (!email || !EMAIL_RE.test(email)) {
       res.status(400).json({ error: "A valid email address is required." });
       return;
@@ -315,13 +314,13 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
         return;
       }
           const holders = await getProjectSeatHolders(company.id);
-          for (const projectId of added) {
-            const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
-        if (held.length >= PROJECT_TEAM_SEATS) {
-          res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
-          return;
-        }
-      }
+          for (const projectId of projectIdsParsed) {
+            const held = holders.get(projectId) ?? [];
+            if (held.length >= PROJECT_TEAM_SEATS) {
+              res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
+              return;
+            }
+          }
     }
     const invitedName =
       typeof req.body?.fullName === "string" ? req.body.fullName.trim().slice(0, 128) : "";
@@ -332,7 +331,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     const [existingUser] = await db
       .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
       .from(platformUsersTable)
-      .where(eq(platformUsersTable.email, invite.email))
+      .where(eq(platformUsersTable.email, email))
       .limit(1);
     if (existingUser) {
       const [existingMembership] = await db
@@ -374,8 +373,9 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     // per-project pools; everything else counts against the workspace pool
     // (agency mode: account-level members/invites only).
     if (!isAgencyProjectSeat) {
-        const seatLimit = await getTeamSeatLimit(company.slug);
-        const { members, pendingInvites } = await countAccountPoolSeats(company.id);
+      const seatLimit = await getTeamSeatLimit(company.slug);
+      const { members, pendingInvites } =
+        teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
       if (members + pendingInvites >= seatLimit) {
         res.status(403).json({
           error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
@@ -385,7 +385,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       }
     }
 
-    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const token = crypto.randomBytes(32).toString("hex");
     await db.insert(platformInvitationsTable).values({
       token,
       email,
@@ -399,37 +399,37 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     });
 
-    const inviteUrl = `${getAppBaseUrl()}/?invite=${newToken}`;
+    const inviteUrl = `${getAppBaseUrl()}/?invite=${token}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
     void sendTeamInviteEmail({
-      toEmail: existing.email,
+      toEmail: email,
       companyName: company.displayName || company.slug,
       inviterName,
-      roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(existing.role)] ?? existing.role,
+      roleLabel: MEMBERSHIP_ROLE_LABELS[role],
       inviteUrl,
     });
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
-      "team_invite_resent",
-      existing.email,
+      "team_invite_sent",
+      email,
       "invitation",
-      { companySlug: company.slug },
+      { role, companySlug: company.slug },
     );
 
-    res.status(200).json({ ok: true, token: newToken, inviteUrl, expiresAt: newExpiresAt });
+    res.status(201).json({ ok: true, token, inviteUrl });
   } catch (err) {
-    logger.error({ err }, "team: failed to resend invite");
-    res.status(500).json({ error: "Failed to resend invitation." });
+    logger.error({ err }, "team: failed to create invite");
+    res.status(500).json({ error: "Failed to send invitation." });
   }
 });
 
 // --- Revoke a pending invite ---------------------------------------------------
 
-router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (req: Request, res: Response) => {
+router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     if (!canManageTeam(req.account!)) {
-      res.status(403).json({ error: "Only owners and admins can revoke invitations." });
+      res.status(403).json({ error: "Only owners and admins can resend invitations." });
       return;
     }
     const company = await getActiveCompany(req);
@@ -438,97 +438,230 @@ router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (
 
     const oldToken = String(req.params.token || "").trim();
 
-    // Look up the existing invite - scoped to this company, not yet used/revoked.
-    const [existing] = await db
-      .select()
-      .from(platformUsersTable)
-      .where(eq(platformUsersTable.email, invite.email))
-      .limit(1);
+    // Seat limit is a config value; fetch it before the transaction.
+    const resendSeatLimit = await getTeamSeatLimit(company.slug);
 
-    if (!existing) {
-      res.status(404).json({ error: "Invitation not found, already used, or already revoked." });
+    // Pre-compute owned project IDs outside the transaction.
+    // getOwnedProjectIds uses plain `db`; calling it inside db.transaction()
+    // deadlocks on PGlite's single connection.  company.slug is stable for the
+    // lifetime of this request so the pre-read is safe.
+    const ownedProjectIds = teamMode === "agency" ? await getOwnedProjectIds(company.slug) : null;
+
+    // Project-seat pre-check (outside transaction).
+    //
+    // PGlite deadlocks when isNotNull(projectAccess) is used inside a transaction
+    // that holds a FOR UPDATE lock, so we check project-pool seat caps here with
+    // plain `db` instead.  The FOR UPDATE lock (acquired below) still serialises
+    // concurrent resend operations; a simultaneous invite + resend race was
+    // already a pre-existing limitation in both pools.
+    //
+    // We only apply this check when the invite exists, is expired (only expired
+    // invites need a re-count), and is project-scoped for an agency workspace.
+    if (teamMode === "agency") {
+      const [preInvite] = await db
+        .select({
+          expiresAt: platformInvitationsTable.expiresAt,
+          projectAccess: platformInvitationsTable.projectAccess,
+          usedAt: platformInvitationsTable.usedAt,
+          revokedAt: platformInvitationsTable.revokedAt,
+        })
+        .from(platformInvitationsTable)
+        .where(
+          and(
+            eq(platformInvitationsTable.token, oldToken),
+            eq(platformInvitationsTable.companyId, company.id),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+          ),
+        )
+        .limit(1);
+
+      if (preInvite) {
+        const preProjects = parseProjectAccess(preInvite.projectAccess);
+        const preExpired = preInvite.expiresAt <= new Date();
+        if (preExpired && preProjects && preProjects.length > 0) {
+          // This invite is expired and project-scoped: check each project's pool.
+          const holders = await getProjectSeatHolders(company.id);
+          for (const projectId of preProjects) {
+            const held = holders.get(projectId) ?? [];
+            if (held.length >= PROJECT_TEAM_SEATS) {
+              res.status(403).json({
+                error: `That project already has ${PROJECT_TEAM_SEATS} team members. Remove one before resending this invitation.`,
+                limitReached: true,
+                projectId,
+              });
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Everything that depends on the invite's current state (lookup, expiry
+    // determination, mode check, ownership check, seat cap, and token update)
+    // runs inside a single transaction locked with FOR UPDATE on the company row.
+    // This eliminates the TOCTOU window where an invite could expire, or a seat
+    // could be taken, between the initial read and the seat check.
+    type ResendResult =
+      | { ok: true; newToken: string; newExpiresAt: Date; email: string; role: string }
+      | { ok: false; status: 404 | 409 | 403; error: string; limitReached?: true; projectId?: string };
+
+    let resendResult: ResendResult;
+    try {
+      resendResult = await db.transaction(async (tx) => {
+        // Lock the company row to serialize all concurrent resend/invite requests
+        // for this workspace.
+        await tx.execute(
+          sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`,
+        );
+
+        // Re-read the invite inside the lock so its state is authoritative.
+        const [fresh] = await tx
+          .select()
+          .from(platformInvitationsTable)
+          .where(
+            and(
+              eq(platformInvitationsTable.token, oldToken),
+              eq(platformInvitationsTable.companyId, company.id),
+              isNull(platformInvitationsTable.usedAt),
+              isNull(platformInvitationsTable.revokedAt),
+            ),
+          )
+          .limit(1);
+
+        if (!fresh) {
+          return {
+            ok: false as const,
+            status: 404 as const,
+            error: "Invitation not found, already used, or already revoked.",
+          };
+        }
+
+        // An invite that no longer fits this workspace's team model must not
+        // be re-activated.
+        const freshRole = normalizeMembershipRole(fresh.role);
+        const freshProjects = parseProjectAccess(fresh.projectAccess);
+        const violatesMode =
+          (teamMode === "client" && freshRole !== "content") ||
+          (teamMode === "agency" && freshProjects !== null && freshRole !== "content");
+        if (violatesMode) {
+          return {
+            ok: false as const,
+            status: 409 as const,
+            error: "This invitation's role no longer matches your team set-up. Revoke it and send a new invitation instead.",
+          };
+        }
+
+        // The invite's projects must still belong to this workspace. A legacy
+        // invite created before ownership enforcement - or one whose project was
+        // since reassigned elsewhere - must not be regenerated with foreign access.
+        // NOTE: ownedProjectIds was pre-computed before the transaction because
+        // getOwnedProjectIds uses plain `db`, which deadlocks in PGlite's
+        // single-connection model when called inside db.transaction().
+        if (freshProjects && freshProjects.length > 0) {
+          if (ownedProjectIds !== null && freshProjects.some((id) => !ownedProjectIds.has(id))) {
+            return {
+              ok: false as const,
+              status: 409 as const,
+              error: "This invitation references a project that no longer belongs to this account. Revoke it and send a new invitation instead.",
+            };
+          }
+        }
+
+        // Seat cap: only applies when re-activating an expired invite.
+        // Expiry is evaluated from the fresh DB read, not the pre-lock state.
+        const isExpiredNow = fresh.expiresAt <= new Date();
+        if (isExpiredNow) {
+          if (teamMode === "agency" && freshProjects && freshProjects.length > 0) {
+            // Project seat check was done PRE-TRANSACTION (see below): if the
+            // pre-check found a full project, we returned 403 before this point.
+            // PGlite deadlocks on isNotNull(projectAccess) inside a FOR UPDATE
+            // transaction, so we cannot re-check here with `tx`.  The FOR UPDATE
+            // lock on the company row already serialises concurrent resend
+            // operations; a concurrent invite vs resend race is a pre-existing
+            // limitation also present in the account-pool path.
+          } else {
+            const { members, pendingInvites } =
+              teamMode === "agency"
+                ? await countAccountPoolSeats(company.id, tx)
+                : await countSeatsUsed(company.id, tx);
+            if (members + pendingInvites >= resendSeatLimit) {
+              return {
+                ok: false as const,
+                status: 403 as const,
+                error: "Seat limit reached - remove a member or invite before resending this expired invitation.",
+                limitReached: true as const,
+              };
+            }
+          }
+        }
+
+        // Regenerate: fresh token, fresh 7-day expiry, clear reminder flag.
+        // The WHERE clause re-asserts the invite is still unused/unrevoked; if
+        // another concurrent request claimed it between our SELECT and UPDATE
+        // (impossible under FOR UPDATE, but guarded defensively), we return 404.
+        const freshToken = crypto.randomBytes(32).toString("hex");
+        const freshExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
+        const updated = await tx
+          .update(platformInvitationsTable)
+          .set({ token: freshToken, expiresAt: freshExpiresAt, reminderSentAt: null })
+          .where(
+            and(
+              eq(platformInvitationsTable.token, oldToken),
+              eq(platformInvitationsTable.companyId, company.id),
+              isNull(platformInvitationsTable.usedAt),
+              isNull(platformInvitationsTable.revokedAt),
+            ),
+          )
+          .returning({ token: platformInvitationsTable.token });
+
+        if (updated.length === 0) {
+          return {
+            ok: false as const,
+            status: 404 as const,
+            error: "Invitation not found, already used, or already revoked.",
+          };
+        }
+
+        return {
+          ok: true as const,
+          newToken: freshToken,
+          newExpiresAt: freshExpiresAt,
+          email: fresh.email,
+          role: fresh.role,
+        };
+      });
+    } catch (err) {
+      logger.error({ err }, "team: failed to resend invite");
+      res.status(500).json({ error: "Failed to resend invitation." });
       return;
     }
 
-    // An old invite that no longer fits this workspace's team model must not
-    // be re-activated - revoke and re-invite instead.
-    const existingRole = normalizeMembershipRole(existing.role);
-    const existingProjects = parseProjectAccess(existing.projectAccess);
-    const violatesMode =
-      (teamMode === "client" && existingRole !== "content") ||
-      (teamMode === "agency" && existingProjects !== null && existingRole !== "content");
-    if (violatesMode) {
-      res.status(409).json({
-        error: "This invitation's role no longer matches your team set-up. Revoke it and send a new invitation instead.",
+    if (!resendResult.ok) {
+      res.status(resendResult.status).json({
+        error: resendResult.error,
+        ...(resendResult.limitReached ? { limitReached: true } : {}),
+        ...(resendResult.projectId ? { projectId: resendResult.projectId } : {}),
       });
       return;
     }
 
-    // The invite's projects must still belong to this workspace. A legacy
-    // invite created before ownership enforcement - or one whose project was
-    // since reassigned elsewhere - must not be regenerated with foreign access.
-    if (existingProjects && existingProjects.length > 0) {
-      const owned = await getOwnedProjectIds(company.slug);
-      if (owned !== null && existingProjects.some((id) => !owned.has(id))) {
-        res.status(409).json({
-          error: "This invitation references a project that no longer belongs to this account. Revoke it and send a new invitation instead.",
-        });
-        return;
-      }
-    }
 
-    // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat
-    // cap for whichever pool the invite belongs to (still-pending invites
-    // already hold their seat - no check needed).
-    if (existing.expiresAt <= new Date()) {
-      const inviteProjects = existingProjects;
-      if (teamMode === "agency" && inviteProjects && inviteProjects.length > 0) {
-        // Project seat: each of the invite's projects must have room again.
-        // (The expired invite itself is not counted - only unexpired ones are.)
-          const holders = await getProjectSeatHolders(company.id);
-          for (const projectId of added) {
-            const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
-          if (held.length >= PROJECT_TEAM_SEATS) {
-            res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
-            return;
-          }
-        }
-      } else {
-        const { members, pendingInvites } = await countAccountPoolSeats(company.id);
-        const seatLimit = await getTeamSeatLimit(company.slug);
-        if (members + pendingInvites >= seatLimit) {
-          res.status(403).json({
-            error: "Seat limit reached - remove a member or invite before resending this expired invitation.",
-            limitReached: true,
-          });
-          return;
-        }
-      }
-    }
-
-    // Regenerate: fresh token, fresh 7-day expiry, clear reminder flag.
-    const newToken = crypto.randomBytes(32).toString("hex");
-    const newExpiresAt = new Date(Date.now() + INVITE_TTL_MS);
-
-    await db
-      .update(platformInvitationsTable)
-      .set({ token: newToken, expiresAt: newExpiresAt, reminderSentAt: null })
-      .where(eq(platformInvitationsTable.token, oldToken));
-
+    const { newToken, newExpiresAt, email: resendEmail, role: resendRole } = resendResult;
     const inviteUrl = `${getAppBaseUrl()}/?invite=${newToken}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
     void sendTeamInviteEmail({
-      toEmail: existing.email,
+      toEmail: resendEmail,
       companyName: company.displayName || company.slug,
       inviterName,
-      roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(existing.role)] ?? existing.role,
+      roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(resendRole)] ?? resendRole,
       inviteUrl,
     });
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
       "team_invite_resent",
-      existing.email,
+      resendEmail,
       "invitation",
       { companySlug: company.slug },
     );
@@ -550,7 +683,7 @@ router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (
     }
     const company = await getActiveCompany(req);
     if (!company || !(await resolveTeamMode(company))) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
-    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const token = String(req.params.token || "").trim();
     const revoked = await db
       .update(platformInvitationsTable)
       .set({ revokedAt: new Date() })
@@ -593,7 +726,7 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     }
 
     const [target] = await db
-      .select({ role: platformMembershipsTable.role })
+      .select()
       .from(platformMembershipsTable)
       .where(
         and(
@@ -784,7 +917,7 @@ router.post("/platform/team/seat-limit", requirePlatformAuth, async (req: Reques
 
 router.get("/platform/invite/:token", async (req: Request, res: Response) => {
   try {
-    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const token = String(req.params.token || "").trim();
     const invite = await getValidInvite(token);
     if (!invite) {
       const reason = await getInviteInvalidReason(token);
@@ -792,20 +925,10 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
       return;
     }
     const [company] = await db
-      .select({ role: platformCompaniesTable.role })
+      .select({ displayName: platformCompaniesTable.displayName, slug: platformCompaniesTable.slug })
       .from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.id, invite.companyId))
       .limit(1);
-
-type ViolationItem = {
-  kind: "member" | "invite";
-  userId?: string | null;
-  inviteToken?: string | null;
-  email: string | null;
-  name?: string | null;
-  currentRole: MembershipRole;
-  reason: string;
-};
     const [existingUser] = await db
       .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
       .from(platformUsersTable)
@@ -904,6 +1027,24 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
       .where(eq(platformCompaniesTable.id, invite.companyId))
       .limit(1);
 
+    res.json({
+      ok: true,
+      account: {
+        username: invite.companySlug,
+        role: company?.role ?? "agency",
+        membershipRole: normalizeMembershipRole(invite.role),
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "team: failed to accept invite");
+    res.status(500).json({ error: "Failed to accept invitation." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin: team-violation report + fix
+// ---------------------------------------------------------------------------
+
 type ViolationItem = {
   kind: "member" | "invite";
   userId?: string | null;
@@ -913,8 +1054,6 @@ type ViolationItem = {
   currentRole: MembershipRole;
   reason: string;
 };
-export default router;
-export type { MembershipRole };
 
 type CompanyViolations = {
   companyId: string;
@@ -925,12 +1064,6 @@ type CompanyViolations = {
   ownerEmail: string | null;
   violations: ViolationItem[];
 };
-
-    const total = violations.reduce((s, c) => s + c.violations.length, 0);
-
-    const actor = { username: req.account!.username, id: req.account!.userId ?? undefined };
-
-    const dryRun = req.body?.dryRun === true;
 
 async function collectTeamViolations(): Promise<CompanyViolations[]> {
   const companies = await db
@@ -1121,6 +1254,39 @@ async function applyTeamViolationFixes(
   return { fixed, companies: violations.length, notifications };
 }
 
-    const result = await applyTeamViolationFixes(violations, actor, dryRun);
+// GET /platform/admin/team-violations : report all violations across all workspaces
+router.get("/platform/admin/team-violations", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (req.account!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    const companies = await collectTeamViolations();
+    const total = companies.reduce((s, c) => s + c.violations.length, 0);
+    res.json({ total, companies });
+  } catch (err) {
+    logger.error({ err }, "team: failed to collect violations");
+    res.status(500).json({ error: "Failed to collect team violations." });
+  }
+});
 
+// POST /platform/admin/team-violations/fix : apply (or dry-run) fixes
+router.post("/platform/admin/team-violations/fix", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (req.account!.role !== "admin") {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    const dryRun = req.body?.dryRun === true;
     const violations = await collectTeamViolations();
+    const actor = { username: req.account!.username, id: req.account!.userId ?? undefined };
+    const result = await applyTeamViolationFixes(violations, actor, dryRun);
+    res.json({ ok: true, dryRun, ...result });
+  } catch (err) {
+    logger.error({ err }, "team: failed to fix violations");
+    res.status(500).json({ error: "Failed to fix team violations." });
+  }
+});
+
+export default router;
+export type { MembershipRole };

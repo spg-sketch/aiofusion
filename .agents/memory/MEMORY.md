@@ -37,6 +37,7 @@
 - [AIO Fusion team invites + membership roles](aio-fusion-team-invites.md) — 5-tier member roles ride on the session; createPlatformSession revokes per user_id NOT per slug; blockReadOnlyMembers must stay path-scoped.
 - [AIO Fusion password reset](aio-fusion-password-reset.md) — passwords live in BOTH platform_users and legacy platform_accounts (sync both); App.tsx history-sync wipes URL query params before lazy pages mount, capture email-link params in App state.
 - [AIO Fusion login/SSO overhaul Steps 1–4](aio-fusion-login-sso-overhaul.md) — schema v2 columns, session_version fast revocation, pending_approval gate removed; PGlite DDL + cookie name `aio_sid` pitfalls; Steps 5–8 still pending.
+- [PGlite transaction limitations](pglite-transaction-limitations.md) — isNotNull(col) and getOwnedProjectIds() deadlock inside db.transaction()+FOR UPDATE; pre-compute before the transaction block.
 - [Scrambled semantic-merge test files](aio-fusion-scrambled-merge-tests.md) — if a rebase-conflict file fails tests, the incoming main version may itself be spliced/broken; rebuild from last coherent commit.
 - [Security alert email recipient](aio-fusion-security-alert-recipient.md) — resolve to earliest OWNER membership (fallback: account email), never latest-membership lookup; non-owners must not get security notices.
 - [App-level jsdom tests](aio-fusion-app-level-jsdom-tests.md) — full-App render needs elementFromPoint/observer stubs + 401 fetch; set URL before importing App (useState initializers capture params).
