@@ -1240,6 +1240,39 @@ describe("agency partner clients are permanently managed", () => {
     expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
   });
 
+  it("forgot-password: no reset token is issued when the human's only workspace is a partner client", async () => {
+    const [u] = await db
+      .insert(platformUsersTable)
+      .values({ email: PARTNER_CONTACT, passwordHash: hashPassword("OldPass12345") })
+      .returning();
+    const [co] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: PARTNER_CLIENT, role: "client" })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: u!.id,
+      companyId: co!.id,
+      companySlug: PARTNER_CLIENT,
+      role: "owner",
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/forgot-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: PARTNER_CONTACT }),
+    });
+    // Response stays enumeration-safe...
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok?: boolean }).ok).toBe(true);
+    // ...but no token is created for a partner-client-only human.
+    await flushAsync();
+    const tokens = await db
+      .select()
+      .from(platformPasswordResetsTable)
+      .where(eq(platformPasswordResetsTable.userId, u!.id));
+    expect(tokens.length).toBe(0);
+  });
+
   it("reset-password: refused when the human's only workspace is a partner client", async () => {
     const [u] = await db
       .insert(platformUsersTable)

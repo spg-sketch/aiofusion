@@ -1398,7 +1398,26 @@ router.post("/platform/forgot-password", loginLimiter, async (req: Request, res:
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     if (email) {
       const user = await getUserByEmail(email);
+      let partnerOnly = false;
       if (user) {
+        // Agency partner clients are permanently managed - never send a reset
+        // link to a human whose ONLY workspaces are partner clients. Keep the
+        // response identical (ok: true) so addresses cannot be enumerated.
+        const memberships = await db
+          .select({ companySlug: platformMembershipsTable.companySlug })
+          .from(platformMembershipsTable)
+          .where(eq(platformMembershipsTable.userId, user.id));
+        if (memberships.length > 0) {
+          partnerOnly = true;
+          for (const mem of memberships) {
+            if (!(await isAgencyPartnerClient(normUsername(mem.companySlug)))) {
+              partnerOnly = false;
+              break;
+            }
+          }
+        }
+      }
+      if (user && !partnerOnly) {
         // Invalidate any previously issued tokens for this user.
         await db
           .delete(platformPasswordResetsTable)
