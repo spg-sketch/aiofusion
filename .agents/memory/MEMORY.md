@@ -1,3 +1,4 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [AIO Fusion profile images](aio-fusion-profile-images.md) — avatar/logo stored as data URLs in platform_meta via /api/platform/profile/image; new authed routes must be added to the ai-action-guards allowlist.
 - [AIO Fusion saved audits + App/LlmCheckPage coupling](aio-fusion-saved-audits-and-cycles.md) — fire `aio:saved-audits-changed` window event on save/delete so sidebar refreshes; beware the App<->LlmCheckPage circular import.
 - [AIO Fusion audit server sync](aio-fusion-audit-server-sync.md) — savedAudits/savedDiagnostics synced to DB via store-audits.ts; auditSync.ts is the client helper; savedAuditsKey must be exported; Content/Tech GEO SavedScored still localStorage-only.
@@ -50,3 +51,4 @@
 - [OAuth interstitial vs password shield](aio-fusion-oauth-interstitial-shield.md) — SSO stuck on "Completing sign-in…" on deployed site = deployment visibility is password/private; shield swallows the interstitial POST; check visibility before debugging code.
 - [Agency partner clients permanently managed](aio-fusion-agency-partner-clients.md) — every credential-issuance route must call isAgencyPartnerClient; UI hiding is not enforcement; /me exposes agencyManagedClient.
 - [Workspace switch cache clearing](aio-fusion-workspace-switch-caches.md) - bare localStorage keys to clear on switch (leak via sync push); intake late-profile effect; VIEW_TO_SLUG derived from PUBLIC_ROUTES + hard-fail prerender.
+- [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.

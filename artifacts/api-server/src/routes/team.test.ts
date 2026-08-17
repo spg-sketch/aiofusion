@@ -797,6 +797,39 @@ describe("resend invite endpoint", () => {
     expect(String(expired.json.error)).toMatch(/7 days/);
   });
 
+  it("tolerates email-client token mangling (whitespace, trailing punctuation, URL-encoding)", async () => {
+    const { sid } = await seedAgency("invite-mangle", "owner@invite-mangle.test");
+    const inv = await api("/api/platform/team/invite", { sid, body: { email: "m@invite-mangle.test", role: "viewer" } });
+    expect(inv.status).toBe(201);
+    const tok = inv.json.token as string;
+
+    // Trailing punctuation appended by an email client.
+    expect((await api(`/api/platform/invite/${tok}.`)).status).toBe(200);
+    expect((await api(`/api/platform/invite/${tok}%22`)).status).toBe(200); // trailing quote, URL-encoded
+    // Surrounding whitespace, URL-encoded.
+    expect((await api(`/api/platform/invite/%20${tok}%20`)).status).toBe(200);
+    // Accept endpoint also normalises before lookup.
+    const accept = await api("/api/platform/invite/accept", { body: { token: `  ${tok}, `, password: "mangle-pass-1" } });
+    expect(accept.status).toBe(200);
+  });
+
+  it("reports 'replaced' when a revoked invite's email has a newer pending invitation", async () => {
+    const { sid } = await seedAgency("invite-replaced", "owner@invite-replaced.test");
+    const inv1 = await api("/api/platform/team/invite", { sid, body: { email: "x@invite-replaced.test", role: "viewer" } });
+    expect(inv1.status).toBe(201);
+    await api(`/api/platform/team/invites/${inv1.json.token}/revoke`, { sid, body: {} });
+    const inv2 = await api("/api/platform/team/invite", { sid, body: { email: "x@invite-replaced.test", role: "viewer" } });
+    expect(inv2.status).toBe(201);
+
+    // The old (revoked) link now points at the newer invitation.
+    const replaced = await api(`/api/platform/invite/${inv1.json.token}`);
+    expect(replaced.status).toBe(404);
+    expect(replaced.json.reason).toBe("replaced");
+    expect(String(replaced.json.error)).toMatch(/most recent invitation email/i);
+    // The new link still resolves.
+    expect((await api(`/api/platform/invite/${inv2.json.token}`)).status).toBe(200);
+  });
+
   it("resending an expired invite at a full workspace returns 403 limitReached; resending a still-pending invite succeeds", async () => {
     const { sid, company } = await seedAgency("resend-seatcap", "owner@resend-seatcap.test");
 

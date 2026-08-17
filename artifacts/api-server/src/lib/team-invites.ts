@@ -83,6 +83,23 @@ export async function countSeatsUsed(companyId: string): Promise<{ members: numb
   return { members: memberRow?.count ?? 0, pendingInvites: inviteRow?.count ?? 0 };
 }
 
+export function normalizeInviteToken(raw: string): string {
+  if (!raw) return "";
+  let t = String(raw).trim();
+  for (let i = 0; i < 2; i++) {
+    try {
+      const dec = decodeURIComponent(t);
+      if (dec === t) break;
+      t = dec;
+    } catch {
+      break;
+    }
+  }
+  t = t.trim().replace(/^["'<([{]+/, "").replace(/["'>)\]}.,;:!?]+$/, "");
+  const m = t.match(/[0-9a-f]{64}/i);
+  return m ? m[0].toLowerCase() : t;
+}
+
 // Account-pool seats on an Agency/Partner workspace: memberships and pending
 // invites with NO project restriction (project_access IS NULL). Project-scoped
 // members sit in the per-project pool instead and do not consume these seats.
@@ -185,7 +202,8 @@ export async function getProjectSeatHolders(companyId: string): Promise<Map<stri
 }
 
 // Load an invitation that is still valid (unused, unrevoked, unexpired).
-export async function getValidInvite(token: string): Promise<PlatformInvitationRow | null> {
+export async function getValidInvite(rawToken: string): Promise<PlatformInvitationRow | null> {
+  const token = normalizeInviteToken(rawToken);
   if (!token) return null;
   const [row] = await db
     .select()
@@ -204,32 +222,76 @@ export async function getValidInvite(token: string): Promise<PlatformInvitationR
   return row;
 }
 
-// Why a specific invite link is not usable. "unknown" also covers tokens that
-// were replaced by a re-sent invitation (each resend issues a fresh token).
-export type InviteInvalidReason = "unknown" | "used" | "revoked" | "expired" | "inactive";
+// Why a specific invite link is not usable. "unknown" covers tokens that
+// don't match any invitation (including tokens replaced by a re-sent
+// invitation, since each resend overwrites the token in place). "replaced"
+// means the token belongs to a revoked invite whose email has a newer pending
+// invitation - the recipient should open their latest email instead.
+export type InviteInvalidReason = "unknown" | "used" | "revoked" | "replaced" | "expired" | "inactive";
 
 export const INVITE_INVALID_MESSAGES: Record<InviteInvalidReason, string> = {
   unknown:
     "This invitation link isn't valid. If the invitation was re-sent, only the link in the newest email works - older links stop working.",
   used: "This invitation has already been used. If that was you, just sign in with your email and password.",
   revoked: "This invitation was withdrawn. Ask your team admin to send a new one.",
+  replaced:
+    "This link was replaced by a newer invitation. Please open the most recent invitation email - only the newest link works.",
   expired: "This invitation has expired - links last 7 days. Ask your team admin to re-send it.",
   inactive: "This workspace is no longer active, so the invitation can't be accepted.",
 };
 
-// Explain why getValidInvite() returned null for this token.
-export async function getInviteInvalidReason(token: string): Promise<InviteInvalidReason> {
-  if (!token) return "unknown";
+// Explain why getValidInvite() returned null for this token, and log the
+// specific failure so support can diagnose reports of "invalid" invite links.
+export async function getInviteInvalidReason(rawToken: string): Promise<InviteInvalidReason> {
+  const token = normalizeInviteToken(rawToken);
+  const tokenPrefix = token.slice(0, 8);
+  if (!token) {
+    logger.warn({ tokenPrefix }, "invite lookup failed: empty token");
+    return "unknown";
+  }
   const [row] = await db
     .select()
     .from(platformInvitationsTable)
     .where(eq(platformInvitationsTable.token, token))
     .limit(1);
-  if (!row) return "unknown";
-  if (row.usedAt) return "used";
-  if (row.revokedAt) return "revoked";
-  if (row.expiresAt < new Date()) return "expired";
-  return "inactive";
+  let reason: InviteInvalidReason;
+  if (!row) {
+    reason = "unknown";
+  } else if (row.usedAt) {
+    reason = "used";
+  } else if (row.revokedAt) {
+    // A revoked invite whose email now has a fresh pending invitation in the
+    // same workspace was effectively replaced - point the user at the new one.
+    const [newer] = await db
+      .select({ token: platformInvitationsTable.token })
+      .from(platformInvitationsTable)
+      .where(
+        and(
+          eq(platformInvitationsTable.companyId, row.companyId),
+          eq(platformInvitationsTable.email, row.email),
+          isNull(platformInvitationsTable.usedAt),
+          isNull(platformInvitationsTable.revokedAt),
+          gt(platformInvitationsTable.expiresAt, new Date()),
+        ),
+      )
+      .limit(1);
+    reason = newer ? "replaced" : "revoked";
+  } else if (row.expiresAt < new Date()) {
+    reason = "expired";
+  } else {
+    reason = "inactive";
+  }
+  logger.warn(
+    {
+      reason,
+      tokenPrefix,
+      rawTokenDiffers: normalizeInviteToken(rawToken) !== String(rawToken ?? ""),
+      email: row?.email,
+      companySlug: row?.companySlug,
+    },
+    "invite lookup failed",
+  );
+  return reason;
 }
 
 // Consume an invitation for a resolved platform user: mark the token used

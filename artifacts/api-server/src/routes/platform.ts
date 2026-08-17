@@ -95,7 +95,7 @@ import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMess
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, sendAccountTypeChangedEmail, getAppBaseUrl } from "../lib/notify-email";
-import { getValidInvite, consumeInvite } from "../lib/team-invites";
+import { getValidInvite, getInviteInvalidReason, consumeInvite } from "../lib/team-invites";
 
 const router: IRouter = Router();
 
@@ -2288,7 +2288,11 @@ async function handleSsoInvite(
   if (!token) return null;
   res.clearCookie(INVITE_COOKIE, { path: "/" });
   const invite = await getValidInvite(token);
-  if (!invite) return `/?oauth_status=error&oauth_msg=invite_invalid`;
+  if (!invite) {
+    // Logs the specific failure reason (not found / used / revoked / expired).
+    await getInviteInvalidReason(token);
+    return `/?oauth_status=error&oauth_msg=invite_invalid`;
+  }
   if (invite.email.toLowerCase() !== profile.email.toLowerCase()) {
     // The invite is bound to a specific email address; a different SSO account
     // must not be able to claim it.
@@ -3424,6 +3428,7 @@ router.post(
       const token = String(req.params.token || "").trim();
       const invite = await getValidInvite(token);
       if (!invite) {
+        await getInviteInvalidReason(token); // logs the specific failure reason
         res.status(404).json({ error: "This invitation is invalid, expired, or has already been used." });
         return;
       }

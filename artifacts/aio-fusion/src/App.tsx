@@ -767,9 +767,14 @@ function App() {
 
   // Team invite token from /?invite=<token> - captured once on mount (the
   // history-sync effect rewrites the URL soon after).
-  const [inviteToken] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get("invite"),
-  );
+  // Email clients sometimes append stray punctuation or whitespace to the
+  // link; trim the obvious cruft here (the server normalises more thoroughly).
+  const [inviteToken] = useState<string | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("invite");
+    if (!raw) return null;
+    const cleaned = raw.trim().replace(/["'>)\]}.,;:!?]+$/, "");
+    return cleaned || null;
+  });
   // Token from a password-reset email link (/?reset_token=...). Captured once
   // on load, before the history-sync effect rewrites the URL and drops the
   // query string, then handed to PlatformHomePage as a prop.

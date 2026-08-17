@@ -12,6 +12,8 @@
  *     first entry wins.
  *  3. Hard-coded production fallback ("https://www.aiofusion.ai").
  */
+import { logger } from "./logger";
+
 export function getAppBaseUrl(): string {
   const isStaging =
     (process.env.DEPLOYMENT_ENV ?? process.env.NODE_ENV) === "staging";
@@ -30,5 +32,12 @@ export function getAppBaseUrl(): string {
     if (first) return `https://${first}`;
   }
 
+  // Last-resort fallback. Reaching this on a non-production environment means
+  // emailed links (invites, resets) will point at the live site and their
+  // tokens will never resolve - log loudly so it can be diagnosed.
+  logger.warn(
+    { deploymentEnv: process.env.DEPLOYMENT_ENV ?? process.env.NODE_ENV ?? null },
+    "getAppBaseUrl: CANONICAL_DOMAIN and REPLIT_DOMAINS both unset - falling back to the hardcoded production domain; emailed links may point at the wrong environment",
+  );
   return "https://www.aiofusion.ai";
 }
