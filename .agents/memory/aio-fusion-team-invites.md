@@ -16,3 +16,5 @@ description: How agency team invitations, 5-tier membership roles, and per-membe
 - PGlite test fixtures for membership must include `project_access` column in all DDL fixtures; new membership columns must be added to all fixtures.
 
 - Session list/revoke endpoints must scope by per-human `userId`, never the shared workspace slug (`platform_sessions.username`) - slug scoping leaks and lets any member revoke colleagues' sessions.
+
+**Ownership on seat assignment:** invite/PATCH/resend validate projectIds against a downward-only owned set (self + descendant sub-accounts, NOT getVisibleUsernames which includes the parent); client-mode invites null out projectAccess before storage. The "Client projects" shortcut stash must only suppress the leftover account_section=clients deep-link, never other sections (security/billing email links).
