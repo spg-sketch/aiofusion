@@ -441,7 +441,9 @@ describe("team invitations", () => {
     const team1 = await api("/api/platform/team", { sid });
     expect(team1.status).toBe(200);
     expect(team1.json.invites).toHaveLength(1);
-    expect(team1.json.seatsUsed).toBe(2); // owner + pending invite
+    // Agency two-pool model: the project-scoped invite holds a project seat,
+    // so only the owner counts against the account pool.
+    expect(team1.json.seatsUsed).toBe(1);
     expect(team1.json.seatLimit).toBe(3);
 
     // Accept with a password → session cookie, membership created.
@@ -1193,5 +1195,222 @@ describe("cross-member session isolation: legacy userId-less sessions", () => {
     });
     expect([403, 404]).toContain(revoke2.status);
     expect((await api("/api/platform/me", { sid: legacySid })).status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agency two-pool seats + direct-client teams (task: partner/client team seats)
+// ---------------------------------------------------------------------------
+
+// Seed an active workspace of any role, optionally with a parent account.
+async function seedWorkspace(slug: string, email: string, role: string, parent?: string) {
+  await db.insert(platformAccountsTable).values({
+    username: slug,
+    passwordHash: hashPassword("owner-password-1"),
+    role,
+    status: "active",
+    email,
+    ...(parent ? { parent } : {}),
+  });
+  const [company] = await db
+    .insert(platformCompaniesTable)
+    .values({ slug, role, status: "active", displayName: `${slug} Ltd`, setupComplete: true })
+    .returning();
+  const [user] = await db
+    .insert(platformUsersTable)
+    .values({ email, passwordHash: hashPassword("owner-password-1"), emailVerified: true })
+    .returning();
+  await db.insert(platformMembershipsTable).values({
+    userId: user!.id,
+    companyId: company!.id,
+    companySlug: slug,
+    role: "owner",
+  });
+  const sid = await createPlatformSession(slug, null, user!.id, company!.id);
+  return { company: company!, user: user!, sid };
+}
+
+describe("agency two-pool seat model", () => {
+  it("GET /team reports agency mode with account-pool seat counts and per-project usage", async () => {
+    const { sid } = await seedWorkspace("pool-agency", "owner@pool.test", "agency");
+    // One account-level invite + one project-scoped invite.
+    await api("/api/platform/team/invite", { sid, body: { email: "acct@pool.test", role: "billing" } });
+    await api("/api/platform/team/invite", { sid, body: { email: "proj@pool.test", role: "content", projectIds: ["p1"] } });
+
+    const t = await api("/api/platform/team", { sid });
+    expect(t.status).toBe(200);
+    expect(t.json.teamMode).toBe("agency");
+    // Owner + 1 pending account invite; the project invite does NOT count here.
+    expect(t.json.seatsUsed).toBe(2);
+    expect(t.json.projectSeatLimit).toBe(3);
+    expect(t.json.projectSeats).toEqual({ p1: 1 });
+  });
+
+  it("a full account pool still allows project-seat invites; per-project pool caps at 3 with holder names", async () => {
+    const { sid } = await seedWorkspace("pool2-agency", "owner@pool2.test", "agency");
+    // Fill the account pool: owner + 2 pending account invites = 3.
+    expect((await api("/api/platform/team/invite", { sid, body: { email: "a@pool2.test", role: "admin" } })).status).toBe(201);
+    expect((await api("/api/platform/team/invite", { sid, body: { email: "b@pool2.test", role: "billing" } })).status).toBe(201);
+    const acctFull = await api("/api/platform/team/invite", { sid, body: { email: "c@pool2.test", role: "viewer" } });
+    expect(acctFull.status).toBe(403);
+    expect(acctFull.json.limitReached).toBe(true);
+
+    // Project seats remain available even though the account pool is full.
+    for (const n of [1, 2, 3]) {
+      const r = await api("/api/platform/team/invite", {
+        sid,
+        body: { email: `p${n}@pool2.test`, role: "content", projectIds: ["proj-x"], fullName: `Person ${n}` },
+      });
+      expect(r.status).toBe(201);
+    }
+    // 4th seat on the same project is rejected, naming the seat holders.
+    const full = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "p4@pool2.test", role: "content", projectIds: ["proj-x"] },
+    });
+    expect(full.status).toBe(403);
+    expect(full.json.limitReached).toBe(true);
+    expect(full.json.projectId).toBe("proj-x");
+    expect(full.json.error).toContain("Person 1");
+
+    // A different project still has room.
+    const other = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "p4@pool2.test", role: "content", projectIds: ["proj-y"] },
+    });
+    expect(other.status).toBe(201);
+  });
+
+  it("project-seat invites must be content members and name at least one project", async () => {
+    const { sid } = await seedWorkspace("pool3-agency", "owner@pool3.test", "agency");
+    const badRole = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "v@pool3.test", role: "viewer", projectIds: ["p1"] },
+    });
+    expect(badRole.status).toBe(400);
+    const noProject = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "v@pool3.test", role: "content", projectIds: [] },
+    });
+    expect(noProject.status).toBe(400);
+  });
+
+  it("member updates respect the pools: no non-content project members, full projects blocked, account pool checked on unscope", async () => {
+    const { sid, company } = await seedWorkspace("pool4-agency", "owner@pool4.test", "agency");
+
+    // Accept a project-scoped content member.
+    const inv = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "m@pool4.test", role: "content", projectIds: ["pa"], fullName: "Member M" },
+    });
+    const accept = await api("/api/platform/invite/accept", { body: { token: inv.json.token, password: "member-pass-1" } });
+    expect(accept.status).toBe(200);
+    const [memberUser] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "m@pool4.test"));
+
+    // Cannot make a project-scoped member an admin.
+    const roleUp = await api(`/api/platform/team/members/${memberUser!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { role: "admin" },
+    });
+    expect(roleUp.status).toBe(400);
+
+    // Fill project "pb" with 3 pending invites, then reassignment into it fails.
+    for (const n of [1, 2, 3]) {
+      expect(
+        (await api("/api/platform/team/invite", { sid, body: { email: `pb${n}@pool4.test`, role: "content", projectIds: ["pb"] } })).status,
+      ).toBe(201);
+    }
+    const intoFull = await api(`/api/platform/team/members/${memberUser!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { projectIds: ["pa", "pb"] },
+    });
+    expect(intoFull.status).toBe(403);
+    expect(intoFull.json.projectId).toBe("pb");
+
+    // Keeping their existing project is fine (their own seat is not double-counted).
+    const keep = await api(`/api/platform/team/members/${memberUser!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { projectIds: ["pa"] },
+    });
+    expect(keep.status).toBe(200);
+
+    // Fill the account pool (owner + 2 account invites), then un-scoping the
+    // project member (null access = account seat) must be rejected.
+    expect((await api("/api/platform/team/invite", { sid, body: { email: "x@pool4.test", role: "admin" } })).status).toBe(201);
+    expect((await api("/api/platform/team/invite", { sid, body: { email: "y@pool4.test", role: "billing" } })).status).toBe(201);
+    const unscope = await api(`/api/platform/team/members/${memberUser!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { projectIds: null },
+    });
+    expect(unscope.status).toBe(403);
+    expect(unscope.json.limitReached).toBe(true);
+  });
+
+  it("resending an expired project-seat invite re-checks that project's pool", async () => {
+    const { sid, company } = await seedWorkspace("pool5-agency", "owner@pool5.test", "agency");
+    const first = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "old@pool5.test", role: "content", projectIds: ["pz"] },
+    });
+    // Expire it.
+    await db
+      .update(platformInvitationsTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(platformInvitationsTable.token, first.json.token));
+    // Fill the project with 3 fresh invites.
+    for (const n of [1, 2, 3]) {
+      expect(
+        (await api("/api/platform/team/invite", { sid, body: { email: `z${n}@pool5.test`, role: "content", projectIds: ["pz"] } })).status,
+      ).toBe(201);
+    }
+    const resend = await api(`/api/platform/team/invites/${first.json.token}/resend`, { sid, body: {} });
+    expect(resend.status).toBe(403);
+    expect(resend.json.limitReached).toBe(true);
+  });
+});
+
+describe("direct-client teams", () => {
+  it("a direct client can invite up to 3 content colleagues; other roles rejected", async () => {
+    const { sid } = await seedWorkspace("direct-client", "owner@direct.test", "client");
+
+    const t = await api("/api/platform/team", { sid });
+    expect(t.status).toBe(200);
+    expect(t.json.teamMode).toBe("client");
+
+    const admin = await api("/api/platform/team/invite", { sid, body: { email: "a@direct.test", role: "admin" } });
+    expect(admin.status).toBe(400);
+
+    const c1 = await api("/api/platform/team/invite", { sid, body: { email: "c1@direct.test", role: "content" } });
+    const c2 = await api("/api/platform/team/invite", { sid, body: { email: "c2@direct.test", role: "content" } });
+    expect(c1.status).toBe(201);
+    expect(c2.status).toBe(201);
+    // Owner + 2 pending = 3 seats: the pool is full.
+    const c3 = await api("/api/platform/team/invite", { sid, body: { email: "c3@direct.test", role: "content" } });
+    expect(c3.status).toBe(403);
+    expect(c3.json.limitReached).toBe(true);
+
+    // A colleague can never be promoted off the content role.
+    const accept = await api("/api/platform/invite/accept", { body: { token: c1.json.token, password: "colleague-pass-1" } });
+    expect(accept.status).toBe(200);
+    const [colleague] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "c1@direct.test"));
+    const promote = await api(`/api/platform/team/members/${colleague!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { role: "billing" },
+    });
+    expect(promote.status).toBe(400);
+  });
+
+  it("agency-managed partner clients have no team at all", async () => {
+    await seedWorkspace("managing-agency", "owner@managing.test", "agency");
+    const { sid } = await seedWorkspace("managed-client", "owner@managed.test", "client", "managing-agency");
+
+    expect((await api("/api/platform/team", { sid })).status).toBe(403);
+    const invite = await api("/api/platform/team/invite", { sid, body: { email: "c@managed.test", role: "content" } });
+    expect(invite.status).toBe(403);
   });
 });

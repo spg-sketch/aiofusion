@@ -60,7 +60,9 @@ function SubAccountsPage({
   const isAgencyPartner = session.role === "agency";
   // Clients under an agency partner never see billing - the agency is billed.
   const canSeeBilling = !session.agencyManagedClient && (session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing");
-  const canSeeTeam = session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin";
+  // Agency-managed partner clients have no team of their own - collaboration
+  // happens through the agency's project seats, so hide the section entirely.
+  const canSeeTeam = !session.agencyManagedClient && (session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin");
   const navGroups: { label: string; items: { id: SettingsSection; label: string; icon: typeof User }[] }[] = [
     {
       label: "My Account",

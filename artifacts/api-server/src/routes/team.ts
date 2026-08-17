@@ -20,15 +20,21 @@ import {
   parseProjectAccess,
   incrementSessionVersion,
   getCompanyBySlug,
+  getAccount,
+  normalizeRole,
   type MembershipRole,
 } from "../lib/platform-auth";
 import {
   INVITE_TTL_MS,
   INVITABLE_ROLES,
   MEMBERSHIP_ROLE_LABELS,
+  PROJECT_TEAM_SEATS,
   getTeamSeatLimit,
   setTeamSeatLimit,
   countSeatsUsed,
+  countAccountPoolSeats,
+  getProjectSeatHolders,
+  type ProjectSeatHolder,
   getValidInvite,
   getInviteInvalidReason,
   INVITE_INVALID_MESSAGES,
@@ -50,10 +56,36 @@ async function getActiveCompany(req: Request) {
   return getCompanyBySlug(normUsername(req.account!.username));
 }
 
-// Only Agency/Partner (and master admin) workspaces have teams; a client
-// sub-account does not manage team members.
-function companyMayHaveTeam(role: string): boolean {
-  return role !== "client";
+// Which team model a workspace runs:
+//  - "agency"   Agency/Partner accounts: two seat pools - account-level seats
+//               (people managing the account, any invitable role) plus up to
+//               PROJECT_TEAM_SEATS content members per project.
+//  - "client"   Direct client accounts (signed up themselves): a single pool
+//               of colleagues, content role only.
+//  - "standard" Master admin / legacy accounts: the original single-pool model.
+//  - null       Agency-managed partner clients: no team at all - collaboration
+//               on their projects happens through the agency's project seats.
+export type TeamMode = "standard" | "agency" | "client";
+
+async function resolveTeamMode(company: { slug: string; role: string }): Promise<TeamMode | null> {
+  const role = normalizeRole(company.role);
+  if (role === "agency") return "agency";
+  if (role !== "client") return "standard";
+  // A client is agency-managed when its parent account is an Agency/Partner.
+  const acc = await getAccount(company.slug);
+  if (acc?.parent) {
+    const parent = await getAccount(normUsername(acc.parent));
+    if (parent && normalizeRole(parent.role) === "agency") return null;
+  }
+  return "client";
+}
+
+const NO_TEAM_MESSAGE = "Team management is not available for this account.";
+
+// Human-readable "project is full" error listing who holds the seats.
+function projectFullError(projectId: string, holders: ProjectSeatHolder[]): string {
+  const names = holders.map((h) => h.label).join(", ");
+  return `That project already has ${PROJECT_TEAM_SEATS} team members (${names}). Remove one before adding another.`;
 }
 
 // Sanitise an incoming projectAccess value: undefined/null = all projects;
@@ -74,8 +106,9 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company || !companyMayHaveTeam(company.role)) {
-      res.status(403).json({ error: "Team management is not available for this account." });
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) {
+      res.status(403).json({ error: NO_TEAM_MESSAGE });
       return;
     }
 
@@ -112,7 +145,23 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     const pendingCount = inviteRows.filter((i) => i.expiresAt > now).length;
 
     const seatLimit = await getTeamSeatLimit(company.slug);
+
+    // Agency mode: the headline seat counter covers the ACCOUNT pool only
+    // (members/invites with no project restriction); project-scoped people sit
+    // in per-project pools reported separately.
+    let seatsUsed = memberRows.length + pendingCount;
+    let projectSeats: Record<string, number> | undefined;
+    if (teamMode === "agency") {
+      const account = await countAccountPoolSeats(company.id);
+      seatsUsed = account.members + account.pendingInvites;
+      const holders = await getProjectSeatHolders(company.id);
+      projectSeats = {};
+      for (const [projectId, list] of holders) projectSeats[projectId] = list.length;
+    }
+
     res.json({
+      teamMode,
+      ...(teamMode === "agency" ? { projectSeatLimit: PROJECT_TEAM_SEATS, projectSeats } : {}),
       members: memberRows.map((m) => ({
         userId: m.userId,
         email: m.email,
@@ -135,7 +184,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         expired: i.expiresAt <= now,
       })),
       seatLimit,
-      seatsUsed: memberRows.length + pendingCount,
+      seatsUsed,
     });
   } catch (err) {
     logger.error({ err }, "team: failed to list team");
@@ -152,13 +201,14 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company || !companyMayHaveTeam(company.role)) {
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) {
       res.status(403).json({ error: "Team invitations are not available for this account." });
       return;
     }
 
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-    const role = normalizeMembershipRole(req.body?.role);
+    let role = normalizeMembershipRole(req.body?.role);
     if (!email || !EMAIL_RE.test(email)) {
       res.status(400).json({ error: "A valid email address is required." });
       return;
@@ -167,7 +217,43 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       res.status(400).json({ error: "Role must be one of: admin, billing, content, viewer." });
       return;
     }
-    const projectAccess = normaliseProjectAccess(req.body?.projectIds);
+    let projectAccess = normaliseProjectAccess(req.body?.projectIds);
+
+    // Client workspaces: colleagues are content team members on the client's
+    // own projects - no other role, no project restriction, regardless of what
+    // the request body says.
+    if (teamMode === "client") {
+      if (role !== "content") {
+        res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
+        return;
+      }
+      role = "content";
+      projectAccess = null;
+    }
+
+    // Agency workspaces, project seat: the invite is scoped to one or more
+    // projects, must be a content member, and each chosen project has its own
+    // PROJECT_TEAM_SEATS-seat pool (it does not consume account seats).
+    const projectIdsParsed = parseProjectAccess(projectAccess);
+    const isAgencyProjectSeat = teamMode === "agency" && projectAccess !== null;
+    if (isAgencyProjectSeat) {
+      if (!projectIdsParsed || projectIdsParsed.length === 0) {
+        res.status(400).json({ error: "Choose at least one project for a project team member." });
+        return;
+      }
+      if (role !== "content") {
+        res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
+        return;
+      }
+      const holders = await getProjectSeatHolders(company.id);
+      for (const projectId of projectIdsParsed) {
+        const held = holders.get(projectId) ?? [];
+        if (held.length >= PROJECT_TEAM_SEATS) {
+          res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
+          return;
+        }
+      }
+    }
     const invitedName =
       typeof req.body?.fullName === "string" ? req.body.fullName.trim().slice(0, 128) : "";
     const position =
@@ -215,15 +301,20 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       return;
     }
 
-    // Seat limit: members + pending invites must stay under the cap.
-    const seatLimit = await getTeamSeatLimit(company.slug);
-    const { members, pendingInvites } = await countSeatsUsed(company.id);
-    if (members + pendingInvites >= seatLimit) {
-      res.status(403).json({
-        error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
-        limitReached: true,
-      });
-      return;
+    // Seat limit. Agency project seats were checked above against their own
+    // per-project pools; everything else counts against the workspace pool
+    // (agency mode: account-level members/invites only).
+    if (!isAgencyProjectSeat) {
+      const seatLimit = await getTeamSeatLimit(company.slug);
+      const { members, pendingInvites } =
+        teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
+      if (members + pendingInvites >= seatLimit) {
+        res.status(403).json({
+          error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
+          limitReached: true,
+        });
+        return;
+      }
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -298,16 +389,33 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     }
 
     // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat
-    // cap (still-pending invites already hold their seat - no check needed).
+    // cap for whichever pool the invite belongs to (still-pending invites
+    // already hold their seat - no check needed).
     if (existing.expiresAt <= new Date()) {
-      const { members, pendingInvites } = await countSeatsUsed(company.id);
-      const seatLimit = await getTeamSeatLimit(company.slug);
-      if (members + pendingInvites >= seatLimit) {
-        res.status(403).json({
-          error: "Seat limit reached - remove a member or invite before resending this expired invitation.",
-          limitReached: true,
-        });
-        return;
+      const teamMode = await resolveTeamMode(company);
+      const inviteProjects = parseProjectAccess(existing.projectAccess);
+      if (teamMode === "agency" && inviteProjects && inviteProjects.length > 0) {
+        // Project seat: each of the invite's projects must have room again.
+        // (The expired invite itself is not counted - only unexpired ones are.)
+        const holders = await getProjectSeatHolders(company.id);
+        for (const projectId of inviteProjects) {
+          const held = holders.get(projectId) ?? [];
+          if (held.length >= PROJECT_TEAM_SEATS) {
+            res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
+            return;
+          }
+        }
+      } else {
+        const { members, pendingInvites } =
+          teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
+        const seatLimit = await getTeamSeatLimit(company.slug);
+        if (members + pendingInvites >= seatLimit) {
+          res.status(403).json({
+            error: "Seat limit reached - remove a member or invite before resending this expired invitation.",
+            limitReached: true,
+          });
+          return;
+        }
       }
     }
 
@@ -427,6 +535,55 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     if (Object.keys(updates).length === 0) {
       res.status(400).json({ error: "Nothing to update." });
       return;
+    }
+
+    // Per-workspace-type rules on the RESULTING role/projectAccess.
+    const teamMode = await resolveTeamMode(company);
+    const resultingRole = normalizeMembershipRole(
+      updates.role !== undefined ? (updates.role as string) : target.role,
+    );
+    const resultingAccess =
+      updates.projectAccess !== undefined
+        ? parseProjectAccess(updates.projectAccess as string | null)
+        : parseProjectAccess(target.projectAccess);
+    if (teamMode === "client" && resultingRole !== "content") {
+      res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
+      return;
+    }
+    if (teamMode === "agency") {
+      const wasProjectSeat = parseProjectAccess(target.projectAccess) !== null;
+      if (resultingAccess !== null) {
+        // Project seat: content role only, and any NEWLY added project must
+        // still have room in its own pool (the member's existing seats stay).
+        if (resultingRole !== "content") {
+          res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
+          return;
+        }
+        const previous = parseProjectAccess(target.projectAccess) ?? [];
+        const added = resultingAccess.filter((id) => !previous.includes(id));
+        if (added.length > 0) {
+          const holders = await getProjectSeatHolders(company.id);
+          for (const projectId of added) {
+            const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
+            if (held.length >= PROJECT_TEAM_SEATS) {
+              res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
+              return;
+            }
+          }
+        }
+      } else if (wasProjectSeat) {
+        // Moving from a project seat to an account seat consumes an account
+        // seat, so the account pool must have room.
+        const seatLimit = await getTeamSeatLimit(company.slug);
+        const { members, pendingInvites } = await countAccountPoolSeats(company.id);
+        if (members + pendingInvites >= seatLimit) {
+          res.status(403).json({
+            error: `You've reached your account seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
+            limitReached: true,
+          });
+          return;
+        }
+      }
     }
 
     await db

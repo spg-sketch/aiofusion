@@ -1091,11 +1091,19 @@ export type TeamInvite = {
   expired: boolean;
 };
 
+export type TeamMode = "standard" | "agency" | "client";
+
 export type TeamOverview = {
   members: TeamMember[];
   invites: TeamInvite[];
+  /** In "agency" mode this is the ACCOUNT pool (people managing the account). */
   seatLimit: number;
   seatsUsed: number;
+  /** Which team model this workspace runs; absent on older servers = standard. */
+  teamMode?: TeamMode;
+  /** Agency mode only: per-project pool size (3) and seats used per project id. */
+  projectSeatLimit?: number;
+  projectSeats?: Record<string, number>;
 };
 
 export async function serverInviteTeamMember(data: {

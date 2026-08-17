@@ -58,7 +58,21 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const projects = useMemo(() => loadStoredProjects(), []);
-  const projectScoped = role === "content" || role === "viewer";
+
+  // Which team model this workspace runs (see TeamOverview.teamMode):
+  //  - "agency": two pools - account seats (any role) + 3 content seats/project.
+  //  - "client": a single pool of colleagues, always content members.
+  //  - "standard": the original single-pool model.
+  const mode = team?.teamMode ?? "standard";
+  const isAgency = mode === "agency";
+  const isClient = mode === "client";
+  const projectSeatLimit = team?.projectSeatLimit ?? 3;
+  const projectSeatsUsed = (id: string) => team?.projectSeats?.[id] ?? 0;
+
+  // In agency mode, ticking "Assign to specific projects" switches the invite
+  // to a per-project seat, which is always a content member.
+  const effectiveRole: MembershipRole = isClient || (isAgency && restrict) ? "content" : role;
+  const projectScoped = isClient ? false : isAgency ? true : effectiveRole === "content" || effectiveRole === "viewer";
 
   const reload = () => {
     void serverGetTeam().then((r) => {
@@ -106,10 +120,14 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
     e.preventDefault();
     setInviteError(null);
     setInviteSuccess(null);
+    if (isAgency && restrict && projectIds.length === 0) {
+      setInviteError("Choose at least one project for a project team member.");
+      return;
+    }
     setSending(true);
     void serverInviteTeamMember({
       email: email.trim(),
-      role,
+      role: effectiveRole,
       projectIds: projectScoped && restrict ? projectIds : null,
       fullName: fullName.trim() || undefined,
       position: position.trim() || undefined,
@@ -278,6 +296,9 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   }
 
   const seatsFull = team.seatsUsed >= team.seatLimit;
+  // In agency mode a full account pool only blocks account-seat invites -
+  // project seats have their own per-project pools.
+  const submitBlocked = seatsFull && !(isAgency && restrict);
   const pendingInvites = team.invites.filter((i) => !i.expired);
   const expiredInvites = team.invites.filter((i) => i.expired);
 
@@ -287,11 +308,15 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
         <span className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1 rounded-full" style={{ background: seatsFull ? "#FDECEC" : accentSoft, color: seatsFull ? "#B3261E" : accent }}>
-          {team.seatsUsed} / {team.seatLimit} seats
+          {team.seatsUsed} / {team.seatLimit} {isAgency ? "account seats" : "seats"}
         </span>
       </div>
       <p className="text-[13px] font-light mb-5 leading-[1.6]" style={{ color: vars.g600 }}>
-        Invite colleagues to work in this account. Each person gets their own login with the role and project access you choose.
+        {isClient
+          ? `Invite up to ${team.seatLimit} colleagues to work on your content. Each person gets their own login as a Content Team Member.`
+          : isAgency
+            ? `Invite your own staff. Account seats (up to ${team.seatLimit}) are for people managing this account - for example billing. Or assign a team member to specific projects: each project has ${projectSeatLimit} seats of its own, and project members work on those projects only.`
+            : "Invite colleagues to work in this account. Each person gets their own login with the role and project access you choose."}
       </p>
 
       {/* Invite form */}
@@ -337,21 +362,27 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
           </div>
           <div className="md:col-span-4">
             <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as MembershipRole)}
-              className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
-              style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-            >
-              {ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label} - {o.hint}</option>
-              ))}
-            </select>
+            {isClient || (isAgency && restrict) ? (
+              <div className="w-full px-3 py-2.5 rounded-lg border text-[14px]" style={{ borderColor: vars.g200, background: "#f8fafc", color: ink }}>
+                Content Team Member
+              </div>
+            ) : (
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as MembershipRole)}
+                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              >
+                {ROLE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label} - {o.hint}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="md:col-span-3">
             <button
               type="submit"
-              disabled={sending || seatsFull}
+              disabled={sending || submitBlocked}
               className="w-full flex items-center justify-center gap-2 px-5 py-3 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90 disabled:opacity-50"
               style={{ background: ink, color: "#fff" }}
             >
@@ -365,7 +396,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
           <div className="mt-3">
             <label className="flex items-center gap-2 text-[13px]" style={{ color: ink }}>
               <input type="checkbox" checked={restrict} onChange={(e) => setRestrict(e.target.checked)} style={{ accentColor: accent }} />
-              Limit to specific projects
+              {isAgency ? "Assign to specific projects (project seat - Content Team Member)" : "Limit to specific projects"}
             </label>
             {restrict && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -374,21 +405,32 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 )}
                 {projects.map((p) => {
                   const checked = projectIds.includes(p.id);
+                  const used = projectSeatsUsed(p.id);
+                  const full = isAgency && !checked && used >= projectSeatLimit;
                   return (
                     <label
                       key={p.id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer border"
-                      style={{ borderColor: checked ? accent : vars.g300, background: checked ? accentSoft : "white", color: checked ? accent : ink }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold border"
+                      style={{
+                        borderColor: checked ? accent : vars.g300,
+                        background: checked ? accentSoft : "white",
+                        color: full ? (vars.g400 ?? "#94a3b8") : checked ? accent : ink,
+                        cursor: full ? "not-allowed" : "pointer",
+                        opacity: full ? 0.7 : 1,
+                      }}
+                      title={full ? `This project's ${projectSeatLimit} seats are taken.` : undefined}
                     >
                       <input
                         type="checkbox"
                         className="hidden"
                         checked={checked}
+                        disabled={full}
                         onChange={() =>
                           setProjectIds((ids) => (checked ? ids.filter((i) => i !== p.id) : [...ids, p.id]))
                         }
                       />
                       {p.name || p.id}
+                      {isAgency && <span style={{ fontWeight: 400 }}>({used}/{projectSeatLimit})</span>}
                     </label>
                   );
                 })}
@@ -397,9 +439,11 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
           </div>
         )}
 
-        {seatsFull && (
+        {submitBlocked && (
           <p className="mt-3 text-[12px] font-semibold" style={{ color: "#B3261E" }}>
-            You've reached your seat limit ({team.seatLimit}). Contact info@aiofusion.ai to add more seats.
+            {isAgency
+              ? `You've reached your account seat limit (${team.seatLimit}). You can still assign team members to specific projects, or contact info@aiofusion.ai to add more account seats.`
+              : `You've reached your seat limit (${team.seatLimit}). Contact info@aiofusion.ai to add more seats.`}
           </p>
         )}
         {inviteError && <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{inviteError}</p>}
@@ -442,17 +486,25 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 </span>
               ) : (
                 <>
-                  <select
-                    value={m.role}
-                    disabled={busy === m.userId}
-                    onChange={(e) => handleRoleChange(m.userId, e.target.value as MembershipRole)}
-                    className="px-2 py-1.5 rounded-lg border text-[12px] bg-white"
-                    style={{ borderColor: vars.g200 }}
-                  >
-                    {ROLE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                  {isClient || (isAgency && m.projectAccess) ? (
+                    // Client colleagues and agency project-seat members are
+                    // always content members - no role to choose.
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: accentSoft, color: accent }}>
+                      {roleLabel("content")}
+                    </span>
+                  ) : (
+                    <select
+                      value={m.role}
+                      disabled={busy === m.userId}
+                      onChange={(e) => handleRoleChange(m.userId, e.target.value as MembershipRole)}
+                      className="px-2 py-1.5 rounded-lg border text-[12px] bg-white"
+                      style={{ borderColor: vars.g200 }}
+                    >
+                      {ROLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  )}
                   {(m.role === "content" || m.role === "viewer") && (
                     <button
                       onClick={() =>

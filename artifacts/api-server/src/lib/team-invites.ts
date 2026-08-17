@@ -7,8 +7,8 @@ import {
   platformCompaniesTable,
   type PlatformInvitationRow,
 } from "@workspace/db";
-import { and, eq, isNull, gt, sql } from "drizzle-orm";
-import { normalizeMembershipRole, type MembershipRole } from "./platform-auth";
+import { and, eq, isNull, isNotNull, gt, sql } from "drizzle-orm";
+import { normalizeMembershipRole, parseProjectAccess, type MembershipRole } from "./platform-auth";
 import { logger } from "./logger";
 
 // Team invitations: single-use tokens that let an Agency/Partner owner/admin
@@ -18,6 +18,12 @@ import { logger } from "./logger";
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export const DEFAULT_TEAM_SEATS = 3;
+
+// Agency/Partner workspaces run two seat pools: account-level seats (members
+// with no project restriction, e.g. someone handling billing) and a separate
+// pool of up to this many seats per project for staff allocated to work on
+// that particular project.
+export const PROJECT_TEAM_SEATS = 3;
 
 // Roles an invitee may be given. "owner" is deliberately excluded - ownership
 // is transferred through the existing owner-reassignment path, not via invite.
@@ -75,6 +81,107 @@ export async function countSeatsUsed(companyId: string): Promise<{ members: numb
       ),
     );
   return { members: memberRow?.count ?? 0, pendingInvites: inviteRow?.count ?? 0 };
+}
+
+// Account-pool seats on an Agency/Partner workspace: memberships and pending
+// invites with NO project restriction (project_access IS NULL). Project-scoped
+// members sit in the per-project pool instead and do not consume these seats.
+export async function countAccountPoolSeats(companyId: string): Promise<{ members: number; pendingInvites: number }> {
+  const [memberRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(platformMembershipsTable)
+    .where(
+      and(
+        eq(platformMembershipsTable.companyId, companyId),
+        isNull(platformMembershipsTable.projectAccess),
+      ),
+    );
+  const [inviteRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(platformInvitationsTable)
+    .where(
+      and(
+        eq(platformInvitationsTable.companyId, companyId),
+        isNull(platformInvitationsTable.projectAccess),
+        isNull(platformInvitationsTable.usedAt),
+        isNull(platformInvitationsTable.revokedAt),
+        gt(platformInvitationsTable.expiresAt, new Date()),
+      ),
+    );
+  return { members: memberRow?.count ?? 0, pendingInvites: inviteRow?.count ?? 0 };
+}
+
+export type ProjectSeatHolder = {
+  // Display label for "who holds this seat" messages: name, else email.
+  label: string;
+  // Set for existing members; null for pending invites.
+  userId: string | null;
+  // Set for pending invites; null for existing members.
+  inviteToken: string | null;
+};
+
+// Per-project seat holders on an Agency/Partner workspace: every member or
+// pending invite whose projectAccess lists a project holds one seat in EACH
+// listed project.
+export async function getProjectSeatHolders(companyId: string): Promise<Map<string, ProjectSeatHolder[]>> {
+  const holders = new Map<string, ProjectSeatHolder[]>();
+  const add = (projectIds: string[] | null, holder: ProjectSeatHolder) => {
+    for (const id of projectIds ?? []) {
+      const list = holders.get(id) ?? [];
+      list.push(holder);
+      holders.set(id, list);
+    }
+  };
+
+  const memberRows = await db
+    .select({
+      userId: platformMembershipsTable.userId,
+      projectAccess: platformMembershipsTable.projectAccess,
+      name: platformUsersTable.name,
+      email: platformUsersTable.email,
+    })
+    .from(platformMembershipsTable)
+    .leftJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+    .where(
+      and(
+        eq(platformMembershipsTable.companyId, companyId),
+        isNotNull(platformMembershipsTable.projectAccess),
+      ),
+    );
+  for (const m of memberRows) {
+    add(parseProjectAccess(m.projectAccess), {
+      label: m.name || m.email || "a team member",
+      userId: m.userId,
+      inviteToken: null,
+    });
+  }
+
+  const inviteRows = await db
+    .select({
+      token: platformInvitationsTable.token,
+      email: platformInvitationsTable.email,
+      invitedName: platformInvitationsTable.invitedName,
+      projectAccess: platformInvitationsTable.projectAccess,
+    })
+    .from(platformInvitationsTable)
+    .where(
+      and(
+        eq(platformInvitationsTable.companyId, companyId),
+        isNotNull(platformInvitationsTable.projectAccess),
+        isNull(platformInvitationsTable.usedAt),
+        isNull(platformInvitationsTable.revokedAt),
+        gt(platformInvitationsTable.expiresAt, new Date()),
+      ),
+    );
+  for (const i of inviteRows) {
+    add(parseProjectAccess(i.projectAccess), {
+      label: i.invitedName || i.email,
+      userId: null,
+      inviteToken: i.token,
+    });
+  }
+
+  return holders;
 }
 
 // Load an invitation that is still valid (unused, unrevoked, unexpired).
