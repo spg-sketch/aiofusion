@@ -334,12 +334,15 @@ describe("POST /api/platform/accounts -- welcome token for new client contact", 
   beforeEach(async () => {
     clientAccountCreatedCalls.length = 0;
 
-    // Seed the agency account that will create the sub-account.
+    // Seed the account that will create the sub-account. Role "user" (legacy
+    // agency): the welcome-email flow only applies to non-partner parents -
+    // an "agency" (Agency/Partner) actor always creates managed clients with
+    // no welcome email (covered in platform-client-access.test.ts).
     const ph = hashPassword(AGENCY_PASSWORD);
     await db.insert(platformAccountsTable).values({
       username: AGENCY_USERNAME,
       passwordHash: ph,
-      role: "agency",
+      role: "user",
       status: "active",
     });
 
@@ -385,7 +388,7 @@ describe("POST /api/platform/accounts -- welcome token for new client contact", 
         "content-type": "application/json",
         "x-test-account": JSON.stringify({
           username: AGENCY_USERNAME,
-          role: "agency",
+          role: "user",
           userId: null,
         }),
       },

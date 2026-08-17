@@ -254,8 +254,8 @@ vi.mock("../lib/admin-events", () => ({
 }));
 
 // requirePlatformAuth injects req.account from the x-test-account header
-vi.mock("../middleware/platform-auth", () => ({
-  requirePlatformAuth: (req: any, _res: unknown, next: () => void) => {
+vi.mock("../middleware/platform-auth", () => {
+  const inject = (req: any, _res: unknown, next: () => void) => {
     try {
       const raw = req.headers["x-test-account"];
       req.account = raw ? JSON.parse(raw as string) : null;
@@ -263,8 +263,14 @@ vi.mock("../middleware/platform-auth", () => ({
       req.account = null;
     }
     next();
-  },
-}));
+  };
+  return {
+    requirePlatformAuth: inject,
+    // Used app-wide for routes like /platform/me that read req.account
+    // without requiring auth.
+    resolvePlatformAccount: inject,
+  };
+});
 
 vi.mock("../lib/notify-email", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/notify-email")>();
@@ -301,6 +307,7 @@ import {
 } from "@workspace/db";
 import { eq, like } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "../lib/platform-auth";
+import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 
 // ---------------------------------------------------------------------------
@@ -311,6 +318,7 @@ function buildApp() {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
+  app.use(resolvePlatformAccount as never);
   app.use("/api", platformRouter);
   return app;
 }
@@ -349,9 +357,13 @@ describe("POST /api/platform/accounts/access", () => {
     clientAccountCreatedCalls.length = 0;
     accessChangedCalls.length = 0;
 
+    // Parents are seeded with the legacy "user" role: grant/set-password only
+    // remain available to non-partner parents. Clients under a real "agency"
+    // (Agency/Partner) parent are permanently managed - covered by the
+    // "agency partner clients" describe block below.
     await db.insert(platformAccountsTable).values([
-      { username: AGENCY, passwordHash: hashPassword("agencypass1"), role: "agency", status: "active" },
-      { username: OTHER_AGENCY, passwordHash: hashPassword("agencypass2"), role: "agency", status: "active" },
+      { username: AGENCY, passwordHash: hashPassword("agencypass1"), role: "user", status: "active" },
+      { username: OTHER_AGENCY, passwordHash: hashPassword("agencypass2"), role: "user", status: "active" },
       {
         username: CLIENT,
         passwordHash: hashPassword(INITIAL_PASSWORD),
@@ -1019,5 +1031,148 @@ describe("POST /api/platform/accounts/access", () => {
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error?: string };
     expect(body.error).toMatch(/managed by your agency/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agency partner clients: permanently managed. Clients whose PARENT account
+// has role "agency" (Agency/Partner) can never be given sign-in access, never
+// have a password set by their parent, and are always created as managed
+// regardless of what the request body says.
+// ---------------------------------------------------------------------------
+describe("agency partner clients are permanently managed", () => {
+  let server: Server;
+  let baseUrl: string;
+
+  const PARTNER = "ap-partner";
+  const PARTNER_CLIENT = "ap-client";
+  const PARTNER_CONTACT = "ap-contact@example.com";
+
+  beforeEach(async () => {
+    clientAccountCreatedCalls.length = 0;
+    await db.insert(platformAccountsTable).values([
+      { username: PARTNER, passwordHash: hashPassword("partnerpass1"), role: "agency", status: "active" },
+      {
+        username: PARTNER_CLIENT,
+        passwordHash: hashPassword("ClientPass123"),
+        role: "client",
+        parent: PARTNER,
+        status: "active",
+        email: PARTNER_CONTACT,
+      },
+    ]);
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    const [contactUser] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, PARTNER_CONTACT))
+      .limit(1);
+    if (contactUser) {
+      await db.delete(platformPasswordResetsTable).where(eq(platformPasswordResetsTable.userId, contactUser.id));
+      await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, contactUser.id));
+      await db.delete(platformUsersTable).where(eq(platformUsersTable.id, contactUser.id));
+    }
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, `%ap-%`));
+    await db.delete(platformCompaniesTable).where(like(platformCompaniesTable.slug, "ap-%"));
+    await db.delete(platformAccountsTable).where(like(platformAccountsTable.username, "ap-%"));
+  });
+
+  const partnerHeaders = {
+    "content-type": "application/json",
+    "x-test-account": JSON.stringify({ username: PARTNER, role: "agency", userId: null }),
+  };
+
+  it("access grant (email and password) is refused with a clear error", async () => {
+    for (const body of [
+      { username: PARTNER_CLIENT, action: "grant" },
+      { username: PARTNER_CLIENT, action: "grant", password: "FreshPass123" },
+    ]) {
+      const res = await fetch(`${baseUrl}/api/platform/accounts/access`, {
+        method: "POST",
+        headers: partnerHeaders,
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as { error?: string };
+      expect(json.error).toMatch(/managed by your agency/i);
+    }
+    // No welcome email may have been sent.
+    await flushAsync();
+    expect(clientAccountCreatedCalls.length).toBe(0);
+  });
+
+  it("revoke and mark-managed remain available as a clean-up path", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/accounts/access`, {
+      method: "POST",
+      headers: partnerHeaders,
+      body: JSON.stringify({ username: PARTNER_CLIENT, action: "mark-managed", confirmRecentSignIn: true }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("the parent cannot set a password on the client account", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/accounts/password`, {
+      method: "POST",
+      headers: partnerHeaders,
+      body: JSON.stringify({ username: PARTNER_CLIENT, newPassword: "NewPass12345" }),
+    });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { error?: string };
+    expect(json.error).toMatch(/managed by your agency/i);
+    // Old password hash is untouched.
+    const [row] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, PARTNER_CLIENT))
+      .limit(1);
+    expect(verifyPassword("ClientPass123", row!.passwordHash)).toBe(true);
+  });
+
+  it("creation by an agency partner is always managed - even without the managed flag, and with a contact email", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/accounts`, {
+      method: "POST",
+      headers: partnerHeaders,
+      body: JSON.stringify({
+        username: "ap-new-client",
+        role: "client",
+        contactEmail: "ap-new-contact@example.com",
+        contactName: "New Contact",
+        displayName: "AP New Client",
+        // NOTE: no password and no managed flag - the server must still
+        // create the account as managed with a random password.
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; username: string; welcomeLinkCreated?: boolean };
+    expect(body.ok).toBe(true);
+    // Managed flag persisted.
+    const [flag] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:managed:${body.username}`))
+      .limit(1);
+    expect(flag?.value).toBe("true");
+    // No welcome email, no set-password link.
+    expect(body.welcomeLinkCreated).toBeUndefined();
+    await flushAsync();
+    expect(clientAccountCreatedCalls.length).toBe(0);
+  });
+
+  it("GET /platform/me reports agencyManagedClient=true for the client and false for the parent", async () => {
+    const asClient = await fetch(`${baseUrl}/api/platform/me`, {
+      headers: { "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }) },
+    });
+    expect(asClient.status).toBe(200);
+    expect(((await asClient.json()) as { agencyManagedClient?: boolean }).agencyManagedClient).toBe(true);
+
+    const asPartner = await fetch(`${baseUrl}/api/platform/me`, {
+      headers: { "x-test-account": JSON.stringify({ username: PARTNER, role: "agency", userId: null }) },
+    });
+    expect(asPartner.status).toBe(200);
+    expect(((await asPartner.json()) as { agencyManagedClient?: boolean }).agencyManagedClient).toBe(false);
   });
 });

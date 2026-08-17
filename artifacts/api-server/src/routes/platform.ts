@@ -343,6 +343,10 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let microsoftLinked = false;
   let hasPassword = false;
   let masterOwner = false;
+  // True when the signed-in workspace is a client account owned by an
+  // agency/partner parent: billing sits entirely with the agency, so the
+  // client UI must never show billing/payment sections.
+  let agencyManagedClient = false;
   let emailVerified: boolean | null = null;
   let setupComplete: boolean | null = null;
   // Profile fields for intake form prefill. Only populated for the account's
@@ -379,6 +383,9 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     } catch { /* non-fatal */ }
     try {
       masterOwner = await isMasterOwner(req.account.username);
+    } catch { /* non-fatal */ }
+    try {
+      agencyManagedClient = await isAgencyPartnerClient(req.account.username);
     } catch { /* non-fatal */ }
     try {
       const co = await getCompanyBySlug(normUsername(req.account.username));
@@ -451,6 +458,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     account: accountWithGoogle,
     impersonating,
     masterOwner,
+    agencyManagedClient,
     emailVerified,
     setupComplete,
     hasPassword,
@@ -3538,6 +3546,20 @@ router.get(
   },
 );
 
+// Whether the target account is a client whose parent is an agency/partner
+// account. Such clients are permanently managed: billing sits entirely with
+// the agency, the client is never given sign-in credentials, and the
+// password/access routes refuse to create a credential for them.
+async function isAgencyPartnerClient(target: string): Promise<boolean> {
+  const acc = await getAccount(normUsername(target));
+  if (!acc || normalizeRole(acc.role) !== "client" || !acc.parent) return false;
+  const parent = await getAccount(normUsername(acc.parent));
+  return !!parent && normalizeRole(parent.role) === "agency";
+}
+
+export const AGENCY_PARTNER_CLIENT_MESSAGE =
+  "This client is managed by your agency - agency partner client accounts are always managed and never have their own sign-in.";
+
 // Whether the given platform_users row belongs ONLY to the target company
 // (single membership, pointing at the target slug). Used to make sure access
 // grant/revoke operations on a client account never touch the credentials of
@@ -3668,7 +3690,11 @@ router.post(
       // Managed accounts are run by the agency on the client's behalf: no
       // welcome email, no set-password link, and a random unguessable password
       // is generated server-side (the agency uses "View account" instead).
-      const managed = req.body?.managed === true;
+      // Clients created by an agency/partner account are ALWAYS managed -
+      // billing sits with the agency and the client never gets a sign-in -
+      // regardless of what the request body says.
+      const actorIsAgencyPartner = normalizeRole(actor.role) === "agency";
+      const managed = req.body?.managed === true || actorIsAgencyPartner;
       let password = typeof req.body?.password === "string" ? req.body.password : "";
       if (managed && !password) password = crypto.randomBytes(24).toString("hex");
       const requestedRole = normalizeRole(req.body?.role);
@@ -3859,6 +3885,12 @@ router.post(
         res.status(404).json({ error: "Account not found." });
         return;
       }
+      // Agency partner clients are permanently managed - no password may ever
+      // be set on them (their agency signs in via "Client projects" instead).
+      if (!isSelf && (await isAgencyPartnerClient(target))) {
+        res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+        return;
+      }
       await db
         .update(platformAccountsTable)
         .set({ passwordHash: hashPassword(newPassword) })
@@ -3982,6 +4014,13 @@ router.post(
       }
       if (normalizeRole(existing.role) !== "client") {
         res.status(400).json({ error: "Access can only be changed on client accounts." });
+        return;
+      }
+      // Agency partner clients are permanently managed: sign-in access can
+      // never be granted to them. (Revoke/mark-managed stay available as a
+      // clean-up path for any legacy passworded client under an agency.)
+      if (action === "grant" && (await isAgencyPartnerClient(target))) {
+        res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
         return;
       }
 

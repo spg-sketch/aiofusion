@@ -49,6 +49,10 @@ export type Session = {
   membershipRole?: MembershipRole | null;
   // Project ids this member may see; null/undefined = all projects.
   projectAccess?: string[] | null;
+  // True when this workspace is a client account owned by an agency/partner
+  // parent. Billing sits entirely with the agency, so billing/payment
+  // sections must never be shown in this session.
+  agencyManagedClient?: boolean;
 };
 
 export type MembershipRole = "owner" | "admin" | "billing" | "content" | "viewer";
@@ -431,6 +435,7 @@ export async function bootstrapAuth(): Promise<{
         impersonating?: Impersonation | null;
         setupComplete?: boolean | null;
         hasPassword?: boolean;
+        agencyManagedClient?: boolean;
         accountProfile?: { displayName?: string | null; website?: string | null } | null;
         workspaces?: WorkspaceInfo[];
       };
@@ -444,6 +449,7 @@ export async function bootstrapAuth(): Promise<{
           role: acct.role,
           membershipRole: acct.membershipRole ?? null,
           projectAccess: acct.projectAccess ?? null,
+          ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
         };
         setSession(session);
         // setupComplete === false (not null, not true) means the user signed up

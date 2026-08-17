@@ -54,7 +54,12 @@ function SubAccountsPage({
 
   // --- Left-hand settings navigation -------------------------------------
   const isClientManager = canCreateSubAccounts(session.role);
-  const canSeeBilling = session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing";
+  // Agency/partner accounts always run their clients' accounts on their
+  // behalf: client rows get a simplified button set (no passwords, no
+  // sign-in access) and new clients are always created as managed.
+  const isAgencyPartner = session.role === "agency";
+  // Clients under an agency partner never see billing - the agency is billed.
+  const canSeeBilling = !session.agencyManagedClient && (session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing");
   const canSeeTeam = session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin";
   const navGroups: { label: string; items: { id: SettingsSection; label: string; icon: typeof User }[] }[] = [
     {
@@ -561,26 +566,30 @@ function SubAccountsPage({
       .replace(/-+/g, "-")
       .slice(0, 28)
       .replace(/^[-.]+|[-.]+$/g, "") || "client";
+    // Agency partners always create managed clients - no password, no email.
+    const effectiveManaged = isAgencyPartner || newManaged;
     setAddingClient(true);
     void (async () => {
-      const result = await serverAddUser(usernameSuggestion, newManaged ? "" : newPassword, "client", companyName, {
+      const result = await serverAddUser(usernameSuggestion, effectiveManaged ? "" : newPassword, "client", companyName, {
         website,
         contactName: newContactName.trim(),
         contactEmail,
         autoUsername: true,
         ...(newLogoDataUrl ? { logoDataUrl: newLogoDataUrl } : {}),
-        ...(newManaged ? { managed: true } : {}),
+        ...(effectiveManaged ? { managed: true } : {}),
       });
       setAddingClient(false);
       if (result.ok) {
         // welcomeLinkCreated === false means the account exists but the
         // set-password link could not be issued - warn instead of implying
         // the client received a working sign-in link.
-        const linkFailed = !newManaged && !!contactEmail && result.welcomeLinkCreated === false;
+        const linkFailed = !effectiveManaged && !!contactEmail && result.welcomeLinkCreated === false;
         setAddSuccess(
           `Created client account '${result.username}' for ${companyName}.` +
-          (newManaged
-            ? " This is a managed account - the client has not been given sign-in access. Use 'View account' to work on their behalf."
+          (effectiveManaged
+            ? (isAgencyPartner
+                ? " Use 'Client projects' to work on their behalf."
+                : " This is a managed account - the client has not been given sign-in access. Use 'View account' to work on their behalf.")
             : linkFailed
               ? ` However, a set-password link could not be created for ${contactEmail}. Any email they receive will not include a sign-in link - use 'Grant access' on the account, or share a password with them directly.`
               : contactEmail ? ` We've emailed ${contactEmail} to let them know.` : ""),
@@ -615,6 +624,19 @@ function SubAccountsPage({
         setEnterError("Failed to enter this account.");
         setEnteringUsername(null);
       });
+  };
+
+  // Agency partner shortcut: enter the client's workspace and land on their
+  // projects (straight into the project when they only have one). The target
+  // is stashed in sessionStorage and consumed by App.tsx after the reload.
+  const handleOpenClientProjects = (username: string, ownedProjects: { id: string }[]) => {
+    try {
+      sessionStorage.setItem(
+        "aio:open-client-projects",
+        JSON.stringify({ projectId: ownedProjects.length === 1 ? ownedProjects[0].id : null }),
+      );
+    } catch { /* non-fatal - lands on the project list instead */ }
+    handleEnterAccount(username);
   };
 
   const handleArchive = (username: string, archive: boolean) => {
@@ -1194,6 +1216,7 @@ function SubAccountsPage({
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />
             </div>
+            {!isAgencyPartner && (
             <label className="md:col-span-12 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer" style={{ borderColor: vars.g200, background: newManaged ? accentSoft : "white" }}>
               <input
                 type="checkbox"
@@ -1209,6 +1232,7 @@ function SubAccountsPage({
                 </span>
               </span>
             </label>
+            )}
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Client logo <span className="font-medium normal-case tracking-normal" style={{ color: vars.g400 }}>(optional)</span></label>
               <div className="flex items-center gap-3">
@@ -1243,7 +1267,7 @@ function SubAccountsPage({
                 )}
               </div>
             </div>
-            {!newManaged && (
+            {!isAgencyPartner && !newManaged && (
               <div className="md:col-span-6">
                 <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
                 <input
@@ -1269,7 +1293,9 @@ function SubAccountsPage({
               </button>
             </div>
             <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
-              {newManaged
+              {isAgencyPartner
+                ? "You manage this account on the client's behalf - there's no password to share and nothing for the client to set up. Billing stays with your agency."
+                : newManaged
                 ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
                 : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
             </p>
@@ -1312,7 +1338,7 @@ function SubAccountsPage({
                             )}
                             <span className="inline-flex items-center gap-1.5">
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
-                              {u.managed && (
+                              {u.managed && !isAgencyPartner && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g500 }}>Managed</span>
                               )}
                             </span>
@@ -1321,13 +1347,14 @@ function SubAccountsPage({
                       </div>
                       <div className="flex items-center gap-2 flex-wrap sm:pl-[52px]">
                         <button
-                          onClick={() => handleEnterAccount(u.username)}
+                          onClick={() => (isAgencyPartner ? handleOpenClientProjects(u.username, owned) : handleEnterAccount(u.username))}
                           disabled={enteringUsername === u.username}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
-                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : <LogIn size={12} />} {u.managed ? "Open account" : "Login as client"}
+                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : isAgencyPartner ? <FolderOpen size={12} /> : <LogIn size={12} />} {isAgencyPartner ? "Client projects" : u.managed ? "Open account" : "Login as client"}
                         </button>
+                        {!isAgencyPartner && (
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -1335,7 +1362,8 @@ function SubAccountsPage({
                         >
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
                         </button>
-                        {u.managed ? (
+                        )}
+                        {isAgencyPartner ? null : u.managed ? (
                           <button
                             onClick={() => { setAccessUser(accessUser === u.username ? null : u.username); setAccessPassword(""); setAccessError(null); setAccessNotice(null); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"

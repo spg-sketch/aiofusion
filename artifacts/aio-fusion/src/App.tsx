@@ -599,6 +599,43 @@ function App() {
     return storedProjects.filter((p) => allowedSet.has((p.owner || "").toLowerCase()));
   }, [storedProjects, session]);
 
+  // "Client projects" shortcut (agency partners): SubAccountsPage stashes a
+  // flag in sessionStorage before the impersonation reload. Once the session
+  // is confirmed, land on the projects hub - and when the client has exactly
+  // one project, open it directly as soon as the sync makes it visible.
+  const pendingClientProjectId = useRef<string | null>(null);
+  useEffect(() => {
+    if (authLoading || !session) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("aio:open-client-projects");
+      if (raw !== null) sessionStorage.removeItem("aio:open-client-projects");
+    } catch { /* non-fatal */ }
+    if (raw === null) return;
+    try {
+      const parsed = JSON.parse(raw) as { projectId?: string | null };
+      pendingClientProjectId.current = typeof parsed.projectId === "string" ? parsed.projectId : null;
+    } catch {
+      pendingClientProjectId.current = null;
+    }
+    setView("platform");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, session]);
+  useEffect(() => {
+    const pid = pendingClientProjectId.current;
+    if (!pid) return;
+    const target = visibleProjects.find((p) => p.id === pid);
+    if (!target) return;
+    pendingClientProjectId.current = null;
+    void (async () => {
+      setActiveProjectId(target.id);
+      await syncIntakeForProject(target.id);
+      setActiveClient({ ...target, logo: clientLogos[target.id] });
+      setCurrentPage("dashboard");
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleProjects, clientLogos]);
+
   // Client sub-accounts that don't own a single project yet. These show in the
   // hub as lighter "Start project" placeholder cards so creating the account
   // and starting its first project stay one continuous flow. Recomputed from
