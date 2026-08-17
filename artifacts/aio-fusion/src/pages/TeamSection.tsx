@@ -486,9 +486,11 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 </span>
               ) : (
                 <>
-                  {isClient || (isAgency && m.projectAccess) ? (
+                  {(isClient || (isAgency && m.projectAccess)) && m.role === "content" ? (
                     // Client colleagues and agency project-seat members are
-                    // always content members - no role to choose.
+                    // always content members - no role to choose. Legacy
+                    // members with another role keep the dropdown so their
+                    // role can be corrected.
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]" style={{ background: accentSoft, color: accent }}>
                       {roleLabel("content")}
                     </span>

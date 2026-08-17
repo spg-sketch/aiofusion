@@ -93,7 +93,9 @@ function projectFullError(projectId: string, holders: ProjectSeatHolder[]): stri
 function normaliseProjectAccess(input: unknown): string | null {
   if (input == null) return null;
   if (!Array.isArray(input)) return null;
-  const ids = input.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim());
+  const ids = Array.from(
+    new Set(input.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim())),
+  );
   return JSON.stringify(ids);
 }
 
@@ -365,7 +367,8 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company) { res.status(403).json({ error: "No active workspace." }); return; }
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
 
     const oldToken = String(req.params.token || "").trim();
 
@@ -388,12 +391,25 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
       return;
     }
 
+    // An old invite that no longer fits this workspace's team model must not
+    // be re-activated - revoke and re-invite instead.
+    const existingRole = normalizeMembershipRole(existing.role);
+    const existingProjects = parseProjectAccess(existing.projectAccess);
+    const violatesMode =
+      (teamMode === "client" && existingRole !== "content") ||
+      (teamMode === "agency" && existingProjects !== null && existingRole !== "content");
+    if (violatesMode) {
+      res.status(409).json({
+        error: "This invitation's role no longer matches your team set-up. Revoke it and send a new invitation instead.",
+      });
+      return;
+    }
+
     // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat
     // cap for whichever pool the invite belongs to (still-pending invites
     // already hold their seat - no check needed).
     if (existing.expiresAt <= new Date()) {
-      const teamMode = await resolveTeamMode(company);
-      const inviteProjects = parseProjectAccess(existing.projectAccess);
+      const inviteProjects = existingProjects;
       if (teamMode === "agency" && inviteProjects && inviteProjects.length > 0) {
         // Project seat: each of the invite's projects must have room again.
         // (The expired invite itself is not counted - only unexpired ones are.)
@@ -462,7 +478,7 @@ router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company) { res.status(403).json({ error: "No active workspace." }); return; }
+    if (!company || !(await resolveTeamMode(company))) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
     const token = String(req.params.token || "").trim();
     const revoked = await db
       .update(platformInvitationsTable)
@@ -496,7 +512,8 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company) { res.status(403).json({ error: "No active workspace." }); return; }
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) { res.status(400).json({ error: "Member id required." }); return; }
     if (targetUserId === req.account!.userId) {
@@ -538,7 +555,6 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     }
 
     // Per-workspace-type rules on the RESULTING role/projectAccess.
-    const teamMode = await resolveTeamMode(company);
     const resultingRole = normalizeMembershipRole(
       updates.role !== undefined ? (updates.role as string) : target.role,
     );
@@ -553,8 +569,13 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     if (teamMode === "agency") {
       const wasProjectSeat = parseProjectAccess(target.projectAccess) !== null;
       if (resultingAccess !== null) {
-        // Project seat: content role only, and any NEWLY added project must
-        // still have room in its own pool (the member's existing seats stay).
+        // Project seat: content role only, at least one project, and any NEWLY
+        // added project must still have room in its own pool (the member's
+        // existing seats stay).
+        if (resultingAccess.length === 0) {
+          res.status(400).json({ error: "Choose at least one project for a project team member." });
+          return;
+        }
         if (resultingRole !== "content") {
           res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
           return;
@@ -613,7 +634,7 @@ router.post("/platform/team/members/:userId/remove", requirePlatformAuth, async 
       return;
     }
     const company = await getActiveCompany(req);
-    if (!company) { res.status(403).json({ error: "No active workspace." }); return; }
+    if (!company || !(await resolveTeamMode(company))) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) { res.status(400).json({ error: "Member id required." }); return; }
     if (targetUserId === req.account!.userId) {

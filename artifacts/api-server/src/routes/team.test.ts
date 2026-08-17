@@ -1405,12 +1405,32 @@ describe("direct-client teams", () => {
     expect(promote.status).toBe(400);
   });
 
-  it("agency-managed partner clients have no team at all", async () => {
+  it("agency-managed partner clients have no team at all - list, invite and every mutation endpoint", async () => {
     await seedWorkspace("managing-agency", "owner@managing.test", "agency");
     const { sid } = await seedWorkspace("managed-client", "owner@managed.test", "client", "managing-agency");
 
     expect((await api("/api/platform/team", { sid })).status).toBe(403);
     const invite = await api("/api/platform/team/invite", { sid, body: { email: "c@managed.test", role: "content" } });
     expect(invite.status).toBe(403);
+    // Mutation endpoints are gated too - stale team state stays frozen.
+    expect((await api("/api/platform/team/invites/some-token/resend", { sid, body: {} })).status).toBe(403);
+    expect((await api("/api/platform/team/invites/some-token/revoke", { sid, body: {} })).status).toBe(403);
+    expect((await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000", { sid, method: "PATCH", body: { role: "content" } })).status).toBe(403);
+    expect((await api("/api/platform/team/members/00000000-0000-0000-0000-000000000000/remove", { sid, body: {} })).status).toBe(403);
+  });
+
+  it("resend refuses legacy invites whose role no longer fits the team model", async () => {
+    const { sid, company } = await seedWorkspace("legacy-inv-client", "owner@leginv.test", "client");
+    // Seed a legacy admin invite directly (pre-dates the content-only rule).
+    await db.insert(platformInvitationsTable).values({
+      token: "legacy-admin-invite",
+      email: "old-admin@leginv.test",
+      companyId: company.id,
+      companySlug: "legacy-inv-client",
+      role: "admin",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const resend = await api("/api/platform/team/invites/legacy-admin-invite/resend", { sid, body: {} });
+    expect(resend.status).toBe(409);
   });
 });
