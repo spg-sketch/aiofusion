@@ -47,4 +47,5 @@
 - [Legacy pending_approval accounts](aio-fusion-legacy-pending-approval.md) — pending_approval is legacy, treated as active in all login paths; only suspended blocks; admin reject suspends, never deletes.
 - [Managed client access flag](aio-fusion-managed-access.md) — `account:managed:<slug>` in platform_meta is a real access-disable; enforced in login/OAuth/MFA/switch-workspace chokepoints, not just UI.
 - [OAuth interstitial vs password shield](aio-fusion-oauth-interstitial-shield.md) — SSO stuck on "Completing sign-in…" on deployed site = deployment visibility is password/private; shield swallows the interstitial POST; check visibility before debugging code.
+- [Agency partner clients permanently managed](aio-fusion-agency-partner-clients.md) — every credential-issuance route must call isAgencyPartnerClient; UI hiding is not enforcement; /me exposes agencyManagedClient.
 - [Workspace switch cache clearing](aio-fusion-workspace-switch-caches.md) - bare localStorage keys to clear on switch (leak via sync push); intake late-profile effect; VIEW_TO_SLUG derived from PUBLIC_ROUTES + hard-fail prerender.
