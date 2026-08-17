@@ -1040,7 +1040,9 @@ function App() {
   }
 
   // Billing team members see invoices/billing only - no project data or tools.
-  if (session?.membershipRole === "billing" && !authLoading) {
+  // Agency-partner clients have no billing of their own (the agency is billed),
+  // so their billing members fall through to the normal read-only app instead.
+  if (session?.membershipRole === "billing" && !session.agencyManagedClient && !authLoading) {
     return (
       <Suspense fallback={null}>
         <BillingOnlyPage workspace={session.username} onSignOut={handleSignOut} />

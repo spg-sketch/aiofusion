@@ -1452,6 +1452,26 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
       return;
     }
 
+    const memberships = await db
+      .select({ companySlug: platformMembershipsTable.companySlug, role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, row.userId));
+
+    // Agency partner clients are permanently managed: never sync a password
+    // into their slug credential store, and refuse the reset outright when the
+    // human's ONLY workspaces are partner clients (multi-workspace humans may
+    // still reset the password they use for their other workspaces).
+    const partnerClientSlugs = new Set<string>();
+    for (const mem of memberships) {
+      if (await isAgencyPartnerClient(normUsername(mem.companySlug))) {
+        partnerClientSlugs.add(mem.companySlug);
+      }
+    }
+    if (memberships.length > 0 && partnerClientSlugs.size === memberships.length) {
+      res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+      return;
+    }
+
     const ph = hashPassword(password);
     await db
       .update(platformUsersTable)
@@ -1460,12 +1480,8 @@ router.post("/platform/reset-password", loginLimiter, async (req: Request, res: 
 
     // Keep the legacy platform_accounts credential store in sync so slug-based
     // logins keep working with the new password.
-    const memberships = await db
-      .select({ companySlug: platformMembershipsTable.companySlug, role: platformMembershipsTable.role })
-      .from(platformMembershipsTable)
-      .where(eq(platformMembershipsTable.userId, row.userId));
     for (const mem of memberships) {
-      if (mem.role === "owner" || mem.role === "admin") {
+      if ((mem.role === "owner" || mem.role === "admin") && !partnerClientSlugs.has(mem.companySlug)) {
         await db
           .update(platformAccountsTable)
           .set({ passwordHash: ph })
@@ -1524,6 +1540,12 @@ router.post("/platform/change-password", requirePlatformAuth, loginLimiter, asyn
     // Guardrail: never allow password changes while impersonating an account.
     if (await isImpersonatedRequest(req)) {
       res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+      return;
+    }
+    // Agency partner clients are permanently managed - they never hold their
+    // own credentials, so a leftover legacy session cannot mint a password.
+    if (await isAgencyPartnerClient(normUsername(req.account!.username))) {
+      res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
       return;
     }
     const currentPassword = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
@@ -1926,6 +1948,13 @@ router.post("/platform/request-set-password", requirePlatformAuth, loginLimiter,
     // Guard: if the user already has a password, they must use change-password.
     if (user.passwordHash) {
       res.status(409).json({ error: "Your account already has a password. Use Change Password instead." });
+      return;
+    }
+
+    // Agency partner clients are permanently managed - never issue them a
+    // set-password link, even from an SSO-authenticated session.
+    if (await isAgencyPartnerClient(normUsername(actor.username))) {
+      res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
       return;
     }
 

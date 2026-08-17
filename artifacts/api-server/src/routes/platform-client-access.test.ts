@@ -1162,6 +1162,77 @@ describe("agency partner clients are permanently managed", () => {
     expect(clientAccountCreatedCalls.length).toBe(0);
   });
 
+  it("change-password: a leftover client session cannot mint its own password", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/change-password`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }),
+      },
+      body: JSON.stringify({ currentPassword: "ClientPass123", newPassword: "SneakyPass123" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+  });
+
+  it("request-set-password: an SSO session on a partner client gets no set-password link", async () => {
+    await db.insert(platformUsersTable).values({ email: PARTNER_CONTACT, passwordHash: null });
+    const res = await fetch(`${baseUrl}/api/platform/request-set-password`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }),
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+  });
+
+  it("reset-password: refused when the human's only workspace is a partner client", async () => {
+    const [u] = await db
+      .insert(platformUsersTable)
+      .values({ email: PARTNER_CONTACT, passwordHash: hashPassword("OldPass12345") })
+      .returning();
+    const [co] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug: PARTNER_CLIENT, role: "client" })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: u!.id,
+      companyId: co!.id,
+      companySlug: PARTNER_CLIENT,
+      role: "owner",
+    });
+    await db.insert(platformPasswordResetsTable).values({
+      token: "ap-reset-token",
+      userId: u!.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/reset-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: "ap-reset-token", password: "NewPass12345" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+
+    // Neither credential store has been touched.
+    const [acct] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, PARTNER_CLIENT))
+      .limit(1);
+    expect(verifyPassword("ClientPass123", acct!.passwordHash)).toBe(true);
+    const [userRow] = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, u!.id))
+      .limit(1);
+    expect(verifyPassword("OldPass12345", userRow!.passwordHash!)).toBe(true);
+  });
+
   it("GET /platform/me reports agencyManagedClient=true for the client and false for the parent", async () => {
     const asClient = await fetch(`${baseUrl}/api/platform/me`, {
       headers: { "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }) },
