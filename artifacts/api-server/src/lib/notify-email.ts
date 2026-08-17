@@ -1549,3 +1549,64 @@ export async function sendPasswordResetEmail(opts: {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send password reset email (non-fatal)");
   }
 }
+
+// Sent to the workspace owner when a platform admin corrects legacy member /
+// invite roles that no longer fit the account's team model.
+export async function sendTeamRoleDowngradedEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  downgradedCount: number;
+  teamMode: "agency" | "client";
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - team role downgrade email not sent");
+    return;
+  }
+
+  const rule =
+    opts.teamMode === "agency"
+      ? "project-scoped team members on Agency accounts must be Content Team Members"
+      : "colleagues on a Client account must be Content Team Members";
+
+  const count = opts.downgradedCount;
+  const subject = `Team role update on ${opts.companyName}`;
+  const text = [
+    `Hi,`,
+    ``,
+    `We've automatically corrected ${count} team ${count === 1 ? "member or invitation" : "members or invitations"} on ${opts.companyName} that had a role which no longer matches your account's team set-up.`,
+    ``,
+    `Under the current rules, ${rule}. The affected ${count === 1 ? "person has" : "people have"} been downgraded to Content Team Member.`,
+    ``,
+    `No action is needed. If you'd like to move someone to a different role, remove them and re-invite with your preferred role through your Team settings.`,
+    ``,
+    `The AIO Fusion team`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Team Update",
+    bodyHtml: `
+      <p style="margin: 0 0 12px 0;">Hi,</p>
+      <p style="margin: 0 0 16px 0;">
+        We've automatically corrected <strong>${count} team ${count === 1 ? "member or invitation" : "members or invitations"}</strong>
+        on <strong>${escHtml(opts.companyName)}</strong> that had a role which no longer matches your account's team set-up.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        Under the current rules, ${escHtml(rule)}.
+        The affected ${count === 1 ? "person has" : "people have"} been downgraded to
+        <strong>Content Team Member</strong>.
+      </p>
+      <p style="margin: 0 0 0 0; font-size: 13px; color: #475569;">
+        No action is needed. To change a team member's role, remove them and re-invite with your preferred
+        role through your Team settings.
+      </p>
+    `,
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail, count }, "notify-email: team role downgrade email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send team role downgrade email (non-fatal)");
+  }
+}

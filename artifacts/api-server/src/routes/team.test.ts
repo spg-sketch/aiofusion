@@ -1602,3 +1602,222 @@ describe("project ownership: downward-only + resend validation", () => {
     expect(resend.json.error).toContain("no longer belongs");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Admin: team-violation report + fix
+// ---------------------------------------------------------------------------
+describe("admin team-violation report and fix", () => {
+  // Seed a master-admin session (role === "admin" at the account level).
+  async function seedMasterAdmin(slug: string, email: string) {
+    await db.insert(platformAccountsTable).values({
+      username: slug,
+      passwordHash: hashPassword("admin-pw-1"),
+      role: "admin",
+      status: "active",
+      email,
+    });
+    const [company] = await db
+      .insert(platformCompaniesTable)
+      .values({ slug, role: "admin", status: "active", displayName: `${slug} Ltd`, setupComplete: true })
+      .returning();
+    const [user] = await db
+      .insert(platformUsersTable)
+      .values({ email, passwordHash: hashPassword("admin-pw-1"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: slug,
+      role: "owner",
+    });
+    const sid = await createPlatformSession(slug, null, user!.id, company!.id);
+    return { company: company!, user: user!, sid };
+  }
+
+  it("returns 403 for non-admin callers", async () => {
+    const { sid } = await seedWorkspace("v-agency-nonadmin", "owner@v-nonadmin.test", "agency");
+    const r = await api("/api/platform/admin/team-violations", { sid });
+    expect(r.status).toBe(403);
+    const rf = await api("/api/platform/admin/team-violations/fix", { sid, body: {} });
+    expect(rf.status).toBe(403);
+  });
+
+  it("reports violations: agency project-seat member with non-content role and client member with non-content role", async () => {
+    const { sid: adminSid } = await seedMasterAdmin("violations-admin", "admin@violations.test");
+
+    // Agency workspace with a project-scoped member that has 'billing' role (legacy).
+    const { company: agencyCompany } = await seedWorkspace("v-agency", "owner@v-agency.test", "agency");
+    const [agencyMember] = await db
+      .insert(platformUsersTable)
+      .values({ email: "billing-proj@v-agency.test", passwordHash: hashPassword("pass1"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: agencyMember!.id,
+      companyId: agencyCompany.id,
+      companySlug: "v-agency",
+      role: "billing",
+      projectAccess: JSON.stringify(["proj-abc"]),
+    });
+
+    // Agency workspace with a project-scoped invite that has 'admin' role (legacy).
+    await db.insert(platformInvitationsTable).values({
+      token: "viol-agency-admin-invite",
+      email: "old-admin@v-agency.test",
+      companyId: agencyCompany.id,
+      companySlug: "v-agency",
+      role: "admin",
+      projectAccess: JSON.stringify(["proj-xyz"]),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    // Client workspace with a member that has 'viewer' role (legacy).
+    const { company: clientCompany } = await seedWorkspace("v-client", "owner@v-client.test", "client");
+    const [clientMember] = await db
+      .insert(platformUsersTable)
+      .values({ email: "viewer@v-client.test", passwordHash: hashPassword("pass2"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: clientMember!.id,
+      companyId: clientCompany.id,
+      companySlug: "v-client",
+      role: "viewer",
+    });
+
+    // Client workspace with a non-content invite (legacy).
+    await db.insert(platformInvitationsTable).values({
+      token: "viol-client-billing-invite",
+      email: "old-billing@v-client.test",
+      companyId: clientCompany.id,
+      companySlug: "v-client",
+      role: "billing",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const r = await api("/api/platform/admin/team-violations", { sid: adminSid });
+    expect(r.status).toBe(200);
+    expect(r.json.total).toBeGreaterThanOrEqual(4);
+
+    // Both violating companies must appear in the report.
+    const slugs: string[] = r.json.companies.map((c: any) => c.companySlug);
+    expect(slugs).toContain("v-agency");
+    expect(slugs).toContain("v-client");
+
+    // The agency company must show the billing member + admin invite as violations.
+    const agencyEntry = r.json.companies.find((c: any) => c.companySlug === "v-agency");
+    expect(agencyEntry).toBeDefined();
+    const agencyViolations = agencyEntry.violations;
+    expect(agencyViolations.some((v: any) => v.kind === "member" && v.currentRole === "billing")).toBe(true);
+    expect(agencyViolations.some((v: any) => v.kind === "invite" && v.currentRole === "admin")).toBe(true);
+
+    // The client company must show the viewer member + billing invite as violations.
+    const clientEntry = r.json.companies.find((c: any) => c.companySlug === "v-client");
+    expect(clientEntry).toBeDefined();
+    expect(clientEntry.violations.some((v: any) => v.kind === "member" && v.currentRole === "viewer")).toBe(true);
+    expect(clientEntry.violations.some((v: any) => v.kind === "invite" && v.currentRole === "billing")).toBe(true);
+
+    // Workspace owners are included in the report for notification purposes.
+    expect(clientEntry.ownerEmail).toBe("owner@v-client.test");
+    expect(agencyEntry.ownerEmail).toBe("owner@v-agency.test");
+  });
+
+  it("fix endpoint downgrades violating members and invites to content role", async () => {
+    const { sid: adminSid } = await seedMasterAdmin("fix-admin", "admin@fix.test");
+
+    const { company: fixAgency } = await seedWorkspace("v-fix-agency", "owner@v-fix-agency.test", "agency");
+    const [fixMember] = await db
+      .insert(platformUsersTable)
+      .values({ email: "admin-proj@v-fix-agency.test", passwordHash: hashPassword("pass3"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: fixMember!.id,
+      companyId: fixAgency.id,
+      companySlug: "v-fix-agency",
+      role: "admin",
+      projectAccess: JSON.stringify(["fix-proj"]),
+    });
+    await db.insert(platformInvitationsTable).values({
+      token: "fix-agency-viewer-invite",
+      email: "viewer-proj@v-fix-agency.test",
+      companyId: fixAgency.id,
+      companySlug: "v-fix-agency",
+      role: "viewer",
+      projectAccess: JSON.stringify(["fix-proj"]),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const fix = await api("/api/platform/admin/team-violations/fix", { sid: adminSid, body: {} });
+    expect(fix.status).toBe(200);
+    expect(fix.json.ok).toBe(true);
+    expect(fix.json.dryRun).toBe(false);
+    expect(fix.json.fixed).toBeGreaterThanOrEqual(2);
+
+    // Member role must now be 'content'.
+    const [updatedMember] = await db
+      .select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, fixMember!.id));
+    expect(updatedMember?.role).toBe("content");
+
+    // Invite role must now be 'content'.
+    const [updatedInvite] = await db
+      .select({ role: platformInvitationsTable.role })
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, "fix-agency-viewer-invite"));
+    expect(updatedInvite?.role).toBe("content");
+  });
+
+  it("dry-run reports violations without changing anything", async () => {
+    const { sid: adminSid } = await seedMasterAdmin("dryrun-admin", "admin@dryrun.test");
+
+    const { company: dryClient } = await seedWorkspace("v-dryrun-client", "owner@v-dryrun.test", "client");
+    const [dryMember] = await db
+      .insert(platformUsersTable)
+      .values({ email: "billing@v-dryrun.test", passwordHash: hashPassword("pass4"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: dryMember!.id,
+      companyId: dryClient.id,
+      companySlug: "v-dryrun-client",
+      role: "billing",
+    });
+
+    const dry = await api("/api/platform/admin/team-violations/fix", {
+      sid: adminSid,
+      body: { dryRun: true },
+    });
+    expect(dry.status).toBe(200);
+    expect(dry.json.dryRun).toBe(true);
+    expect(dry.json.fixed).toBeGreaterThanOrEqual(1);
+
+    // DB must be unchanged.
+    const [unchanged] = await db
+      .select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, dryMember!.id));
+    expect(unchanged?.role).toBe("billing");
+  });
+
+  it("does not flag account-level (non-project-scoped) agency members with any role", async () => {
+    const { sid: adminSid } = await seedMasterAdmin("safe-admin", "admin@safe.test");
+
+    const { company: safeAgency } = await seedWorkspace("v-safe-agency", "owner@v-safe.test", "agency");
+    const [safeMember] = await db
+      .insert(platformUsersTable)
+      .values({ email: "billing-acct@v-safe.test", passwordHash: hashPassword("pass5"), emailVerified: true })
+      .returning();
+    // Account-level seat (no projectAccess) with 'billing' - this is valid.
+    await db.insert(platformMembershipsTable).values({
+      userId: safeMember!.id,
+      companyId: safeAgency.id,
+      companySlug: "v-safe-agency",
+      role: "billing",
+      projectAccess: null,
+    });
+
+    const r = await api("/api/platform/admin/team-violations", { sid: adminSid });
+    expect(r.status).toBe(200);
+    const entry = r.json.companies.find((c: any) => c.companySlug === "v-safe-agency");
+    // v-safe-agency should NOT appear in the violations list.
+    expect(entry).toBeUndefined();
+  });
+});

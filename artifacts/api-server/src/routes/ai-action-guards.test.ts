@@ -653,6 +653,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/team/seat-limit",
   "GET /platform/invite/:token",
   "POST /platform/invite/accept",
+  "GET /platform/admin/team-violations",
+  "POST /platform/admin/team-violations/fix",
 
   // ── platform - workspace / in-app invites ─────────────────────────────────
   "GET /platform/my-invites",

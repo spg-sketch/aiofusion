@@ -32,6 +32,7 @@ export type AdminAction =
   | "team_invite_resent"
   | "team_invite_accepted_inapp"
   | "team_member_removed"
+  | "team_violations_fixed"
   | "email_changed";
 
 export async function logAdminEvent(

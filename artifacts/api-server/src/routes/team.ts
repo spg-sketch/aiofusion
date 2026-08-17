@@ -9,7 +9,7 @@ import {
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, desc, eq, isNull, gt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, isNotNull, gt } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   normUsername,
@@ -43,7 +43,7 @@ import {
   INVITE_INVALID_MESSAGES,
   consumeInvite,
 } from "../lib/team-invites";
-import { sendTeamInviteEmail, getAppBaseUrl } from "../lib/notify-email";
+import { sendTeamInviteEmail, sendTeamRoleDowngradedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { logger } from "../lib/logger";
@@ -208,7 +208,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     const now = new Date();
     const pendingCount = inviteRows.filter((i) => i.expiresAt > now).length;
 
-    const seatLimit = await getTeamSeatLimit(company.slug);
+        const seatLimit = await getTeamSeatLimit(company.slug);
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
     // (members/invites with no project restriction); project-scoped people sit
@@ -218,7 +218,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
     if (teamMode === "agency") {
       const account = await countAccountPoolSeats(company.id);
       seatsUsed = account.members + account.pendingInvites;
-      const holders = await getProjectSeatHolders(company.id);
+          const holders = await getProjectSeatHolders(company.id);
       projectSeats = {};
       for (const [projectId, list] of holders) projectSeats[projectId] = list.length;
     }
@@ -272,7 +272,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     }
 
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-    let role = normalizeMembershipRole(req.body?.role);
+      const role = normalizeMembershipRole(req.body.role);
     if (!email || !EMAIL_RE.test(email)) {
       res.status(400).json({ error: "A valid email address is required." });
       return;
@@ -314,9 +314,9 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
         res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
         return;
       }
-      const holders = await getProjectSeatHolders(company.id);
-      for (const projectId of projectIdsParsed) {
-        const held = holders.get(projectId) ?? [];
+          const holders = await getProjectSeatHolders(company.id);
+          for (const projectId of added) {
+            const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
         if (held.length >= PROJECT_TEAM_SEATS) {
           res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
           return;
@@ -330,9 +330,9 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
 
     // Already a member of this workspace?
     const [existingUser] = await db
-      .select({ id: platformUsersTable.id })
+      .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
       .from(platformUsersTable)
-      .where(eq(platformUsersTable.email, email))
+      .where(eq(platformUsersTable.email, invite.email))
       .limit(1);
     if (existingUser) {
       const [existingMembership] = await db
@@ -374,9 +374,8 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     // per-project pools; everything else counts against the workspace pool
     // (agency mode: account-level members/invites only).
     if (!isAgencyProjectSeat) {
-      const seatLimit = await getTeamSeatLimit(company.slug);
-      const { members, pendingInvites } =
-        teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
+        const seatLimit = await getTeamSeatLimit(company.slug);
+        const { members, pendingInvites } = await countAccountPoolSeats(company.id);
       if (members + pendingInvites >= seatLimit) {
         res.status(403).json({
           error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
@@ -386,7 +385,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       }
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     await db.insert(platformInvitationsTable).values({
       token,
       email,
@@ -400,37 +399,37 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     });
 
-    const inviteUrl = `${getAppBaseUrl()}/?invite=${token}`;
+    const inviteUrl = `${getAppBaseUrl()}/?invite=${newToken}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
     void sendTeamInviteEmail({
-      toEmail: email,
+      toEmail: existing.email,
       companyName: company.displayName || company.slug,
       inviterName,
-      roleLabel: MEMBERSHIP_ROLE_LABELS[role],
+      roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(existing.role)] ?? existing.role,
       inviteUrl,
     });
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
-      "team_invite_sent",
-      email,
+      "team_invite_resent",
+      existing.email,
       "invitation",
-      { role, companySlug: company.slug },
+      { companySlug: company.slug },
     );
 
-    res.status(201).json({ ok: true, token, inviteUrl });
+    res.status(200).json({ ok: true, token: newToken, inviteUrl, expiresAt: newExpiresAt });
   } catch (err) {
-    logger.error({ err }, "team: failed to create invite");
-    res.status(500).json({ error: "Failed to send invitation." });
+    logger.error({ err }, "team: failed to resend invite");
+    res.status(500).json({ error: "Failed to resend invitation." });
   }
 });
 
-// --- Resend (regenerate) a pending or expired invite --------------------------
+// --- Revoke a pending invite ---------------------------------------------------
 
-router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (req: Request, res: Response) => {
+router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     if (!canManageTeam(req.account!)) {
-      res.status(403).json({ error: "Only owners and admins can resend invitations." });
+      res.status(403).json({ error: "Only owners and admins can revoke invitations." });
       return;
     }
     const company = await getActiveCompany(req);
@@ -442,15 +441,8 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     // Look up the existing invite - scoped to this company, not yet used/revoked.
     const [existing] = await db
       .select()
-      .from(platformInvitationsTable)
-      .where(
-        and(
-          eq(platformInvitationsTable.token, oldToken),
-          eq(platformInvitationsTable.companyId, company.id),
-          isNull(platformInvitationsTable.usedAt),
-          isNull(platformInvitationsTable.revokedAt),
-        ),
-      )
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, invite.email))
       .limit(1);
 
     if (!existing) {
@@ -493,17 +485,16 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
       if (teamMode === "agency" && inviteProjects && inviteProjects.length > 0) {
         // Project seat: each of the invite's projects must have room again.
         // (The expired invite itself is not counted - only unexpired ones are.)
-        const holders = await getProjectSeatHolders(company.id);
-        for (const projectId of inviteProjects) {
-          const held = holders.get(projectId) ?? [];
+          const holders = await getProjectSeatHolders(company.id);
+          for (const projectId of added) {
+            const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
           if (held.length >= PROJECT_TEAM_SEATS) {
             res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
             return;
           }
         }
       } else {
-        const { members, pendingInvites } =
-          teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
+        const { members, pendingInvites } = await countAccountPoolSeats(company.id);
         const seatLimit = await getTeamSeatLimit(company.slug);
         if (members + pendingInvites >= seatLimit) {
           res.status(403).json({
@@ -559,7 +550,7 @@ router.post("/platform/team/invites/:token/revoke", requirePlatformAuth, async (
     }
     const company = await getActiveCompany(req);
     if (!company || !(await resolveTeamMode(company))) { res.status(403).json({ error: NO_TEAM_MESSAGE }); return; }
-    const token = String(req.params.token || "").trim();
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const revoked = await db
       .update(platformInvitationsTable)
       .set({ revokedAt: new Date() })
@@ -597,12 +588,12 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) { res.status(400).json({ error: "Member id required." }); return; }
     if (targetUserId === req.account!.userId) {
-      res.status(400).json({ error: "You cannot change your own role." });
+      res.status(400).json({ error: "You cannot remove yourself from the team." });
       return;
     }
 
     const [target] = await db
-      .select()
+      .select({ role: platformMembershipsTable.role })
       .from(platformMembershipsTable)
       .where(
         and(
@@ -793,7 +784,7 @@ router.post("/platform/team/seat-limit", requirePlatformAuth, async (req: Reques
 
 router.get("/platform/invite/:token", async (req: Request, res: Response) => {
   try {
-    const token = String(req.params.token || "").trim();
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
     const invite = await getValidInvite(token);
     if (!invite) {
       const reason = await getInviteInvalidReason(token);
@@ -801,10 +792,20 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
       return;
     }
     const [company] = await db
-      .select({ displayName: platformCompaniesTable.displayName, slug: platformCompaniesTable.slug })
+      .select({ role: platformCompaniesTable.role })
       .from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.id, invite.companyId))
       .limit(1);
+
+type ViolationItem = {
+  kind: "member" | "invite";
+  userId?: string | null;
+  inviteToken?: string | null;
+  email: string | null;
+  name?: string | null;
+  currentRole: MembershipRole;
+  reason: string;
+};
     const [existingUser] = await db
       .select({ id: platformUsersTable.id, passwordHash: platformUsersTable.passwordHash })
       .from(platformUsersTable)
@@ -902,19 +903,224 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
       .from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.id, invite.companyId))
       .limit(1);
-    res.json({
-      ok: true,
-      account: {
-        username: invite.companySlug,
-        role: company?.role ?? "agency",
-        membershipRole: normalizeMembershipRole(invite.role),
-      },
-    });
-  } catch (err) {
-    logger.error({ err }, "team: failed to accept invite");
-    res.status(500).json({ error: "Failed to accept invitation." });
-  }
-});
 
+type ViolationItem = {
+  kind: "member" | "invite";
+  userId?: string | null;
+  inviteToken?: string | null;
+  email: string | null;
+  name?: string | null;
+  currentRole: MembershipRole;
+  reason: string;
+};
 export default router;
 export type { MembershipRole };
+
+type CompanyViolations = {
+  companyId: string;
+  companySlug: string;
+  // Standard workspaces never generate violations (no restricted seat rules),
+  // so this is always narrowed to "agency" | "client" in practice.
+  teamMode: "agency" | "client";
+  ownerEmail: string | null;
+  violations: ViolationItem[];
+};
+
+    const total = violations.reduce((s, c) => s + c.violations.length, 0);
+
+    const actor = { username: req.account!.username, id: req.account!.userId ?? undefined };
+
+    const dryRun = req.body?.dryRun === true;
+
+async function collectTeamViolations(): Promise<CompanyViolations[]> {
+  const companies = await db
+    .select()
+    .from(platformCompaniesTable)
+    .where(eq(platformCompaniesTable.status, "active"));
+
+  const results: CompanyViolations[] = [];
+
+  for (const company of companies) {
+    const teamMode = await resolveTeamMode(company);
+    if (!teamMode) continue; // agency-managed clients: no team, nothing to fix
+
+    const violations: ViolationItem[] = [];
+
+    // -- existing members -------------------------------------------------
+    const members = await db
+      .select({
+        userId: platformMembershipsTable.userId,
+        role: platformMembershipsTable.role,
+        projectAccess: platformMembershipsTable.projectAccess,
+        email: platformUsersTable.email,
+        name: platformUsersTable.name,
+      })
+      .from(platformMembershipsTable)
+      .leftJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+      .where(eq(platformMembershipsTable.companyId, company.id));
+
+    for (const m of members) {
+      const role = normalizeMembershipRole(m.role);
+      if (role === "owner") continue; // owners are never touched
+      const projectIds = parseProjectAccess(m.projectAccess);
+      if (teamMode === "agency" && projectIds !== null && role !== "content") {
+        violations.push({
+          kind: "member",
+          userId: m.userId,
+          email: m.email,
+          name: m.name ?? null,
+          currentRole: role,
+          reason: "Agency project-seat member must be Content Team Member",
+        });
+      } else if (teamMode === "client" && role !== "content") {
+        violations.push({
+          kind: "member",
+          userId: m.userId,
+          email: m.email,
+          name: m.name ?? null,
+          currentRole: role,
+          reason: "Client account members must be Content Team Members",
+        });
+      }
+    }
+
+    // -- pending invites (including expired ones not yet revoked) ---------
+    const invites = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(
+        and(
+          eq(platformInvitationsTable.companyId, company.id),
+          isNull(platformInvitationsTable.usedAt),
+          isNull(platformInvitationsTable.revokedAt),
+        ),
+      );
+
+    for (const inv of invites) {
+      const role = normalizeMembershipRole(inv.role);
+      const projectIds = parseProjectAccess(inv.projectAccess);
+      if (teamMode === "agency" && projectIds !== null && role !== "content") {
+        violations.push({
+          kind: "invite",
+          inviteToken: inv.token,
+          email: inv.email,
+          currentRole: role,
+          reason: "Agency project-seat invite must be for Content Team Member",
+        });
+      } else if (teamMode === "client" && role !== "content") {
+        violations.push({
+          kind: "invite",
+          inviteToken: inv.token,
+          email: inv.email,
+          currentRole: role,
+          reason: "Client account invite must be for Content Team Member",
+        });
+      }
+    }
+
+    // Standard workspaces never produce violations, so if we have any, teamMode
+    // must be "agency" or "client". The explicit check satisfies TypeScript.
+    if (violations.length > 0 && (teamMode === "agency" || teamMode === "client")) {
+      const ownerEmail = await getCompanyOwnerEmail(company.id);
+      results.push({
+        companyId: company.id,
+        companySlug: company.slug,
+        teamMode,
+        ownerEmail,
+        violations,
+      });
+    }
+  }
+
+  return results;
+}
+
+async function getCompanyOwnerEmail(companyId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ email: platformUsersTable.email })
+    .from(platformMembershipsTable)
+    .leftJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+    .where(
+      and(
+        eq(platformMembershipsTable.companyId, companyId),
+        eq(platformMembershipsTable.role, "owner"),
+      ),
+    )
+    .orderBy(asc(platformMembershipsTable.createdAt))
+    .limit(1);
+  return row?.email ?? null;
+}
+
+async function applyTeamViolationFixes(
+  violations: CompanyViolations[],
+  actor: { username: string; id?: string },
+  dryRun: boolean,
+): Promise<{ fixed: number; companies: number; notifications: number }> {
+  let fixed = 0;
+  let notifications = 0;
+
+  for (const company of violations) {
+    let companyFixed = 0;
+    const affectedUserIds: string[] = [];
+
+    for (const v of company.violations) {
+      if (v.kind === "member" && v.userId) {
+        if (!dryRun) {
+          await db
+            .update(platformMembershipsTable)
+            .set({ role: "content" })
+            .where(
+              and(
+                eq(platformMembershipsTable.userId, v.userId),
+                eq(platformMembershipsTable.companyId, company.companyId),
+              ),
+            );
+          affectedUserIds.push(v.userId);
+        }
+        companyFixed++;
+      } else if (v.kind === "invite" && v.inviteToken) {
+        if (!dryRun) {
+          await db
+            .update(platformInvitationsTable)
+            .set({ role: "content" })
+            .where(eq(platformInvitationsTable.token, v.inviteToken));
+        }
+        companyFixed++;
+      }
+    }
+
+    if (!dryRun && companyFixed > 0) {
+      // Revoke sessions for any members whose role was downgraded.
+      for (const userId of affectedUserIds) {
+        await incrementSessionVersion(userId);
+      }
+
+      // Notify the workspace owner.
+      if (company.ownerEmail) {
+        void sendTeamRoleDowngradedEmail({
+          toEmail: company.ownerEmail,
+          companyName: company.companySlug,
+          downgradedCount: companyFixed,
+          teamMode: company.teamMode,
+        });
+        notifications++;
+      }
+
+      void logAdminEvent(
+        actor,
+        "team_violations_fixed",
+        company.companySlug,
+        "company",
+        { count: companyFixed, dryRun },
+      );
+    }
+
+    fixed += companyFixed;
+  }
+
+  return { fixed, companies: violations.length, notifications };
+}
+
+    const result = await applyTeamViolationFixes(violations, actor, dryRun);
+
+    const violations = await collectTeamViolations();
