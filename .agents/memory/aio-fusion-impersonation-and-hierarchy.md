@@ -47,3 +47,5 @@ cap/Sessions/Delete) into one kebab "more actions" dropdown, leaving only
 **Why:** a purely structural fix (tree nesting) reads as cosmetic if the
 per-row information density and off-brand background are untouched — those
 are what actually register as "cluttered" to a non-technical reviewer.
+
+**Agency-view banner removed (Aug 2026):** when byRole==="agency" the global ImpersonationBanner returns null; the exit route is BackToAgencyLink, injected via the workspaceSwitcher slot (Sidebar + ClientSelectorPage) AND passed to PlatformHomePage/SubAccountsPage headers — every other view routes back to one of those. Master switch-up and admin support-mode banners unchanged. If new top-level views are added outside these, they must receive the control or users get stranded in the client session.
