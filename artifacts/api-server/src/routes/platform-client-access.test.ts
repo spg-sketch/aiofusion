@@ -1194,6 +1194,25 @@ describe("agency partner clients are permanently managed", () => {
     expect(body.welcomeLinkCreated).toBeUndefined();
   });
 
+  it("accounts/password: a client session cannot set a password for ITSELF either", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/accounts/password`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-test-account": JSON.stringify({ username: PARTNER_CLIENT, role: "client", userId: null }),
+      },
+      body: JSON.stringify({ username: PARTNER_CLIENT, newPassword: "SelfMintedPass123" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
+    const [acct] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, PARTNER_CLIENT))
+      .limit(1);
+    expect(verifyPassword("SelfMintedPass123", acct!.passwordHash)).toBe(false);
+  });
+
   it("change-password: a leftover client session cannot mint its own password", async () => {
     const res = await fetch(`${baseUrl}/api/platform/change-password`, {
       method: "POST",

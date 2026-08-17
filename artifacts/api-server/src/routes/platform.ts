@@ -3920,7 +3920,10 @@ router.post(
       }
       // Agency partner clients are permanently managed - no password may ever
       // be set on them (their agency signs in via "Client projects" instead).
-      if (!isSelf && (await isAgencyPartnerClient(target))) {
+      // This applies to the client's own session too: this route does not
+      // verify the current password, so a leftover/SSO client session must
+      // not be able to mint one for itself.
+      if (await isAgencyPartnerClient(target)) {
         res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
         return;
       }
