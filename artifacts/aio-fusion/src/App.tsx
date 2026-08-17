@@ -604,6 +604,11 @@ function App() {
   // is confirmed, land on the projects hub - and when the client has exactly
   // one project, open it directly as soon as the sync makes it visible.
   const pendingClientProjectId = useRef<string | null>(null);
+  // The shortcut is clicked from the account settings page, whose URL carries
+  // ?account_section=clients. That param survives the impersonation reload and
+  // its deep-link effect would otherwise navigate straight back to account
+  // settings, overriding the shortcut. Consuming the stash suppresses it.
+  const suppressAccountSectionNav = useRef(false);
   useEffect(() => {
     if (authLoading || !session) return;
     let raw: string | null = null;
@@ -618,6 +623,8 @@ function App() {
     } catch {
       pendingClientProjectId.current = null;
     }
+    suppressAccountSectionNav.current = true;
+    setAccountSection(null);
     setView("platform");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, session]);
@@ -948,6 +955,10 @@ function App() {
     if (!accountSection || accountSectionNavDone.current) return;
     if (authLoading || !session) return;
     accountSectionNavDone.current = true;
+    // The "Client projects" shortcut consumed its stash this load - the
+    // account_section param is a leftover from the page the shortcut was
+    // clicked on, not a deep link to follow.
+    if (suppressAccountSectionNav.current) return;
     setView("sub-accounts");
   }, [accountSection, authLoading, session]);
 
