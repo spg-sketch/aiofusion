@@ -6,6 +6,7 @@ import {
   platformMembershipsTable,
   platformUsersTable,
   platformCompaniesTable,
+  platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
 import { and, desc, eq, isNull, gt } from "drizzle-orm";
@@ -91,14 +92,38 @@ const NO_TEAM_MESSAGE = "Team management is not available for this account.";
 async function getOwnedProjectIds(companySlug: string): Promise<Set<string> | null> {
   const account = await getAccount(companySlug);
   if (!account) return new Set();
-  const visible = await getVisibleUsernames(account);
+  if (account.role === "admin") return null; // master admin: any project
+  // Downward-only ownership: self plus descendant sub-accounts. Deliberately
+  // NOT getVisibleUsernames - that includes a client's direct parent for read
+  // visibility, and a workspace must never grant team seats on a project it
+  // can merely see but does not own.
   const rows = await db
+    .select({
+      username: platformAccountsTable.username,
+      parent: platformAccountsTable.parent,
+    })
+    .from(platformAccountsTable);
+  const childrenByParent = new Map<string, string[]>();
+  for (const r of rows) {
+    const parent = normUsername(r.parent);
+    if (!parent) continue;
+    const list = childrenByParent.get(parent) || [];
+    list.push(normUsername(r.username));
+    childrenByParent.set(parent, list);
+  }
+  const allowed = new Set<string>();
+  const queue = [normUsername(companySlug)];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (allowed.has(cur)) continue;
+    allowed.add(cur);
+    for (const child of childrenByParent.get(cur) || []) queue.push(child);
+  }
+  const projectRows = await db
     .select({ id: projectsTable.id, owner: projectsTable.owner })
     .from(projectsTable)
     .where(isNull(projectsTable.deletedAt));
-  if (visible === null) return null; // master admin: any project
-  const allowed = new Set(visible.map((v) => normUsername(v)));
-  return new Set(rows.filter((r) => allowed.has(normUsername(r.owner))).map((r) => r.id));
+  return new Set(projectRows.filter((r) => allowed.has(normUsername(r.owner))).map((r) => r.id));
 }
 
 // 400 when any of the given project ids is not owned by this workspace.
@@ -445,6 +470,19 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
         error: "This invitation's role no longer matches your team set-up. Revoke it and send a new invitation instead.",
       });
       return;
+    }
+
+    // The invite's projects must still belong to this workspace. A legacy
+    // invite created before ownership enforcement - or one whose project was
+    // since reassigned elsewhere - must not be regenerated with foreign access.
+    if (existingProjects && existingProjects.length > 0) {
+      const owned = await getOwnedProjectIds(company.slug);
+      if (owned !== null && existingProjects.some((id) => !owned.has(id))) {
+        res.status(409).json({
+          error: "This invitation references a project that no longer belongs to this account. Revoke it and send a new invitation instead.",
+        });
+        return;
+      }
     }
 
     // Resending an EXPIRED invite re-adds a pending seat, so enforce the seat

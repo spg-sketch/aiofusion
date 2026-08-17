@@ -1542,3 +1542,63 @@ describe("project ownership enforcement on team invites", () => {
     expect(r.status).toBe(201);
   });
 });
+
+describe("project ownership: downward-only + resend validation", () => {
+  it("a client workspace cannot grant seats on its parent agency's project", async () => {
+    // Parent agency owns a project; the client can SEE it (read visibility
+    // includes the parent) but must not be able to assign team seats on it.
+    await seedWorkspace("par-own-ag", "owner@par-own.test", "agency");
+    await seedProject("parent-owned-proj", "par-own-ag");
+    const { sid } = await seedWorkspace("par-own-cl", "owner@par-own-cl.test", "client");
+    await db.update(platformAccountsTable)
+      .set({ parent: "par-own-ag" })
+      .where(eq(platformAccountsTable.username, "par-own-cl"));
+    // Make the parent non-agency so the client keeps a team (client mode).
+    await db.update(platformAccountsTable)
+      .set({ role: "client" })
+      .where(eq(platformAccountsTable.username, "par-own-ag"));
+    // Client-mode invites discard any project scoping - the parent's project
+    // id must not end up stored on the invitation.
+    const r = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "x@par-own-cl.test", role: "content", projectIds: ["parent-owned-proj"] },
+    });
+    expect(r.status).toBe(201);
+    const [stored] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.email, "x@par-own-cl.test"));
+    expect(stored!.projectAccess).toBeNull();
+
+    // Nor can a member update smuggle the parent's project in: accept the
+    // invite, then try to scope the member to the parent-owned project.
+    const accept = await api("/api/platform/invite/accept", { body: { token: r.json.token, password: "member-pass-9" } });
+    expect(accept.status).toBe(200);
+    const [member] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "x@par-own-cl.test"));
+    const patch = await api(`/api/platform/team/members/${member!.id}`, {
+      sid,
+      method: "PATCH",
+      body: { projectIds: ["parent-owned-proj"] },
+    });
+    expect(patch.status).toBe(400);
+    expect(patch.json.error).toContain("don't belong");
+  });
+
+  it("resend refuses an expired invite whose project no longer belongs to the workspace", async () => {
+    const { sid, company } = await seedWorkspace("resend-own-ag", "owner@resend-own.test", "agency");
+    await seedProject("resend-own-proj", "resend-own-ag");
+    const inv = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "r@resend-own.test", role: "content", projectIds: ["resend-own-proj"] },
+    });
+    expect(inv.status).toBe(201);
+    // Project gets reassigned to an unrelated owner, invite expires.
+    await db.update(projectsTable).set({ owner: "someone-else" }).where(eq(projectsTable.id, "resend-own-proj"));
+    await db.update(platformInvitationsTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(platformInvitationsTable.companyId, company.id));
+    const resend = await api(`/api/platform/team/invites/${inv.json.token}/resend`, { sid, body: {} });
+    expect(resend.status).toBe(409);
+    expect(resend.json.error).toContain("no longer belongs");
+  });
+});

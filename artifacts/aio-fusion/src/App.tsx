@@ -623,8 +623,16 @@ function App() {
     } catch {
       pendingClientProjectId.current = null;
     }
-    suppressAccountSectionNav.current = true;
-    setAccountSection(null);
+    // Only neutralise the "clients" section leftover from the page the
+    // shortcut was clicked on - a genuine email deep link to another section
+    // (security, billing...) must still navigate even if a stale stash exists.
+    setAccountSection((prev) => {
+      if (prev === "clients") {
+        suppressAccountSectionNav.current = true;
+        return null;
+      }
+      return prev;
+    });
     setView("platform");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, session]);
