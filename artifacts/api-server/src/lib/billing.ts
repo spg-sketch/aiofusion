@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import { randomUUID } from "node:crypto";
 import {
   db,
   platformCompaniesTable,
@@ -215,46 +216,121 @@ export async function withBillingLock<T>(
 //
 // The in-process billing lock (withBillingLock) prevents same-process races
 // but does not help when two server processes attempt a checkout simultaneously.
-// A DB-backed "checkout pending" flag bridges that gap: the first request to
-// INSERT wins the slot; the second sees a conflict and learns another checkout
-// is already in flight.
+// A DB-backed pending-checkout record bridges that gap.
 //
-// Stale claims (older than CHECKOUT_PENDING_TTL_MS) are preempted automatically
-// via the WHERE guard on the ON CONFLICT DO UPDATE, so a crashed process can
-// never permanently block checkouts for an account.
+// Design:
+//  - The first request INSERTs a claim with { at, tok, sid?, url? }.
+//    "at" is the claim timestamp (for TTL), "tok" is a unique token (UUID).
+//  - After the Stripe session is created, the claim is updated (finalizeCheckoutClaim)
+//    to include the session id and url. Subsequent requests can reuse this URL.
+//  - The claim is NOT released when the URL is returned to the browser.
+//    It is held open so no second process can race in while the session tab
+//    is still active.
+//  - The webhook (checkout.session.completed) releases the claim conditionally
+//    using the claim token stored in the Stripe session metadata ("claim_tok").
+//  - If session creation fails, the route releases the claim immediately so
+//    the user can retry.
+//  - Stale claims (older than CHECKOUT_PENDING_TTL_MS) are preempted by the
+//    UPSERT WHERE guard so a crashed process never permanently blocks checkouts.
+//    Preemption is safe because releaseCheckout is conditional on the token:
+//    an expired claimant calling release with its old token does not delete the
+//    new claimant's record.
 
-const CHECKOUT_PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
+export const CHECKOUT_PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const checkoutPendingKey = (slug: string) => `checkout:pending:${normUsername(slug)}`;
 
+type CheckoutClaim = {
+  at: string;   // ISO timestamp of claim (used for TTL comparison)
+  tok: string;  // unique claim token (UUID); release is conditional on this
+  sid?: string; // Stripe Checkout Session id (set after session created)
+  url?: string; // Stripe Checkout Session url (set after session created)
+};
+
 // Atomically claim the checkout-in-progress slot for a billing account.
-// Returns true when the claim is acquired; false when another live checkout
-// is already in progress (< CHECKOUT_PENDING_TTL_MS old).
-export async function claimCheckout(slug: string): Promise<boolean> {
+//
+// Returns:
+//  { claimed: true,  claimToken }               - slot acquired, proceed to create session
+//  { claimed: false, existingUrl }              - live session already open; reuse this URL
+//  { claimed: false, existingUrl: undefined }   - mid-claim race (another process is creating
+//                                                  the session but has not finalized yet)
+export async function claimCheckout(
+  slug: string,
+): Promise<{ claimed: true; claimToken: string } | { claimed: false; existingUrl?: string }> {
   const key = checkoutPendingKey(slug);
+  const claimToken = randomUUID();
   const now = new Date().toISOString();
   const stale = new Date(Date.now() - CHECKOUT_PENDING_TTL_MS).toISOString();
+  const newValue = JSON.stringify({ at: now, tok: claimToken } satisfies CheckoutClaim);
+
   // Atomic: INSERT wins the slot. ON CONFLICT DO UPDATE only fires when the
-  // existing claim is stale (the previous claimer crashed); in that case the
-  // slot is preempted and returned to the new caller. No rows returned means
-  // a live checkout is already in progress.
+  // existing claim is stale; in that case the slot is preempted by the new
+  // caller. No rows returned means a live claim is already in progress.
   const result = await db.execute(sql`
     INSERT INTO platform_meta (key, value)
-    VALUES (${key}, ${now})
+    VALUES (${key}, ${newValue})
     ON CONFLICT (key) DO UPDATE
-      SET value = ${now}
-      WHERE platform_meta.value < ${stale}
+      SET value = ${newValue}
+      WHERE (platform_meta.value::json->>'at') < ${stale}
     RETURNING key
   `);
   const rows = (result as unknown as { rows?: unknown[] }).rows ?? [];
-  return rows.length > 0;
+  if (rows.length > 0) {
+    return { claimed: true, claimToken };
+  }
+
+  // A live claim exists. Read it to expose any already-created session URL so
+  // the caller can redirect the user there instead of returning a 409.
+  const [existing] = await db
+    .select({ value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, key));
+
+  if (existing?.value) {
+    try {
+      const data = JSON.parse(existing.value) as Partial<CheckoutClaim>;
+      if (data.url) return { claimed: false, existingUrl: data.url };
+    } catch {
+      // Malformed value - treat as no URL available
+    }
+  }
+  return { claimed: false };
 }
 
-// Release the checkout claim so the account can start a new checkout.
-// Always called in a finally block after the Stripe session is created.
-export async function releaseCheckout(slug: string): Promise<void> {
-  await db
-    .delete(platformMetaTable)
-    .where(eq(platformMetaTable.key, checkoutPendingKey(slug)));
+// Update the claim with the Stripe session details after the session is created.
+// Extends the TTL from the session-creation time.
+// Conditional on the claim token so a preempted process cannot overwrite a
+// successor's claim.
+export async function finalizeCheckoutClaim(
+  slug: string,
+  claimToken: string,
+  sessionId: string,
+  sessionUrl: string,
+): Promise<void> {
+  const key = checkoutPendingKey(slug);
+  const value = JSON.stringify({
+    at: new Date().toISOString(),
+    tok: claimToken,
+    sid: sessionId,
+    url: sessionUrl,
+  } satisfies CheckoutClaim);
+  await db.execute(sql`
+    UPDATE platform_meta
+    SET value = ${value}
+    WHERE key = ${key}
+      AND (value::json->>'tok') = ${claimToken}
+  `);
+}
+
+// Conditionally release the checkout claim.
+// Only deletes the row when the stored token matches so a TTL-expired claimant
+// calling release with its old token cannot remove the new claimant's record.
+export async function releaseCheckout(slug: string, claimToken: string): Promise<void> {
+  const key = checkoutPendingKey(slug);
+  await db.execute(sql`
+    DELETE FROM platform_meta
+    WHERE key = ${key}
+      AND (value::json->>'tok') = ${claimToken}
+  `);
 }
 
 // True when the project exists, is live (not deleted) and is owned by the
@@ -702,6 +778,16 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
     })
     .where(eq(platformCompaniesTable.slug, slug));
   logger.info({ slug, plan, frequency, subscriptionId }, "billing: subscription activated via checkout");
+
+  // Release the checkout claim now that the session has completed. The claim
+  // token is stored in the session metadata so we can release conditionally -
+  // an old token from a TTL-preempted claimant cannot delete a successor's claim.
+  const claimToken = session.metadata?.["claim_tok"];
+  if (claimToken) {
+    await releaseCheckout(slug, claimToken).catch((err) => {
+      logger.warn({ err, slug }, "billing: could not release checkout claim on completion (non-fatal)");
+    });
+  }
 
   // Sync confirmed billing details from Stripe back to the app.
   // The customer can correct their name and address during checkout;
@@ -1246,7 +1332,10 @@ export async function createCheckoutSession(opts: {
   frequency: BillingFrequency;
   successUrl: string;
   cancelUrl: string;
-}): Promise<{ url: string }> {
+  // Stored in Stripe session metadata so the webhook can conditionally release
+  // the DB checkout claim when the session completes.
+  claimToken?: string;
+}): Promise<{ url: string; sessionId: string }> {
   const stripe = await getUncachableStripeClient();
   const slug = normUsername(opts.slug);
   const price = PLAN_PRICES[opts.plan][opts.frequency];
@@ -1273,6 +1362,9 @@ export async function createCheckoutSession(opts: {
     throw err;
   }
 
+  const extraMeta: Record<string, string> = {};
+  if (opts.claimToken) extraMeta["claim_tok"] = opts.claimToken;
+
   const session = await createSessionWithTax(stripe, slug, {
     customer: customerId,
     mode: "subscription",
@@ -1281,13 +1373,13 @@ export async function createCheckoutSession(opts: {
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
     client_reference_id: slug,
-    metadata: { slug, plan: opts.plan, frequency: opts.frequency },
+    metadata: { slug, plan: opts.plan, frequency: opts.frequency, ...extraMeta },
     subscription_data: {
       metadata: { slug, plan: opts.plan, frequency: opts.frequency },
     },
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
-  return { url: session.url };
+  return { url: session.url, sessionId: session.id };
 }
 
 // Reuses (or creates) the account's Stripe customer. Shared by the plan and

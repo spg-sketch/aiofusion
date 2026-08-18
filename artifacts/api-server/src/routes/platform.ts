@@ -2913,11 +2913,14 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       try {
         const { getDiscountInvite: getInvite, consumeDiscountInvite: consumeInvite, applyInviteAccountType: applyType } = await import("../lib/discount-invites");
         const looked = await getInvite(discountToken);
-        // getDiscountInvite already filters out used/expired invites; if
-        // invite is non-null it is safe to consume.
-        if (looked.invite) {
+        // getDiscountInvite already filters out used/expired invites.
+        // Require an exact email match (case-insensitive) so a forwarded or
+        // intercepted invite URL cannot be redeemed by an unintended account.
+        if (looked.invite && looked.invite.email.toLowerCase() === userInfo.email.toLowerCase()) {
           await consumeInvite(looked.invite.token, username);
           await applyType(username, looked.invite.accountType);
+        } else if (looked.invite) {
+          logger.warn({ username, inviteEmail: looked.invite.email, ssoEmail: userInfo.email }, "google-sso: discount invite email mismatch - invite not consumed (non-fatal)");
         }
       } catch (err) {
         logger.warn({ err, username }, "google-sso: could not redeem discount invite for new account (non-fatal)");
@@ -3205,9 +3208,13 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         const { getDiscountInvite: getInvite, consumeDiscountInvite: consumeInvite, applyInviteAccountType: applyType } = await import("../lib/discount-invites");
         const looked = await getInvite(msDiscountToken);
         // getDiscountInvite already filters out used/expired invites.
-        if (looked.invite) {
+        // Require an exact email match so a forwarded invite URL cannot be
+        // redeemed by an unintended account.
+        if (looked.invite && looked.invite.email.toLowerCase() === msEmail.toLowerCase()) {
           await consumeInvite(looked.invite.token, username);
           await applyType(username, looked.invite.accountType);
+        } else if (looked.invite) {
+          logger.warn({ username, inviteEmail: looked.invite.email, ssoEmail: msEmail }, "microsoft-sso: discount invite email mismatch - invite not consumed (non-fatal)");
         }
       } catch (err) {
         logger.warn({ err, username }, "microsoft-sso: could not redeem discount invite for new account (non-fatal)");

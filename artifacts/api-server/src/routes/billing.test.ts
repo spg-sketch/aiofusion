@@ -238,7 +238,7 @@ vi.mock("../lib/stripe-client", () => ({
               );
             }
             stripeCalls.sessions.push(params);
-            return Promise.resolve({ url: "https://checkout.stripe.com/test-session" });
+            return Promise.resolve({ id: "cs_test_mock", url: "https://checkout.stripe.com/test-session" });
           },
         },
       },
@@ -303,7 +303,7 @@ vi.mock("../lib/stripe-client", () => ({
 }));
 
 import { db, platformAccountsTable, platformCompaniesTable, platformUsersTable, platformMembershipsTable, platformMetaTable, projectsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
@@ -319,7 +319,9 @@ import {
   syncStripeBillingDetails,
   vatNumberToTaxId,
   claimCheckout,
+  finalizeCheckoutClaim,
   releaseCheckout,
+  CHECKOUT_PENDING_TTL_MS,
   warnIfTaxDeactivated,
 } from "../lib/billing";
 
@@ -724,6 +726,10 @@ describe("billing routes", () => {
         .update(platformCompaniesTable)
         .set({ subscriptionStatus: null })
         .where(eq(platformCompaniesTable.slug, "live-co"));
+      // The first checkout left a durable claim in the DB. Clear it so the
+      // second request reaches the live-mode tax check instead of getting
+      // redirected to the existing (test-mode) session URL.
+      await db.execute(sql`DELETE FROM platform_meta WHERE key = 'checkout:pending:live-co'`);
       stripeCalls.secretKey = "sk_live_x";
       stripeCalls.rejectTaxNext = true;
       const sessionsBefore = stripeCalls.sessions.length;
@@ -1278,20 +1284,107 @@ describe("portal and invoices", () => {
 // Billing hardening: checkout race, billing details sync, discount edge cases
 // ---------------------------------------------------------------------------
 describe("billing hardening", () => {
-  it("refuses a checkout when another checkout is already in progress for the same account (cross-process DB guard)", async () => {
+  // Helper: remove any lingering checkout claims after a test so they don't bleed.
+  async function cleanupCheckoutClaims() {
+    await db.execute(sql`DELETE FROM platform_meta WHERE key LIKE 'checkout:pending:%'`);
+  }
+
+  it("refuses a checkout when another checkout is already in progress (claim-only, no session yet)", async () => {
     const { sid } = await seedWorkspace("checkrace-co", "owner@checkrace.test", { accountRole: "client" });
-    // Simulate another process having claimed the checkout slot in the DB.
-    await claimCheckout("checkrace-co");
+    // Simulate another process having claimed the checkout slot but not yet created
+    // the Stripe session (no url in the claim value).
+    const claimResult = await claimCheckout("checkrace-co");
+    if (!claimResult.claimed) throw new Error("expected first claim to succeed");
     try {
       const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
       expect(res.status).toBe(409);
       expect(res.json.error).toMatch(/already in progress/i);
     } finally {
-      await releaseCheckout("checkrace-co");
+      await releaseCheckout("checkrace-co", claimResult.claimToken);
     }
-    // After releasing the claim a new checkout must work.
+    // After releasing, a new checkout must work.
     const res2 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(res2.status).toBe(200);
+    expect(res2.json.url).toMatch(/^https/);
+    await cleanupCheckoutClaims();
+  });
+
+  it("sequential checkout: second request reuses the open session URL; webhook releases the claim; third request starts fresh", async () => {
+    const { sid } = await seedWorkspace("seqcheck-co", "owner@seqcheck.test", { accountRole: "client" });
+
+    // First checkout - creates a Stripe session and finalizes the claim.
+    const res1 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res1.status).toBe(200);
+    const url1 = res1.json.url;
+    expect(url1).toMatch(/^https/);
+
+    // Second checkout while the first session is still open - must reuse the URL.
+    const res2 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res2.status).toBe(200);
+    expect(res2.json.url).toBe(url1);
+
+    // Retrieve the stored claim token (the route put it in the Stripe metadata and
+    // finalizeCheckoutClaim stored it in the DB claim too).
+    const [claim] = await db
+      .select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(sql`key LIKE 'checkout:pending:%'`);
+    expect(claim).toBeDefined();
+    const claimData = JSON.parse(claim!.value) as { tok: string };
+
+    // Simulate checkout.session.completed - this should release the claim.
+    await handleStripeEvent(
+      fakeEvent("evt_seqcheck", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_seqcheck",
+        subscription: "sub_seqcheck",
+        metadata: { slug: "seqcheck-co", plan: "agency", frequency: "annual", claim_tok: claimData.tok },
+      }),
+    );
+
+    // Claim must now be gone.
+    const [afterWebhook] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(sql`key LIKE 'checkout:pending:%'`);
+    expect(afterWebhook).toBeUndefined();
+
+    // Account is now subscribed - a third checkout should be blocked (entitled).
+    const res3 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res3.status).toBe(409);
+    expect(res3.json.error).toMatch(/active subscription/i);
+  });
+
+  it("TTL preemption: a stale claim is preempted but the old claimant's release does not remove the new claim", async () => {
+    // Plant a stale claim directly (older than CHECKOUT_PENDING_TTL_MS).
+    const staleToken = "stale-token-uuid-for-test";
+    const staleAt = new Date(Date.now() - CHECKOUT_PENDING_TTL_MS - 5000).toISOString();
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:ttlrace-co",
+      value: JSON.stringify({ at: staleAt, tok: staleToken }),
+    });
+
+    // New process preempts the stale claim.
+    const result = await claimCheckout("ttlrace-co");
+    expect(result.claimed).toBe(true);
+    if (!result.claimed) throw new Error("expected preemption to succeed");
+    const newToken = result.claimToken;
+    expect(newToken).not.toBe(staleToken);
+
+    // Old process tries to release with its original token - must NOT delete
+    // the new claimant's record.
+    await releaseCheckout("ttlrace-co", staleToken);
+
+    // New claim must still exist with the new token.
+    const [row] = await db
+      .select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:ttlrace-co"));
+    expect(row).toBeDefined();
+    expect(JSON.parse(row!.value).tok).toBe(newToken);
+
+    // Clean up.
+    await releaseCheckout("ttlrace-co", newToken);
   });
 
   it("checkout.session.completed syncs Stripe customer billing details back to the app", async () => {

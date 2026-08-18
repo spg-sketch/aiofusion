@@ -8,6 +8,7 @@ import {
 import {
   getBillingState,
   createCheckoutSession,
+  finalizeCheckoutClaim,
   createProjectCheckoutSession,
   createPortalSession,
   listCustomerInvoices,
@@ -153,34 +154,47 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
     }
 
     // Serialise within this process AND guard against cross-process races with
-    // a DB-backed claim. This prevents two simultaneous checkout sessions
+    // a durable DB claim. This prevents two simultaneous checkout sessions
     // creating duplicate subscriptions for the same account.
     //
     // The in-process billing lock (withBillingLock) prevents same-process
     // races. claimCheckout inserts a row in platform_meta so that a second
-    // server process racing at the same moment is turned away too. The claim
-    // is held only until the Stripe API call returns; it is released in the
-    // finally block below.
+    // server process racing at the same moment is turned away too.
+    //
+    // The claim is NOT released after the URL is returned - it is held open
+    // until the webhook (checkout.session.completed) releases it via the
+    // claim token stored in the Stripe session metadata. This ensures no
+    // second process can race in while the session tab is still active.
+    // If session creation fails the claim is released immediately so the
+    // user can retry.
     let billingSlug: string;
-    let claimed = false;
+    let claimToken: string;
     try {
       const lockResult = await withBillingLock(ctx.slug, async (bs) => {
         const state = await getBillingState(bs);
         if (isEntitled(state)) return { entitled: true, billingSlug: bs };
-        const ok = await claimCheckout(bs);
-        return { entitled: false, claimed: ok, billingSlug: bs };
+        const result = await claimCheckout(bs);
+        return { entitled: false, claimResult: result, billingSlug: bs };
       });
 
       if (lockResult.entitled) {
         res.status(409).json({ error: "This account already has an active subscription." });
         return;
       }
-      if (!lockResult.claimed) {
+      const claimResult = lockResult.claimResult!;
+      if (!claimResult.claimed) {
+        // Another process has an open checkout session. If it has already been
+        // created, reuse its URL so the user lands on the same Stripe page
+        // instead of seeing a generic error.
+        if (claimResult.existingUrl) {
+          res.json({ url: claimResult.existingUrl });
+          return;
+        }
         res.status(409).json({ error: "A checkout is already in progress for this account. Please wait a moment and try again." });
         return;
       }
       billingSlug = lockResult.billingSlug;
-      claimed = true;
+      claimToken = claimResult.claimToken;
     } catch (err) {
       logger.error({ err }, "billing: failed to claim checkout slot");
       res.status(500).json({ error: "Could not start checkout. Please try again." });
@@ -189,20 +203,27 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
 
     try {
       const base = getAppBaseUrl();
-      const { url } = await createCheckoutSession({
+      const { url, sessionId } = await createCheckoutSession({
         slug: billingSlug,
         plan: ctx.plan,
         frequency,
         successUrl: `${base}/?account_section=billing&checkout=success`,
         cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
+        claimToken,
+      });
+      // Persist the session id and url in the claim so a concurrent request
+      // can retrieve the URL, and so the webhook can identify the claim to release.
+      await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url).catch((err) => {
+        logger.warn({ err, slug: billingSlug }, "billing: could not finalize checkout claim (non-fatal)");
       });
       res.json({ url });
-    } finally {
-      if (claimed) {
-        await releaseCheckout(billingSlug).catch((err) => {
-          logger.warn({ err, slug: billingSlug }, "billing: could not release checkout claim (non-fatal)");
-        });
-      }
+      // Claim is now held until checkout.session.completed fires. Do NOT release here.
+    } catch (err) {
+      // Session creation failed - release the claim immediately so the user can retry.
+      await releaseCheckout(billingSlug, claimToken).catch((releaseErr) => {
+        logger.warn({ releaseErr, slug: billingSlug }, "billing: could not release checkout claim after session error (non-fatal)");
+      });
+      throw err;
     }
   } catch (err) {
     logger.error({ err }, "billing: failed to create checkout session");
