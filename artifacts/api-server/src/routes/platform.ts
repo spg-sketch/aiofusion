@@ -1240,6 +1240,15 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
         res.status(400).json({ error: msg });
         return;
       }
+      // The invite is a bearer link, but it was issued FOR a specific email:
+      // bind redemption to that address so a forwarded/leaked URL cannot be
+      // used by someone else.
+      if (looked.invite.email !== email.toLowerCase()) {
+        res.status(400).json({
+          error: "This invitation was issued for a different email address. Please sign up with the invited email.",
+        });
+        return;
+      }
       discountInvite = looked.invite;
     }
 
@@ -1333,7 +1342,26 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
         await applyInviteAccountType(username, discountInvite.accountType);
       } catch (err) {
         logger.error({ err, username }, "signup: discount invite redemption failed");
-        res.status(500).json({ error: "Sign-up failed. Please try again." });
+        // Roll back the partially created account so the person can retry
+        // (otherwise the email is stuck behind a duplicate-account 409).
+        try {
+          await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, username));
+          if (userId) {
+            await db.delete(platformEmailVerificationsTable).where(eq(platformEmailVerificationsTable.userId, userId));
+            const remaining = await db
+              .select()
+              .from(platformMembershipsTable)
+              .where(eq(platformMembershipsTable.userId, userId));
+            if (remaining.length === 0) {
+              await db.delete(platformUsersTable).where(eq(platformUsersTable.id, userId));
+            }
+          }
+          await db.delete(platformMetaTable).where(eq(platformMetaTable.key, displayNameKey));
+          await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, username));
+        } catch (cleanupErr) {
+          logger.error({ cleanupErr, username }, "signup: rollback after failed invite redemption failed");
+        }
+        res.status(400).json({ error: "This invitation link has already been used." });
         return;
       }
     }

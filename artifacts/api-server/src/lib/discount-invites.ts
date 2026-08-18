@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type Stripe from "stripe";
 import { db, platformMetaTable, platformCompaniesTable, platformAccountsTable } from "@workspace/db";
-import { eq, like } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { logger } from "./logger";
 import { normUsername } from "./platform-auth";
 import { normalizeInviteToken } from "./team-invites";
@@ -154,17 +154,25 @@ export async function getDiscountInvite(
 }
 
 // Mark the invite used and stamp the redeeming account's discount record.
-// Called during signup AFTER the account row exists. Single-use: a re-read
-// inside the same call path would see usedAt, and the signup route validates
-// before creating the account, so a raced second signup fails the lookup.
+// Called during signup AFTER the account row exists. Single-use is enforced
+// with an atomic compare-and-swap on the stored invite JSON: two concurrent
+// redemptions both read the unused invite, but only the first conditional
+// UPDATE matches the original value - the loser gets zero rows and fails.
 export async function consumeDiscountInvite(token: string, slug: string): Promise<void> {
   const clean = normalizeInviteToken(token);
-  const invite = parseJson<DiscountInvite>(await readMeta(inviteKey(clean)));
+  const raw = await readMeta(inviteKey(clean));
+  const invite = parseJson<DiscountInvite>(raw);
   if (!invite || invite.usedAt) throw new Error("Invite no longer valid");
+  if (new Date(invite.expiresAt).getTime() < Date.now()) throw new Error("Invite expired");
   const now = new Date().toISOString();
   invite.usedAt = now;
   invite.usedBySlug = normUsername(slug);
-  await writeMeta(inviteKey(clean), JSON.stringify(invite));
+  const claimed = await db
+    .update(platformMetaTable)
+    .set({ value: JSON.stringify(invite) })
+    .where(and(eq(platformMetaTable.key, inviteKey(clean)), eq(platformMetaTable.value, raw as string)))
+    .returning();
+  if (claimed.length === 0) throw new Error("Invite no longer valid");
   const discount: AccountDiscount = {
     percent: invite.percent,
     label: invite.label,

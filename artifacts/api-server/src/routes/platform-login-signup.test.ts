@@ -1693,6 +1693,23 @@ describe("POST /api/platform/signup with discountInvite", () => {
     expect(accounts).toHaveLength(0);
   });
 
+  it("rejects an invite issued for a different email address", async () => {
+    const { createDiscountInvite, getDiscountInvite } = await import("../lib/discount-invites");
+    const inv = await createDiscountInvite({
+      email: "someone-else@example.com", accountType: "client", percent: 30, label: "Beta", createdBy: "aiofusion",
+    });
+    const { status, body } = await signup({ discountInvite: inv.token });
+    expect(status).toBe(400);
+    expect(String(body.error)).toMatch(/different email/i);
+    // Nothing was created and the invite is still redeemable.
+    const accounts = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    expect(accounts).toHaveLength(0);
+    expect((await getDiscountInvite(inv.token)).invite).not.toBeNull();
+  });
+
   it("redeems a valid invite: sets account type, stamps the discount, single-use", async () => {
     const { createDiscountInvite, getAccountDiscount, getDiscountInvite } = await import("../lib/discount-invites");
     const inv = await createDiscountInvite({

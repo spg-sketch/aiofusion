@@ -287,6 +287,34 @@ describe("discount-invites lib", () => {
     expect(await getActiveAccountDiscount("acme")).not.toBeNull();
   });
 
+  it("concurrent consumes: exactly one wins the atomic claim", async () => {
+    const inv = await createDiscountInvite({
+      email: "race@b.com", accountType: "client", percent: 20, label: "Beta", createdBy: "aiofusion",
+    });
+    const results = await Promise.allSettled([
+      consumeDiscountInvite(inv.token, "racer-one"),
+      consumeDiscountInvite(inv.token, "racer-two"),
+    ]);
+    const wins = results.filter((r) => r.status === "fulfilled");
+    expect(wins).toHaveLength(1);
+    const winners = [await getAccountDiscount("racer-one"), await getAccountDiscount("racer-two")];
+    expect(winners.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("consume rejects an expired invite even after a stale lookup", async () => {
+    const inv = await createDiscountInvite({
+      email: "late@b.com", accountType: "client", percent: 10, label: "Beta", createdBy: "aiofusion",
+    });
+    // Expire it behind the caller's back (simulates redeeming after TTL).
+    const key = `discount-invite:${inv.token}`;
+    const [row] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, key));
+    const stored = JSON.parse(row.value);
+    stored.expiresAt = new Date(Date.now() - 1000).toISOString();
+    await db.update(platformMetaTable).set({ value: JSON.stringify(stored) }).where(eq(platformMetaTable.key, key));
+    await expect(consumeDiscountInvite(inv.token, "late-slug")).rejects.toThrow(/expired/i);
+    expect(await getAccountDiscount("late-slug")).toBeNull();
+  });
+
   it("applyInviteAccountType sets the role on both tables", async () => {
     await db.insert(platformAccountsTable).values({ username: "acme", passwordHash: "x", role: "agency", status: "active" });
     await db.insert(platformCompaniesTable).values({ slug: "acme", role: "agency" });
