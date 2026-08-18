@@ -1024,19 +1024,18 @@ function isTaxNotActivatedError(err: unknown): boolean {
   return /stripe tax/i.test(msg) && /activat/i.test(msg);
 }
 
-// True when the connected Stripe key is a live key. Cached per process.
-let liveModeCache: boolean | null = null;
+// True when the connected Stripe key is a live key. Checked FRESH on every
+// call (no caching): credentials can be swapped from test to live without a
+// restart, and a stale "test" answer would permit a taxless live checkout.
 async function isLiveStripeMode(): Promise<boolean> {
-  if (liveModeCache !== null) return liveModeCache;
   try {
     const { getStripeCredentials } = await import("./stripe-client");
     const { secretKey } = await getStripeCredentials();
-    liveModeCache = /^(sk|rk)_live_/.test(secretKey ?? "");
+    return /^(sk|rk)_live_/.test(secretKey ?? "");
   } catch {
     // Unknown -> assume live: never silently drop VAT when unsure.
-    liveModeCache = true;
+    return true;
   }
-  return liveModeCache;
 }
 
 // Creates a Checkout Session with Stripe Tax (automatic tax + billing address

@@ -175,10 +175,12 @@ const stripeCalls = vi.hoisted(() => ({
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
+  // Swappable so tests can simulate a test-to-live credential change.
+  secretKey: "sk_test_x",
 }));
 vi.mock("../lib/stripe-client", () => ({
   stripeConfigured: () => true,
-  getStripeCredentials: () => Promise.resolve({ secretKey: "sk_test_x", webhookSecret: "whsec_x" }),
+  getStripeCredentials: () => Promise.resolve({ secretKey: stripeCalls.secretKey, webhookSecret: "whsec_x" }),
   getUncachableStripeClient: () =>
     Promise.resolve({
       prices: {
@@ -669,6 +671,31 @@ describe("billing routes", () => {
     const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
     expect(params.automatic_tax).toBeUndefined();
     expect(params.metadata.slug).toBe("untaxed-co");
+  });
+
+  it("refuses a taxless fallback in live mode, even after a test-mode fallback in the same process", async () => {
+    // First, a test-mode fallback happens (exercised by the previous test's
+    // path); now the key is swapped to live WITHOUT a restart. The live
+    // determination must be fresh, so the fallback is refused.
+    const { sid } = await seedWorkspace("live-co", "owner@live.test", { accountRole: "client" });
+    stripeCalls.secretKey = "sk_test_x";
+    stripeCalls.rejectTaxNext = true;
+    const testRes = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(testRes.status).toBe(200); // test mode: fallback allowed
+    try {
+      await db
+        .update(platformCompaniesTable)
+        .set({ subscriptionStatus: null })
+        .where(eq(platformCompaniesTable.slug, "live-co"));
+      stripeCalls.secretKey = "sk_live_x";
+      stripeCalls.rejectTaxNext = true;
+      const sessionsBefore = stripeCalls.sessions.length;
+      const liveRes = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+      expect(liveRes.status).toBe(500); // live mode: checkout refused
+      expect(stripeCalls.sessions.length).toBe(sessionsBefore); // no taxless session created
+    } finally {
+      stripeCalls.secretKey = "sk_test_x";
+    }
   });
 
   it("creates the Stripe customer with address and VAT number from billing details", async () => {

@@ -1,11 +1,10 @@
 ---
 name: AIO Fusion Stripe Tax (VAT at checkout)
-description: How VAT/automatic tax, VAT-number sync and invoice links work in checkout; fallback and mode rules.
+description: Durable rules for VAT/automatic tax at checkout - fallback policy, VAT-number handling, sync semantics.
 ---
 
-- Both checkout paths add `automatic_tax` + `billing_address_collection: required` + `tax_id_collection` + `customer_update: {address, name: auto}` via a shared `createSessionWithTax` helper. **Why:** customer_update is required when reusing a customer with automatic tax.
-- "Stripe Tax not activated" fallback is TEST MODE ONLY (key prefix sk_live/rk_live check, cached; unknown = live) and matched narrowly (invalid_request on param automatic_tax or "Stripe Tax ... activat" message). Live mode refuses checkout instead of silently selling without VAT.
-- VAT numbers are never passed inline as `tax_id_data` on customers.create - attach separately, fail-soft, so a malformed stored VAT number cannot block checkout. `vatNumberToTaxId` maps GB/XI -> gb_vat, EU prefixes -> eu_vat, others null.
-- `syncStripeBillingDetails(slug)` is fail-soft, serialised per slug via withSlugLock("billing-sync:<slug>"), clears the Stripe address when the app address is cleared (send "" not omit), and reconciles tax IDs (delete stale, create wanted). Called on billing-details save (awaited) and before reusing a customer at checkout.
-- Owner one-time dashboard steps (activate Stripe Tax, origin address, registrations, "email finished invoices") are documented at the bottom of replit.md.
-- Subscription endpoint returns `latestInvoiceUrl` (hosted invoice link, fail-soft null).
+- Taxless fallback when Stripe Tax is not activated is allowed in TEST MODE ONLY, and the live/test determination must be made fresh per decision (never cached - credentials can swap test-to-live without a restart). Unknown mode = live. **Why:** a UK business must never silently sell without VAT; a cached "test" answer once let live fallback through in review.
+- Match the "Tax not activated" error narrowly (invalid_request on the automatic_tax param or the explicit activation message); broader tax/config errors must fail checkout.
+- Never pass a stored VAT number inline when creating the Stripe customer - attach it separately and fail-soft, so a malformed value cannot block checkout (the customer can enter one at checkout via tax_id_collection).
+- Billing-details sync to the Stripe customer is fail-soft and serialised per account; clearing the address in the app must clear it in Stripe too (send empty, do not omit), and tax-ID reconciliation deletes stale IDs before creating the wanted one.
+- Reusing an existing customer with automatic tax requires customer_update address/name "auto" on the checkout session.
