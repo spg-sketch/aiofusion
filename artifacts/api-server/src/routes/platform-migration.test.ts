@@ -272,4 +272,36 @@ describe("POST /api/platform/migrate - client orphan guard", () => {
     expect(h.state.accounts.length).toBeGreaterThan(before + 1);
     expect(json?.inserted).toBeGreaterThanOrEqual(2);
   });
+
+  it("skips a client whose batch parent has no password and was not inserted", async () => {
+    // "nopwparent" has an empty password so it fails the password >= 1 check
+    // and is never inserted. Its child must therefore also be skipped because
+    // "nopwparent" never enters the eligible-parents set.
+    const before = h.state.accounts.length;
+    const { status } = await migrate([
+      { username: "nopwparent", password: "", role: "user" },
+      { username: "childofnopw", password: "pw12345678", role: "client", parent: "nopwparent" },
+    ]);
+    expect(status).toBe(200);
+    // Neither parent nor child should have been inserted.
+    expect(h.state.accounts.length).toBe(before);
+    // A warning about the child must be emitted.
+    expect(h.warnMessages.some((m) => m.includes("childofnopw") || m.includes("parent"))).toBe(true);
+  });
+
+  it("skips a client whose batch parent collides with an existing client in the DB", async () => {
+    // "existingclient" is already in the DB as a client (a leaf account).
+    // A batch user with the same name is rejected on conflict (rowCount = 0),
+    // so it never enters eligibleParents, and the child must be skipped.
+    h.state.accounts.push({ username: "existingclient", passwordHash: "", role: "client", parent: "admin" });
+    const before = h.state.accounts.length;
+    const { status } = await migrate([
+      { username: "existingclient", password: "pw12345678", role: "user" },  // conflicts
+      { username: "childofconflict", password: "pw12345678", role: "client", parent: "existingclient" },
+    ]);
+    expect(status).toBe(200);
+    // No new accounts: the conflict is ignored and the child is correctly skipped.
+    expect(h.state.accounts.length).toBe(before);
+    expect(h.warnMessages.some((m) => m.includes("childofconflict") || m.includes("parent"))).toBe(true);
+  });
 });
