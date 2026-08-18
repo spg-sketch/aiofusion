@@ -814,6 +814,35 @@ describe("project add-ons", () => {
     expect((await getBillingState("addon-gone"))?.status).toBe("active");
   });
 
+  it("concurrent new projects cannot consume the same purchased slot twice", async () => {
+    await seedSubscribed("addon-race", "owner@addonrace.test");
+    await handleStripeEvent(
+      fakeEvent("evt_addon_race", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-race",
+        subscription: "sub_addon_race",
+        metadata: { slug: "addon-race", kind: "project-addon", tier: "max" },
+      }),
+    );
+    await db.insert(projectsTable).values([
+      { id: "race-1", name: "R1", data: {}, owner: "addon-race" },
+      { id: "race-2", name: "R2", data: {}, owner: "addon-race" },
+    ]);
+    await Promise.all([
+      assignAddonToNewProject("addon-race", "race-1"),
+      assignAddonToNewProject("addon-race", "race-2"),
+    ]);
+    const addons = await getProjectAddons("addon-race");
+    expect(addons).toHaveLength(1);
+    // Exactly one project got the paid tier; the other stays included.
+    const limits = await Promise.all([
+      getProjectActionLimit("addon-race", "race-1"),
+      getProjectActionLimit("addon-race", "race-2"),
+    ]);
+    expect(limits.filter((l) => l === 150)).toHaveLength(1);
+    expect(addons[0]!.projectId).toBeTruthy();
+  });
+
   it("project-tier rejects included projects and unknown projects", async () => {
     const { sid } = await seedSubscribed("addon-incl", "owner@addonincl.test");
     await db.insert(projectsTable).values({ id: "incl-proj", name: "Incl", data: {}, owner: "addon-incl" });

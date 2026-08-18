@@ -40,6 +40,37 @@ vi.mock("@workspace/db", async () => {
       updated_at timestamptz NOT NULL DEFAULT now(),
       deleted_at timestamptz
     );
+    -- The intake route's allowance check resolves the billing slug and reads
+    -- the shared add-on pool, which touch these three platform tables.
+    CREATE TABLE IF NOT EXISTS platform_accounts (
+      username varchar PRIMARY KEY,
+      password_hash text NOT NULL DEFAULT '',
+      role varchar NOT NULL DEFAULT 'user',
+      parent varchar,
+      max_seats integer,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      email varchar,
+      website varchar,
+      status varchar NOT NULL DEFAULT 'active'
+    );
+    CREATE TABLE IF NOT EXISTS platform_meta (
+      key varchar PRIMARY KEY,
+      value text NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS platform_companies (
+      id serial PRIMARY KEY,
+      slug varchar UNIQUE NOT NULL,
+      company_name varchar NOT NULL DEFAULT '',
+      billing_email varchar,
+      subscription_status varchar,
+      plan varchar,
+      billing_frequency varchar,
+      stripe_customer_id varchar,
+      stripe_subscription_id varchar,
+      current_period_end timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS project_snapshots (
       id serial PRIMARY KEY,
       project_id varchar NOT NULL,

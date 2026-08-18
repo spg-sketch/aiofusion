@@ -16,7 +16,13 @@ import {
 } from "../lib/member-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
-import { getProjectAllowance, assignAddonToNewProject, withSlugLock } from "../lib/billing";
+import {
+  getProjectAllowance,
+  assignAddonToNewProjectUnlocked,
+  withBillingLock,
+  listBillingProjects,
+} from "../lib/billing";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -242,26 +248,21 @@ router.post(
       const incomingName = typeof name === "string" ? name.trim() : "";
       const incomingDataEmpty = dataIsEmpty(data);
       const incomingLogo = typeof logo === "string" && logo ? logo : null;
-      // The allowance check, the insert and the add-on assignment run under a
-      // per-account lock so concurrent creates can neither exceed the
-      // allowance nor consume the same purchased add-on slot twice.
-      const outcome = await withSlugLock(owner, async () => {
+      // The allowance check, the insert and the add-on assignment run under
+      // the BILLING account's lock (an agency and its managed children share
+      // one allowance/add-on pool) so concurrent creates - including by
+      // different child accounts - can neither exceed the allowance nor
+      // consume the same purchased add-on slot twice.
+      const outcome = await withBillingLock(owner, async (billingSlug) => {
         // Enforce the project allowance for non-admin accounts on new projects
         // only. Subscribed accounts get their plan's included projects plus any
         // purchased add-ons; unsubscribed accounts keep the legacy cap of 2.
+        // The count spans the whole billing subtree, matching the allowance.
         // Admins are never restricted.
         if (isNewProject && req.account!.role !== "admin") {
-          const [countRow] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(projectsTable)
-            .where(
-              and(
-                isNull(projectsTable.deletedAt),
-                visible !== null ? inArray(projectsTable.owner, visible) : undefined,
-              ),
-            );
-          const allowance = await getProjectAllowance(owner);
-          if ((countRow?.count ?? 0) >= allowance) {
+          const used = (await listBillingProjects(billingSlug)).length;
+          const allowance = await getProjectAllowance(billingSlug);
+          if (used >= allowance) {
             return { limitReached: true as const, allowance };
           }
         }
@@ -303,6 +304,16 @@ router.post(
             setWhere: ownerPredicate(visible),
           })
           .returning(projectRowColumns);
+        // A brand-new project consumes the oldest unassigned purchased add-on
+        // (if any) so it immediately carries the paid-for tier. Runs inside
+        // this critical section (unlocked variant - we already hold the lock).
+        if (isNewProject && saved[0]) {
+          try {
+            await assignAddonToNewProjectUnlocked(billingSlug, id);
+          } catch (err) {
+            logger.warn({ err, id }, "store: add-on assignment failed (non-fatal)");
+          }
+        }
         return { limitReached: false as const, saved };
       });
       if (outcome.limitReached) {
@@ -315,12 +326,6 @@ router.post(
       const saved = outcome.saved;
       // Back up the resulting state so this version can always be restored.
       if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "upsert");
-      // A brand-new project consumes the oldest unassigned purchased add-on
-      // (if any) so it immediately carries the paid-for tier. Fail-soft;
-      // assignAddonToNewProject re-acquires the same per-slug lock.
-      if (isNewProject && saved[0]) {
-        await assignAddonToNewProject(owner, id);
-      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save project" });
@@ -354,31 +359,6 @@ router.post(
       const isNewProject = existingOwner === undefined;
       const now = new Date();
       const owner = normUsername(req.account!.username);
-      // Enforce the project allowance on new projects only, matching /upsert.
-      // The intake route also inserts a new row when the project does not
-      // exist yet, so it must be gated (and locked) the same way.
-      if (isNewProject && req.account!.role !== "admin") {
-        const limitHit = await withSlugLock(owner, async () => {
-          const [countRow] = await db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(projectsTable)
-            .where(
-              and(
-                isNull(projectsTable.deletedAt),
-                visible !== null ? inArray(projectsTable.owner, visible) : undefined,
-              ),
-            );
-          const allowance = await getProjectAllowance(owner);
-          return (countRow?.count ?? 0) >= allowance ? allowance : null;
-        });
-        if (limitHit !== null) {
-          res.status(403).json({
-            error: `You've reached your ${limitHit}-project allowance. You can add another project from the Billing section of your account settings.`,
-            limitReached: true,
-          });
-          return;
-        }
-      }
       const incomingIntakeEmpty = intakeIsEmpty(intake);
       // The confirmed company identity (for an ambiguous brand name) rides inside
       // the intake blob, but it is not counted as a "real Set-Up answer" by
@@ -390,52 +370,76 @@ router.post(
           : undefined;
       const hasIncomingConfirmedEntity =
         incomingConfirmedEntity != null && typeof incomingConfirmedEntity === "object";
-      const saved = await db
-        .insert(projectsTable)
-        .values({
-          id,
-          name: typeof name === "string" ? name : "",
-          data: data ?? {},
-          intake: intake ?? null,
-          owner,
-          updatedAt: now,
-          deletedAt: null,
-        })
-        .onConflictDoUpdate({
-          target: projectsTable.id,
-          // deletedAt is never touched and a real owner is never reassigned, but a
-          // legacy NULL owner is claimed by the caller (same reasoning as upsert).
-          //
-          // A blank/empty incoming Set-Up never overwrites a populated stored
-          // one: when the payload carries no real answers we coalesce so the
-          // existing intake is kept (and only adopted when there was nothing
-          // there before). This is the core guard against a Draft from a stale
-          // device wiping a completed Set-Up.
-          set: {
-            // A blank/empty incoming Set-Up never overwrites a populated stored
-            // one. But when that "empty" payload carries a confirmed identity, we
-            // merge just that one key onto the existing intake (jsonb `||` is a
-            // shallow merge, right side wins) so the choice is saved cross-device
-            // without a sparse payload wiping any populated answers underneath.
-            intake: incomingIntakeEmpty
-              ? hasIncomingConfirmedEntity
-                ? sql`coalesce(${projectsTable.intake}, '{}'::jsonb) || ${asJsonb({ confirmedEntity: incomingConfirmedEntity })}`
-                : sql`coalesce(${projectsTable.intake}, ${asJsonb(intake)})`
-              : intake,
-            owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
+      // Allowance check, insert and add-on assignment run as one critical
+      // section under the billing account's lock, matching /upsert.
+      const outcome = await withBillingLock(owner, async (billingSlug) => {
+        if (isNewProject && req.account!.role !== "admin") {
+          const used = (await listBillingProjects(billingSlug)).length;
+          const allowance = await getProjectAllowance(billingSlug);
+          if (used >= allowance) {
+            return { limitReached: true as const, allowance };
+          }
+        }
+        const saved = await db
+          .insert(projectsTable)
+          .values({
+            id,
+            name: typeof name === "string" ? name : "",
+            data: data ?? {},
+            intake: intake ?? null,
+            owner,
             updatedAt: now,
-          },
-          // Atomic guard: only update rows the caller may touch.
-          setWhere: ownerPredicate(visible),
-        })
-        .returning(projectRowColumns);
+            deletedAt: null,
+          })
+          .onConflictDoUpdate({
+            target: projectsTable.id,
+            // deletedAt is never touched and a real owner is never reassigned, but a
+            // legacy NULL owner is claimed by the caller (same reasoning as upsert).
+            //
+            // A blank/empty incoming Set-Up never overwrites a populated stored
+            // one: when the payload carries no real answers we coalesce so the
+            // existing intake is kept (and only adopted when there was nothing
+            // there before). This is the core guard against a Draft from a stale
+            // device wiping a completed Set-Up.
+            set: {
+              // A blank/empty incoming Set-Up never overwrites a populated stored
+              // one. But when that "empty" payload carries a confirmed identity, we
+              // merge just that one key onto the existing intake (jsonb `||` is a
+              // shallow merge, right side wins) so the choice is saved cross-device
+              // without a sparse payload wiping any populated answers underneath.
+              intake: incomingIntakeEmpty
+                ? hasIncomingConfirmedEntity
+                  ? sql`coalesce(${projectsTable.intake}, '{}'::jsonb) || ${asJsonb({ confirmedEntity: incomingConfirmedEntity })}`
+                  : sql`coalesce(${projectsTable.intake}, ${asJsonb(intake)})`
+                : intake,
+              owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
+              updatedAt: now,
+            },
+            // Atomic guard: only update rows the caller may touch.
+            setWhere: ownerPredicate(visible),
+          })
+          .returning(projectRowColumns);
+        // Intake-created projects consume a purchased add-on slot the same
+        // way upsert-created ones do (unlocked - we already hold the lock).
+        if (isNewProject && saved[0]) {
+          try {
+            await assignAddonToNewProjectUnlocked(billingSlug, id);
+          } catch (err) {
+            logger.warn({ err, id }, "store: add-on assignment failed (non-fatal)");
+          }
+        }
+        return { limitReached: false as const, saved };
+      });
+      if (outcome.limitReached) {
+        res.status(403).json({
+          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
+          limitReached: true,
+        });
+        return;
+      }
+      const saved = outcome.saved;
       // Back up the resulting Set-Up so this version can always be restored.
       if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "intake");
-      // Intake-created projects consume a purchased add-on slot the same way
-      // upsert-created ones do. Fail-soft.
-      if (isNewProject && saved[0]) {
-        await assignAddonToNewProject(owner, id);
-      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save intake" });

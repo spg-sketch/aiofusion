@@ -5,7 +5,7 @@ import {
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getUncachableStripeClient } from "./stripe-client";
 import {
@@ -171,18 +171,35 @@ const addonsKey = (slug: string) => `projectAddons:${normUsername(slug)}`;
 // The api-server runs as a single process, so an in-process per-slug promise
 // chain is sufficient; the same lock also serialises project-allowance
 // count-then-insert checks in the store routes.
-const slugLocks = new Map<string, Promise<unknown>>();
+const slugLocks = new Map<string, Promise<void>>();
 
 export async function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
   const key = normUsername(slug);
   const prev = slugLocks.get(key) ?? Promise.resolve();
   const run = prev.then(fn, fn);
-  slugLocks.set(key, run.catch(() => undefined));
-  try {
-    return await run;
-  } finally {
-    if (slugLocks.get(key) !== run && slugLocks.get(key) === undefined) slugLocks.delete(key);
-  }
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  slugLocks.set(key, tail);
+  void tail.then(() => {
+    // Drop the map entry once no newer waiter has chained onto it.
+    if (slugLocks.get(key) === tail) slugLocks.delete(key);
+  });
+  return run;
+}
+
+// Locks on the RESOLVED billing slug so all accounts sharing one billing pool
+// (an agency and its managed children) serialise on the same lock. Everything
+// that reads or mutates a shared allowance / add-on pool must go through this
+// (or already hold it). NOTE: never nest withSlugLock/withBillingLock calls
+// for the same slug - that deadlocks.
+export async function withBillingLock<T>(
+  slug: string,
+  fn: (billingSlug: string) => Promise<T>,
+): Promise<T> {
+  const billingSlug = await resolveBillingSlug(normUsername(slug));
+  return withSlugLock(billingSlug, () => fn(billingSlug));
 }
 
 // True when the project exists, is live (not deleted) and is owned by the
@@ -246,29 +263,36 @@ export async function getProjectAllowance(slug: string): Promise<number> {
 // Fail-soft: any error leaves the project as a plain (included) project.
 export async function assignAddonToNewProject(slug: string, projectId: string): Promise<void> {
   try {
-    const billingSlug = await resolveBillingSlug(slug);
-    await withSlugLock(billingSlug, async () => {
-      const addons = await getProjectAddons(billingSlug);
-      const free = addons.find((a) => !a.projectId);
-      if (!free) return;
-      free.projectId = projectId;
-      await saveProjectAddons(billingSlug, addons);
-      await db.update(projectsTable).set({ tier: free.tier }).where(eq(projectsTable.id, projectId));
-      logger.info(
-        { slug: billingSlug, projectId, tier: free.tier, subscriptionId: free.subscriptionId },
-        "billing: assigned purchased add-on to new project",
-      );
-    });
+    await withBillingLock(slug, (billingSlug) =>
+      assignAddonToNewProjectUnlocked(billingSlug, projectId),
+    );
   } catch (err) {
     logger.warn({ err, slug, projectId }, "billing: assignAddonToNewProject failed (non-fatal)");
   }
 }
 
-// All live projects owned by the billing subtree (the billing account plus its
-// descendant sub-accounts), for the billing UI's usage counter and pickers.
-export async function listBillingProjects(slug: string): Promise<
-  Array<{ id: string; name: string; tier: ProjectTier | null; owner: string }>
-> {
+// Same as assignAddonToNewProject but assumes the caller ALREADY holds the
+// billing-slug lock (the store routes run count + insert + assignment as one
+// critical section). billingSlug must be the resolved billing slug.
+export async function assignAddonToNewProjectUnlocked(
+  billingSlug: string,
+  projectId: string,
+): Promise<void> {
+  const addons = await getProjectAddons(billingSlug);
+  const free = addons.find((a) => !a.projectId);
+  if (!free) return;
+  if (!(await setProjectTierScoped(billingSlug, projectId, free.tier))) return;
+  free.projectId = projectId;
+  await saveProjectAddons(billingSlug, addons);
+  logger.info(
+    { slug: billingSlug, projectId, tier: free.tier, subscriptionId: free.subscriptionId },
+    "billing: assigned purchased add-on to new project",
+  );
+}
+
+// All account slugs in the billing subtree (the billing account plus its
+// descendant sub-accounts).
+export async function billingSubtreeOwners(slug: string): Promise<string[]> {
   const billingSlug = await resolveBillingSlug(slug);
   const accountRows = await db.execute(
     sql`SELECT username, parent FROM platform_accounts`,
@@ -290,6 +314,15 @@ export async function listBillingProjects(slug: string): Promise<
     allowed.add(cur);
     for (const child of childrenByParent.get(cur) || []) queue.push(child);
   }
+  return [...allowed];
+}
+
+// All live projects owned by the billing subtree, for the billing UI's usage
+// counter and pickers, and for allowance counting.
+export async function listBillingProjects(slug: string): Promise<
+  Array<{ id: string; name: string; tier: ProjectTier | null; owner: string }>
+> {
+  const allowed = new Set(await billingSubtreeOwners(slug));
   const projectRows = await db
     .select({
       id: projectsTable.id,
@@ -307,6 +340,30 @@ export async function listBillingProjects(slug: string): Promise<
       tier: isProjectTier(p.tier) ? p.tier : null,
       owner: normUsername(p.owner ?? ""),
     }));
+}
+
+// Sets (or clears) a project's tier with the ownership check IN the SQL
+// predicate, so a project reassigned out of the billing subtree between a
+// read and this write can never be mutated. Returns false when no live,
+// subtree-owned row matched (a stale binding).
+export async function setProjectTierScoped(
+  slug: string,
+  projectId: string,
+  tier: ProjectTier | null,
+): Promise<boolean> {
+  const owners = await billingSubtreeOwners(slug);
+  const updated = await db
+    .update(projectsTable)
+    .set({ tier })
+    .where(
+      and(
+        eq(projectsTable.id, projectId),
+        inArray(projectsTable.owner, owners),
+        isNull(projectsTable.deletedAt),
+      ),
+    )
+    .returning({ id: projectsTable.id });
+  return updated.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -527,20 +584,24 @@ async function handleProjectAddonPurchased(
   }
   // Revalidate the project binding at fulfilment time: the project can be
   // deleted or reassigned out of this account's subtree while the checkout
-  // tab sits open. An invalid binding leaves the add-on unassigned (the next
-  // new project consumes it) rather than mutating a foreign project.
-  let projectId = String(session.metadata?.["projectId"] ?? "") || null;
-  if (projectId && !(await isProjectInBillingSubtree(slug, projectId))) {
-    logger.warn(
-      { slug, projectId, subscriptionId },
-      "billing: add-on's target project no longer belongs to this account - storing slot unassigned",
-    );
-    projectId = null;
-  }
-
+  // tab sits open. The ownership check lives in the tier update's SQL
+  // predicate; when it doesn't match, the add-on is stored unassigned (the
+  // next new project consumes it) rather than mutating a foreign project.
+  const requestedProjectId = String(session.metadata?.["projectId"] ?? "") || null;
+  let projectId: string | null = null;
   await withSlugLock(slug, async () => {
     const addons = await getProjectAddons(slug);
     if (addons.some((a) => a.subscriptionId === subscriptionId)) return; // replayed
+    if (requestedProjectId) {
+      if (await setProjectTierScoped(slug, requestedProjectId, tier)) {
+        projectId = requestedProjectId;
+      } else {
+        logger.warn(
+          { slug, projectId: requestedProjectId, subscriptionId },
+          "billing: add-on's target project no longer belongs to this account - storing slot unassigned",
+        );
+      }
+    }
     addons.push({
       subscriptionId,
       tier,
@@ -549,9 +610,6 @@ async function handleProjectAddonPurchased(
     });
     await saveProjectAddons(slug, addons);
   });
-  if (projectId) {
-    await db.update(projectsTable).set({ tier }).where(eq(projectsTable.id, projectId));
-  }
   // Persist the customer id if this was the account's first-ever checkout.
   const customerId = customerIdOf(session.customer as string | { id: string } | null);
   if (customerId) {
@@ -588,8 +646,8 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
         addon.tier = addon.pendingTier;
         delete addon.pendingTier;
         await saveProjectAddons(slug, addons);
-        if (addon.projectId && (await isProjectInBillingSubtree(slug, addon.projectId))) {
-          await db.update(projectsTable).set({ tier: addon.tier }).where(eq(projectsTable.id, addon.projectId));
+        if (addon.projectId) {
+          await setProjectTierScoped(slug, addon.projectId, addon.tier);
         }
         logger.info({ slug, subscriptionId: invSub, tier: addon.tier }, "billing: add-on downgrade applied at renewal");
       }
@@ -657,11 +715,8 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
       if (idx < 0) return false;
       const [removed] = addons.splice(idx, 1);
       await saveProjectAddons(slug, addons);
-      if (removed!.projectId && (await isProjectInBillingSubtree(slug, removed!.projectId))) {
-        await db
-          .update(projectsTable)
-          .set({ tier: null })
-          .where(eq(projectsTable.id, removed!.projectId));
+      if (removed!.projectId) {
+        await setProjectTierScoped(slug, removed!.projectId, null);
       }
       logger.warn(
         { slug, subscriptionId: subscription.id, projectId: removed!.projectId },
@@ -947,8 +1002,8 @@ export async function changeAddonTier(opts: {
       addon.tier = opts.newTier;
       delete addon.pendingTier;
       await saveProjectAddons(slug, addons);
-      if (addon.projectId && (await isProjectInBillingSubtree(slug, addon.projectId))) {
-        await db.update(projectsTable).set({ tier: opts.newTier }).where(eq(projectsTable.id, addon.projectId));
+      if (addon.projectId) {
+        await setProjectTierScoped(slug, addon.projectId, opts.newTier);
       }
       logger.info({ slug, subscriptionId: opts.subscriptionId, tier: opts.newTier }, "billing: add-on upgraded");
       return { applied: "now" as const };
