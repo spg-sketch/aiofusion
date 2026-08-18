@@ -17,11 +17,8 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 - **How to apply:** any new webhook event type or billing route must follow the claim/release + stored-subscription-match patterns and be added to the ai-action-guards allowlist.
 
 ## Project add-ons (extra projects)
-- Add-ons live in platform_meta `projectAddons:<billing slug>` as a JSON array `{subscriptionId, tier, projectId|null, pendingTier?}`; each add-on is its own annual Stripe subscription with metadata `{slug, kind:"project-addon", tier, projectId?}`.
-- **Why:** one shared pool per billing account (agency + managed children resolve to one billing root) keeps allowance = included + add-ons enforceable subtree-wide.
-- **How to apply:** all count/insert/assign work must run inside `withBillingLock` (in-process per-billing-slug mutex; never nest for the same slug - deadlocks); tier writes only via `setProjectTierScoped` (ownership + not-deleted in the SQL predicate, 0 rows = stale, treat as failure).
-- Cross-account project transfer must detach the add-on binding and clear the tier BEFORE the owner update - but keep `pendingTier` (it belongs to the subscription; renewal must lower the slot's tier even while unassigned).
-- Queued downgrades are only consumed by invoices with `billing_reason === "subscription_cycle"` - Stripe webhooks are unordered.
-- `getProjectAllowance`: entitled = exactly included + add-ons (In-House 1, Agency 3); LEGACY_PROJECT_CAP 2 only for unsubscribed/malformed state. Legacy `Math.max(2, ...)` gave subscribers a free second project - don't reintroduce.
-- Locks are in-process only: a multi-process deployment needs DB-backed locking before scaling.
-- Test gotcha: PGlite-backed route tests hitting billing paths need platform_accounts (column is `password_hash`, not `password`), platform_meta and platform_companies DDL; fully-faked-db route tests should `vi.mock("../lib/billing")` instead.
+- Each extra project is funded by its own annual Stripe add-on subscription; add-on state is a shared pool per billing root (agency + managed children share one).
+- **Why:** allowance = plan-included + purchased add-ons, enforced subtree-wide; the paid slot buys the project's EXISTENCE, so cancelling an assigned add-on retires (soft-deletes) its project — otherwise cancellation is a revenue bypass.
+- **How to apply:** allowance check + insert + slot assignment must be one critical section under the billing-root lock; tier/delete writes must carry subtree ownership in the SQL predicate and treat 0 rows as stale. Cross-account transfer detaches the binding (clear first, then persist) but keeps a queued downgrade — it belongs to the subscription.
+- Queued downgrades apply only on `billing_reason === "subscription_cycle"` invoices (Stripe webhooks are unordered). Legacy cap 2 is for unsubscribed accounts only — never Math.max it into entitled allowances.
+- Locks are in-process; multi-process deployment needs DB-backed locking first.

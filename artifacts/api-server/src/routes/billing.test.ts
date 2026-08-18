@@ -810,7 +810,7 @@ describe("project add-ons", () => {
     expect(state?.currentPeriodEnd).toBeNull();
   });
 
-  it("cancelling an add-on removes the slot and clears the project's tier", async () => {
+  it("cancelling an add-on retires its project so the account cannot keep an unpaid extra", async () => {
     await seedSubscribed("addon-gone", "owner@addongone.test");
     await db.insert(projectsTable).values({ id: "gone-proj", name: "Gone", data: {}, owner: "addon-gone" });
     await handleStripeEvent(
@@ -831,9 +831,43 @@ describe("project add-ons", () => {
       }),
     );
     expect(await getProjectAddons("addon-gone")).toHaveLength(0);
-    // Back to the included tier; main plan still active.
-    expect(await getProjectActionLimit("addon-gone", "gone-proj")).toBe(75);
+    // The project the slot funded is soft-deleted (recoverable), so the
+    // account drops back within its paid allowance; main plan still active.
+    const [row] = await db
+      .select({ deletedAt: projectsTable.deletedAt, tier: projectsTable.tier })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, "gone-proj"));
+    expect(row!.deletedAt).not.toBeNull();
+    expect(row!.tier).toBeNull();
     expect((await getBillingState("addon-gone"))?.status).toBe("active");
+  });
+
+  it("cancelling an UNASSIGNED add-on removes only the slot and touches no project", async () => {
+    await seedSubscribed("addon-unass", "owner@addonunass.test");
+    await db.insert(projectsTable).values({ id: "unass-proj", name: "U", data: {}, owner: "addon-unass" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_ua1", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-unass",
+        subscription: "sub_addon_ua",
+        metadata: { slug: "addon-unass", kind: "project-addon", tier: "standard" },
+      }),
+    );
+    expect(await getProjectAddons("addon-unass")).toHaveLength(1);
+    await handleStripeEvent(
+      fakeEvent("evt_addon_ua2", "customer.subscription.deleted", {
+        id: "sub_addon_ua",
+        customer: "cus_addon-unass",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    expect(await getProjectAddons("addon-unass")).toHaveLength(0);
+    const [row] = await db
+      .select({ deletedAt: projectsTable.deletedAt })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, "unass-proj"));
+    expect(row!.deletedAt).toBeNull();
+    expect((await getBillingState("addon-unass"))?.status).toBe("active");
   });
 
   it("transferring an add-on project outside its billing subtree detaches the paid tier", async () => {

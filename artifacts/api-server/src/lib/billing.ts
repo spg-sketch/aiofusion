@@ -409,6 +409,27 @@ export async function setProjectTierScoped(
   return updated.length > 0;
 }
 
+// When an add-on subscription is cancelled, the project it funded must not
+// remain usable - the paid slot bought the project's existence, not just its
+// tier. Soft-delete it (same recoverable semantics as the user delete route:
+// data is kept, snapshots remain, an admin can restore) so the account drops
+// back within its allowance. Same subtree-scoped predicate as tier updates.
+export async function softDeleteProjectScoped(slug: string, projectId: string): Promise<boolean> {
+  const owners = await billingSubtreeOwners(slug);
+  const updated = await db
+    .update(projectsTable)
+    .set({ tier: null, deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(projectsTable.id, projectId),
+        inArray(projectsTable.owner, owners),
+        isNull(projectsTable.deletedAt),
+      ),
+    )
+    .returning({ id: projectsTable.id });
+  return updated.length > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Price resolution (find-or-create by lookup_key; never hardcode price ids)
 // ---------------------------------------------------------------------------
@@ -763,7 +784,22 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
       const [removed] = addons.splice(idx, 1);
       await saveProjectAddons(slug, addons);
       if (removed!.projectId) {
-        await setProjectTierScoped(slug, removed!.projectId, null);
+        // The cancelled slot funded this project - retire it (soft-delete,
+        // recoverable) so the account cannot keep an unpaid extra project.
+        await softDeleteProjectScoped(slug, removed!.projectId);
+      } else {
+        // Unassigned slot: normally no project consumed it, but if a create
+        // slipped through while the slot counted towards the allowance the
+        // account may now be over. Flag for support rather than guessing
+        // which project to retire.
+        const used = (await listBillingProjects(slug)).length;
+        const allowance = await getProjectAllowance(slug);
+        if (used > allowance) {
+          logger.error(
+            { slug, used, allowance, subscriptionId: subscription.id },
+            "billing: account over allowance after unassigned add-on cancellation",
+          );
+        }
       }
       logger.warn(
         { slug, subscriptionId: subscription.id, projectId: removed!.projectId },
