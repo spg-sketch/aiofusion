@@ -177,6 +177,8 @@ const stripeCalls = vi.hoisted(() => ({
   taxIdDeletes: [] as string[],
   // Records subscription ids whose discount was deleted via deleteDiscount.
   discountDeletes: [] as string[],
+  // Records subscription ids that were cancelled via subscriptions.cancel.
+  subscriptionCancels: [] as string[],
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
@@ -256,6 +258,10 @@ vi.mock("../lib/stripe-client", () => ({
         deleteDiscount: (id: string) => {
           stripeCalls.discountDeletes.push(id);
           return Promise.resolve({});
+        },
+        cancel: (id: string) => {
+          stripeCalls.subscriptionCancels.push(id);
+          return Promise.resolve({ id, status: "canceled" });
         },
       },
       billingPortal: {
@@ -1385,6 +1391,101 @@ describe("billing hardening", () => {
 
     // Clean up.
     await releaseCheckout("ttlrace-co", newToken);
+  });
+
+  it("TTL preemption: a finalized claim (sid set) is never preempted even when stale", async () => {
+    const finalizedToken = "finalized-stale-token-for-test";
+    const staleAt = new Date(Date.now() - CHECKOUT_PENDING_TTL_MS - 5000).toISOString();
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:finalized-stale-co",
+      value: JSON.stringify({
+        at: staleAt,
+        tok: finalizedToken,
+        sid: "cs_finalized_open_session",
+        url: "https://checkout.stripe.com/finalized-open",
+      }),
+    });
+
+    // Even though the claim is stale, it has a sid - it must not be preempted.
+    const result = await claimCheckout("finalized-stale-co");
+    expect(result.claimed).toBe(false);
+    if (result.claimed) throw new Error("expected finalized claim to block preemption");
+    expect(result.existingUrl).toBe("https://checkout.stripe.com/finalized-open");
+
+    // Clean up.
+    await releaseCheckout("finalized-stale-co", finalizedToken);
+  });
+
+  it("checkout.session.expired releases the claim so the user can start a new checkout", async () => {
+    await seedWorkspace("expired-sess-co", "owner@expiredsess.test");
+    // Plant a finalized claim for this account.
+    const claimToken = "expired-sess-claim-tok-uuid";
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:expired-sess-co",
+      value: JSON.stringify({
+        at: new Date().toISOString(),
+        tok: claimToken,
+        sid: "cs_expired_session_1",
+        url: "https://checkout.stripe.com/expired-sess-1",
+      }),
+    });
+
+    // Fire the session.expired webhook.
+    await handleStripeEvent(
+      fakeEvent("evt_sess_exp_1", "checkout.session.expired", {
+        metadata: { slug: "expired-sess-co", claim_tok: claimToken },
+      }),
+    );
+
+    // Claim must now be gone.
+    const [row] = await db
+      .select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:expired-sess-co"));
+    expect(row).toBeUndefined();
+  });
+
+  it("duplicate checkout: a late-completing session is cancelled and the first active subscription wins", async () => {
+    await seedWorkspace("dup-sub-co", "owner@dupsub.test");
+
+    // First session completes and activates sub_dup_A.
+    await handleStripeEvent(
+      fakeEvent("evt_dup_sub_a", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_dup",
+        subscription: "sub_dup_A",
+        metadata: { slug: "dup-sub-co", plan: "agency", frequency: "annual" },
+      }),
+    );
+
+    // Verify sub_dup_A is now stored.
+    const [before] = await db
+      .select({ stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "dup-sub-co"));
+    expect(before?.stripeSubscriptionId).toBe("sub_dup_A");
+
+    const cancelsBefore = stripeCalls.subscriptionCancels.length;
+
+    // Second (late, duplicate) session completes with a different sub_dup_B.
+    await handleStripeEvent(
+      fakeEvent("evt_dup_sub_b", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_dup",
+        subscription: "sub_dup_B",
+        metadata: { slug: "dup-sub-co", plan: "agency", frequency: "annual" },
+      }),
+    );
+
+    // sub_dup_B must have been cancelled.
+    expect(stripeCalls.subscriptionCancels.slice(cancelsBefore)).toContain("sub_dup_B");
+
+    // DB must still show sub_dup_A (the first winner).
+    const [after] = await db
+      .select({ stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "dup-sub-co"));
+    expect(after?.stripeSubscriptionId).toBe("sub_dup_A");
   });
 
   it("checkout.session.completed syncs Stripe customer billing details back to the app", async () => {

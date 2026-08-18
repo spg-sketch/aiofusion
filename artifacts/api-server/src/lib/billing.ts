@@ -6,7 +6,7 @@ import {
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getUncachableStripeClient } from "./stripe-client";
 import {
@@ -230,8 +230,12 @@ export async function withBillingLock<T>(
 //    using the claim token stored in the Stripe session metadata ("claim_tok").
 //  - If session creation fails, the route releases the claim immediately so
 //    the user can retry.
-//  - Stale claims (older than CHECKOUT_PENDING_TTL_MS) are preempted by the
-//    UPSERT WHERE guard so a crashed process never permanently blocks checkouts.
+//  - Stale *pre-session* claims (older than CHECKOUT_PENDING_TTL_MS and no
+//    Stripe session created yet) are preempted by the UPSERT WHERE guard so a
+//    crashed process never permanently blocks checkouts. Finalized claims (those
+//    with a `sid` already set) are intentionally NOT preemptable by TTL alone:
+//    the Stripe session is still open and can complete. They are released by the
+//    checkout.session.completed or checkout.session.expired webhook instead.
 //    Preemption is safe because releaseCheckout is conditional on the token:
 //    an expired claimant calling release with its old token does not delete the
 //    new claimant's record.
@@ -263,14 +267,16 @@ export async function claimCheckout(
   const newValue = JSON.stringify({ at: now, tok: claimToken } satisfies CheckoutClaim);
 
   // Atomic: INSERT wins the slot. ON CONFLICT DO UPDATE only fires when the
-  // existing claim is stale; in that case the slot is preempted by the new
-  // caller. No rows returned means a live claim is already in progress.
+  // existing claim is stale AND has no Stripe session created yet (sid IS NULL).
+  // A finalized claim (sid present) is never preempted by TTL - the session may
+  // still be open. No rows returned means a live claim is already in progress.
   const result = await db.execute(sql`
     INSERT INTO platform_meta (key, value)
     VALUES (${key}, ${newValue})
     ON CONFLICT (key) DO UPDATE
       SET value = ${newValue}
       WHERE (platform_meta.value::json->>'at') < ${stale}
+        AND (platform_meta.value::json->>'sid') IS NULL
     RETURNING key
   `);
   const rows = (result as unknown as { rows?: unknown[] }).rows ?? [];
@@ -767,7 +773,11 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
   const subscriptionId =
     typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
 
-  await db
+  // Conditional UPDATE: only activate when no *different* subscription is
+  // already stored. If a duplicate checkout session completes late (e.g. the
+  // original pre-TTL session whose claim was superseded), the update matches
+  // 0 rows and we cancel the incoming Stripe subscription to prevent double-billing.
+  const activated = await db
     .update(platformCompaniesTable)
     .set({
       stripeCustomerId: customerId,
@@ -776,7 +786,35 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
       billingFrequency: isBillingFrequency(frequency) ? frequency : null,
       subscriptionStatus: "active",
     })
-    .where(eq(platformCompaniesTable.slug, slug));
+    .where(
+      and(
+        eq(platformCompaniesTable.slug, slug),
+        or(
+          isNull(platformCompaniesTable.stripeSubscriptionId),
+          eq(platformCompaniesTable.stripeSubscriptionId, subscriptionId ?? ""),
+        ),
+      ),
+    )
+    .returning({ slug: platformCompaniesTable.slug });
+
+  if (activated.length === 0) {
+    // A different subscription is already active - this completion is a duplicate.
+    logger.warn(
+      { slug, incomingSubscription: subscriptionId },
+      "billing: duplicate checkout.session.completed - a different subscription is already stored; cancelling the incoming one",
+    );
+    if (subscriptionId) {
+      try {
+        const stripe = await getUncachableStripeClient();
+        await stripe.subscriptions.cancel(subscriptionId, { prorate: false } as Parameters<typeof stripe.subscriptions.cancel>[1]);
+        logger.info({ slug, subscriptionId }, "billing: duplicate subscription cancelled");
+      } catch (err) {
+        logger.error({ err, slug, subscriptionId }, "billing: could not cancel duplicate subscription (manual cleanup may be needed)");
+      }
+    }
+    return;
+  }
+
   logger.info({ slug, plan, frequency, subscriptionId }, "billing: subscription activated via checkout");
 
   // Release the checkout claim now that the session has completed. The claim
@@ -1062,6 +1100,7 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
 export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
   const relevant =
     event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.expired" ||
     event.type === "invoice.payment_succeeded" ||
     event.type === "invoice.payment_failed" ||
     event.type === "customer.subscription.deleted";
@@ -1077,6 +1116,23 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       case "checkout.session.completed":
         await handleCheckoutCompleted(event);
         break;
+      case "checkout.session.expired": {
+        // Release the checkout claim so the account is not locked while waiting
+        // for the TTL. The session has expired on Stripe's side so it can never
+        // complete; the claim token prevents a foreign release.
+        const expiredSession = event.data.object as Stripe.Checkout.Session;
+        const expiredSlug = normUsername(
+          String(expiredSession.metadata?.["slug"] ?? expiredSession.client_reference_id ?? ""),
+        );
+        const expiredClaimToken = expiredSession.metadata?.["claim_tok"];
+        if (expiredSlug && expiredClaimToken) {
+          await releaseCheckout(expiredSlug, expiredClaimToken).catch((err) => {
+            logger.warn({ err, slug: expiredSlug }, "billing: could not release checkout claim on session expiry (non-fatal)");
+          });
+          logger.info({ slug: expiredSlug }, "billing: checkout session expired - claim released");
+        }
+        break;
+      }
       case "invoice.payment_succeeded":
         await handleInvoicePaymentSucceeded(event);
         break;
