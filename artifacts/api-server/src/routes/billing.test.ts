@@ -637,6 +637,15 @@ describe("project add-ons", () => {
     return seeded;
   }
 
+  it("allowance is exactly what's paid for: In-House 1, Agency 3, unsubscribed 2", async () => {
+    await seedSubscribed("allow-ih", "owner@allowih.test");
+    expect(await getProjectAllowance("allow-ih")).toBe(1);
+    await seedSubscribed("allow-ag", "owner@allowag.test", "agency");
+    expect(await getProjectAllowance("allow-ag")).toBe(3);
+    await seedWorkspace("allow-none", "owner@allownone.test", { accountRole: "client" });
+    expect(await getProjectAllowance("allow-none")).toBe(2);
+  });
+
   it("project-checkout requires an active subscription and a valid tier", async () => {
     const { sid } = await seedWorkspace("addon-unsub", "owner@addonunsub.test", { accountRole: "client" });
     expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "gold" } })).status).toBe(400);

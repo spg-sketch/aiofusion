@@ -248,10 +248,12 @@ export async function getProjectAllowance(slug: string): Promise<number> {
     const state = await getBillingState(billingSlug);
     if (!isEntitled(state)) return LEGACY_PROJECT_CAP;
     const addons = await getProjectAddons(billingSlug);
-    return Math.max(
-      LEGACY_PROJECT_CAP,
-      (state!.plan ? INCLUDED_PROJECTS[state!.plan] : 0) + addons.length,
-    );
+    // Entitled accounts get exactly what they pay for: the plan's included
+    // projects plus purchased add-ons. The legacy cap of 2 applies ONLY to
+    // unsubscribed accounts (and as a defensive fallback for malformed state
+    // where the plan is missing).
+    if (!state!.plan) return LEGACY_PROJECT_CAP;
+    return INCLUDED_PROJECTS[state!.plan] + addons.length;
   } catch (err) {
     logger.warn({ err, slug }, "billing: getProjectAllowance failed - using legacy cap");
     return LEGACY_PROJECT_CAP;
