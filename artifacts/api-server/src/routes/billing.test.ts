@@ -686,7 +686,9 @@ describe("billing routes", () => {
     const created = stripeCalls.customerCreates[stripeCalls.customerCreates.length - 1];
     expect(created.email).toBe("accounts@detailed.test");
     expect(created.address).toEqual({ line1: "1 High Street, London" });
-    expect(created.tax_id_data).toEqual([{ type: "gb_vat", value: "GB123456789" }]);
+    // The VAT number is attached separately (fail-soft), not inline on create.
+    expect(created.tax_id_data).toBeUndefined();
+    expect(stripeCalls.taxIdCreates).toContainEqual({ type: "gb_vat", value: "GB123456789" });
   });
 
   it("syncStripeBillingDetails pushes name, email, address and reconciles tax IDs", async () => {
@@ -709,6 +711,32 @@ describe("billing routes", () => {
     expect(upd.params.address).toEqual({ line1: "2 Kaiserstrasse, Berlin" });
     expect(stripeCalls.taxIdDeletes).toContain("txi_old");
     expect(stripeCalls.taxIdCreates).toContainEqual({ type: "eu_vat", value: "DE123456789" });
+  });
+
+  it("a malformed stored VAT number does not block customer creation or checkout", async () => {
+    const { sid } = await seedWorkspace("badvat-co", "owner@badvat.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({ vatNumber: "GB-THIS-IS-NOT-VALID-#####" })
+      .where(eq(platformCompaniesTable.slug, "badvat-co"));
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res.status).toBe(200);
+    const created = stripeCalls.customerCreates[stripeCalls.customerCreates.length - 1];
+    // VAT is attached separately (fail-soft), never inline on create.
+    expect(created.tax_id_data).toBeUndefined();
+  });
+
+  it("clearing the billing address clears it on the Stripe customer too", async () => {
+    await seedWorkspace("clear-co", "owner@clear.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_clear_1", billingAddress: null, vatNumber: null })
+      .where(eq(platformCompaniesTable.slug, "clear-co"));
+    stripeCalls.taxIds.length = 0;
+    await syncStripeBillingDetails("clear-co");
+    const upd = stripeCalls.customerUpdates[stripeCalls.customerUpdates.length - 1];
+    expect(upd.id).toBe("cus_clear_1");
+    expect(upd.params.address).toBe("");
   });
 
   it("vatNumberToTaxId maps GB and EU prefixes and rejects the rest", () => {

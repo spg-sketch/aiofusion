@@ -939,54 +939,112 @@ export function vatNumberToTaxId(vat: string): { type: "gb_vat" | "eu_vat"; valu
 // must never fail because Stripe is unreachable; the next checkout re-syncs.
 export async function syncStripeBillingDetails(slug: string): Promise<void> {
   const key = normUsername(slug);
-  try {
-    const state = await getBillingState(key);
-    if (!state?.stripeCustomerId) return;
-    const details = await getBillingDetails(key);
-    if (!details) return;
-    const stripe = await getUncachableStripeClient();
-    await stripe.customers.update(state.stripeCustomerId, {
-      name: details.companyName,
-      ...(details.email ? { email: details.email } : {}),
-      ...(details.billingAddress
-        ? { address: { line1: details.billingAddress.slice(0, 500) } }
-        : {}),
-    });
-    // Reconcile the customer's tax IDs with the stored VAT number.
-    const wanted = details.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
-    const existing = await stripe.customers.listTaxIds(state.stripeCustomerId, { limit: 10 });
-    const alreadyThere = wanted
-      ? existing.data.some((t) => t.value.replace(/\s+/g, "").toUpperCase() === wanted.value)
-      : false;
-    for (const t of existing.data) {
-      const keep = wanted && t.value.replace(/\s+/g, "").toUpperCase() === wanted.value;
-      if (!keep) await stripe.customers.deleteTaxId(state.stripeCustomerId, t.id).catch(() => {});
-    }
-    if (wanted && !alreadyThere) {
-      try {
-        await stripe.customers.createTaxId(state.stripeCustomerId, wanted);
-      } catch (err) {
-        // An invalid VAT number must not block the rest of the sync.
-        logger.warn({ err, slug: key }, "billing: could not attach VAT number to Stripe customer");
+  // Serialised per account so two rapid saves cannot interleave the tax-ID
+  // reconciliation (list-then-create races leaving duplicate/stale IDs).
+  await withSlugLock(`billing-sync:${key}`, async () => {
+    try {
+      const state = await getBillingState(key);
+      if (!state?.stripeCustomerId) return;
+      const details = await getBillingDetails(key);
+      if (!details) return;
+      const stripe = await getUncachableStripeClient();
+      await stripe.customers.update(state.stripeCustomerId, {
+        name: details.companyName,
+        ...(details.email ? { email: details.email } : {}),
+        // Clearing the address in the app deliberately clears it in Stripe
+        // too, so old invoice addresses do not linger.
+        address: details.billingAddress
+          ? { line1: details.billingAddress.slice(0, 500) }
+          : ("" as unknown as Stripe.Emptyable<Stripe.AddressParam>),
+      });
+      // Reconcile the customer's tax IDs with the stored VAT number.
+      const wanted = details.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
+      const existing = await stripe.customers.listTaxIds(state.stripeCustomerId, { limit: 10 });
+      const alreadyThere = wanted
+        ? existing.data.some((t) => t.value.replace(/\s+/g, "").toUpperCase() === wanted.value)
+        : false;
+      let deletesFailed = false;
+      for (const t of existing.data) {
+        const keep = wanted && t.value.replace(/\s+/g, "").toUpperCase() === wanted.value;
+        if (!keep) {
+          try {
+            await stripe.customers.deleteTaxId(state.stripeCustomerId, t.id);
+          } catch (err) {
+            deletesFailed = true;
+            logger.warn(
+              { err, slug: key, taxId: t.id },
+              "billing: could not remove a stale tax ID from the Stripe customer - sync incomplete",
+            );
+          }
+        }
       }
+      if (wanted && !alreadyThere) {
+        try {
+          await stripe.customers.createTaxId(state.stripeCustomerId, wanted);
+        } catch (err) {
+          // An invalid VAT number must not block the rest of the sync - the
+          // customer can still enter a valid one at checkout.
+          logger.warn({ err, slug: key }, "billing: could not attach VAT number to Stripe customer");
+        }
+      }
+      if (!deletesFailed) {
+        logger.info({ slug: key }, "billing: synced billing details to Stripe customer");
+      }
+    } catch (err) {
+      logger.warn({ err, slug: key }, "billing: failed to sync billing details to Stripe (non-fatal)");
     }
-    logger.info({ slug: key }, "billing: synced billing details to Stripe customer");
+  });
+}
+
+// Best-effort, fail-soft attachment of a VAT number to a customer - never
+// blocks checkout on a malformed stored value.
+async function attachVatNumber(stripe: Stripe, customerId: string, slug: string, vatNumber: string): Promise<void> {
+  const wanted = vatNumberToTaxId(vatNumber);
+  if (!wanted) return;
+  try {
+    await stripe.customers.createTaxId(customerId, wanted);
   } catch (err) {
-    logger.warn({ err, slug: key }, "billing: failed to sync billing details to Stripe (non-fatal)");
+    logger.warn({ err, slug }, "billing: could not attach VAT number to new Stripe customer");
   }
 }
 
-// True when a Stripe error means "Stripe Tax has not been activated in the
-// dashboard yet" - in that case checkout retries without automatic tax so
-// test mode keeps working before the one-time activation.
+// True only when the Stripe error unambiguously means "Stripe Tax has not
+// been activated in the dashboard yet" (an invalid_request_error on the
+// automatic_tax parameter, or Stripe's activation message). Deliberately
+// narrow: other tax/config errors must FAIL the checkout rather than silently
+// selling without VAT.
 function isTaxNotActivatedError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err ?? "");
-  return /tax/i.test(msg) && /(activ|enabled|origin address|registration)/i.test(msg);
+  const e = err as { type?: string; param?: string; message?: string } | null;
+  if (!e || e.type !== "StripeInvalidRequestError") {
+    // Plain Errors from mocks/tests carry no type; fall through to message.
+    if (e?.type !== undefined) return false;
+  }
+  if (e?.param === "automatic_tax") return true;
+  const msg = e?.message ?? "";
+  return /stripe tax/i.test(msg) && /activat/i.test(msg);
+}
+
+// True when the connected Stripe key is a live key. Cached per process.
+let liveModeCache: boolean | null = null;
+async function isLiveStripeMode(): Promise<boolean> {
+  if (liveModeCache !== null) return liveModeCache;
+  try {
+    const { getStripeCredentials } = await import("./stripe-client");
+    const { secretKey } = await getStripeCredentials();
+    liveModeCache = /^(sk|rk)_live_/.test(secretKey ?? "");
+  } catch {
+    // Unknown -> assume live: never silently drop VAT when unsure.
+    liveModeCache = true;
+  }
+  return liveModeCache;
 }
 
 // Creates a Checkout Session with Stripe Tax (automatic tax + billing address
-// + VAT number collection). If Stripe Tax is not activated on the account yet,
-// logs loudly and falls back to a session without tax.
+// + VAT number collection). If Stripe Tax is not yet activated:
+//  - test mode: log loudly and fall back to a taxless session so test
+//    payments are not blocked before the one-time dashboard activation;
+//  - live mode: fail the checkout - a UK business must never silently sell
+//    without VAT because of a configuration gap.
 async function createSessionWithTax(
   stripe: Stripe,
   slug: string,
@@ -1005,9 +1063,16 @@ async function createSessionWithTax(
     return await stripe.checkout.sessions.create(withTax);
   } catch (err) {
     if (!isTaxNotActivatedError(err)) throw err;
+    if (await isLiveStripeMode()) {
+      logger.error(
+        { err, slug },
+        "billing: Stripe Tax is not activated in LIVE mode - checkout refused. Activate Stripe Tax in the dashboard (see replit.md).",
+      );
+      throw err;
+    }
     logger.error(
       { err, slug },
-      "billing: Stripe Tax is not activated - checkout created WITHOUT VAT. Activate Stripe Tax in the dashboard (see replit.md).",
+      "billing: Stripe Tax is not activated - TEST checkout created WITHOUT VAT. Activate Stripe Tax in the dashboard (see replit.md).",
     );
     return stripe.checkout.sessions.create(params);
   }
@@ -1077,16 +1142,17 @@ async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<str
     return state.stripeCustomerId;
   }
   const details = await getBillingDetails(slug);
-  const wanted = details?.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
   const customer = await stripe.customers.create({
     email: details?.email ?? undefined,
     name: details?.companyName ?? slug,
     ...(details?.billingAddress
       ? { address: { line1: details.billingAddress.slice(0, 500) } }
       : {}),
-    ...(wanted ? { tax_id_data: [wanted] } : {}),
     metadata: { slug },
   });
+  // VAT number attached separately and fail-soft: a malformed stored value
+  // must never block checkout (the customer can enter it at checkout).
+  if (details?.vatNumber) await attachVatNumber(stripe, customer.id, slug, details.vatNumber);
   await db
     .update(platformCompaniesTable)
     .set({ stripeCustomerId: customer.id })
