@@ -714,6 +714,26 @@ describe("project add-ons", () => {
     expect(addons[0]!.projectId).toBe("attach-proj");
   });
 
+  it("fulfilment stores the slot unassigned when the target project left the account", async () => {
+    await seedSubscribed("addon-stale", "owner@addonstale.test");
+    await seedSubscribed("addon-other", "owner@addonother.test");
+    await db.insert(projectsTable).values({ id: "other-proj", name: "O", data: {}, owner: "addon-other" });
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_stale", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-stale",
+        subscription: "sub_addon_stale",
+        metadata: { slug: "addon-stale", kind: "project-addon", tier: "max", projectId: "other-proj" },
+      }),
+    );
+    const addons = await getProjectAddons("addon-stale");
+    expect(addons).toHaveLength(1);
+    expect(addons[0]!.projectId).toBeNull();
+    // Foreign project untouched.
+    expect(await getProjectActionLimit("addon-other", "other-proj")).toBe(75);
+  });
+
   it("upgrading an add-on applies immediately with a prorated charge", async () => {
     const { sid } = await seedSubscribed("addon-up", "owner@addonup.test");
     await db.insert(projectsTable).values({ id: "up-proj", name: "Up", data: {}, owner: "addon-up", tier: "standard" });

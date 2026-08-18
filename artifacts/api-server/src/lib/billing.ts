@@ -165,6 +165,35 @@ export interface ProjectAddon {
 
 const addonsKey = (slug: string) => `projectAddons:${normUsername(slug)}`;
 
+// Add-ons are stored as one JSON array per account, so every read-modify-write
+// (webhook fulfilment, tier changes, cancellation, new-project assignment)
+// must be serialised or concurrent updates can lose each other's changes.
+// The api-server runs as a single process, so an in-process per-slug promise
+// chain is sufficient; the same lock also serialises project-allowance
+// count-then-insert checks in the store routes.
+const slugLocks = new Map<string, Promise<unknown>>();
+
+export async function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
+  const key = normUsername(slug);
+  const prev = slugLocks.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  slugLocks.set(key, run.catch(() => undefined));
+  try {
+    return await run;
+  } finally {
+    if (slugLocks.get(key) !== run && slugLocks.get(key) === undefined) slugLocks.delete(key);
+  }
+}
+
+// True when the project exists, is live (not deleted) and is owned by the
+// billing account's subtree. Used to revalidate stale project bindings at
+// webhook fulfilment and before any add-on-driven project mutation - a
+// project can be deleted or reassigned while a checkout tab sits open.
+export async function isProjectInBillingSubtree(slug: string, projectId: string): Promise<boolean> {
+  const projects = await listBillingProjects(slug);
+  return projects.some((p) => p.id === projectId);
+}
+
 export async function getProjectAddons(slug: string): Promise<ProjectAddon[]> {
   const [row] = await db
     .select({ value: platformMetaTable.value })
@@ -218,16 +247,18 @@ export async function getProjectAllowance(slug: string): Promise<number> {
 export async function assignAddonToNewProject(slug: string, projectId: string): Promise<void> {
   try {
     const billingSlug = await resolveBillingSlug(slug);
-    const addons = await getProjectAddons(billingSlug);
-    const free = addons.find((a) => !a.projectId);
-    if (!free) return;
-    free.projectId = projectId;
-    await saveProjectAddons(billingSlug, addons);
-    await db.update(projectsTable).set({ tier: free.tier }).where(eq(projectsTable.id, projectId));
-    logger.info(
-      { slug: billingSlug, projectId, tier: free.tier, subscriptionId: free.subscriptionId },
-      "billing: assigned purchased add-on to new project",
-    );
+    await withSlugLock(billingSlug, async () => {
+      const addons = await getProjectAddons(billingSlug);
+      const free = addons.find((a) => !a.projectId);
+      if (!free) return;
+      free.projectId = projectId;
+      await saveProjectAddons(billingSlug, addons);
+      await db.update(projectsTable).set({ tier: free.tier }).where(eq(projectsTable.id, projectId));
+      logger.info(
+        { slug: billingSlug, projectId, tier: free.tier, subscriptionId: free.subscriptionId },
+        "billing: assigned purchased add-on to new project",
+      );
+    });
   } catch (err) {
     logger.warn({ err, slug, projectId }, "billing: assignAddonToNewProject failed (non-fatal)");
   }
@@ -494,17 +525,30 @@ async function handleProjectAddonPurchased(
     logger.error({ sessionId: session.id }, "billing: project-addon checkout without a subscription id");
     return;
   }
-  const projectId = String(session.metadata?.["projectId"] ?? "") || null;
+  // Revalidate the project binding at fulfilment time: the project can be
+  // deleted or reassigned out of this account's subtree while the checkout
+  // tab sits open. An invalid binding leaves the add-on unassigned (the next
+  // new project consumes it) rather than mutating a foreign project.
+  let projectId = String(session.metadata?.["projectId"] ?? "") || null;
+  if (projectId && !(await isProjectInBillingSubtree(slug, projectId))) {
+    logger.warn(
+      { slug, projectId, subscriptionId },
+      "billing: add-on's target project no longer belongs to this account - storing slot unassigned",
+    );
+    projectId = null;
+  }
 
-  const addons = await getProjectAddons(slug);
-  if (addons.some((a) => a.subscriptionId === subscriptionId)) return; // replayed
-  addons.push({
-    subscriptionId,
-    tier,
-    projectId,
-    purchasedAt: new Date().toISOString(),
+  await withSlugLock(slug, async () => {
+    const addons = await getProjectAddons(slug);
+    if (addons.some((a) => a.subscriptionId === subscriptionId)) return; // replayed
+    addons.push({
+      subscriptionId,
+      tier,
+      projectId,
+      purchasedAt: new Date().toISOString(),
+    });
+    await saveProjectAddons(slug, addons);
   });
-  await saveProjectAddons(slug, addons);
   if (projectId) {
     await db.update(projectsTable).set({ tier }).where(eq(projectsTable.id, projectId));
   }
@@ -536,20 +580,22 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
   // has been paid at the new (lower) price.
   const invSub = invoiceSubscriptionId(invoice);
   if (invSub) {
-    const addons = await getProjectAddons(slug);
-    const addon = addons.find((a) => a.subscriptionId === invSub);
-    if (addon) {
+    const isAddonInvoice = await withSlugLock(slug, async () => {
+      const addons = await getProjectAddons(slug);
+      const addon = addons.find((a) => a.subscriptionId === invSub);
+      if (!addon) return false;
       if (addon.pendingTier) {
         addon.tier = addon.pendingTier;
         delete addon.pendingTier;
         await saveProjectAddons(slug, addons);
-        if (addon.projectId) {
+        if (addon.projectId && (await isProjectInBillingSubtree(slug, addon.projectId))) {
           await db.update(projectsTable).set({ tier: addon.tier }).where(eq(projectsTable.id, addon.projectId));
         }
         logger.info({ slug, subscriptionId: invSub, tier: addon.tier }, "billing: add-on downgrade applied at renewal");
       }
-      return; // add-on invoices never touch the main plan's status
-    }
+      return true;
+    });
+    if (isAddonInvoice) return; // add-on invoices never touch the main plan's status
   }
   if (!(await invoiceMatchesStoredSubscription(slug, invoice))) return;
   const periodEndUnix = invoice.lines?.data?.[0]?.period?.end;
@@ -605,12 +651,13 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
   // Add-on cancellation: match by our stored records (metadata is a hint, the
   // stored list is authoritative).
   {
-    const addons = await getProjectAddons(slug);
-    const idx = addons.findIndex((a) => a.subscriptionId === subscription.id);
-    if (idx >= 0) {
+    const wasAddon = await withSlugLock(slug, async () => {
+      const addons = await getProjectAddons(slug);
+      const idx = addons.findIndex((a) => a.subscriptionId === subscription.id);
+      if (idx < 0) return false;
       const [removed] = addons.splice(idx, 1);
       await saveProjectAddons(slug, addons);
-      if (removed!.projectId) {
+      if (removed!.projectId && (await isProjectInBillingSubtree(slug, removed!.projectId))) {
         await db
           .update(projectsTable)
           .set({ tier: null })
@@ -620,8 +667,9 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
         { slug, subscriptionId: subscription.id, projectId: removed!.projectId },
         "billing: project add-on cancelled",
       );
-      return;
-    }
+      return true;
+    });
+    if (wasAddon) return;
   }
   // Stale-event guard: if the account has since started a NEW subscription
   // (e.g. re-subscribed after cancelling), a late deletion event for the old
@@ -874,38 +922,40 @@ export async function changeAddonTier(opts: {
   newTier: ProjectTier;
 }): Promise<{ applied: "now" | "at_renewal" }> {
   const slug = normUsername(opts.slug);
-  const addons = await getProjectAddons(slug);
-  const addon = addons.find((a) => a.subscriptionId === opts.subscriptionId);
-  if (!addon) throw new Error("Add-on not found");
-  if (addon.tier === opts.newTier && !addon.pendingTier) {
-    return { applied: "now" };
-  }
-  const isUpgrade = TIER_RANK[opts.newTier] > TIER_RANK[addon.tier];
-
-  const stripe = await getUncachableStripeClient();
-  const priceId = await ensurePriceId(stripe, PROJECT_TIER_PRICES[opts.newTier]);
-  const subscription = await stripe.subscriptions.retrieve(opts.subscriptionId);
-  const itemId = subscription.items.data[0]?.id;
-  if (!itemId) throw new Error("Add-on subscription has no item to update");
-
-  await stripe.subscriptions.update(opts.subscriptionId, {
-    items: [{ id: itemId, price: priceId }],
-    proration_behavior: isUpgrade ? "always_invoice" : "none",
-    metadata: { ...subscription.metadata, tier: opts.newTier },
-  });
-
-  if (isUpgrade) {
-    addon.tier = opts.newTier;
-    delete addon.pendingTier;
-    await saveProjectAddons(slug, addons);
-    if (addon.projectId) {
-      await db.update(projectsTable).set({ tier: opts.newTier }).where(eq(projectsTable.id, addon.projectId));
+  return withSlugLock(slug, async () => {
+    const addons = await getProjectAddons(slug);
+    const addon = addons.find((a) => a.subscriptionId === opts.subscriptionId);
+    if (!addon) throw new Error("Add-on not found");
+    if (addon.tier === opts.newTier && !addon.pendingTier) {
+      return { applied: "now" as const };
     }
-    logger.info({ slug, subscriptionId: opts.subscriptionId, tier: opts.newTier }, "billing: add-on upgraded");
-    return { applied: "now" };
-  }
-  addon.pendingTier = opts.newTier;
-  await saveProjectAddons(slug, addons);
-  logger.info({ slug, subscriptionId: opts.subscriptionId, pendingTier: opts.newTier }, "billing: add-on downgrade queued to renewal");
-  return { applied: "at_renewal" };
+    const isUpgrade = TIER_RANK[opts.newTier] > TIER_RANK[addon.tier];
+
+    const stripe = await getUncachableStripeClient();
+    const priceId = await ensurePriceId(stripe, PROJECT_TIER_PRICES[opts.newTier]);
+    const subscription = await stripe.subscriptions.retrieve(opts.subscriptionId);
+    const itemId = subscription.items.data[0]?.id;
+    if (!itemId) throw new Error("Add-on subscription has no item to update");
+
+    await stripe.subscriptions.update(opts.subscriptionId, {
+      items: [{ id: itemId, price: priceId }],
+      proration_behavior: isUpgrade ? "always_invoice" : "none",
+      metadata: { ...subscription.metadata, tier: opts.newTier },
+    });
+
+    if (isUpgrade) {
+      addon.tier = opts.newTier;
+      delete addon.pendingTier;
+      await saveProjectAddons(slug, addons);
+      if (addon.projectId && (await isProjectInBillingSubtree(slug, addon.projectId))) {
+        await db.update(projectsTable).set({ tier: opts.newTier }).where(eq(projectsTable.id, addon.projectId));
+      }
+      logger.info({ slug, subscriptionId: opts.subscriptionId, tier: opts.newTier }, "billing: add-on upgraded");
+      return { applied: "now" as const };
+    }
+    addon.pendingTier = opts.newTier;
+    await saveProjectAddons(slug, addons);
+    logger.info({ slug, subscriptionId: opts.subscriptionId, pendingTier: opts.newTier }, "billing: add-on downgrade queued to renewal");
+    return { applied: "at_renewal" as const };
+  });
 }

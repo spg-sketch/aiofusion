@@ -16,7 +16,7 @@ import {
 } from "../lib/member-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
-import { getProjectAllowance, assignAddonToNewProject } from "../lib/billing";
+import { getProjectAllowance, assignAddonToNewProject, withSlugLock } from "../lib/billing";
 
 const router: IRouter = Router();
 
@@ -236,77 +236,88 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      // Enforce the project allowance for non-admin accounts on new projects
-      // only. Subscribed accounts get their plan's included projects plus any
-      // purchased add-ons; unsubscribed accounts keep the legacy cap of 2.
-      // Admins are never restricted.
       const isNewProject = existingOwner === undefined;
-      if (isNewProject && req.account!.role !== "admin") {
-        const [countRow] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(projectsTable)
-          .where(
-            and(
-              isNull(projectsTable.deletedAt),
-              visible !== null ? inArray(projectsTable.owner, visible) : undefined,
-            ),
-          );
-        const allowance = await getProjectAllowance(normUsername(req.account!.username));
-        if ((countRow?.count ?? 0) >= allowance) {
-          res.status(403).json({
-            error: `You've reached your ${allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
-            limitReached: true,
-          });
-          return;
-        }
-      }
       const now = new Date();
       const owner = normUsername(req.account!.username);
       const incomingName = typeof name === "string" ? name.trim() : "";
       const incomingDataEmpty = dataIsEmpty(data);
       const incomingLogo = typeof logo === "string" && logo ? logo : null;
-      const saved = await db
-        .insert(projectsTable)
-        .values({
-          id,
-          name: typeof name === "string" ? name : "",
-          data: data ?? {},
-          logo: incomingLogo,
-          owner,
-          updatedAt: now,
-          deletedAt: null,
-        })
-        .onConflictDoUpdate({
-          target: projectsTable.id,
-          // deletedAt is never touched (a stale write must not revive a deleted
-          // project). owner is never reassigned either, but a legacy NULL owner
-          // (an unclaimed row from before ownership was enforced) is claimed by
-          // the caller via coalesce. The setWhere guard below means only a caller
-          // who can already see the row reaches this, so this never steals a
-          // project from another account.
-          //
-          // A blank incoming value never overwrites a populated stored one: an
-          // empty name keeps the existing name, an empty data record keeps the
-          // existing data, and a missing logo keeps the existing logo. This
-          // stops a stale/empty device from wiping a completed project.
-          set: {
-            name: incomingName ? incomingName : sql`${projectsTable.name}`,
-            data: incomingDataEmpty
-              ? sql`coalesce(${projectsTable.data}, ${asJsonb(data)})`
-              : data,
-            logo: incomingLogo ? incomingLogo : sql`${projectsTable.logo}`,
-            owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
+      // The allowance check, the insert and the add-on assignment run under a
+      // per-account lock so concurrent creates can neither exceed the
+      // allowance nor consume the same purchased add-on slot twice.
+      const outcome = await withSlugLock(owner, async () => {
+        // Enforce the project allowance for non-admin accounts on new projects
+        // only. Subscribed accounts get their plan's included projects plus any
+        // purchased add-ons; unsubscribed accounts keep the legacy cap of 2.
+        // Admins are never restricted.
+        if (isNewProject && req.account!.role !== "admin") {
+          const [countRow] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(projectsTable)
+            .where(
+              and(
+                isNull(projectsTable.deletedAt),
+                visible !== null ? inArray(projectsTable.owner, visible) : undefined,
+              ),
+            );
+          const allowance = await getProjectAllowance(owner);
+          if ((countRow?.count ?? 0) >= allowance) {
+            return { limitReached: true as const, allowance };
+          }
+        }
+        const saved = await db
+          .insert(projectsTable)
+          .values({
+            id,
+            name: typeof name === "string" ? name : "",
+            data: data ?? {},
+            logo: incomingLogo,
+            owner,
             updatedAt: now,
-          },
-          // Atomic guard: only update rows the caller may touch, so the
-          // authorization holds even if ownership changed after the check above.
-          setWhere: ownerPredicate(visible),
-        })
-        .returning(projectRowColumns);
+            deletedAt: null,
+          })
+          .onConflictDoUpdate({
+            target: projectsTable.id,
+            // deletedAt is never touched (a stale write must not revive a deleted
+            // project). owner is never reassigned either, but a legacy NULL owner
+            // (an unclaimed row from before ownership was enforced) is claimed by
+            // the caller via coalesce. The setWhere guard below means only a caller
+            // who can already see the row reaches this, so this never steals a
+            // project from another account.
+            //
+            // A blank incoming value never overwrites a populated stored one: an
+            // empty name keeps the existing name, an empty data record keeps the
+            // existing data, and a missing logo keeps the existing logo. This
+            // stops a stale/empty device from wiping a completed project.
+            set: {
+              name: incomingName ? incomingName : sql`${projectsTable.name}`,
+              data: incomingDataEmpty
+                ? sql`coalesce(${projectsTable.data}, ${asJsonb(data)})`
+                : data,
+              logo: incomingLogo ? incomingLogo : sql`${projectsTable.logo}`,
+              owner: sql`coalesce(${projectsTable.owner}, ${owner})`,
+              updatedAt: now,
+            },
+            // Atomic guard: only update rows the caller may touch, so the
+            // authorization holds even if ownership changed after the check above.
+            setWhere: ownerPredicate(visible),
+          })
+          .returning(projectRowColumns);
+        return { limitReached: false as const, saved };
+      });
+      if (outcome.limitReached) {
+        res.status(403).json({
+          error: `You've reached your ${outcome.allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
+          limitReached: true,
+        });
+        return;
+      }
+      const saved = outcome.saved;
       // Back up the resulting state so this version can always be restored.
       if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "upsert");
       // A brand-new project consumes the oldest unassigned purchased add-on
-      // (if any) so it immediately carries the paid-for tier. Fail-soft.
+      // (if any) so it immediately carries the paid-for tier. Fail-soft;
+      // assignAddonToNewProject re-acquires the same per-slug lock.
       if (isNewProject && saved[0]) {
         await assignAddonToNewProject(owner, id);
       }
@@ -340,30 +351,34 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      // Enforce the 2-project limit for non-admin accounts on new projects only,
-      // matching the same guard on /upsert. The intake route also inserts a new
-      // row when the project does not exist yet, so it must be gated the same way.
-      if (existingOwner === undefined && req.account!.role !== "admin") {
-        const [countRow] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(projectsTable)
-          .where(
-            and(
-              isNull(projectsTable.deletedAt),
-              visible !== null ? inArray(projectsTable.owner, visible) : undefined,
-            ),
-          );
-        if ((countRow?.count ?? 0) >= 2) {
+      const isNewProject = existingOwner === undefined;
+      const now = new Date();
+      const owner = normUsername(req.account!.username);
+      // Enforce the project allowance on new projects only, matching /upsert.
+      // The intake route also inserts a new row when the project does not
+      // exist yet, so it must be gated (and locked) the same way.
+      if (isNewProject && req.account!.role !== "admin") {
+        const limitHit = await withSlugLock(owner, async () => {
+          const [countRow] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(projectsTable)
+            .where(
+              and(
+                isNull(projectsTable.deletedAt),
+                visible !== null ? inArray(projectsTable.owner, visible) : undefined,
+              ),
+            );
+          const allowance = await getProjectAllowance(owner);
+          return (countRow?.count ?? 0) >= allowance ? allowance : null;
+        });
+        if (limitHit !== null) {
           res.status(403).json({
-            error:
-              "You've reached the 2-project limit for agency accounts. Contact info@aiofusion.ai to add more projects.",
+            error: `You've reached your ${limitHit}-project allowance. You can add another project from the Billing section of your account settings.`,
             limitReached: true,
           });
           return;
         }
       }
-      const now = new Date();
-      const owner = normUsername(req.account!.username);
       const incomingIntakeEmpty = intakeIsEmpty(intake);
       // The confirmed company identity (for an ambiguous brand name) rides inside
       // the intake blob, but it is not counted as a "real Set-Up answer" by
@@ -416,6 +431,11 @@ router.post(
         .returning(projectRowColumns);
       // Back up the resulting Set-Up so this version can always be restored.
       if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "intake");
+      // Intake-created projects consume a purchased add-on slot the same way
+      // upsert-created ones do. Fail-soft.
+      if (isNewProject && saved[0]) {
+        await assignAddonToNewProject(owner, id);
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save intake" });
