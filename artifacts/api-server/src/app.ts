@@ -114,7 +114,14 @@ app.post(
         return;
       }
       const stripe = await getUncachableStripeClient();
-      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      let event;
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      } catch (err) {
+        logger.warn({ err }, "stripe webhook: signature verification failed");
+        res.status(400).json({ error: "Invalid signature" });
+        return;
+      }
 
       await handleStripeEvent(event);
 
@@ -129,8 +136,10 @@ app.post(
 
       res.status(200).json({ received: true });
     } catch (err) {
+      // Internal failure after signature verification: return 5xx so Stripe
+      // retries the event (the claim has been released by handleStripeEvent).
       logger.error({ err }, "stripe webhook: processing failed");
-      res.status(400).json({ error: "Webhook processing error" });
+      res.status(500).json({ error: "Webhook processing error" });
     }
   },
 );

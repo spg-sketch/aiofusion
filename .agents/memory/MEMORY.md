@@ -52,4 +52,5 @@
 - [OAuth interstitial vs password shield](aio-fusion-oauth-interstitial-shield.md) — SSO stuck on "Completing sign-in…" on deployed site = deployment visibility is password/private; shield swallows the interstitial POST; check visibility before debugging code.
 - [Agency partner clients permanently managed](aio-fusion-agency-partner-clients.md) — every credential-issuance route must call isAgencyPartnerClient; UI hiding is not enforcement; /me exposes agencyManagedClient.
 - [Workspace switch cache clearing](aio-fusion-workspace-switch-caches.md) - bare localStorage keys to clear on switch (leak via sync push); intake late-profile effect; VIEW_TO_SLUG derived from PUBLIC_ROUTES + hard-fail prerender.
+- [AIO Fusion Stripe billing](aio-fusion-stripe-billing.md) — connection key is settings.secret; webhook secret in stripe._managed_webhooks; claim/release + stored-subscription-match webhook rules; tier honours project owner only.
 - [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.

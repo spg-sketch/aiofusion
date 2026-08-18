@@ -377,6 +377,60 @@ describe("stripe webhook handlers", () => {
     expect(state?.status).toBe("active");
     expect(state?.currentPeriodEnd?.getTime()).toBe(periodEnd * 1000);
   });
+
+  it("releases the event claim when a handler fails, so Stripe's retry is re-processed", async () => {
+    const evt = fakeEvent("evt_retry_1", "checkout.session.completed", {
+      mode: "subscription",
+      customer: "cus_retry",
+      subscription: "sub_retry",
+      // Missing slug triggers the error log path but not a throw; instead we
+      // simulate a handler failure by making the event object malformed in a
+      // way that throws inside the handler.
+      metadata: { slug: "retry-co", plan: "agency", frequency: "annual" },
+    });
+    // Force a failure: no such company row is fine (update affects 0 rows,
+    // no throw), so instead stub the failure via a bad event payload shape.
+    const bad = { ...evt, data: null } as never;
+    await expect(handleStripeEvent(bad)).rejects.toThrow();
+    // The claim must have been released - the same event id claims again.
+    expect(await claimStripeEvent("evt_retry_1")).toBe(true);
+  });
+
+  it("ignores subscription.deleted for a superseded subscription", async () => {
+    await seedWorkspace("resub-co", "owner@resub.test");
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_resub", stripeSubscriptionId: "sub_new", subscriptionStatus: "active" })
+      .where(eq(platformCompaniesTable.slug, "resub-co"));
+
+    await handleStripeEvent(
+      fakeEvent("evt_stale_del", "customer.subscription.deleted", { id: "sub_old", customer: "cus_resub" }),
+    );
+    expect((await getBillingState("resub-co"))?.status).toBe("active");
+
+    await handleStripeEvent(
+      fakeEvent("evt_live_del", "customer.subscription.deleted", { id: "sub_new", customer: "cus_resub" }),
+    );
+    expect((await getBillingState("resub-co"))?.status).toBe("cancelled");
+  });
+
+  it("ignores invoice events for a superseded subscription", async () => {
+    await seedWorkspace("stale-inv-co", "owner@staleinv.test");
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_staleinv", stripeSubscriptionId: "sub_current", subscriptionStatus: "cancelled" })
+      .where(eq(platformCompaniesTable.slug, "stale-inv-co"));
+
+    // A late invoice success from an old subscription must not reactivate.
+    await handleStripeEvent(
+      fakeEvent("evt_stale_inv", "invoice.payment_succeeded", {
+        customer: "cus_staleinv",
+        subscription: "sub_old",
+        lines: { data: [{ period: { end: 2000000000 } }] },
+      }),
+    );
+    expect((await getBillingState("stale-inv-co"))?.status).toBe("cancelled");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -415,6 +469,32 @@ describe("getProjectActionLimit", () => {
     await seedWorkspace("child-client", "owner@child.test", { accountRole: "client", parent: "parent-agency" });
 
     expect(await getProjectActionLimit("child-client")).toBe(75);
+  });
+
+  it("does not honour tiers of projects outside the caller's billing subtree", async () => {
+    await seedWorkspace("victim-co", "owner@victim.test", { accountRole: "client" });
+    await seedWorkspace("attacker-co", "owner@attacker.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({ subscriptionStatus: "active", plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "victim-co"));
+    await db
+      .update(platformCompaniesTable)
+      .set({ subscriptionStatus: "active", plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "attacker-co"));
+    await db.insert(projectsTable).values([
+      { id: "victim-max", name: "Victim max", data: {}, owner: "victim-co", tier: "max" },
+      { id: "ownerless-max", name: "Ownerless", data: {}, tier: "max" },
+    ]);
+
+    // Another account's max-tier project id must not grant 150.
+    expect(await getProjectActionLimit("attacker-co", "victim-max")).toBe(75);
+    // Ownerless projects never grant a tier.
+    expect(await getProjectActionLimit("attacker-co", "ownerless-max")).toBe(75);
+    // Unknown/fabricated project ids fall back to the included tier.
+    expect(await getProjectActionLimit("attacker-co", "made-up-id")).toBe(75);
+    // The rightful owner still gets the tier.
+    expect(await getProjectActionLimit("victim-co", "victim-max")).toBe(150);
   });
 });
 

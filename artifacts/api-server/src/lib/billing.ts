@@ -118,11 +118,22 @@ export async function getProjectActionLimit(
     if (!isEntitled(state)) return NO_SUBSCRIPTION_ACTION_LIMIT;
     if (projectId) {
       const [proj] = await db
-        .select({ tier: projectsTable.tier })
+        .select({ tier: projectsTable.tier, owner: projectsTable.owner })
         .from(projectsTable)
         .where(eq(projectsTable.id, projectId))
         .limit(1);
-      if (proj && isProjectTier(proj.tier)) return TIER_ACTION_LIMITS[proj.tier];
+      // Only honour a project's tier when the project actually belongs to
+      // this account's billing subtree - otherwise a caller could pass an
+      // arbitrary project id and inherit another account's (or a fabricated)
+      // higher tier.
+      if (
+        proj &&
+        isProjectTier(proj.tier) &&
+        proj.owner &&
+        (await resolveBillingSlug(proj.owner)) === billingSlug
+      ) {
+        return TIER_ACTION_LIMITS[proj.tier];
+      }
     }
     return TIER_ACTION_LIMITS[INCLUDED_PROJECT_TIER];
   } catch (err) {
@@ -222,6 +233,15 @@ export async function claimStripeEvent(eventId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// Releases a claim so Stripe's retry of the same event id is re-processed.
+// Used when the business handler fails after the claim was taken - without
+// this, a transient DB error would permanently swallow the event.
+export async function releaseStripeEvent(eventId: string): Promise<void> {
+  await db
+    .delete(platformMetaTable)
+    .where(eq(platformMetaTable.key, "stripeEvent:" + eventId));
+}
+
 async function findSlugByCustomerId(customerId: string): Promise<string | null> {
   const [row] = await db
     .select({ slug: platformCompaniesTable.slug })
@@ -252,6 +272,38 @@ async function getBillingContact(slug: string): Promise<{ email: string | null; 
 function customerIdOf(v: string | { id: string } | null | undefined): string | null {
   if (!v) return null;
   return typeof v === "string" ? v : v.id;
+}
+
+// Best-effort extraction of the subscription id from an invoice, tolerant of
+// both older (`invoice.subscription`) and newer (`invoice.parent`) API shapes.
+function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const legacy = (invoice as unknown as { subscription?: string | { id: string } | null }).subscription;
+  if (legacy) return typeof legacy === "string" ? legacy : legacy.id;
+  const parent = (invoice as unknown as {
+    parent?: { subscription_details?: { subscription?: string | { id: string } | null } | null } | null;
+  }).parent;
+  const sub = parent?.subscription_details?.subscription;
+  if (sub) return typeof sub === "string" ? sub : sub.id;
+  return null;
+}
+
+// Stale-event guard shared by the invoice handlers: an invoice for a
+// subscription other than the one currently stored (e.g. from a superseded
+// subscription) must not mutate the account's status.
+async function invoiceMatchesStoredSubscription(
+  slug: string,
+  invoice: Stripe.Invoice,
+): Promise<boolean> {
+  const state = await getBillingState(slug);
+  const invoiceSub = invoiceSubscriptionId(invoice);
+  if (state?.stripeSubscriptionId && invoiceSub && invoiceSub !== state.stripeSubscriptionId) {
+    logger.info(
+      { slug, invoiceSubscription: invoiceSub, storedSubscription: state.stripeSubscriptionId },
+      "billing: invoice event for a superseded subscription - ignored",
+    );
+    return false;
+  }
+  return true;
 }
 
 // checkout.session.completed: activate the subscription on the account named
@@ -296,6 +348,7 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
     logger.info({ eventId: event.id, customerId }, "billing: invoice.payment_succeeded for unknown customer (likely first invoice)");
     return;
   }
+  if (!(await invoiceMatchesStoredSubscription(slug, invoice))) return;
   const periodEndUnix = invoice.lines?.data?.[0]?.period?.end;
   await db
     .update(platformCompaniesTable)
@@ -317,6 +370,7 @@ export async function handleInvoicePaymentFailed(event: Stripe.Event): Promise<v
     logger.warn({ eventId: event.id, customerId }, "billing: invoice.payment_failed for unknown customer");
     return;
   }
+  if (!(await invoiceMatchesStoredSubscription(slug, invoice))) return;
   await db
     .update(platformCompaniesTable)
     .set({ subscriptionStatus: "past_due" })
@@ -341,6 +395,17 @@ export async function handleSubscriptionDeleted(event: Stripe.Event): Promise<vo
   const slug = await findSlugByCustomerId(customerId);
   if (!slug) {
     logger.warn({ eventId: event.id, customerId }, "billing: subscription.deleted for unknown customer");
+    return;
+  }
+  // Stale-event guard: if the account has since started a NEW subscription
+  // (e.g. re-subscribed after cancelling), a late deletion event for the old
+  // subscription must not cancel the new one.
+  const state = await getBillingState(slug);
+  if (state?.stripeSubscriptionId && state.stripeSubscriptionId !== subscription.id) {
+    logger.info(
+      { slug, eventSubscription: subscription.id, storedSubscription: state.stripeSubscriptionId },
+      "billing: subscription.deleted for a superseded subscription - ignored",
+    );
     return;
   }
   await db
@@ -373,19 +438,26 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  switch (event.type) {
-    case "checkout.session.completed":
-      await handleCheckoutCompleted(event);
-      break;
-    case "invoice.payment_succeeded":
-      await handleInvoicePaymentSucceeded(event);
-      break;
-    case "invoice.payment_failed":
-      await handleInvoicePaymentFailed(event);
-      break;
-    case "customer.subscription.deleted":
-      await handleSubscriptionDeleted(event);
-      break;
+  try {
+    switch (event.type) {
+      case "checkout.session.completed":
+        await handleCheckoutCompleted(event);
+        break;
+      case "invoice.payment_succeeded":
+        await handleInvoicePaymentSucceeded(event);
+        break;
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event);
+        break;
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(event);
+        break;
+    }
+  } catch (err) {
+    // Release the claim so Stripe's retry re-processes the event instead of
+    // being skipped as a duplicate, then let the route return 5xx.
+    await releaseStripeEvent(event.id).catch(() => {});
+    throw err;
   }
 }
 
