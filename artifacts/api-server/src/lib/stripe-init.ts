@@ -1,7 +1,7 @@
 import { runMigrations } from "stripe-replit-sync";
 import { logger } from "./logger";
 import { getStripeSync, getUncachableStripeClient, stripeConfigured } from "./stripe-client";
-import { ensureAllPrices } from "./billing";
+import { ensureAllPrices, warnIfTaxDeactivated } from "./billing";
 
 // Startup Stripe initialisation:
 //   1. create the `stripe` schema tables (idempotent)
@@ -37,13 +37,26 @@ export async function initStripe(): Promise<void> {
     logger.warn("stripe-init: REPLIT_DOMAINS not set - webhook not registered");
   }
 
+  let stripe;
   try {
-    const stripe = await getUncachableStripeClient();
+    stripe = await getUncachableStripeClient();
     await ensureAllPrices(stripe);
     logger.info("stripe-init: plan products/prices ensured");
   } catch (err) {
     logger.warn({ err }, "stripe-init: failed to ensure plan prices (non-fatal)");
   }
+
+  // In live mode, verify that Stripe Tax is fully activated so we surface the
+  // problem at startup rather than only when the first real checkout is
+  // attempted. Fail-soft: a probe error must never block the server from
+  // starting; we already refuse live-mode checkout sessions when Tax is
+  // deactivated (in createSessionWithTax), so the damage is limited.
+  try {
+    const creds = await import("./stripe-client").then((m) => m.getStripeCredentials());
+    if (/^(sk|rk)_live_/.test(creds.secretKey ?? "") && stripe) {
+      await warnIfTaxDeactivated(stripe);
+    }
+  } catch { /* non-fatal - do not block startup */ }
 
   stripeSync
     .syncBackfill()

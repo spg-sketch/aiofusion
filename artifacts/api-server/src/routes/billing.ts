@@ -16,6 +16,9 @@ import {
   listBillingProjects,
   changeAddonTier,
   isEntitled,
+  withBillingLock,
+  claimCheckout,
+  releaseCheckout,
 } from "../lib/billing";
 import {
   PLAN_PRICES,
@@ -149,21 +152,58 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       return;
     }
 
-    const state = await getBillingState(ctx.slug);
-    if (isEntitled(state)) {
-      res.status(409).json({ error: "This account already has an active subscription." });
+    // Serialise within this process AND guard against cross-process races with
+    // a DB-backed claim. This prevents two simultaneous checkout sessions
+    // creating duplicate subscriptions for the same account.
+    //
+    // The in-process billing lock (withBillingLock) prevents same-process
+    // races. claimCheckout inserts a row in platform_meta so that a second
+    // server process racing at the same moment is turned away too. The claim
+    // is held only until the Stripe API call returns; it is released in the
+    // finally block below.
+    let billingSlug: string;
+    let claimed = false;
+    try {
+      const lockResult = await withBillingLock(ctx.slug, async (bs) => {
+        const state = await getBillingState(bs);
+        if (isEntitled(state)) return { entitled: true, billingSlug: bs };
+        const ok = await claimCheckout(bs);
+        return { entitled: false, claimed: ok, billingSlug: bs };
+      });
+
+      if (lockResult.entitled) {
+        res.status(409).json({ error: "This account already has an active subscription." });
+        return;
+      }
+      if (!lockResult.claimed) {
+        res.status(409).json({ error: "A checkout is already in progress for this account. Please wait a moment and try again." });
+        return;
+      }
+      billingSlug = lockResult.billingSlug;
+      claimed = true;
+    } catch (err) {
+      logger.error({ err }, "billing: failed to claim checkout slot");
+      res.status(500).json({ error: "Could not start checkout. Please try again." });
       return;
     }
 
-    const base = getAppBaseUrl();
-    const { url } = await createCheckoutSession({
-      slug: ctx.slug,
-      plan: ctx.plan,
-      frequency,
-      successUrl: `${base}/?account_section=billing&checkout=success`,
-      cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
-    });
-    res.json({ url });
+    try {
+      const base = getAppBaseUrl();
+      const { url } = await createCheckoutSession({
+        slug: billingSlug,
+        plan: ctx.plan,
+        frequency,
+        successUrl: `${base}/?account_section=billing&checkout=success`,
+        cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
+      });
+      res.json({ url });
+    } finally {
+      if (claimed) {
+        await releaseCheckout(billingSlug).catch((err) => {
+          logger.warn({ err, slug: billingSlug }, "billing: could not release checkout claim (non-fatal)");
+        });
+      }
+    }
   } catch (err) {
     logger.error({ err }, "billing: failed to create checkout session");
     res.status(500).json({ error: "Could not start checkout. Please try again." });

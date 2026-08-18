@@ -169,12 +169,19 @@ const stripeCalls = vi.hoisted(() => ({
   portalSessions: [] as unknown[],
   customerCreates: [] as any[],
   customerUpdates: [] as Array<{ id: string; params: any }>,
+  // Per-id overrides for customers.retrieve; keyed by customer id.
+  // If not set for a given id the mock returns a bare customer with null fields.
+  customerRetrieveOverrides: {} as Record<string, Partial<{ name: string; email: string; address: { line1: string }; deleted: boolean }>>,
   taxIds: [] as Array<{ id: string; type: string; value: string }>,
   taxIdCreates: [] as any[],
   taxIdDeletes: [] as string[],
+  // Records subscription ids whose discount was deleted via deleteDiscount.
+  discountDeletes: [] as string[],
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
+  // When true, tax.calculations.create throws, simulating Tax not activated.
+  rejectTaxCalculation: false,
   // Swappable so tests can simulate a test-to-live credential change.
   secretKey: "sk_test_x",
 }));
@@ -199,6 +206,17 @@ vi.mock("../lib/stripe-client", () => ({
         update: (id: string, params: any) => {
           stripeCalls.customerUpdates.push({ id, params });
           return Promise.resolve({ id });
+        },
+        retrieve: (id: string) => {
+          const override = stripeCalls.customerRetrieveOverrides[id] ?? {};
+          return Promise.resolve({
+            id,
+            deleted: false,
+            name: null,
+            email: null,
+            address: null,
+            ...override,
+          });
         },
         listTaxIds: () => Promise.resolve({ data: stripeCalls.taxIds }),
         createTaxId: (_id: string, params: any) => {
@@ -235,6 +253,10 @@ vi.mock("../lib/stripe-client", () => ({
           stripeCalls.subscriptionUpdates.push({ id, params });
           return Promise.resolve({ id });
         },
+        deleteDiscount: (id: string) => {
+          stripeCalls.discountDeletes.push(id);
+          return Promise.resolve({});
+        },
       },
       billingPortal: {
         configurations: {
@@ -264,11 +286,23 @@ vi.mock("../lib/stripe-client", () => ({
             ],
           }),
       },
+      tax: {
+        calculations: {
+          create: () => {
+            if (stripeCalls.rejectTaxCalculation) {
+              return Promise.reject(
+                new Error("You must activate Stripe Tax and set an origin address before using automatic_tax."),
+              );
+            }
+            return Promise.resolve({ id: "tax_calc_mock" });
+          },
+        },
+      },
     }),
   getStripeSync: () => Promise.reject(new Error("not used in tests")),
 }));
 
-import { db, platformAccountsTable, platformCompaniesTable, platformUsersTable, platformMembershipsTable, projectsTable } from "@workspace/db";
+import { db, platformAccountsTable, platformCompaniesTable, platformUsersTable, platformMembershipsTable, platformMetaTable, projectsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
@@ -284,6 +318,9 @@ import {
   assignAddonToNewProject,
   syncStripeBillingDetails,
   vatNumberToTaxId,
+  claimCheckout,
+  releaseCheckout,
+  warnIfTaxDeactivated,
 } from "../lib/billing";
 
 // ---------------------------------------------------------------------------
@@ -840,8 +877,11 @@ describe("project add-ons", () => {
     expect(res.status).toBe(400);
   });
 
-  it("webhook fulfilment records the add-on; unassigned slots attach to the next new project", async () => {
+  it("webhook fulfilment records the add-on; unassigned slots attach to extra projects beyond the included allowance", async () => {
+    // "addon-fulfil" uses the inhouse plan (1 included project).
     await seedSubscribed("addon-fulfil", "owner@addonfulfil.test");
+    // Create the 1 included project first so the included slot is occupied.
+    await db.insert(projectsTable).values({ id: "fulfil-included", name: "Included", data: {}, owner: "addon-fulfil" });
 
     await handleStripeEvent(
       fakeEvent("evt_addon_1", "checkout.session.completed", {
@@ -863,12 +903,35 @@ describe("project add-ons", () => {
     // Allowance grew: 1 included (inhouse) + 1 add-on.
     expect(await getProjectAllowance("addon-fulfil")).toBe(2);
 
-    // New project consumes the slot and gets the tier.
-    await db.insert(projectsTable).values({ id: "fulfil-new", name: "New", data: {}, owner: "addon-fulfil" });
-    await assignAddonToNewProject("addon-fulfil", "fulfil-new");
+    // The EXTRA project (2nd, beyond the included allowance) consumes the slot
+    // and gets the purchased tier.
+    await db.insert(projectsTable).values({ id: "fulfil-extra", name: "Extra", data: {}, owner: "addon-fulfil" });
+    await assignAddonToNewProject("addon-fulfil", "fulfil-extra");
     const after = await getProjectAddons("addon-fulfil");
-    expect(after[0]!.projectId).toBe("fulfil-new");
-    expect(await getProjectActionLimit("addon-fulfil", "fulfil-new")).toBe(150);
+    expect(after[0]!.projectId).toBe("fulfil-extra");
+    expect(await getProjectActionLimit("addon-fulfil", "fulfil-extra")).toBe(150);
+    // The included project is unaffected.
+    expect(await getProjectActionLimit("addon-fulfil", "fulfil-included")).toBe(75);
+  });
+
+  it("add-ons are not auto-assigned to projects within the included allowance", async () => {
+    // Buy an add-on for an inhouse account that has no projects yet.
+    await seedSubscribed("addon-nocons", "owner@addonnocons.test");
+    await handleStripeEvent(
+      fakeEvent("evt_addon_nocons", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-nocons",
+        subscription: "sub_addon_nocons",
+        metadata: { slug: "addon-nocons", kind: "project-addon", tier: "max" },
+      }),
+    );
+    // Create the 1st project (inhouse = 1 included). Since the account is still
+    // within the included allowance, the purchased slot must NOT be auto-assigned.
+    await db.insert(projectsTable).values({ id: "nocons-proj", name: "Included", data: {}, owner: "addon-nocons" });
+    await assignAddonToNewProject("addon-nocons", "nocons-proj");
+    const addons = await getProjectAddons("addon-nocons");
+    expect(addons[0]!.projectId).toBeNull(); // slot still unassigned
+    expect(await getProjectActionLimit("addon-nocons", "nocons-proj")).toBe(75); // included tier, not paid add-on tier
   });
 
   it("webhook fulfilment with a projectId attaches and sets the tier immediately", async () => {
@@ -1208,5 +1271,124 @@ describe("portal and invoices", () => {
     expect(res.json.projects[0].isAddon).toBe(false);
     expect(res.json.tierPrices.max.yearlyTotal).toBe(80000);
     expect(res.json.tierPrices.max.actionsPerMonth).toBe(150);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Billing hardening: checkout race, billing details sync, discount edge cases
+// ---------------------------------------------------------------------------
+describe("billing hardening", () => {
+  it("refuses a checkout when another checkout is already in progress for the same account (cross-process DB guard)", async () => {
+    const { sid } = await seedWorkspace("checkrace-co", "owner@checkrace.test", { accountRole: "client" });
+    // Simulate another process having claimed the checkout slot in the DB.
+    await claimCheckout("checkrace-co");
+    try {
+      const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+      expect(res.status).toBe(409);
+      expect(res.json.error).toMatch(/already in progress/i);
+    } finally {
+      await releaseCheckout("checkrace-co");
+    }
+    // After releasing the claim a new checkout must work.
+    const res2 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res2.status).toBe(200);
+  });
+
+  it("checkout.session.completed syncs Stripe customer billing details back to the app", async () => {
+    await seedWorkspace("syncback-co", "owner@syncback.test");
+    // The Stripe mock will return these as the confirmed customer details.
+    stripeCalls.customerRetrieveOverrides["cus_syncback"] = {
+      name: "Syncback Ltd (corrected)",
+      email: "billing-corrected@syncback.test",
+      address: { line1: "99 Corrected Road, London" },
+    };
+    await handleStripeEvent(
+      fakeEvent("evt_syncback", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_syncback",
+        subscription: "sub_syncback",
+        metadata: { slug: "syncback-co", plan: "agency", frequency: "annual" },
+      }),
+    );
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "syncback-co"));
+    expect(company!.displayName).toBe("Syncback Ltd (corrected)");
+    expect(company!.billingEmail).toBe("billing-corrected@syncback.test");
+    expect(company!.billingAddress).toBe("99 Corrected Road, London");
+    // Clean up the override so it does not bleed into other tests.
+    delete stripeCalls.customerRetrieveOverrides["cus_syncback"];
+  });
+
+  it("checkout.session.completed removes the Stripe discount when the account discount was ended before checkout completed", async () => {
+    await seedWorkspace("enddisc-co", "owner@enddisc.test");
+    // Seed an ended discount for this account in platform_meta.
+    await db.insert(platformMetaTable).values({
+      key: "account-discount:enddisc-co",
+      value: JSON.stringify({
+        token: "tok_test_ended",
+        discountPercent: 20,
+        accountType: "inhouse",
+        createdAt: new Date().toISOString(),
+        redeemedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(), // already ended
+      }),
+    });
+    const discountDeletesBefore = stripeCalls.discountDeletes.length;
+    await handleStripeEvent(
+      fakeEvent("evt_enddisc", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_enddisc",
+        subscription: "sub_enddisc",
+        metadata: { slug: "enddisc-co", plan: "inhouse", frequency: "annual" },
+      }),
+    );
+    // The subscription discount must have been removed.
+    expect(stripeCalls.discountDeletes.slice(discountDeletesBefore)).toContain("sub_enddisc");
+  });
+
+  it("checkout.session.completed does NOT remove the discount when the account discount is still active", async () => {
+    await seedWorkspace("activedisc-co", "owner@activedisc.test");
+    // Active discount - no endedAt.
+    await db.insert(platformMetaTable).values({
+      key: "account-discount:activedisc-co",
+      value: JSON.stringify({
+        token: "tok_test_active",
+        discountPercent: 20,
+        accountType: "inhouse",
+        createdAt: new Date().toISOString(),
+        redeemedAt: new Date().toISOString(),
+        // endedAt absent - discount is live
+      }),
+    });
+    const discountDeletesBefore = stripeCalls.discountDeletes.length;
+    await handleStripeEvent(
+      fakeEvent("evt_activedisc", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_activedisc",
+        subscription: "sub_activedisc",
+        metadata: { slug: "activedisc-co", plan: "inhouse", frequency: "annual" },
+      }),
+    );
+    // The active discount must be left in place.
+    expect(stripeCalls.discountDeletes.slice(discountDeletesBefore)).not.toContain("sub_activedisc");
+  });
+
+  it("warnIfTaxDeactivated logs an error when Stripe Tax is not activated and is silent when it is", async () => {
+    // Get the mocked Stripe client.
+    const { getUncachableStripeClient } = await import("../lib/stripe-client");
+    const stripe = await getUncachableStripeClient();
+
+    // Tax active - no error should reach the logger.
+    stripeCalls.rejectTaxCalculation = false;
+    await expect(warnIfTaxDeactivated(stripe as never)).resolves.toBeUndefined();
+
+    // Tax not activated - should resolve (not throw) but would log an error
+    // (the logger call itself is not captured here; the important thing is no
+    // exception escapes to crash the caller).
+    stripeCalls.rejectTaxCalculation = true;
+    await expect(warnIfTaxDeactivated(stripe as never)).resolves.toBeUndefined();
+    stripeCalls.rejectTaxCalculation = false;
   });
 });

@@ -2364,6 +2364,27 @@ const OAUTH_LINK_COOKIE = "aio_oauth_link";
 // creating a fresh account.
 const INVITE_COOKIE = "aio_invite";
 
+// Carries a discount invite token across an SSO (Google/Microsoft) round-trip
+// so the invite can be redeemed when the new account is created.
+const DISCOUNT_INVITE_COOKIE = "aio_discount_invite";
+
+function setDiscountInviteCookie(res: Response, token: string): void {
+  res.cookie(DISCOUNT_INVITE_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 10 * 60 * 1000,
+    path: "/",
+  });
+}
+
+// Read and clear the discount invite cookie. Returns empty string when absent.
+function popDiscountInviteCookie(req: Request, res: Response): string {
+  const token = (req.cookies as Record<string, string>)?.[DISCOUNT_INVITE_COOKIE] ?? "";
+  res.clearCookie(DISCOUNT_INVITE_COOKIE, { path: "/" });
+  return token;
+}
+
 function setInviteCookie(res: Response, token: string): void {
   res.cookie(INVITE_COOKIE, token, {
     httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/",
@@ -2522,6 +2543,11 @@ router.get("/platform/auth/google", (req: Request, res: Response) => {
   // Team invite flow: carry the invite token across the OAuth round-trip.
   if (typeof req.query.invite === "string" && req.query.invite.trim()) {
     setInviteCookie(res, req.query.invite.trim());
+  }
+  // Discount invite flow: carry the discount token across the OAuth round-trip
+  // so it can be redeemed when the new account is created on return.
+  if (typeof req.query.discount === "string" && req.query.discount.trim()) {
+    setDiscountInviteCookie(res, req.query.discount.trim());
   }
   const params = new URLSearchParams({
     client_id: clientId,
@@ -2879,6 +2905,24 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
     }
     void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: displayName, username, method: "google" });
+    // Discount invite: redeem any discount token that was carried across the
+    // OAuth round-trip in the discount-invite cookie. Fail-soft - a redemption
+    // failure must never block the sign-in.
+    const discountToken = popDiscountInviteCookie(req, res);
+    if (discountToken) {
+      try {
+        const { getDiscountInvite: getInvite, consumeDiscountInvite: consumeInvite, applyInviteAccountType: applyType } = await import("../lib/discount-invites");
+        const looked = await getInvite(discountToken);
+        // getDiscountInvite already filters out used/expired invites; if
+        // invite is non-null it is safe to consume.
+        if (looked.invite) {
+          await consumeInvite(looked.invite.token, username);
+          await applyType(username, looked.invite.accountType);
+        }
+      } catch (err) {
+        logger.warn({ err, username }, "google-sso: could not redeem discount invite for new account (non-fatal)");
+      }
+    }
     await finishOauthLoginOrChallenge(req, res, origin, {
       username,
       role: "agency",
@@ -2921,6 +2965,10 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
   // Team invite flow: carry the invite token across the OAuth round-trip.
   if (typeof req.query.invite === "string" && req.query.invite.trim()) {
     setInviteCookie(res, req.query.invite.trim());
+  }
+  // Discount invite flow: carry the discount token across the OAuth round-trip.
+  if (typeof req.query.discount === "string" && req.query.discount.trim()) {
+    setDiscountInviteCookie(res, req.query.discount.trim());
   }
   res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
 });
@@ -3149,6 +3197,22 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     if (newUserId) { try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ } }
     if (newActiveCompanyId) { try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ } }
     void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: displayName, username, method: "microsoft" });
+    // Discount invite: redeem any discount token carried across the OAuth
+    // round-trip in the discount-invite cookie. Fail-soft.
+    const msDiscountToken = popDiscountInviteCookie(req, res);
+    if (msDiscountToken) {
+      try {
+        const { getDiscountInvite: getInvite, consumeDiscountInvite: consumeInvite, applyInviteAccountType: applyType } = await import("../lib/discount-invites");
+        const looked = await getInvite(msDiscountToken);
+        // getDiscountInvite already filters out used/expired invites.
+        if (looked.invite) {
+          await consumeInvite(looked.invite.token, username);
+          await applyType(username, looked.invite.accountType);
+        }
+      } catch (err) {
+        logger.warn({ err, username }, "microsoft-sso: could not redeem discount invite for new account (non-fatal)");
+      }
+    }
     await finishOauthLoginOrChallenge(req, res, origin, {
       username,
       role: "agency",

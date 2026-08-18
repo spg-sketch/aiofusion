@@ -194,12 +194,67 @@ export async function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promi
 // that reads or mutates a shared allowance / add-on pool must go through this
 // (or already hold it). NOTE: never nest withSlugLock/withBillingLock calls
 // for the same slug - that deadlocks.
+//
+// NOTE ON MULTI-PROCESS SAFETY: withSlugLock is an in-process promise chain -
+// it serialises concurrent requests within the same server process but does
+// nothing when two separate processes (e.g. a scaled deployment) run the same
+// critical section simultaneously. For checkout creation specifically, use
+// claimCheckout / releaseCheckout as a cross-process DB guard in addition to
+// this in-process lock.
 export async function withBillingLock<T>(
   slug: string,
   fn: (billingSlug: string) => Promise<T>,
 ): Promise<T> {
   const billingSlug = await resolveBillingSlug(normUsername(slug));
   return withSlugLock(billingSlug, () => fn(billingSlug));
+}
+
+// ---------------------------------------------------------------------------
+// Cross-process checkout race protection
+// ---------------------------------------------------------------------------
+//
+// The in-process billing lock (withBillingLock) prevents same-process races
+// but does not help when two server processes attempt a checkout simultaneously.
+// A DB-backed "checkout pending" flag bridges that gap: the first request to
+// INSERT wins the slot; the second sees a conflict and learns another checkout
+// is already in flight.
+//
+// Stale claims (older than CHECKOUT_PENDING_TTL_MS) are preempted automatically
+// via the WHERE guard on the ON CONFLICT DO UPDATE, so a crashed process can
+// never permanently block checkouts for an account.
+
+const CHECKOUT_PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const checkoutPendingKey = (slug: string) => `checkout:pending:${normUsername(slug)}`;
+
+// Atomically claim the checkout-in-progress slot for a billing account.
+// Returns true when the claim is acquired; false when another live checkout
+// is already in progress (< CHECKOUT_PENDING_TTL_MS old).
+export async function claimCheckout(slug: string): Promise<boolean> {
+  const key = checkoutPendingKey(slug);
+  const now = new Date().toISOString();
+  const stale = new Date(Date.now() - CHECKOUT_PENDING_TTL_MS).toISOString();
+  // Atomic: INSERT wins the slot. ON CONFLICT DO UPDATE only fires when the
+  // existing claim is stale (the previous claimer crashed); in that case the
+  // slot is preempted and returned to the new caller. No rows returned means
+  // a live checkout is already in progress.
+  const result = await db.execute(sql`
+    INSERT INTO platform_meta (key, value)
+    VALUES (${key}, ${now})
+    ON CONFLICT (key) DO UPDATE
+      SET value = ${now}
+      WHERE platform_meta.value < ${stale}
+    RETURNING key
+  `);
+  const rows = (result as unknown as { rows?: unknown[] }).rows ?? [];
+  return rows.length > 0;
+}
+
+// Release the checkout claim so the account can start a new checkout.
+// Always called in a finally block after the Stripe session is created.
+export async function releaseCheckout(slug: string): Promise<void> {
+  await db
+    .delete(platformMetaTable)
+    .where(eq(platformMetaTable.key, checkoutPendingKey(slug)));
 }
 
 // True when the project exists, is live (not deleted) and is owned by the
@@ -324,6 +379,27 @@ export async function assignAddonToNewProjectUnlocked(
   const addons = await getProjectAddons(billingSlug);
   const free = addons.find((a) => !a.projectId);
   if (!free) return;
+
+  // Add-ons are purchased for projects BEYOND the plan's included allowance.
+  // A new project that still falls within the included count must not
+  // automatically consume a paid slot - that would mean the account gets an
+  // add-on "for free" and the next genuinely extra project has no slot to use.
+  const state = await getBillingState(billingSlug);
+  if (state?.plan) {
+    const allProjects = await listBillingProjects(billingSlug);
+    const included = INCLUDED_PROJECTS[state.plan] ?? 0;
+    // `allProjects` already includes the newly-inserted project (we are called
+    // after the INSERT, inside the billing lock). If the count is still within
+    // the included ceiling this project does not need a purchased slot.
+    if (allProjects.length <= included) {
+      logger.info(
+        { slug: billingSlug, projectId, included, projectCount: allProjects.length },
+        "billing: new project is within included allowance - not consuming a purchased add-on slot",
+      );
+      return;
+    }
+  }
+
   if (!(await setProjectTierScoped(billingSlug, projectId, free.tier))) return;
   free.projectId = projectId;
   await saveProjectAddons(billingSlug, addons);
@@ -626,6 +702,55 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
     })
     .where(eq(platformCompaniesTable.slug, slug));
   logger.info({ slug, plan, frequency, subscriptionId }, "billing: subscription activated via checkout");
+
+  // Sync confirmed billing details from Stripe back to the app.
+  // The customer can correct their name and address during checkout;
+  // customer_update: { address: "auto", name: "auto" } causes Stripe to
+  // persist what they typed back to the customer object. We read it here so
+  // the app's billing details stay accurate without a separate manual step.
+  if (customerId) {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer && !customer.deleted) {
+        const c = customer as Stripe.Customer;
+        const patch: Record<string, string> = {};
+        if (c.name) patch["displayName"] = c.name;
+        if (c.email) patch["billingEmail"] = c.email;
+        if (c.address?.line1) patch["billingAddress"] = c.address.line1;
+        if (Object.keys(patch).length > 0) {
+          await db
+            .update(platformCompaniesTable)
+            .set(patch as Partial<typeof platformCompaniesTable.$inferInsert>)
+            .where(eq(platformCompaniesTable.slug, slug));
+          logger.info({ slug }, "billing: synced Stripe customer billing details back to app after checkout");
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, slug }, "billing: could not sync Stripe billing details after checkout (non-fatal)");
+    }
+  }
+
+  // If the account's discount was ended AFTER the checkout session was
+  // created but BEFORE the customer completed payment, the new subscription
+  // carries a coupon the admin has already cancelled. Remove it immediately
+  // so the very next invoice bills full price.
+  if (subscriptionId) {
+    try {
+      const { getAccountDiscount } = await import("./discount-invites");
+      const discount = await getAccountDiscount(slug);
+      if (discount?.endedAt) {
+        const stripe = await getUncachableStripeClient();
+        await stripe.subscriptions.deleteDiscount(subscriptionId);
+        logger.warn(
+          { slug, subscriptionId },
+          "billing: removed discount from new subscription - discount was ended before checkout completed",
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, slug }, "billing: could not check/remove ended discount after checkout (non-fatal)");
+    }
+  }
 }
 
 // A completed project-addon checkout: record the purchase and, when the buyer
@@ -1022,6 +1147,40 @@ function isTaxNotActivatedError(err: unknown): boolean {
   if (e?.param === "automatic_tax") return true;
   const msg = e?.message ?? "";
   return /stripe tax/i.test(msg) && /activat/i.test(msg);
+}
+
+// ---------------------------------------------------------------------------
+// Startup Stripe Tax health check
+// ---------------------------------------------------------------------------
+
+// Probe whether Stripe Tax is activated by attempting a stateless Tax
+// Calculation. This is read-only (calculations are not persisted) so it has
+// no side effects. If Tax is not configured, the call throws an error that
+// matches isTaxNotActivatedError and a loud warning is logged. Called at
+// server startup in live mode only; test-mode omission is intentional since
+// Tax activation is a one-time dashboard step.
+export async function warnIfTaxDeactivated(stripe: Stripe): Promise<void> {
+  try {
+    await (stripe.tax as unknown as { calculations: { create: (p: Record<string, unknown>) => Promise<unknown> } })
+      .calculations.create({
+        currency: "gbp",
+        line_items: [{ amount: 100, reference: "_startup_tax_probe_" }],
+      });
+    // Success - Stripe Tax is active; nothing to warn about.
+  } catch (err) {
+    if (isTaxNotActivatedError(err)) {
+      logger.error(
+        {},
+        "billing: STARTUP - Stripe Tax is NOT activated in LIVE mode. " +
+          "All live checkout attempts will be refused until you activate Stripe Tax " +
+          "and set an origin address in the Stripe dashboard. " +
+          "See the 'Owner setup' section in replit.md for steps.",
+      );
+      return;
+    }
+    // Network errors, auth errors, etc. do not constitute a Tax activation
+    // problem - do not block startup on transient Stripe issues.
+  }
 }
 
 // True when the connected Stripe key is a live key. Checked FRESH on every
