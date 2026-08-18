@@ -105,6 +105,17 @@ vi.mock("@workspace/db", () => {
   };
 });
 
+// The billing lib touches the real platform tables (this test's db mock is a
+// tiny in-memory fake). Ownership-authorization behaviour is what's under
+// test here; billing detach/allowance logic is covered by billing.test.ts.
+vi.mock("../lib/billing", () => ({
+  getProjectAllowance: () => Promise.resolve(999),
+  assignAddonToNewProjectUnlocked: () => Promise.resolve(),
+  withBillingLock: (_slug: string, fn: (s: string) => Promise<unknown>) => fn(_slug),
+  listBillingProjects: () => Promise.resolve([]),
+  detachAddonForProjectTransfer: () => Promise.resolve(),
+}));
+
 import storeRouter from "./store";
 
 describe("POST /api/store/projects/owner (owner reassignment authorization)", () => {

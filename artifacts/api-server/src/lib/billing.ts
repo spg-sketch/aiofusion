@@ -271,6 +271,35 @@ export async function assignAddonToNewProject(slug: string, projectId: string): 
   }
 }
 
+// When a project is reassigned to an owner OUTSIDE its current billing
+// subtree, the paid tier must not travel with it - the add-on belongs to the
+// purchaser's billing account. Detach the binding (the slot becomes
+// unassigned, ready for the purchaser's next project) and clear the
+// project's tier. Called by the owner-reassignment route BEFORE the owner
+// changes, so the scoped tier update still matches the old subtree.
+export async function detachAddonForProjectTransfer(
+  currentOwnerSlug: string,
+  projectId: string,
+  newOwnerSlug: string,
+): Promise<void> {
+  const oldRoot = await resolveBillingSlug(normUsername(currentOwnerSlug));
+  const newRoot = await resolveBillingSlug(normUsername(newOwnerSlug));
+  if (oldRoot === newRoot) return; // same billing pool - binding stays valid
+  await withSlugLock(oldRoot, async () => {
+    const addons = await getProjectAddons(oldRoot);
+    const addon = addons.find((a) => a.projectId === projectId);
+    if (!addon) return;
+    addon.projectId = null;
+    delete addon.pendingTier;
+    await saveProjectAddons(oldRoot, addons);
+    await setProjectTierScoped(oldRoot, projectId, null);
+    logger.warn(
+      { oldRoot, newRoot, projectId, subscriptionId: addon.subscriptionId },
+      "billing: project left its billing subtree - add-on detached, tier cleared",
+    );
+  });
+}
+
 // Same as assignAddonToNewProject but assumes the caller ALREADY holds the
 // billing-slug lock (the store routes run count + insert + assignment as one
 // critical section). billingSlug must be the resolved billing slug.
@@ -642,7 +671,11 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
       const addons = await getProjectAddons(slug);
       const addon = addons.find((a) => a.subscriptionId === invSub);
       if (!addon) return false;
-      if (addon.pendingTier) {
+      // Only a genuine renewal consumes a queued downgrade. Stripe webhooks
+      // are unordered: a delayed initial-purchase or one-off invoice success
+      // arriving after the downgrade is queued must not apply it early.
+      const isRenewal = invoice.billing_reason === "subscription_cycle";
+      if (addon.pendingTier && isRenewal) {
         addon.tier = addon.pendingTier;
         delete addon.pendingTier;
         await saveProjectAddons(slug, addons);

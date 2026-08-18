@@ -21,6 +21,7 @@ import {
   assignAddonToNewProjectUnlocked,
   withBillingLock,
   listBillingProjects,
+  detachAddonForProjectTransfer,
 } from "../lib/billing";
 import { logger } from "../lib/logger";
 
@@ -492,6 +493,13 @@ router.post(
       if (!(await getAccount(target))) {
         res.status(404).json({ error: "That account does not exist." });
         return;
+      }
+      // A paid add-on tier never travels to a different billing account: if
+      // the project is moving outside its current billing subtree, detach the
+      // add-on binding and clear the tier BEFORE ownership changes (while the
+      // scoped tier update still matches the old subtree).
+      if (existingOwner) {
+        await detachAddonForProjectTransfer(existingOwner, id, target);
       }
       // Atomic guard: scope the update to rows the caller may touch, so the
       // authorization holds even if ownership changed after the check above.

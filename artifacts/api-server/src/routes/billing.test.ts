@@ -774,12 +774,25 @@ describe("project add-ons", () => {
     // Limit unchanged until renewal.
     expect(await getProjectActionLimit("addon-down", "down-proj")).toBe(150);
 
+    // A NON-renewal invoice success (out-of-order webhook, one-off charge)
+    // must NOT apply the queued downgrade early.
+    await handleStripeEvent(
+      fakeEvent("evt_addon_notrenew", "invoice.payment_succeeded", {
+        customer: "cus_addon-down",
+        subscription: "sub_addon_4",
+        billing_reason: "subscription_create",
+        lines: { data: [{ period: { end: 2_000_000_000 } }] },
+      }),
+    );
+    expect(await getProjectActionLimit("addon-down", "down-proj")).toBe(150);
+
     // Renewal invoice for the add-on applies the pending tier and must not
     // touch the main plan's period end.
     await handleStripeEvent(
       fakeEvent("evt_addon_renew", "invoice.payment_succeeded", {
         customer: "cus_addon-down",
         subscription: "sub_addon_4",
+        billing_reason: "subscription_cycle",
         lines: { data: [{ period: { end: 2_100_000_000 } }] },
       }),
     );
@@ -812,6 +825,30 @@ describe("project add-ons", () => {
     // Back to the included tier; main plan still active.
     expect(await getProjectActionLimit("addon-gone", "gone-proj")).toBe(75);
     expect((await getBillingState("addon-gone"))?.status).toBe("active");
+  });
+
+  it("transferring an add-on project outside its billing subtree detaches the paid tier", async () => {
+    const { detachAddonForProjectTransfer } = await import("../lib/billing");
+    await seedSubscribed("addon-xfer", "owner@addonxfer.test");
+    await seedSubscribed("addon-recv", "owner@addonrecv.test");
+    await db.insert(projectsTable).values({ id: "xfer-proj", name: "X", data: {}, owner: "addon-xfer" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_xfer", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-xfer",
+        subscription: "sub_addon_xfer",
+        metadata: { slug: "addon-xfer", kind: "project-addon", tier: "max", projectId: "xfer-proj" },
+      }),
+    );
+    expect(await getProjectActionLimit("addon-xfer", "xfer-proj")).toBe(150);
+
+    await detachAddonForProjectTransfer("addon-xfer", "xfer-proj", "addon-recv");
+    // Slot returns to the purchaser unassigned; tier cleared before the move.
+    const addons = await getProjectAddons("addon-xfer");
+    expect(addons).toHaveLength(1);
+    expect(addons[0]!.projectId).toBeNull();
+    await db.update(projectsTable).set({ owner: "addon-recv" }).where(eq(projectsTable.id, "xfer-proj"));
+    expect(await getProjectActionLimit("addon-recv", "xfer-proj")).toBe(75);
   });
 
   it("concurrent new projects cannot consume the same purchased slot twice", async () => {
