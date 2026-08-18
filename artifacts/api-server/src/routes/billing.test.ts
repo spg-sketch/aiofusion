@@ -862,6 +862,14 @@ describe("billing routes", () => {
     expect(res.status).toBe(200);
     expect(res.json.latestInvoiceUrl).toBe("https://invoice.stripe.com/i/hosted");
   });
+
+  it("latestInvoiceUrl is null when the account has no Stripe customer yet", async () => {
+    const { sid } = await seedWorkspace("no-cust-co", "owner@nocust.test", { accountRole: "client" });
+    // No stripeCustomerId set: account has not checked out yet.
+    const res = await api("/api/platform/billing/subscription", { sid });
+    expect(res.status).toBe(200);
+    expect(res.json.latestInvoiceUrl).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -906,6 +914,17 @@ describe("project add-ons", () => {
     expect(params.metadata.kind).toBe("project-addon");
     expect(params.metadata.tier).toBe("max");
     expect(params.metadata.slug).toBe("addon-buyer");
+  });
+
+  it("project-checkout also enables Stripe Tax, address and VAT collection", async () => {
+    const { sid } = await seedSubscribed("addon-tax-buyer", "owner@addontax.test");
+    const res = await api("/api/platform/billing/project-checkout", { sid, body: { tier: "standard" } });
+    expect(res.status).toBe(200);
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.automatic_tax).toEqual({ enabled: true });
+    expect(params.billing_address_collection).toBe("required");
+    expect(params.tax_id_collection).toEqual({ enabled: true });
+    expect(params.customer_update).toEqual({ address: "auto", name: "auto" });
   });
 
   it("rejects attaching an add-on to a foreign project", async () => {

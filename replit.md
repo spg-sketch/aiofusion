@@ -223,3 +223,21 @@ Checkout is built to charge VAT automatically via Stripe Tax, but Stripe require
 4. Under **Settings → Emails**, turn on **"Email finished invoices to customers"** (and receipts) so every subscription payment sends a compliant invoice PDF automatically.
 
 Until Stripe Tax is activated, behaviour differs by mode. In **test mode**, checkout still works: the server detects the "not activated" error, logs it loudly, and creates the session without tax so test payments are not blocked. In **live mode**, checkout is refused instead — the business must never silently sell without VAT, so live payments fail with an error until Stripe Tax is activated. Once activated, no code change is needed — VAT appears at checkout automatically, customers confirm their billing address, and business customers can enter a VAT number (valid EU/UK numbers apply reverse charge where appropriate). Billing details saved in the app (billing email, VAT number, address) sync to the Stripe customer so invoices carry them.
+
+### Post-activation verification checklist (test mode)
+
+Run through these steps after activating Stripe Tax in the Stripe **test** dashboard to confirm the full flow works before switching to live mode:
+
+1. **No fallback warning in logs** — Start a checkout from the Billing settings page and confirm the server log does NOT contain `"Stripe Tax is not activated"`. If it does, the origin address or UK VAT registration is still missing in the dashboard.
+
+2. **VAT appears at checkout** — Use Stripe test card `4000 0082 6000 0000` (UK card) and enter a UK billing address at checkout. The summary should show the plan price plus 20% UK VAT on top.
+
+3. **Reverse charge for EU VAT numbers** — Start another checkout, enter a German or other EU billing address, then enter a valid EU VAT number (e.g. `DE123456789` for testing). The VAT line should drop to 0% (reverse charge).
+
+4. **Invoice carries billing details** — Before checking out, save a company name, billing address, and VAT number in **Settings → Billing details** in the app. After a successful test payment, open the Stripe dashboard, find the customer, and confirm the invoice shows the saved name, address, and VAT number.
+
+5. **"View your latest invoice" link appears** — After a successful test payment, refresh the Billing page in the app. The subscription card should show a "View your latest invoice" link. Click it to confirm it opens the hosted Stripe invoice page.
+
+6. **Invoice email sent** — Check the email address associated with the test account (or the billing email if set). Stripe should have sent a "Your invoice from AIO Fusion" email with a PDF attachment and "View invoice" button. If no email arrives, confirm **Settings → Emails → "Email finished invoices to customers"** is enabled in the Stripe dashboard.
+
+7. **Repeat for add-on project checkout** — Go to **Billing → Add a project**, choose a tier, and complete checkout. Confirm VAT appears and the new invoice link is visible after payment.
