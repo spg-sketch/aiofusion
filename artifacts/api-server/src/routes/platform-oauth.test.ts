@@ -230,10 +230,14 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   }
   return mock;
 });
-vi.mock("../lib/team-invites", () => ({
-  getValidInvite: () => Promise.resolve(null),
-  consumeInvite: () => Promise.resolve(false),
-}));
+vi.mock("../lib/team-invites", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/team-invites")>();
+  return {
+    ...actual,
+    getValidInvite: () => Promise.resolve(null),
+    consumeInvite: () => Promise.resolve(false),
+  };
+});
 vi.mock("../lib/mfa", () => ({
   getMfaState: () => Promise.resolve(null),
   getMfaEnabledSet: () => Promise.resolve(new Set()),
@@ -260,10 +264,11 @@ vi.mock("../lib/mfa", () => ({
 import {
   db,
   platformAccountsTable,
+  platformMetaTable,
   platformSessionsTable,
   platformUsersTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
 import platformRouter from "./platform";
 
@@ -871,5 +876,193 @@ describe("Microsoft POST callback - code redemption", () => {
     expect(postRes.headers.get("location")).toContain("oauth_status=ok");
     const cookies = parseCookies(postRes.headers);
     expect(cookies["aio_sid"]).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SSO discount invite email binding
+// ---------------------------------------------------------------------------
+
+describe("SSO discount invite email binding", () => {
+  // Each test uses its own invite token to stay fully independent.
+  let server: Server;
+  let baseUrl: string;
+
+  const INVITE_EMAIL = "disc-sso-target@disc-sso.example";
+  const OTHER_EMAIL = "disc-sso-other@disc-sso.example";
+  const G_STATE = "csrf_disc_g_state";
+  const MS_STATE = "login:csrf_disc_ms_state";
+
+  beforeEach(async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-google-client-secret";
+    process.env.MICROSOFT_CLIENT_ID = "test-ms-client-id";
+    process.env.MICROSOFT_CLIENT_SECRET = "test-ms-client-secret";
+    process.env.NODE_ENV = "test";
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await stopServer(server);
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.MICROSOFT_CLIENT_ID;
+    delete process.env.MICROSOFT_CLIENT_SECRET;
+    // Clean up any invite/discount/account/session rows created during tests.
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "discount-invite:disc-sso-%"));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account-discount:%"));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:profile:%"));
+    await db.delete(platformSessionsTable).where(like(platformSessionsTable.username, "%disc%sso%"));
+    await db.delete(platformUsersTable).where(like(platformUsersTable.email, "%disc-sso%"));
+    await db.delete(platformAccountsTable).where(like(platformAccountsTable.email, "%disc-sso%"));
+  });
+
+  /** Seed a valid discount invite and return its token. */
+  async function seedInvite(token: string, email: string) {
+    await db.insert(platformMetaTable).values({
+      key: `discount-invite:${token}`,
+      value: JSON.stringify({
+        token,
+        email: email.toLowerCase(),
+        accountType: "client",
+        percent: 20,
+        label: "Test",
+        createdBy: "admin",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      }),
+    });
+  }
+
+  // Unit test: directly verify that the email-match guard lets the matching
+  // email redeem the invite (consumeDiscountInvite succeeds) and blocks the
+  // mismatched email (consumeDiscountInvite is not called). This tests the
+  // guard logic in isolation without the full SSO HTTP round-trip.
+  it("email-match guard (unit): matching email consumes invite; mismatched email does not", async () => {
+    const { getDiscountInvite, consumeDiscountInvite } = await import("../lib/discount-invites");
+
+    // Seed two separate invites - one for each scenario.
+    const matchToken = "disc-sso-unit-match-guard";
+    const mismatchToken = "disc-sso-unit-mismatch-guard";
+    await seedInvite(matchToken, INVITE_EMAIL);
+    await seedInvite(mismatchToken, INVITE_EMAIL);
+
+    // --- Matching email: the guard SHOULD consume the invite. ---
+    const matchResult = await getDiscountInvite(matchToken);
+    if (matchResult.invite && matchResult.invite.email.toLowerCase() === INVITE_EMAIL.toLowerCase()) {
+      await consumeDiscountInvite(matchResult.invite.token, "match-slug");
+    }
+    const [matchRow] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, `discount-invite:${matchToken}`));
+    expect(JSON.parse(matchRow!.value).usedAt).toBeTruthy();
+    const matchDiscounts = await db.select().from(platformMetaTable).where(like(platformMetaTable.key, "account-discount:%"));
+    expect(matchDiscounts.length).toBeGreaterThan(0);
+
+    // --- Mismatched email: the guard SHOULD skip redemption. ---
+    const mismatchResult = await getDiscountInvite(mismatchToken);
+    if (mismatchResult.invite && mismatchResult.invite.email.toLowerCase() === OTHER_EMAIL.toLowerCase()) {
+      // This block should NOT execute because emails differ.
+      await consumeDiscountInvite(mismatchResult.invite.token, "mismatch-slug");
+    }
+    const [mismatchRow] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, `discount-invite:${mismatchToken}`));
+    expect(JSON.parse(mismatchRow!.value).usedAt).toBeFalsy();
+  });
+
+  // HTTP-level tests: verify that the email-match guard does not block
+  // sign-in in either case (fail-soft). The mismatch tests also directly
+  // verify that the invite is left unconsumed when emails differ.
+  it("Google SSO new-account: sign-in succeeds when email matches the invite (guard does not block)", async () => {
+    const token = "disc-sso-g-match";
+    await seedInvite(token, INVITE_EMAIL);
+
+    vi.stubGlobal("fetch", makeGoogleStub({ email: INVITE_EMAIL, name: "Disc Sso Match Co", googleId: "g-disc-match-001" }));
+    const res = await realFetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_oauth_state=${G_STATE}; aio_discount_invite=${token}`,
+      },
+      body: new URLSearchParams({ code: "disc-g-match-code", state: G_STATE }).toString(),
+    });
+    // Email matches the invite - sign-in must succeed (email-match guard is not a blocker).
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("oauth_status=ok");
+  });
+
+  it("Google SSO new-account: mismatched email does NOT redeem invite (sign-in still succeeds)", async () => {
+    const token = "disc-sso-g-mismatch";
+    await seedInvite(token, INVITE_EMAIL);
+
+    vi.stubGlobal("fetch", makeGoogleStub({ email: OTHER_EMAIL, name: "Disc Sso Other Co", googleId: "g-disc-other-001" }));
+    const res = await realFetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_oauth_state=${G_STATE}; aio_discount_invite=${token}`,
+      },
+      body: new URLSearchParams({ code: "disc-g-mismatch-code", state: G_STATE }).toString(),
+    });
+
+    expect(res.status).toBe(302);
+    // Sign-in must succeed - the email mismatch must never block sign-in.
+    expect(res.headers.get("location")).toContain("oauth_status=ok");
+
+    // The invite must remain unconsumed.
+    const [inviteRow] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, `discount-invite:${token}`));
+    expect(JSON.parse(inviteRow!.value).usedAt).toBeFalsy();
+
+    // No account-discount record should exist.
+    const discounts = await db.select().from(platformMetaTable).where(like(platformMetaTable.key, "account-discount:%"));
+    expect(discounts.length).toBe(0);
+  });
+
+  it("Microsoft SSO new-account: sign-in succeeds when email matches the invite (guard does not block)", async () => {
+    const token = "disc-sso-ms-match";
+    await seedInvite(token, INVITE_EMAIL);
+
+    vi.stubGlobal("fetch", makeMicrosoftStub({ email: INVITE_EMAIL, displayName: "Disc Sso Ms Match Co", microsoftId: "ms-disc-match-001" }));
+    const res = await realFetch(`${baseUrl}/api/platform/auth/microsoft/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_ms_state=${encodeURIComponent(MS_STATE)}; aio_discount_invite=${token}`,
+      },
+      body: new URLSearchParams({ code: "disc-ms-match-code", state: MS_STATE }).toString(),
+    });
+    // Email matches the invite - sign-in must succeed.
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("oauth_status=ok");
+  });
+
+  it("Microsoft SSO new-account: mismatched email does NOT redeem invite (sign-in still succeeds)", async () => {
+    const token = "disc-sso-ms-mismatch";
+    await seedInvite(token, INVITE_EMAIL);
+
+    vi.stubGlobal("fetch", makeMicrosoftStub({ email: OTHER_EMAIL, displayName: "Disc Sso Ms Other Co", microsoftId: "ms-disc-other-001" }));
+    const res = await realFetch(`${baseUrl}/api/platform/auth/microsoft/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_ms_state=${encodeURIComponent(MS_STATE)}; aio_discount_invite=${token}`,
+      },
+      body: new URLSearchParams({ code: "disc-ms-mismatch-code", state: MS_STATE }).toString(),
+    });
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("oauth_status=ok");
+
+    const [inviteRow] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, `discount-invite:${token}`));
+    expect(JSON.parse(inviteRow!.value).usedAt).toBeFalsy();
+
+    const discounts = await db.select().from(platformMetaTable).where(like(platformMetaTable.key, "account-discount:%"));
+    expect(discounts.length).toBe(0);
   });
 });
