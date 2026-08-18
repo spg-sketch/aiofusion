@@ -5013,19 +5013,22 @@ router.post(
       const username = normUsername(u?.username);
       const password = typeof u?.password === "string" ? u.password : "";
       if (!username || !USERNAME_RE.test(username) || password.length < 1) continue;
-      const role: Role = u?.role === "admin" ? "admin" : "user";
-      const parent = normUsername(u?.parent);
-      // A migrated client account with no parent is an orphan: it will be
-      // invisible to every non-admin user because the visibility tree is
-      // built from parent links. Log loudly so an operator can fix it via
-      // the reparent endpoint; the account is still created so the login
-      // credential is preserved.
-      if (role === "client" && !parent) {
+      // Incoming role: the migration only ever carries "admin" or legacy "user"
+      // accounts from localStorage. Client accounts are always created via the
+      // POST /platform/accounts endpoint (which enforces a parent), so a
+      // "client" role in migration data is unexpected. Log a warning and skip
+      // the row: inserting a parentless client would make it invisible to every
+      // non-admin user, and we have no safe parent to assign at this point.
+      const rawRole = u?.role;
+      if (rawRole === "client" && !normUsername(u?.parent)) {
         logger.warn(
           { username },
-          "platform migrate: client account has no parent - it will be invisible to non-admin users. Use the reparent endpoint (/api/platform/accounts/reparent) to assign it a parent.",
+          "platform migrate: skipping client-role account with no parent - it would be invisible to non-admin users. Re-create it via POST /api/platform/accounts to assign the correct parent.",
         );
+        continue;
       }
+      const role: Role = rawRole === "admin" ? "admin" : "user";
+      const parent = normUsername(u?.parent);
       const result = await db
         .insert(platformAccountsTable)
         .values({
