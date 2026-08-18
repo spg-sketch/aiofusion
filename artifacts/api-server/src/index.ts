@@ -14,8 +14,8 @@ import { ensurePasswordResetsTable } from "./lib/ensure-password-resets-table";
 import { cleanupExpiredTokens } from "./lib/cleanup-expired-tokens";
 import { pruneExpiredSessions } from "./lib/auth";
 import { seedSupportFaq } from "./lib/seed-support-faq";
-import { db, platformAccountsTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { db, platformAccountsTable, platformCompaniesTable } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
 import { ensurePlatformSchemaV5 } from "./lib/ensure-platform-schema-v5";
 import { ensurePlatformSchemaV6 } from "./lib/ensure-platform-schema-v6";
@@ -179,6 +179,49 @@ app.listen(port, (err) => {
     ))
     .catch((err) => {
       logger.warn({ err }, "Failed to reparent 'patrick' to 'aiodemo' (non-fatal)");
+    });
+
+  // One-time repair: 'bluhalo-1' (Abbe Wheeler) was orphaned during the
+  // legacy localStorage migration - its parent link was empty, making it
+  // invisible to the workspace owner. Restore it to the correct parent
+  // 'bluhalo'. Safe to run repeatedly - the WHERE guard means it only
+  // fires when the parent is still null.
+  Promise.all([
+    db.update(platformAccountsTable)
+      .set({ parent: "bluhalo" })
+      .where(and(
+        eq(platformAccountsTable.username, "bluhalo-1"),
+        isNull(platformAccountsTable.parent),
+      )),
+    db.update(platformCompaniesTable)
+      .set({ parentSlug: "bluhalo" })
+      .where(and(
+        eq(platformCompaniesTable.slug, "bluhalo-1"),
+        isNull(platformCompaniesTable.parentSlug),
+      )),
+  ]).catch((err) => {
+    logger.warn({ err }, "Failed to repair orphaned 'bluhalo-1' account (non-fatal)");
+  });
+
+  // Startup orphan check: log any client-role accounts with no parent so
+  // an operator can spot and fix them quickly. Visibility is hierarchy-based,
+  // so a parentless client is invisible to every non-admin user.
+  db.select({ username: platformAccountsTable.username })
+    .from(platformAccountsTable)
+    .where(and(
+      eq(platformAccountsTable.role, "client"),
+      isNull(platformAccountsTable.parent),
+    ))
+    .then((rows) => {
+      if (rows.length > 0) {
+        logger.warn(
+          { orphans: rows.map((r) => r.username) },
+          "platform: client accounts with no parent detected - they are invisible to non-admin users. Use the reparent endpoint to fix them.",
+        );
+      }
+    })
+    .catch((err) => {
+      logger.warn({ err }, "Failed to check for orphaned client accounts (non-fatal)");
     });
 
   setInterval(() => {

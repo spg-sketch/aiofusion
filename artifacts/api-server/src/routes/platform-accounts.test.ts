@@ -206,6 +206,40 @@ describe("POST /api/platform/accounts (creation gating + role coercion)", () => 
   it("validates a missing or too-short password", async () => {
     expect((await create({ username: "x9", password: "no", role: "client" })).status).toBe(400);
   });
+
+  it("always sets the parent when autoUsername picks a suffixed slug on a collision", async () => {
+    // "agency" is already taken, so with autoUsername=true the server should
+    // try "agency-1" (or further suffixes) - the parent must survive the retry.
+    actor = { username: "admin", role: "admin" };
+    const { status, json } = await create({
+      username: "agency",
+      password: "pw123456",
+      role: "client",
+      autoUsername: true,
+    });
+    expect(status).toBe(200);
+    expect(json.ok).toBe(true);
+    // The suffixed account must carry a parent - not be orphaned.
+    const inserted = h.state.accounts.find((a) => a.username === json.username);
+    expect(inserted).toBeDefined();
+    expect(inserted?.parent).toBeTruthy();
+  });
+
+  it("sets the parent even when agency creates a client with a colliding username", async () => {
+    // Add a pre-existing account that will collide with the requested name.
+    h.state.accounts.push({ username: "newclient", passwordHash: "", role: "client", parent: "agency" });
+    actor = { username: "agency", role: "agency" };
+    const { status, json } = await create({
+      username: "newclient",
+      password: "pw123456",
+      role: "client",
+      autoUsername: true,
+    });
+    expect(status).toBe(200);
+    // The created account (with a suffix) must have "agency" as its parent.
+    const inserted = h.state.accounts.find((a) => a.username === json.username);
+    expect(inserted?.parent).toBe("agency");
+  });
 });
 
 // ---------------------------------------------------------------------------
