@@ -89,6 +89,51 @@ app.use(
 );
 app.use(cors(corsOptionsDelegate));
 app.use(cookieParser());
+
+// Stripe webhook - registered BEFORE express.json() because signature
+// verification needs the raw request body. Events are verified against the
+// connection's webhook secret, dispatched to the billing business handlers
+// (idempotent), then mirrored into the stripe schema by stripe-replit-sync.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req: Request, res: Response) => {
+    const signature = req.headers["stripe-signature"];
+    if (!signature || !Buffer.isBuffer(req.body)) {
+      res.status(400).json({ error: "Invalid webhook request" });
+      return;
+    }
+    const sig = Array.isArray(signature) ? signature[0]! : signature;
+    try {
+      const { getUncachableStripeClient, getStripeSync } = await import("./lib/stripe-client");
+      const { handleStripeEvent, getWebhookSecret } = await import("./lib/billing");
+      const webhookSecret = await getWebhookSecret();
+      if (!webhookSecret) {
+        logger.error("stripe webhook: no webhook secret configured yet");
+        res.status(500).json({ error: "Webhook not configured" });
+        return;
+      }
+      const stripe = await getUncachableStripeClient();
+      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+
+      await handleStripeEvent(event);
+
+      // Mirror into the stripe schema tables (fail-soft - business state above
+      // is the source of truth for entitlements).
+      try {
+        const sync = await getStripeSync();
+        await sync.processWebhook(req.body, sig);
+      } catch (err) {
+        logger.warn({ err }, "stripe webhook: stripe-replit-sync mirror failed (non-fatal)");
+      }
+
+      res.status(200).json({ received: true });
+    } catch (err) {
+      logger.error({ err }, "stripe webhook: processing failed");
+      res.status(400).json({ error: "Webhook processing error" });
+    }
+  },
+);
 // Logos are stored as data URLs and the intake blob can be sizeable, so the
 // project store needs more headroom than the default 1mb.
 app.use(express.json({ limit: "12mb" }));

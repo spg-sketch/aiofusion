@@ -2,6 +2,7 @@ import { db, tokenUsageTable, platformMetaTable } from "@workspace/db";
 import { and, gte, lt, sql, eq, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { sendSpikeAlert, sendQuotaBreachAlert } from "./notify-email";
+import { getProjectActionLimit } from "./billing";
 
 export const DEFAULT_FAIR_USAGE_LIMIT = 50;
 export const SPIKE_RATIO_THRESHOLD = 3;
@@ -94,7 +95,11 @@ export async function checkFairUsage(accountId: string, projectId?: string | nul
 
     const callCount = result[0]?.count ?? 0;
     const multiplier = await getFairUsageMultiplier(accountId);
-    const limit = Math.round(DEFAULT_FAIR_USAGE_LIMIT * multiplier);
+    // Per-project tier-derived base limit (Premium 75 for included projects,
+    // purchased tier for add-ons). Unsubscribed accounts keep the legacy flat
+    // limit. The per-account admin multiplier still applies on top.
+    const baseLimit = await getProjectActionLimit(accountId, projectId);
+    const limit = Math.round(baseLimit * multiplier);
     const allowed = callCount < limit;
 
     if (!allowed) {

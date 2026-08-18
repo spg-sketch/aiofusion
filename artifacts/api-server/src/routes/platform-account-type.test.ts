@@ -40,6 +40,12 @@ vi.mock("@workspace/db", async () => {
       free_access boolean NOT NULL DEFAULT false,
       status varchar NOT NULL DEFAULT 'active',
       setup_complete boolean,
+      stripe_customer_id text,
+      stripe_subscription_id text,
+      plan varchar(16),
+      billing_frequency varchar(16),
+      subscription_status varchar(16),
+      current_period_end timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS platform_sessions (

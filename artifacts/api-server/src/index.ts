@@ -20,6 +20,8 @@ import { ensurePlatformSchemaV4 } from "./lib/ensure-platform-schema-v4";
 import { ensurePlatformSchemaV5 } from "./lib/ensure-platform-schema-v5";
 import { ensurePlatformSchemaV6 } from "./lib/ensure-platform-schema-v6";
 import { ensurePlatformSchemaV7 } from "./lib/ensure-platform-schema-v7";
+import { ensurePlatformSchemaV8 } from "./lib/ensure-platform-schema-v8";
+import { initStripe } from "./lib/stripe-init";
 import { sendInviteReminders } from "./lib/invite-reminders";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -109,6 +111,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v5 additions", ensurePlatformSchemaV5],
     ["platform schema v6 additions", ensurePlatformSchemaV6],
     ["platform schema v7 additions", ensurePlatformSchemaV7],
+    ["platform schema v8 additions", ensurePlatformSchemaV8],
     ["platform_password_resets table", ensurePasswordResetsTable],
   ];
   for (const [label, step] of steps) {
@@ -156,6 +159,13 @@ app.listen(port, (err) => {
 
   seedSupportFaq().catch((err) => {
     logger.error({ err }, "Failed to seed support FAQ (non-fatal)");
+  });
+
+  // Stripe: create the stripe schema, register the managed webhook and
+  // backfill data. Fail-soft - the platform must boot even if Stripe is
+  // temporarily unreachable (Beta accounts don't depend on it).
+  initStripe().catch((err) => {
+    logger.error({ err }, "Failed to initialise Stripe (non-fatal)");
   });
 
   // One-time data migration: move the 'patrick' demo account under the

@@ -1610,3 +1610,107 @@ export async function sendTeamRoleDowngradedEmail(opts: {
     logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send team role downgrade email (non-fatal)");
   }
 }
+
+// --- Billing lifecycle emails -------------------------------------------------
+
+export async function sendPaymentFailedEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  amountDuePence: number | null;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - payment failed email not sent");
+    return;
+  }
+
+  const amount =
+    typeof opts.amountDuePence === "number" && opts.amountDuePence > 0
+      ? `£${(opts.amountDuePence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2 })}`
+      : null;
+  const subject = `Action needed: your AIO Fusion payment did not go through`;
+  const text = [
+    `Hi,`,
+    ``,
+    `We tried to collect the latest subscription payment for ${opts.companyName}${amount ? ` (${amount})` : ""},`,
+    `but the payment did not go through.`,
+    ``,
+    `We'll retry automatically over the next few days. To avoid any interruption,`,
+    `please check that your card details are up to date.`,
+    ``,
+    `If the payment keeps failing, your subscription will be cancelled and access`,
+    `to paid features will stop at the end of the retry period.`,
+    ``,
+    `Manage billing: ${getAppBaseUrl()}/?account_section=billing`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Payment Failed",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        We tried to collect the latest subscription payment for
+        <strong>${escHtml(opts.companyName)}</strong>${amount ? ` (${escHtml(amount)})` : ""}, but the payment did not go through.
+      </p>
+      <p style="margin: 0 0 16px 0;">
+        We'll retry automatically over the next few days. To avoid any interruption,
+        please check that your card details are up to date.
+      </p>
+      <p style="margin: 0 0 0 0; font-size: 13px; color: #475569;">
+        If the payment keeps failing, your subscription will be cancelled and access
+        to paid features will stop at the end of the retry period.
+      </p>
+    `,
+    cta: { text: "Manage Billing", href: `${getAppBaseUrl()}/?account_section=billing` },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: payment failed email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send payment failed email (non-fatal)");
+  }
+}
+
+export async function sendSubscriptionCancelledEmail(opts: {
+  toEmail: string;
+  companyName: string;
+}): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - cancellation email not sent");
+    return;
+  }
+
+  const subject = `Your AIO Fusion subscription has been cancelled`;
+  const text = [
+    `Hi,`,
+    ``,
+    `The AIO Fusion subscription for ${opts.companyName} has been cancelled.`,
+    ``,
+    `Your team can still sign in, but paid plan allowances no longer apply.`,
+    `You can restart your subscription at any time from your billing settings.`,
+    ``,
+    `Restart subscription: ${getAppBaseUrl()}/?account_section=billing`,
+  ].join("\n");
+
+  const html = buildEmailHtml({
+    label: "Subscription Cancelled",
+    bodyHtml: `
+      <p style="margin: 0 0 16px 0;">
+        The AIO Fusion subscription for <strong>${escHtml(opts.companyName)}</strong> has been cancelled.
+      </p>
+      <p style="margin: 0 0 0 0;">
+        Your team can still sign in, but paid plan allowances no longer apply.
+        You can restart your subscription at any time from your billing settings.
+      </p>
+    `,
+    cta: { text: "Restart Subscription", href: `${getAppBaseUrl()}/?account_section=billing` },
+  });
+
+  try {
+    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    logger.info({ toEmail: opts.toEmail }, "notify-email: subscription cancelled email sent");
+  } catch (err) {
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send cancellation email (non-fatal)");
+  }
+}

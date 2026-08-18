@@ -25,6 +25,11 @@ export const projectsTable = pgTable("projects", {
   // sub-accounts'); an admin sees all. Nullable for legacy rows created before
   // ownership was enforced - those are treated as admin-only until backfilled.
   owner: varchar("owner"),
+  // Billing tier for this project: "standard" | "premium" | "max".
+  // NULL = no explicit tier - treated as an included (Premium) project when
+  // the owning account has a subscription, or legacy behaviour (flat limit)
+  // when it does not.
+  tier: varchar("tier", { length: 16 }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()

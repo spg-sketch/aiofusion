@@ -83,6 +83,19 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   //  new organic signups that haven't chosen Agency/Partner vs Client yet,
   //  true once the account type has been selected.
   setupComplete: boolean("setup_complete"),
+  //  Stripe subscription state (schema v8). Subscriptions attach ONLY to
+  //  top-level accounts (agency or direct client). All nullable - NULL
+  //  subscriptionStatus/"none" means the account has never subscribed
+  //  (Beta grandfathering: everything keeps working as before).
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  //  "inhouse" | "agency"
+  plan: varchar("plan", { length: 16 }),
+  //  "annual" | "quarterly"
+  billingFrequency: varchar("billing_frequency", { length: 16 }),
+  //  "none" | "active" | "past_due" | "cancelled"
+  subscriptionStatus: varchar("subscription_status", { length: 16 }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

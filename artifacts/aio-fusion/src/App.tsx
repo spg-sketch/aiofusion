@@ -796,6 +796,14 @@ function App() {
     new URLSearchParams(window.location.search).get("account_section"),
   );
 
+  // Stripe Checkout return flag (/?checkout=success|cancelled). Captured once
+  // on load, before the history-sync effect rewrites the URL and drops the
+  // query string, then handed to SubAccountsPage for the subscription card.
+  const [checkoutResult] = useState<"success" | "cancelled" | null>(() => {
+    const v = new URLSearchParams(window.location.search).get("checkout");
+    return v === "success" || v === "cancelled" ? v : null;
+  });
+
   // Team invite token from /?invite=<token> - captured once on mount (the
   // history-sync effect rewrites the URL soon after).
   // Email clients sometimes append stray punctuation or whitespace to the
@@ -1251,6 +1259,7 @@ function App() {
       <SubAccountsPage
         backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} /> : undefined}
         initialSection={accountSection ?? undefined}
+        checkoutResult={checkoutResult}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
         onBack={() => setView("platform-home")}

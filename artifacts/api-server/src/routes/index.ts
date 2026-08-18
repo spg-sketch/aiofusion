@@ -12,6 +12,7 @@ import storeContentRouter from "./store-content";
 import storeAuditsRouter from "./store-audits";
 import mediaDbRouter from "./media-db";
 import platformRouter from "./platform";
+import billingRouter from "./billing";
 import teamRouter from "./team";
 import adminRouter from "./admin";
 import contactRouter from "./contact";
@@ -22,6 +23,7 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(platformRouter);
+router.use(billingRouter);
 router.use(teamRouter);
 router.use(adminRouter);
 // AI action routes are off-limits for viewer (read-only) and billing members.

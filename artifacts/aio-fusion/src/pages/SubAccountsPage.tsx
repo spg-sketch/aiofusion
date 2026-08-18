@@ -18,6 +18,7 @@ import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
+import { SubscriptionCard } from "../components/SubscriptionCard";
 import { type Session as LocalSession, type User as LocalUser, type Role, getSubAccounts as getLocalSubAccounts, serverAddUser, serverDeleteUser, serverChangePassword, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverSetSeatCap, refreshAccountsCache, serverImpersonate, serverSwitchToMaster, serverChangeAccountType, serverSetClientAccess, canCreateSubAccounts } from "../lib/auth";
 /** Section ids for the left-hand settings navigation. */
 type SettingsSection = "profile" | "security" | "billing" | "team" | "clients" | "archived" | "assign";
@@ -30,6 +31,7 @@ function SubAccountsPage({
   onWorkspacesChanged,
   onSignOut,
   initialSection,
+  checkoutResult,
   onSectionChange,
   backToAgency,
 }: {
@@ -43,6 +45,7 @@ function SubAccountsPage({
   onSignOut?: () => void;
   /** Deep-link target (e.g. from an email link ?account_section=security). Falls back to profile if not allowed. */
   initialSection?: string;
+  checkoutResult?: "success" | "cancelled" | null;
   /** "Back to my agency account" control, present while an agency user is working inside a client account. */
   backToAgency?: React.ReactNode;
   /** Reports section changes so the parent can mirror them into the URL/history (refresh + Back support). */
@@ -1164,7 +1167,10 @@ function SubAccountsPage({
 
         {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
         {section === "billing" && canSeeBilling && (
-          <BillingDetailsCard />
+          <>
+            <SubscriptionCard checkoutResult={checkoutResult} />
+            <BillingDetailsCard />
+          </>
         )}
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}

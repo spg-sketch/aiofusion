@@ -36,6 +36,7 @@ vi.mock("@workspace/db", async () => {
       intake jsonb,
       logo text,
       owner varchar,
+      tier varchar(16),
       updated_at timestamptz NOT NULL DEFAULT now(),
       deleted_at timestamptz
     );
