@@ -16,6 +16,7 @@ import {
 } from "../lib/member-guards";
 import { shouldSnapshot, type ProjectContent } from "../lib/snapshot-guards";
 import { logAdminEvent } from "../lib/admin-events";
+import { getProjectAllowance, assignAddonToNewProject } from "../lib/billing";
 
 const router: IRouter = Router();
 
@@ -235,9 +236,12 @@ router.post(
         res.status(403).json({ error: "You cannot modify this project." });
         return;
       }
-      // Enforce the 2-project limit for non-admin accounts on new projects only.
-      // Admins are never restricted. "user" is the legacy alias for "agency".
-      if (existingOwner === undefined && req.account!.role !== "admin") {
+      // Enforce the project allowance for non-admin accounts on new projects
+      // only. Subscribed accounts get their plan's included projects plus any
+      // purchased add-ons; unsubscribed accounts keep the legacy cap of 2.
+      // Admins are never restricted.
+      const isNewProject = existingOwner === undefined;
+      if (isNewProject && req.account!.role !== "admin") {
         const [countRow] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(projectsTable)
@@ -247,10 +251,10 @@ router.post(
               visible !== null ? inArray(projectsTable.owner, visible) : undefined,
             ),
           );
-        if ((countRow?.count ?? 0) >= 2) {
+        const allowance = await getProjectAllowance(normUsername(req.account!.username));
+        if ((countRow?.count ?? 0) >= allowance) {
           res.status(403).json({
-            error:
-              "You've reached the 2-project limit for agency accounts. Contact info@aiofusion.ai to add more projects.",
+            error: `You've reached your ${allowance}-project allowance. You can add another project from the Billing section of your account settings.`,
             limitReached: true,
           });
           return;
@@ -301,6 +305,11 @@ router.post(
         .returning(projectRowColumns);
       // Back up the resulting state so this version can always be restored.
       if (saved[0]) await snapshotProject(saved[0] as ProjectRowSlim, "upsert");
+      // A brand-new project consumes the oldest unassigned purchased add-on
+      // (if any) so it immediately carries the paid-for tier. Fail-soft.
+      if (isNewProject && saved[0]) {
+        await assignAddonToNewProject(owner, id);
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to save project" });

@@ -162,8 +162,12 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   return mock;
 });
 
-// Stripe client mock - checkout tests only need session creation.
-const stripeCalls = vi.hoisted(() => ({ sessions: [] as unknown[] }));
+// Stripe client mock - checkout, portal, invoices, and subscription updates.
+const stripeCalls = vi.hoisted(() => ({
+  sessions: [] as unknown[],
+  subscriptionUpdates: [] as Array<{ id: string; params: any }>,
+  portalSessions: [] as unknown[],
+}));
 vi.mock("../lib/stripe-client", () => ({
   stripeConfigured: () => true,
   getStripeCredentials: () => Promise.resolve({ secretKey: "sk_test_x", webhookSecret: "whsec_x" }),
@@ -188,6 +192,46 @@ vi.mock("../lib/stripe-client", () => ({
           },
         },
       },
+      subscriptions: {
+        retrieve: (id: string) =>
+          Promise.resolve({
+            id,
+            items: { data: [{ id: "si_mock_1" }] },
+            metadata: { kind: "project-addon" },
+          }),
+        update: (id: string, params: any) => {
+          stripeCalls.subscriptionUpdates.push({ id, params });
+          return Promise.resolve({ id });
+        },
+      },
+      billingPortal: {
+        configurations: {
+          list: () => Promise.resolve({ data: [{ id: "bpc_mock_1" }] }),
+          create: () => Promise.resolve({ id: "bpc_mock_created" }),
+        },
+        sessions: {
+          create: (params: unknown) => {
+            stripeCalls.portalSessions.push(params);
+            return Promise.resolve({ url: "https://billing.stripe.com/test-portal" });
+          },
+        },
+      },
+      invoices: {
+        list: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "in_mock_1",
+                number: "AIO-0001",
+                created: 1_700_000_000,
+                amount_due: 50000,
+                status: "paid",
+                hosted_invoice_url: "https://invoice.stripe.com/i/hosted",
+                invoice_pdf: "https://invoice.stripe.com/i/pdf",
+              },
+            ],
+          }),
+      },
     }),
   getStripeSync: () => Promise.reject(new Error("not used in tests")),
 }));
@@ -203,6 +247,9 @@ import {
   claimStripeEvent,
   getProjectActionLimit,
   getBillingState,
+  getProjectAddons,
+  getProjectAllowance,
+  assignAddonToNewProject,
 } from "../lib/billing";
 
 // ---------------------------------------------------------------------------
@@ -569,5 +616,262 @@ describe("billing routes", () => {
       .where(eq(platformCompaniesTable.slug, "buyer-co"));
     const again = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(again.status).toBe(409);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Project add-ons: purchase, fulfilment, allowance, tier changes
+// ---------------------------------------------------------------------------
+describe("project add-ons", () => {
+  async function seedSubscribed(slug: string, email: string, accountRole = "client") {
+    const seeded = await seedWorkspace(slug, email, { accountRole });
+    await db
+      .update(platformCompaniesTable)
+      .set({
+        subscriptionStatus: "active",
+        plan: accountRole === "agency" ? "agency" : "inhouse",
+        stripeCustomerId: `cus_${slug}`,
+        stripeSubscriptionId: `sub_${slug}`,
+      })
+      .where(eq(platformCompaniesTable.slug, slug));
+    return seeded;
+  }
+
+  it("project-checkout requires an active subscription and a valid tier", async () => {
+    const { sid } = await seedWorkspace("addon-unsub", "owner@addonunsub.test", { accountRole: "client" });
+    expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "gold" } })).status).toBe(400);
+    expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "max" } })).status).toBe(409);
+  });
+
+  it("project-checkout creates an add-on session with kind metadata", async () => {
+    const { sid } = await seedSubscribed("addon-buyer", "owner@addonbuyer.test");
+    const res = await api("/api/platform/billing/project-checkout", { sid, body: { tier: "max" } });
+    expect(res.status).toBe(200);
+    expect(res.json.url).toContain("checkout.stripe.com");
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.metadata.kind).toBe("project-addon");
+    expect(params.metadata.tier).toBe("max");
+    expect(params.metadata.slug).toBe("addon-buyer");
+  });
+
+  it("rejects attaching an add-on to a foreign project", async () => {
+    const { sid } = await seedSubscribed("addon-a", "owner@addona.test");
+    await seedSubscribed("addon-b", "owner@addonb.test");
+    await db.insert(projectsTable).values({ id: "b-proj", name: "B", data: {}, owner: "addon-b" });
+    const res = await api("/api/platform/billing/project-checkout", {
+      sid,
+      body: { tier: "max", projectId: "b-proj" },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("webhook fulfilment records the add-on; unassigned slots attach to the next new project", async () => {
+    await seedSubscribed("addon-fulfil", "owner@addonfulfil.test");
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_1", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-fulfil",
+        subscription: "sub_addon_1",
+        metadata: { slug: "addon-fulfil", kind: "project-addon", tier: "max" },
+      }),
+    );
+
+    const addons = await getProjectAddons("addon-fulfil");
+    expect(addons).toHaveLength(1);
+    expect(addons[0]!.tier).toBe("max");
+    expect(addons[0]!.projectId).toBeNull();
+    // Main plan untouched.
+    const state = await getBillingState("addon-fulfil");
+    expect(state?.stripeSubscriptionId).toBe("sub_addon-fulfil");
+    expect(state?.status).toBe("active");
+    // Allowance grew: 1 included (inhouse) + 1 add-on.
+    expect(await getProjectAllowance("addon-fulfil")).toBe(2);
+
+    // New project consumes the slot and gets the tier.
+    await db.insert(projectsTable).values({ id: "fulfil-new", name: "New", data: {}, owner: "addon-fulfil" });
+    await assignAddonToNewProject("addon-fulfil", "fulfil-new");
+    const after = await getProjectAddons("addon-fulfil");
+    expect(after[0]!.projectId).toBe("fulfil-new");
+    expect(await getProjectActionLimit("addon-fulfil", "fulfil-new")).toBe(150);
+  });
+
+  it("webhook fulfilment with a projectId attaches and sets the tier immediately", async () => {
+    await seedSubscribed("addon-attach", "owner@addonattach.test");
+    await db.insert(projectsTable).values({ id: "attach-proj", name: "P", data: {}, owner: "addon-attach" });
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_2", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-attach",
+        subscription: "sub_addon_2",
+        metadata: { slug: "addon-attach", kind: "project-addon", tier: "max", projectId: "attach-proj" },
+      }),
+    );
+
+    expect(await getProjectActionLimit("addon-attach", "attach-proj")).toBe(150);
+    const addons = await getProjectAddons("addon-attach");
+    expect(addons[0]!.projectId).toBe("attach-proj");
+  });
+
+  it("upgrading an add-on applies immediately with a prorated charge", async () => {
+    const { sid } = await seedSubscribed("addon-up", "owner@addonup.test");
+    await db.insert(projectsTable).values({ id: "up-proj", name: "Up", data: {}, owner: "addon-up", tier: "standard" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_3", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-up",
+        subscription: "sub_addon_3",
+        metadata: { slug: "addon-up", kind: "project-addon", tier: "standard", projectId: "up-proj" },
+      }),
+    );
+
+    const res = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "up-proj", tier: "max" } });
+    expect(res.status).toBe(200);
+    expect(res.json.applied).toBe("now");
+    const update = stripeCalls.subscriptionUpdates.find((u) => u.id === "sub_addon_3");
+    expect(update?.params.proration_behavior).toBe("always_invoice");
+    expect(await getProjectActionLimit("addon-up", "up-proj")).toBe(150);
+  });
+
+  it("downgrading an add-on queues to renewal and applies on the renewal invoice", async () => {
+    const { sid } = await seedSubscribed("addon-down", "owner@addondown.test");
+    await db.insert(projectsTable).values({ id: "down-proj", name: "Down", data: {}, owner: "addon-down", tier: "max" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_4", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-down",
+        subscription: "sub_addon_4",
+        metadata: { slug: "addon-down", kind: "project-addon", tier: "max", projectId: "down-proj" },
+      }),
+    );
+
+    const res = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "down-proj", tier: "standard" } });
+    expect(res.status).toBe(200);
+    expect(res.json.applied).toBe("at_renewal");
+    const update = stripeCalls.subscriptionUpdates.find((u) => u.id === "sub_addon_4");
+    expect(update?.params.proration_behavior).toBe("none");
+    // Limit unchanged until renewal.
+    expect(await getProjectActionLimit("addon-down", "down-proj")).toBe(150);
+
+    // Renewal invoice for the add-on applies the pending tier and must not
+    // touch the main plan's period end.
+    await handleStripeEvent(
+      fakeEvent("evt_addon_renew", "invoice.payment_succeeded", {
+        customer: "cus_addon-down",
+        subscription: "sub_addon_4",
+        lines: { data: [{ period: { end: 2_100_000_000 } }] },
+      }),
+    );
+    expect(await getProjectActionLimit("addon-down", "down-proj")).toBe(50);
+    const state = await getBillingState("addon-down");
+    expect(state?.currentPeriodEnd).toBeNull();
+  });
+
+  it("cancelling an add-on removes the slot and clears the project's tier", async () => {
+    await seedSubscribed("addon-gone", "owner@addongone.test");
+    await db.insert(projectsTable).values({ id: "gone-proj", name: "Gone", data: {}, owner: "addon-gone" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_5", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-gone",
+        subscription: "sub_addon_5",
+        metadata: { slug: "addon-gone", kind: "project-addon", tier: "max", projectId: "gone-proj" },
+      }),
+    );
+    expect(await getProjectActionLimit("addon-gone", "gone-proj")).toBe(150);
+
+    await handleStripeEvent(
+      fakeEvent("evt_addon_6", "customer.subscription.deleted", {
+        id: "sub_addon_5",
+        customer: "cus_addon-gone",
+        metadata: { kind: "project-addon" },
+      }),
+    );
+    expect(await getProjectAddons("addon-gone")).toHaveLength(0);
+    // Back to the included tier; main plan still active.
+    expect(await getProjectActionLimit("addon-gone", "gone-proj")).toBe(75);
+    expect((await getBillingState("addon-gone"))?.status).toBe("active");
+  });
+
+  it("project-tier rejects included projects and unknown projects", async () => {
+    const { sid } = await seedSubscribed("addon-incl", "owner@addonincl.test");
+    await db.insert(projectsTable).values({ id: "incl-proj", name: "Incl", data: {}, owner: "addon-incl" });
+    const res = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "incl-proj", tier: "max" } });
+    expect(res.status).toBe(400);
+    const res2 = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "nope", tier: "max" } });
+    expect(res2.status).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Portal + invoices routes
+// ---------------------------------------------------------------------------
+describe("portal and invoices", () => {
+  it("portal requires a Stripe customer; creates a session when one exists", async () => {
+    const { sid } = await seedWorkspace("portal-co", "owner@portal.test", { accountRole: "client" });
+    expect((await api("/api/platform/billing/portal", { sid, method: "POST" })).status).toBe(409);
+
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_portal", subscriptionStatus: "active", plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "portal-co"));
+    const res = await api("/api/platform/billing/portal", { sid, method: "POST" });
+    expect(res.status).toBe(200);
+    expect(res.json.url).toContain("billing.stripe.com");
+    const params = stripeCalls.portalSessions[stripeCalls.portalSessions.length - 1] as any;
+    expect(params.customer).toBe("cus_portal");
+  });
+
+  it("lists invoices with PDF links; empty without a customer", async () => {
+    const { sid } = await seedWorkspace("inv-co", "owner@inv.test", { accountRole: "client" });
+    let res = await api("/api/platform/billing/invoices", { sid });
+    expect(res.status).toBe(200);
+    expect(res.json.invoices).toEqual([]);
+
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_inv" })
+      .where(eq(platformCompaniesTable.slug, "inv-co"));
+    res = await api("/api/platform/billing/invoices", { sid });
+    expect(res.status).toBe(200);
+    expect(res.json.invoices).toHaveLength(1);
+    expect(res.json.invoices[0].invoicePdf).toContain("pdf");
+  });
+
+  it("blocks viewer members and managed clients from the new routes", async () => {
+    const { sid } = await seedWorkspace("guard-co", "viewer2@guard.test", { membershipRole: "viewer" });
+    expect((await api("/api/platform/billing/portal", { sid, method: "POST" })).status).toBe(403);
+    expect((await api("/api/platform/billing/invoices", { sid })).status).toBe(403);
+    expect((await api("/api/platform/billing/project-checkout", { sid, body: { tier: "max" } })).status).toBe(403);
+    expect((await api("/api/platform/billing/project-tier", { sid, body: { projectId: "x", tier: "max" } })).status).toBe(403);
+
+    await seedWorkspace("guard-agency", "owner@guardagency.test");
+    const managed = await seedWorkspace("guard-managed", "owner@guardmanaged.test", {
+      accountRole: "client",
+      parent: "guard-agency",
+    });
+    expect((await api("/api/platform/billing/portal", { sid: managed.sid, method: "POST" })).status).toBe(403);
+    expect((await api("/api/platform/billing/invoices", { sid: managed.sid })).status).toBe(403);
+    expect((await api("/api/platform/billing/project-checkout", { sid: managed.sid, body: { tier: "max" } })).status).toBe(403);
+  });
+
+  it("subscription payload includes usage, projects and tier prices", async () => {
+    const { sid } = await seedWorkspace("payload-co", "owner@payload.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({ subscriptionStatus: "active", plan: "inhouse", stripeCustomerId: "cus_payload" })
+      .where(eq(platformCompaniesTable.slug, "payload-co"));
+    await db.insert(projectsTable).values({ id: "payload-proj", name: "P1", data: {}, owner: "payload-co" });
+
+    const res = await api("/api/platform/billing/subscription", { sid });
+    expect(res.status).toBe(200);
+    expect(res.json.projectsUsed).toBe(1);
+    expect(res.json.projectAllowance).toBe(1);
+    expect(res.json.portalAvailable).toBe(true);
+    expect(res.json.projects).toHaveLength(1);
+    expect(res.json.projects[0].isAddon).toBe(false);
+    expect(res.json.tierPrices.max.yearlyTotal).toBe(80000);
+    expect(res.json.tierPrices.max.actionsPerMonth).toBe(150);
   });
 });

@@ -8,8 +8,21 @@ const accent = vars.accent;
 // Subscription card shown at the top of the Billing settings section.
 // - No subscription: choose annual or quarterly billing and start Stripe
 //   Checkout (test mode during Beta).
-// - Subscribed: shows plan, status and renewal date.
+// - Subscribed: shows plan, status, renewal date, projects used vs included,
+//   payment-method/cancellation via the Stripe Customer Portal, past invoices,
+//   and the two upsells (add a project, change a project's tier).
 // Access is enforced server-side; the parent gates rendering by role.
+
+type ProjectTier = "standard" | "premium" | "max";
+
+type BillingProject = {
+  id: string;
+  name: string;
+  tier: ProjectTier | null;
+  isAddon: boolean;
+  addonSubscriptionId: string | null;
+  pendingTier: ProjectTier | null;
+};
 
 type SubscriptionInfo = {
   status: "none" | "active" | "past_due" | "cancelled";
@@ -19,11 +32,27 @@ type SubscriptionInfo = {
   entitled: boolean;
   applicablePlan: "inhouse" | "agency";
   includedProjects: number;
+  projectAllowance: number | null;
+  projectsUsed: number;
+  portalAvailable: boolean;
   checkoutAvailable: boolean;
+  projects: BillingProject[];
+  unassignedAddons: { tier: ProjectTier; purchasedAt: string }[];
+  tierPrices: Record<ProjectTier, { yearlyTotal: number; actionsPerMonth: number }>;
   prices: {
     annual: { yearlyTotal: number };
     quarterly: { perQuarter: number; yearlyTotal: number };
   };
+};
+
+type Invoice = {
+  id: string;
+  number: string | null;
+  created: string;
+  amountDuePence: number;
+  status: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
 };
 
 function pounds(pence: number): string {
@@ -37,6 +66,14 @@ const PLAN_LABELS: Record<string, string> = {
   agency: "Agency/Partner",
 };
 
+const TIER_LABELS: Record<ProjectTier, string> = {
+  standard: "Standard",
+  premium: "Premium",
+  max: "Max",
+};
+
+const TIER_ORDER: ProjectTier[] = ["standard", "premium", "max"];
+
 const STATUS_LABELS: Record<string, { text: string; color: string; bg: string }> = {
   active: { text: "Active", color: "#166534", bg: "#DCFCE7" },
   past_due: { text: "Payment overdue", color: "#92400E", bg: "#FEF3C7" },
@@ -49,6 +86,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
   const [frequency, setFrequency] = useState<"annual" | "quarterly">("annual");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +103,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
       }
     })();
     return () => { cancelled = true; };
-  }, [checkoutResult]);
+  }, [checkoutResult, refreshTick]);
 
   async function startCheckout() {
     setStarting(true);
@@ -101,58 +139,402 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
     : null;
 
   return (
-    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscription</h2>
+    <>
+      <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+        <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Subscription</h2>
 
-      {checkoutResult === "success" && !info.entitled && (
-        <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: "#DCFCE7", color: "#166534" }}>
-          Payment received - your subscription is being activated. This can take a few seconds; refresh shortly.
-        </p>
-      )}
-      {checkoutResult === "cancelled" && !subscribed && (
-        <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
-          Checkout was cancelled - no payment was taken.
-        </p>
-      )}
+        {checkoutResult === "success" && (
+          <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: "#DCFCE7", color: "#166534" }}>
+            Payment received. Activation can take a few seconds - refresh shortly if you don't see the change yet.
+          </p>
+        )}
+        {checkoutResult === "cancelled" && (
+          <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
+            Checkout was cancelled - no payment was taken.
+          </p>
+        )}
 
-      {subscribed ? (
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-[14px] font-semibold" style={{ color: ink }}>
-              {planLabel} plan{info.frequency ? ` - billed ${info.frequency === "annual" ? "annually" : "quarterly"}` : ""}
-            </span>
-            {status && (
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ color: status.color, background: status.bg }}>
-                {status.text}
+        {subscribed ? (
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-[14px] font-semibold" style={{ color: ink }}>
+                {planLabel} plan{info.frequency ? ` - billed ${info.frequency === "annual" ? "annually" : "quarterly"}` : ""}
               </span>
+              {status && (
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ color: status.color, background: status.bg }}>
+                  {status.text}
+                </span>
+              )}
+            </div>
+            <p className="text-[13px]" style={{ color: vars.g500 }}>
+              {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
+              {renewal ? ` Next renewal: ${renewal}.` : ""}
+            </p>
+            {info.entitled && info.projectAllowance !== null && (
+              <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>
+                Projects: <strong style={{ color: ink }}>{info.projectsUsed} of {info.projectAllowance}</strong> in use
+                {info.unassignedAddons.length > 0 && (
+                  <> - {info.unassignedAddons.length} purchased project slot{info.unassignedAddons.length === 1 ? "" : "s"} ({info.unassignedAddons.map((a) => TIER_LABELS[a.tier]).join(", ")}) waiting for a new project</>
+                )}
+                .
+              </p>
+            )}
+            {info.status === "past_due" && (
+              <p className="text-[13px] mt-2" style={{ color: "#92400E" }}>
+                Your last payment did not go through. We'll retry automatically - please update your card details below to avoid interruption.
+              </p>
+            )}
+            {info.portalAvailable && <PortalButtons />}
+            {info.status === "cancelled" && (
+              <div className="mt-3">
+                <p className="text-[13px] mb-3" style={{ color: vars.g500 }}>
+                  Your subscription has been cancelled. You can restart it below.
+                </p>
+                <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
+              </div>
             )}
           </div>
-          <p className="text-[13px]" style={{ color: vars.g500 }}>
-            {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
-            {renewal ? ` Next renewal: ${renewal}.` : ""}
-          </p>
-          {info.status === "past_due" && (
-            <p className="text-[13px] mt-2" style={{ color: "#92400E" }}>
-              Your last payment did not go through. We'll retry automatically - please check your card details to avoid interruption.
+        ) : (
+          <div>
+            <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+              Subscribe to the {planLabel} plan - {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. All prices exclude VAT.
             </p>
-          )}
-          {info.status === "cancelled" && (
-            <div className="mt-3">
-              <p className="text-[13px] mb-3" style={{ color: vars.g500 }}>
-                Your subscription has been cancelled. You can restart it below.
-              </p>
-              <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
-            </div>
-          )}
-        </div>
-      ) : (
-        <div>
-          <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-            Subscribe to the {planLabel} plan - {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. All prices exclude VAT.
-          </p>
-          <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
-        </div>
+            <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
+          </div>
+        )}
+      </div>
+
+      {info.entitled && (
+        <>
+          <AddProjectCard info={info} />
+          <ChangeTierCard info={info} onChanged={() => setRefreshTick((t) => t + 1)} />
+        </>
       )}
+      {subscribed && <InvoicesCard />}
+    </>
+  );
+}
+
+// --- Stripe Customer Portal buttons ------------------------------------------
+
+function PortalButtons() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function openPortal() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/platform/billing/portal`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.url) {
+        setError(json.error ?? "Could not open the billing portal.");
+        return;
+      }
+      window.location.href = json.url;
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={openPortal}
+          disabled={busy}
+          className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-50"
+          style={{ color: ink, border: `1.5px solid ${vars.g300}`, background: "white" }}
+        >
+          {busy ? "Opening..." : "Update payment method"}
+        </button>
+        <button
+          type="button"
+          onClick={openPortal}
+          disabled={busy}
+          className="px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 disabled:opacity-50"
+          style={{ color: "#991B1B", border: "1.5px solid #FECACA", background: "white" }}
+        >
+          Cancel subscription
+        </button>
+        {error && <span className="text-[13px]" style={{ color: "#991B1B" }}>{error}</span>}
+      </div>
+      <p className="text-[11px] mt-2" style={{ color: vars.g400 }}>
+        Both open your secure Stripe billing portal, where you can update your card or cancel at the end of the billing period.
+      </p>
+    </div>
+  );
+}
+
+// --- Add a project -------------------------------------------------------------
+
+function AddProjectCard({ info }: { info: SubscriptionInfo }) {
+  const [tier, setTier] = useState<ProjectTier>("premium");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function buy() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/platform/billing/project-checkout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.url) {
+        setError(json.error ?? "Could not start checkout. Please try again.");
+        return;
+      }
+      window.location.href = json.url;
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a project</h2>
+      <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+        Add another project workspace to your plan. Billed annually, excl. VAT. Once paid, your next new project uses the tier you choose here.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
+        {TIER_ORDER.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTier(t)}
+            className="rounded-xl p-4 text-left transition-all"
+            style={{
+              border: tier === t ? `2px solid ${accent}` : `1.5px solid ${vars.g200}`,
+              background: tier === t ? "#FBE3ED22" : "white",
+            }}
+          >
+            <span className="text-[13px] font-bold block" style={{ color: ink }}>{TIER_LABELS[t]}</span>
+            <span className="text-[16px] font-bold block" style={{ color: ink }}>{pounds(info.tierPrices[t].yearlyTotal)}/yr</span>
+            <span className="text-[12px]" style={{ color: vars.g500 }}>{info.tierPrices[t].actionsPerMonth} actions/month</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={buy}
+          disabled={busy || !info.checkoutAvailable}
+          className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+          style={{ background: accent }}
+        >
+          {busy ? "Starting checkout..." : "Continue to payment"}
+        </button>
+        {error && <span className="text-[13px]" style={{ color: "#991B1B" }}>{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// --- Change a project's tier -----------------------------------------------------
+
+function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged: () => void }) {
+  const [projectId, setProjectId] = useState("");
+  const [tier, setTier] = useState<ProjectTier | "">("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  if (info.projects.length === 0) return null;
+
+  const selected = info.projects.find((p) => p.id === projectId) ?? null;
+  // Included projects (no purchased add-on) are upgraded by buying an add-on
+  // tier for them; add-on projects change tier on their existing subscription.
+  const selectedIsAddon = !!selected?.isAddon;
+  const currentTier: ProjectTier = (selected?.tier ?? "premium") as ProjectTier;
+  const isUpgrade = tier !== "" && TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(currentTier);
+
+  async function submit() {
+    if (!selected || tier === "") return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (selectedIsAddon) {
+        const res = await fetch(`${apiBase()}/api/platform/billing/project-tier`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: selected.id, tier }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setMessage({ kind: "error", text: json.error ?? "Could not change the tier." });
+          return;
+        }
+        setMessage({ kind: "ok", text: json.message ?? "Tier updated." });
+        onChanged();
+      } else {
+        // Included project: purchase an add-on tier attached to this project.
+        const res = await fetch(`${apiBase()}/api/platform/billing/project-checkout`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: selected.id, tier }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.url) {
+          setMessage({ kind: "error", text: json.error ?? "Could not start checkout." });
+          return;
+        }
+        window.location.href = json.url;
+      }
+    } catch {
+      setMessage({ kind: "error", text: "Network error. Please try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Change a project's tier</h2>
+      <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
+        Upgrades apply immediately (the prorated difference is charged to your card). Downgrades take effect at your next renewal.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 max-w-2xl">
+        <div className="md:col-span-6">
+          <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Project</label>
+          <select
+            value={projectId}
+            onChange={(e) => { setProjectId(e.target.value); setTier(""); setMessage(null); }}
+            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
+          >
+            <option value="">Choose a project...</option>
+            {info.projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || p.id} - {p.isAddon ? TIER_LABELS[(p.tier ?? "premium") as ProjectTier] : "Premium (included)"}
+                {p.pendingTier ? ` (changing to ${TIER_LABELS[p.pendingTier]} at renewal)` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="md:col-span-6">
+          <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>New tier</label>
+          <select
+            value={tier}
+            onChange={(e) => { setTier(e.target.value as ProjectTier | ""); setMessage(null); }}
+            disabled={!selected}
+            className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
+            style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent, background: "white" }}
+          >
+            <option value="">Choose a tier...</option>
+            {/* Add-on projects can move to any other tier; included projects
+                (already Premium) can only be upgraded to Max. */}
+            {TIER_ORDER.filter((t) =>
+              selectedIsAddon ? t !== currentTier : TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf("premium"),
+            ).map((t) => (
+                <option key={t} value={t}>
+                  {TIER_LABELS[t]} - {pounds(info.tierPrices[t].yearlyTotal)}/yr, {info.tierPrices[t].actionsPerMonth} actions/month
+                </option>
+              ))}
+          </select>
+        </div>
+      </div>
+      {selected && !selectedIsAddon && (
+        <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+          This project is included in your plan at Premium. Upgrading it adds a paid project tier ({tier !== "" ? `${pounds(info.tierPrices[tier].yearlyTotal)}/yr` : "billed annually"}) on top of your plan.
+        </p>
+      )}
+      {selected && selectedIsAddon && tier !== "" && !isUpgrade && (
+        <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+          This is a downgrade - the lower price and allowance apply from your next renewal.
+        </p>
+      )}
+      <div className="flex items-center gap-3 mt-4">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !selected || tier === ""}
+          className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
+          style={{ background: accent }}
+        >
+          {busy ? "Working..." : selectedIsAddon ? "Change tier" : "Continue to payment"}
+        </button>
+        {message && (
+          <span className="text-[13px]" style={{ color: message.kind === "ok" ? "#166534" : "#991B1B" }}>{message.text}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Past invoices ---------------------------------------------------------------
+
+function InvoicesCard() {
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase()}/api/platform/billing/invoices`, { credentials: "include" });
+        if (!res.ok) return;
+        const json = (await res.json()) as { invoices?: Invoice[] };
+        if (!cancelled) setInvoices(json.invoices ?? []);
+      } catch {
+        /* section simply stays hidden */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!invoices || invoices.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      <h2 className="text-[16px] font-bold mb-3" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Invoices</h2>
+      <div className="divide-y" style={{ borderColor: vars.g100 }}>
+        {invoices.map((inv) => (
+          <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+            <div className="min-w-0">
+              <span className="text-[13px] font-semibold" style={{ color: ink }}>
+                {inv.number ?? inv.id}
+              </span>
+              <span className="text-[12px] ml-3" style={{ color: vars.g500 }}>
+                {new Date(inv.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[13px] font-semibold" style={{ color: ink }}>{pounds(inv.amountDuePence)}</span>
+              {inv.status && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{
+                  color: inv.status === "paid" ? "#166534" : vars.g600,
+                  background: inv.status === "paid" ? "#DCFCE7" : vars.g100,
+                }}>
+                  {inv.status === "paid" ? "Paid" : inv.status.replace(/_/g, " ")}
+                </span>
+              )}
+              {(inv.invoicePdf || inv.hostedInvoiceUrl) && (
+                <a
+                  href={inv.invoicePdf ?? inv.hostedInvoiceUrl ?? "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[12px] font-bold underline"
+                  style={{ color: accent }}
+                >
+                  PDF
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
