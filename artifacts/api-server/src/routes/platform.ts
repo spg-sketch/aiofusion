@@ -96,6 +96,7 @@ import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, sendAccountTypeChangedEmail, getAppBaseUrl } from "../lib/notify-email";
 import { getValidInvite, getInviteInvalidReason, consumeInvite } from "../lib/team-invites";
+import { getDiscountInvite, consumeDiscountInvite, applyInviteAccountType } from "../lib/discount-invites";
 
 const router: IRouter = Router();
 
@@ -1222,6 +1223,26 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
     if (!website) { res.status(400).json({ error: "Company website is required." }); return; }
     if (!password || password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters." }); return; }
 
+    // Optional discount invite (beta/VIP link). Validate BEFORE creating the
+    // account: a broken/expired link must fail loudly here, not silently
+    // produce a full-price account.
+    const discountToken = typeof req.body?.discountInvite === "string" ? req.body.discountInvite : "";
+    let discountInvite: import("../lib/discount-invites").DiscountInvite | null = null;
+    if (discountToken) {
+      const looked = await getDiscountInvite(discountToken);
+      if (!looked.invite) {
+        const msg =
+          looked.reason === "expired"
+            ? "This invitation link has expired. Please ask for a new one."
+            : looked.reason === "used"
+              ? "This invitation link has already been used."
+              : "This invitation link is not valid.";
+        res.status(400).json({ error: msg });
+        return;
+      }
+      discountInvite = looked.invite;
+    }
+
     // Email must be unique.
     if (await emailExists(email)) {
       res.status(409).json({ error: "An account with that email already exists. Try signing in instead." });
@@ -1302,6 +1323,21 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
       }
     }
 
+    // Redeem the discount invite: mark it used, stamp the account's discount
+    // record (checkout attaches the coupon server-side), and pre-set the
+    // invited account type. Awaited (not fire-and-forget) so a failure here
+    // surfaces instead of leaving a full-price account behind.
+    if (discountInvite) {
+      try {
+        await consumeDiscountInvite(discountInvite.token, username);
+        await applyInviteAccountType(username, discountInvite.accountType);
+      } catch (err) {
+        logger.error({ err, username }, "signup: discount invite redemption failed");
+        res.status(500).json({ error: "Sign-up failed. Please try again." });
+        return;
+      }
+    }
+
     const verifyUrl = `${getAppBaseUrl()}/api/platform/verify-email?token=${verifyToken}`;
     void sendVerificationEmail({ toEmail: email, toName: name, verifyUrl });
     void sendNewSignupAlert({ name, email, companyName, username, method: "password" });
@@ -1309,6 +1345,37 @@ router.post("/platform/signup", loginLimiter, async (req: Request, res: Response
   } catch (err) {
     console.error("[signup]", err);
     res.status(500).json({ error: "Sign-up failed. Please try again." });
+  }
+});
+
+// Public lookup for a discount-invite link: lets the signup page pre-fill the
+// invitee's email, show the discount transparently, and lock the account type.
+// Exposes only what the invited person was already told - never a coupon code.
+router.get("/platform/discount-invite", async (req: Request, res: Response) => {
+  try {
+    const raw = typeof req.query.token === "string" ? req.query.token : "";
+    if (!raw) { res.status(400).json({ error: "Missing invitation token." }); return; }
+    const looked = await getDiscountInvite(raw);
+    if (!looked.invite) {
+      const msg =
+        looked.reason === "expired"
+          ? "This invitation link has expired. Please ask for a new one."
+          : looked.reason === "used"
+            ? "This invitation link has already been used."
+            : "This invitation link is not valid.";
+      res.status(404).json({ error: msg, reason: looked.reason });
+      return;
+    }
+    res.json({
+      ok: true,
+      email: looked.invite.email,
+      accountType: looked.invite.accountType,
+      percent: looked.invite.percent,
+      label: looked.invite.label,
+    });
+  } catch (err) {
+    logger.error({ err }, "discount-invite: lookup route failed");
+    res.status(500).json({ error: "Could not check this invitation. Please try again." });
   }
 });
 

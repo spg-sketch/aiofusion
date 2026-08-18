@@ -21,7 +21,197 @@ import {
   getAppBaseUrl,
 } from "../lib/notify-email";
 
+import {
+  createDiscountInvite,
+  listDiscountInvites,
+  getAllAccountDiscounts,
+  endAccountDiscount,
+  isDiscountAccountType,
+  isValidDiscountPercent,
+} from "../lib/discount-invites";
+import { getProjectAddons } from "../lib/billing";
+
 const adminRouter = Router();
+
+// Master-admin gate shared by the subscription/discount endpoints. Reads are
+// admin-only; mutations additionally require an unrestricted master owner.
+function requireMasterAdmin(req: Request, res: Response, opts?: { mutate?: boolean }): boolean {
+  if (req.account?.role !== "admin") {
+    res.status(403).json({ error: "Admin access required" });
+    return false;
+  }
+  if (opts?.mutate && isRestrictedMaster(req.account)) {
+    res.status(403).json({ error: MASTER_OWNER_REQUIRED_MESSAGE });
+    return false;
+  }
+  return true;
+}
+
+// --- Subscription overview ---------------------------------------------------
+//
+// One row per account: subscription status, plan, frequency, renewal, last
+// payment, rolling-30-day content action usage, and any invite discount.
+adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (!requireMasterAdmin(req, res)) return;
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [companies, actionRows, lastPayRows, discounts] = await Promise.all([
+      db
+        .select({
+          slug: platformCompaniesTable.slug,
+          displayName: platformCompaniesTable.displayName,
+          role: platformCompaniesTable.role,
+          status: platformCompaniesTable.status,
+          subscriptionStatus: platformCompaniesTable.subscriptionStatus,
+          plan: platformCompaniesTable.plan,
+          billingFrequency: platformCompaniesTable.billingFrequency,
+          currentPeriodEnd: platformCompaniesTable.currentPeriodEnd,
+          freeAccess: platformCompaniesTable.freeAccess,
+        })
+        .from(platformCompaniesTable),
+      // Rolling 30-day content-action counts, attributed to the project
+      // owner's account like the fair-usage counter.
+      db
+        .select({
+          account: sql<string>`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+          actions: sql<number>`count(*)::int`,
+        })
+        .from(tokenUsageTable)
+        .leftJoin(projectsTable, eq(tokenUsageTable.projectId, projectsTable.id))
+        .where(and(gte(tokenUsageTable.createdAt, thirtyDaysAgo), sql`${tokenUsageTable.operation} LIKE 'content-%'`))
+        .groupBy(sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`),
+      db
+        .select()
+        .from(platformMetaTable)
+        .where(sql`${platformMetaTable.key} LIKE 'billing:last-payment:%'`),
+      getAllAccountDiscounts(),
+    ]);
+    const actionsByAccount = new Map(actionRows.map((r) => [String(r.account).toLowerCase(), r.actions]));
+    const lastPaymentByAccount = new Map(
+      lastPayRows.map((r) => [r.key.slice("billing:last-payment:".length), r.value]),
+    );
+    const rows = await Promise.all(
+      companies.map(async (c) => {
+        const slug = c.slug.toLowerCase();
+        const discount = discounts.get(slug) ?? null;
+        let addons = 0;
+        try {
+          addons = (await getProjectAddons(slug)).length;
+        } catch { /* non-fatal */ }
+        return {
+          slug,
+          displayName: c.displayName || slug,
+          accountType: c.role,
+          accountStatus: c.status,
+          subscriptionStatus: c.subscriptionStatus ?? "none",
+          plan: c.plan ?? null,
+          frequency: c.billingFrequency ?? null,
+          currentPeriodEnd: c.currentPeriodEnd ? c.currentPeriodEnd.toISOString() : null,
+          lastPaymentAt: lastPaymentByAccount.get(slug) ?? null,
+          actionsLast30Days: actionsByAccount.get(slug) ?? 0,
+          projectAddons: addons,
+          freeAccess: c.freeAccess === true,
+          discount: discount
+            ? { percent: discount.percent, label: discount.label, redeemedAt: discount.redeemedAt, endedAt: discount.endedAt ?? null }
+            : null,
+        };
+      }),
+    );
+    rows.sort((a, b) => a.slug.localeCompare(b.slug));
+    res.json({ rows });
+  } catch (err) {
+    logger.error({ err }, "admin subscriptions: failed");
+    res.status(500).json({ error: "Could not load the subscription overview." });
+  }
+});
+
+// --- Discount invites ----------------------------------------------------------
+
+adminRouter.get("/admin/discount-invites", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (!requireMasterAdmin(req, res)) return;
+  try {
+    const invites = await listDiscountInvites();
+    const base = getAppBaseUrl();
+    res.json({
+      invites: invites.map((i) => ({
+        email: i.email,
+        accountType: i.accountType,
+        percent: i.percent,
+        label: i.label,
+        createdAt: i.createdAt,
+        expiresAt: i.expiresAt,
+        usedAt: i.usedAt ?? null,
+        usedBySlug: i.usedBySlug ?? null,
+        expired: !i.usedAt && new Date(i.expiresAt).getTime() < Date.now(),
+        // Link only returned for still-pending invites so an admin can re-copy it.
+        url: !i.usedAt ? `${base}/?discount_invite=${i.token}` : null,
+      })),
+    });
+  } catch (err) {
+    logger.error({ err }, "admin discount-invites: list failed");
+    res.status(500).json({ error: "Could not load discount invites." });
+  }
+});
+
+adminRouter.post("/admin/discount-invites", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (!requireMasterAdmin(req, res, { mutate: true })) return;
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const accountType = req.body?.accountType;
+    const percent = req.body?.percent;
+    const label = typeof req.body?.label === "string" ? req.body.label.trim() : "";
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "A valid invitee email is required." });
+      return;
+    }
+    if (!isDiscountAccountType(accountType)) {
+      res.status(400).json({ error: "accountType must be 'client' (In-House) or 'agency' (Agency/Partner)." });
+      return;
+    }
+    if (!isValidDiscountPercent(percent)) {
+      res.status(400).json({ error: "Discount must be a whole number between 1 and 99. For 100%, use the free-access flag instead." });
+      return;
+    }
+    if (!label) {
+      res.status(400).json({ error: "A label is required (e.g. Beta, VIP)." });
+      return;
+    }
+    const invite = await createDiscountInvite({
+      email,
+      accountType,
+      percent,
+      label,
+      createdBy: req.account!.username,
+    });
+    logger.info(
+      { email, percent, label, by: req.account!.username },
+      "admin discount-invites: created",
+    );
+    res.status(201).json({
+      ok: true,
+      url: `${getAppBaseUrl()}/?discount_invite=${invite.token}`,
+      expiresAt: invite.expiresAt,
+    });
+  } catch (err) {
+    logger.error({ err }, "admin discount-invites: create failed");
+    res.status(500).json({ error: "Could not create the discount invite." });
+  }
+});
+
+// End an account's discount effective at the next renewal.
+adminRouter.post("/admin/discounts/end", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (!requireMasterAdmin(req, res, { mutate: true })) return;
+  try {
+    const slug = typeof req.body?.slug === "string" ? req.body.slug.trim().toLowerCase() : "";
+    if (!slug) { res.status(400).json({ error: "Account slug is required." }); return; }
+    const result = await endAccountDiscount(slug);
+    if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "admin discounts: end failed");
+    res.status(500).json({ error: "Could not end the discount." });
+  }
+});
 
 const MODEL = "claude-sonnet-4-6";
 const INTAKE_GEN_TIMEOUT_MS = 120_000;

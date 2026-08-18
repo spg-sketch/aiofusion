@@ -14,6 +14,7 @@ import { type Session as LocalSession, type SessionInfo, type User as LocalUser,
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/contentAi";
+import { SubscriptionsAdminCard } from "../components/SubscriptionsAdminCard";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
 function UsersAdminPage({
@@ -1481,6 +1482,9 @@ function UsersAdminPage({
             </div>
           )}
         </div>
+
+        {/* SUBSCRIPTIONS + DISCOUNT INVITES (master admin only) */}
+        {session.role === "admin" && <SubscriptionsAdminCard />}
 
         {/* AUDIT LOG */}
         <div className="rounded-2xl p-6 sm:p-8 mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>

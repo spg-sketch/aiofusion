@@ -827,6 +827,12 @@ function App() {
   const [isWelcomeLink] = useState<boolean>(
     () => new URLSearchParams(window.location.search).get("welcome") === "1",
   );
+  // Token from a discount-invite link (/?discount_invite=...). Captured once
+  // on load, before the history-sync effect strips the query string, then
+  // handed to PlatformHomePage so the signup form can redeem it.
+  const [discountInviteToken] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("discount_invite"),
+  );
   // OAuth/verification redirect params (/?oauth_status=mfa&mfa_token=... etc).
   // Captured once on load, before the history-sync effect rewrites the URL and
   // drops the query string, then handed to PlatformHomePage as a prop. Without
@@ -850,6 +856,7 @@ function App() {
       params.has("needs_setup") ||
       params.has("verify_status") ||
       params.has("reset_token") ||
+      params.has("discount_invite") ||
       params.has("aio_exit_impersonation") ||
       params.has("aio_switched_master")
     ) {
@@ -1178,6 +1185,7 @@ function App() {
           resetToken={passwordResetToken}
           isWelcomeLink={isWelcomeLink}
           hasPassword={hasPassword}
+          discountInviteToken={discountInviteToken}
         />
         {!session && (
           <GeorgeSupport

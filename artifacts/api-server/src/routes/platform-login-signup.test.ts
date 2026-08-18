@@ -1639,3 +1639,94 @@ describe("POST /api/platform/request-set-password", () => {
     expect(slugLogin.status).toBe(200);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Signup with a discount invite (beta/VIP link)
+// ---------------------------------------------------------------------------
+
+describe("POST /api/platform/signup with discountInvite", () => {
+  let server: Server;
+  let baseUrl: string;
+  const EMAIL = "discount-signup@example.com";
+
+  beforeEach(async () => {
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    await stopServer(server);
+    const accounts = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    for (const acc of accounts) {
+      await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, acc.username));
+      await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, acc.username));
+    }
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+  });
+
+  async function signup(extra: Record<string, unknown>) {
+    const res = await fetch(`${baseUrl}/api/platform/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Dana Discount",
+        email: EMAIL,
+        companyName: "Discount Co",
+        website: "https://example.com",
+        password: "supersecure123",
+        ...extra,
+      }),
+    });
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+  }
+
+  it("rejects an invalid discount invite before creating any account", async () => {
+    const { status, body } = await signup({ discountInvite: "deadbeef" });
+    expect(status).toBe(400);
+    expect(String(body.error)).toMatch(/not valid/i);
+    const accounts = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    expect(accounts).toHaveLength(0);
+  });
+
+  it("redeems a valid invite: sets account type, stamps the discount, single-use", async () => {
+    const { createDiscountInvite, getAccountDiscount, getDiscountInvite } = await import("../lib/discount-invites");
+    const inv = await createDiscountInvite({
+      email: EMAIL, accountType: "client", percent: 40, label: "Beta", createdBy: "aiofusion",
+    });
+
+    const { status } = await signup({ discountInvite: inv.token });
+    expect(status).toBe(201);
+
+    const [acc] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, EMAIL));
+    expect(acc).toBeTruthy();
+    expect(acc.role).toBe("client"); // invite pre-set the account type
+
+    const discount = await getAccountDiscount(acc.username);
+    expect(discount).toMatchObject({ percent: 40, label: "Beta" });
+
+    // Single-use: the same token no longer validates.
+    expect(await getDiscountInvite(inv.token)).toMatchObject({ invite: null, reason: "used" });
+  });
+
+  it("public lookup route returns invite details and failure reasons", async () => {
+    const { createDiscountInvite } = await import("../lib/discount-invites");
+    const inv = await createDiscountInvite({
+      email: EMAIL, accountType: "agency", percent: 25, label: "VIP", createdBy: "aiofusion",
+    });
+    const ok = await fetch(`${baseUrl}/api/platform/discount-invite?token=${inv.token}`);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, email: EMAIL, accountType: "agency", percent: 25, label: "VIP" });
+
+    const bad = await fetch(`${baseUrl}/api/platform/discount-invite?token=deadbeef`);
+    expect(bad.status).toBe(404);
+    expect((await bad.json() as any).reason).toBe("not_found");
+  });
+});

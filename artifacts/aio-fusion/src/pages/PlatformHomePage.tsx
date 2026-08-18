@@ -10,7 +10,7 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts, loadLastSignIn, saveLastSignIn, markPendingSso, clearPendingSso } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverGetDiscountInvite, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts, loadLastSignIn, saveLastSignIn, markPendingSso, clearPendingSso } from "../lib/auth";
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
@@ -35,6 +35,7 @@ function PlatformHomePage({
   oauthRedirectParams,
   onOauthParamsConsumed,
   backToAgency,
+  discountInviteToken,
 }: {
   onCreateProject: () => void;
   onContinueToProjects: () => void;
@@ -63,6 +64,9 @@ function PlatformHomePage({
    *  strips it - the OAuth/MFA/verification redirect params live here. */
   oauthRedirectParams?: string | null;
   onOauthParamsConsumed?: () => void;
+  /** Token from a discount-invite link (/?discount_invite=...). Captured by
+   *  App before the history-sync effect strips the query string. */
+  discountInviteToken?: string | null;
 }) {
   // Pre-fill the email and remember the method from the last successful
   // sign-in on this browser - kept across logout on purpose (never the
@@ -73,7 +77,28 @@ function PlatformHomePage({
   const [loginError, setLoginError] = useState<string | null>(initialNotice ?? null);
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
   // Sign-up form
-  const [showSignup, setShowSignup] = useState(false);
+  const [showSignup, setShowSignup] = useState(() => Boolean(discountInviteToken));
+  // Discount invite (beta/VIP link). Looked up server-side so the signup form
+  // can pre-fill the invitee's email and show the discount transparently.
+  const [discountInvite, setDiscountInvite] = useState<{ email: string; percent: number; label: string } | null>(null);
+  const [discountInviteError, setDiscountInviteError] = useState<string | null>(null);
+
+  // Resolve the discount-invite token (if any) once on mount: pre-fill the
+  // invitee's email and surface the discount, or explain why the link failed.
+  useEffect(() => {
+    if (!discountInviteToken) return;
+    void serverGetDiscountInvite(discountInviteToken).then((r) => {
+      if (r.ok) {
+        setDiscountInvite({ email: r.email, percent: r.percent, label: r.label });
+        setSignupEmail((prev) => prev || r.email);
+        setShowSignup(true);
+      } else {
+        setDiscountInviteError(r.error);
+        setShowSignup(true);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountInviteToken]);
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupCompany, setSignupCompany] = useState("");
@@ -239,6 +264,7 @@ function PlatformHomePage({
       companyName: signupCompany,
       website: websiteNormalised || undefined,
       password: signupPassword,
+      discountInvite: discountInvite && discountInviteToken ? discountInviteToken : undefined,
     }).then((r) => {
       if (!r.ok) { setSignupError(r.error); return; }
       if (r.needsVerification) {
@@ -557,8 +583,22 @@ function PlatformHomePage({
                     ← Sign in instead
                   </button>
                 </div>
-                {/* Sign up with Google / Microsoft */}
-                <div className="mb-5">
+                {(discountInvite || discountInviteError) && (
+                  <div
+                    className="mb-5 px-4 py-3 rounded-xl text-[14px] font-semibold"
+                    style={discountInviteError
+                      ? { background: "rgba(220,38,38,0.25)", color: "white" }
+                      : { background: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.3)" }}
+                  >
+                    {discountInviteError
+                      ? discountInviteError
+                      : `${discountInvite!.label} invitation: your subscription will be ${discountInvite!.percent}% off, applied automatically at checkout.`}
+                  </div>
+                )}
+                {/* Sign up with Google / Microsoft. Hidden when arriving via a
+                    discount invite - the discount is redeemed through the
+                    password signup path, and an SSO signup would lose it. */}
+                <div className="mb-5" style={discountInvite ? { display: "none" } : undefined}>
                   <div className="flex flex-col sm:flex-row gap-3 mb-4">
                     <a
                       href={`${apiBase()}/api/platform/auth/google`}

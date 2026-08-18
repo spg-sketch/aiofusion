@@ -798,6 +798,8 @@ export async function serverSignUp(data: {
   companyName: string;
   website?: string;
   password: string;
+  /** Server-side discount-invite token from a beta/VIP link (?discount_invite=...). */
+  discountInvite?: string;
 }): Promise<
   | { ok: true; session: Session; needsVerification?: false }
   | { ok: true; needsVerification: true; email: string }
@@ -813,6 +815,27 @@ export async function serverSignUp(data: {
   setSession(session);
   await refreshAccountsCache();
   return { ok: true, session };
+}
+
+// Look up a discount-invite link so the signup form can pre-fill the email
+// and show the discount. Returns a user-facing error message on failure.
+export async function serverGetDiscountInvite(
+  token: string,
+): Promise<
+  | { ok: true; email: string; accountType: string; percent: number; label: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const resp = await fetch(
+      `${apiBase()}/api/platform/discount-invite?token=${encodeURIComponent(token)}`,
+      { credentials: "include" },
+    );
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok) return { ok: false, error: json?.error || "This invitation link is not valid." };
+    return { ok: true, email: json.email, accountType: json.accountType, percent: json.percent, label: json.label };
+  } catch {
+    return { ok: false, error: "Could not check this invitation. Please try again." };
+  }
 }
 
 // Resend the email verification link to the given address.

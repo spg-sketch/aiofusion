@@ -698,6 +698,17 @@ export async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promis
     logger.info({ eventId: event.id, customerId }, "billing: invoice.payment_succeeded for unknown customer (likely first invoice)");
     return;
   }
+  // Record the account's most recent successful payment (any invoice: main
+  // plan or add-on) for the admin subscription overview. Fail-soft.
+  try {
+    await db
+      .insert(platformMetaTable)
+      .values({ key: `billing:last-payment:${slug}`, value: new Date().toISOString() })
+      .onConflictDoUpdate({
+        target: platformMetaTable.key,
+        set: { value: new Date().toISOString() },
+      });
+  } catch { /* non-fatal */ }
   // Add-on renewal: apply any queued downgrade now that the renewal invoice
   // has been paid at the new (lower) price.
   const invSub = invoiceSubscriptionId(invoice);
@@ -906,10 +917,29 @@ export async function createCheckoutSession(opts: {
       .where(eq(platformCompaniesTable.slug, slug));
   }
 
+  // Invite-based discount: if this account redeemed a discount invite (and
+  // the master admin hasn't ended it), attach the reusable coupon for that %
+  // server-side. Subscription-level with duration "forever", so every renewal
+  // stays discounted. Never driven by client input.
+  let discounts: Array<{ coupon: string }> | undefined;
+  try {
+    const { getActiveAccountDiscount, ensureDiscountCoupon } = await import("./discount-invites");
+    const discount = await getActiveAccountDiscount(slug);
+    if (discount) {
+      discounts = [{ coupon: await ensureDiscountCoupon(stripe, discount.percent) }];
+    }
+  } catch (err) {
+    // Fail LOUD: silently charging an invited beta tester full price would be
+    // worse than a failed checkout attempt.
+    logger.error({ err, slug }, "billing: failed to resolve discount for checkout");
+    throw err;
+  }
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
+    ...(discounts ? { discounts } : {}),
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
     client_reference_id: slug,
