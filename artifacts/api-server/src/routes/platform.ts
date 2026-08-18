@@ -5009,26 +5009,69 @@ router.post(
 
     const incoming = Array.isArray(req.body?.users) ? req.body.users : [];
     let inserted = 0;
+
+    // Build a set of eligible parents for this migration batch. A parent must
+    // (a) exist in the database already OR appear in this batch itself as a
+    // non-client account, AND (b) not be a client (clients are leaves; nesting
+    // under them is forbidden by the same rule enforced in account-creation and
+    // reparent endpoints).
+    //
+    // We pre-fetch existing eligible parents from the DB once so we do not need
+    // to query per-row in the loop.
+    const existingEligibleParents = new Set<string>();
+    {
+      const rows = await db
+        .select({ username: platformAccountsTable.username, role: platformAccountsTable.role })
+        .from(platformAccountsTable);
+      for (const r of rows) {
+        if (normalizeRole(r.role) !== "client") {
+          existingEligibleParents.add(normUsername(r.username));
+        }
+      }
+    }
+    // Accounts in THIS batch that are non-client can also serve as parents (a
+    // simple validation pass; we do not topologically sort the batch).
+    const batchEligibleParents = new Set<string>();
+    for (const u of incoming) {
+      const uname = normUsername(u?.username);
+      // Check the raw incoming role so client-role entries are excluded from
+      // the eligible-parent set even before the per-row coercion below.
+      if (uname && u?.role !== "client") batchEligibleParents.add(uname);
+    }
+    const isEligibleParent = (slug: string) =>
+      existingEligibleParents.has(slug) || batchEligibleParents.has(slug);
+
     for (const u of incoming) {
       const username = normUsername(u?.username);
       const password = typeof u?.password === "string" ? u.password : "";
       if (!username || !USERNAME_RE.test(username) || password.length < 1) continue;
-      // Incoming role: the migration only ever carries "admin" or legacy "user"
-      // accounts from localStorage. Client accounts are always created via the
-      // POST /platform/accounts endpoint (which enforces a parent), so a
-      // "client" role in migration data is unexpected. Log a warning and skip
-      // the row: inserting a parentless client would make it invisible to every
-      // non-admin user, and we have no safe parent to assign at this point.
       const rawRole = u?.role;
-      if (rawRole === "client" && !normUsername(u?.parent)) {
+      const parent = normUsername(u?.parent);
+
+      // A client account with no parent would be invisible to every workspace
+      // owner. Skip and log so an operator can re-create it correctly.
+      if (rawRole === "client" && !parent) {
         logger.warn(
           { username },
           "platform migrate: skipping client-role account with no parent - it would be invisible to non-admin users. Re-create it via POST /api/platform/accounts to assign the correct parent.",
         );
         continue;
       }
+
+      // A client account whose parent does not exist (or is itself a client)
+      // would also be orphaned or wrongly nested. Skip and log.
+      if (rawRole === "client" && parent && !isEligibleParent(parent)) {
+        logger.warn(
+          { username, parent },
+          "platform migrate: skipping client-role account whose parent does not exist or is itself a client. Re-create it via POST /api/platform/accounts after ensuring the parent account exists.",
+        );
+        continue;
+      }
+
+      // Migration only ever produces "admin" or "user" (legacy localStorage
+      // role) - "client" accounts are always created through the normal
+      // POST /platform/accounts endpoint which enforces a correct parent.
       const role: Role = rawRole === "admin" ? "admin" : "user";
-      const parent = normUsername(u?.parent);
       const result = await db
         .insert(platformAccountsTable)
         .values({

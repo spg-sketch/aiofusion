@@ -201,7 +201,7 @@ describe("POST /api/platform/migrate - client orphan guard", () => {
     expect(h.warnMessages.some((m) => m.includes("orphanclient") || m.includes("client"))).toBe(true);
   });
 
-  it("still inserts a client-role account that has a parent", async () => {
+  it("still inserts a client-role account whose parent exists in the DB", async () => {
     // An existing parent account must be present so the tree makes sense.
     h.state.accounts.push({ username: "agency", passwordHash: "", role: "agency", parent: null });
     const before = h.state.accounts.length;
@@ -213,6 +213,31 @@ describe("POST /api/platform/migrate - client orphan guard", () => {
     // localStorage only knew admin/user). The account should be inserted.
     expect(h.state.accounts.length).toBeGreaterThan(before);
     expect(json?.inserted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("skips a client-role account with a dangling parent (parent does not exist)", async () => {
+    const before = h.state.accounts.length;
+    const { status } = await migrate([
+      { username: "orphanwithdangling", password: "pw12345678", role: "client", parent: "nonexistent-agency" },
+    ]);
+    expect(status).toBe(200);
+    // The account must NOT be inserted - dangling parent would make it invisible.
+    expect(h.state.accounts.length).toBe(before);
+    // A warning must have been emitted.
+    expect(h.warnMessages.some((m) => m.includes("orphanwithdangling") || m.includes("parent"))).toBe(true);
+  });
+
+  it("skips a client-role account nested under a client parent (forbidden nesting)", async () => {
+    // Seed a client account as a potential (invalid) parent.
+    h.state.accounts.push({ username: "parentclient", passwordHash: "", role: "client", parent: "admin" });
+    const before = h.state.accounts.length;
+    const { status } = await migrate([
+      { username: "nestedclient", password: "pw12345678", role: "client", parent: "parentclient" },
+    ]);
+    expect(status).toBe(200);
+    // The nested client must NOT be inserted.
+    expect(h.state.accounts.length).toBe(before);
+    expect(h.warnMessages.some((m) => m.includes("nestedclient") || m.includes("parent"))).toBe(true);
   });
 
   it("accepts an admin-role account with no parent (top-level)", async () => {
@@ -233,5 +258,18 @@ describe("POST /api/platform/migrate - client orphan guard", () => {
     expect(status).toBe(200);
     expect(json?.inserted).toBeGreaterThanOrEqual(1);
     expect(h.state.accounts.length).toBeGreaterThan(before);
+  });
+
+  it("allows a client to reference a parent from the same migration batch", async () => {
+    // No pre-existing agency - it arrives in the same batch as its client.
+    const before = h.state.accounts.length;
+    const { status, json } = await migrate([
+      { username: "batchagency", password: "pw12345678", role: "user" },
+      { username: "batchclient", password: "pw12345678", role: "client", parent: "batchagency" },
+    ]);
+    expect(status).toBe(200);
+    // Both accounts should be inserted.
+    expect(h.state.accounts.length).toBeGreaterThan(before + 1);
+    expect(json?.inserted).toBeGreaterThanOrEqual(2);
   });
 });
