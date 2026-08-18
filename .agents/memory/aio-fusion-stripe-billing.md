@@ -16,6 +16,16 @@ description: Stripe connection quirks, webhook secret location, entitlement/tier
 - **Why:** all of the above came out of an architect review flagging entitlement-loss and quota-abuse paths; tests in `routes/billing.test.ts` cover them.
 - **How to apply:** any new webhook event type or billing route must follow the claim/release + stored-subscription-match patterns and be added to the ai-action-guards allowlist.
 
+## Checkout claim concurrency invariant
+
+The checkout-in-progress guard must remain live from the moment a claim is issued until Stripe can no longer complete the session. The core rule: **a pre-session claim is TTL-preemptable; a finalized claim (with a session id) is not** - it may only be released by a webhook (`checkout.session.completed` or `checkout.session.expired`). Releasing on URL-return or TTL alone is insufficient once a live Stripe session exists.
+
+If finalization fails (DB write), the route must expire the Stripe session and return an error - never return the URL with an unprotected claim still in place.
+
+The completion webhook conditional UPDATE must allow: (a) first purchase (null stored sub), (b) idempotent replay (same sub), (c) re-subscription after cancellation (status = 'cancelled'). An incoming sub that matches none of these is a late duplicate and must be cancelled via the Stripe API immediately.
+
+**Why:** an architect review found that TTL preemption of a finalized claim and an unconditional completion UPDATE both created windows for double-billing; cancelled re-subscription is a legitimate flow that the duplicate guard must not block.
+
 ## Project add-ons (extra projects)
 - Each extra project is funded by its own annual Stripe add-on subscription; add-on state is a shared pool per billing root (agency + managed children share one).
 - **Why:** allowance = plan-included + purchased add-ons, enforced subtree-wide; the paid slot buys the project's EXISTENCE, so cancelling an assigned add-on retires (soft-deletes) its project — otherwise cancellation is a revenue bypass.
