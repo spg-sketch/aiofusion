@@ -777,6 +777,14 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
   // already stored. If a duplicate checkout session completes late (e.g. the
   // original pre-TTL session whose claim was superseded), the update matches
   // 0 rows and we cancel the incoming Stripe subscription to prevent double-billing.
+  // Conditional UPDATE: only activate when:
+  //  - no subscription is currently stored (first purchase), OR
+  //  - the stored subscription matches (idempotent re-processing), OR
+  //  - the stored subscription was cancelled (legitimate re-subscription).
+  // If a duplicate checkout session completes late (e.g. a session from before
+  // the TTL-preemption window, which should no longer be possible but is caught
+  // here as defence-in-depth), the update matches 0 rows and we cancel the
+  // incoming Stripe subscription to prevent double-billing.
   const activated = await db
     .update(platformCompaniesTable)
     .set({
@@ -792,21 +800,23 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
         or(
           isNull(platformCompaniesTable.stripeSubscriptionId),
           eq(platformCompaniesTable.stripeSubscriptionId, subscriptionId ?? ""),
+          eq(platformCompaniesTable.subscriptionStatus, "cancelled"),
         ),
       ),
     )
     .returning({ slug: platformCompaniesTable.slug });
 
   if (activated.length === 0) {
-    // A different subscription is already active - this completion is a duplicate.
+    // A different, non-cancelled subscription is already active - this is a
+    // late duplicate. Cancel the incoming Stripe subscription.
     logger.warn(
       { slug, incomingSubscription: subscriptionId },
-      "billing: duplicate checkout.session.completed - a different subscription is already stored; cancelling the incoming one",
+      "billing: duplicate checkout.session.completed - a different active subscription is already stored; cancelling the incoming one",
     );
     if (subscriptionId) {
       try {
         const stripe = await getUncachableStripeClient();
-        await stripe.subscriptions.cancel(subscriptionId, { prorate: false } as Parameters<typeof stripe.subscriptions.cancel>[1]);
+        await stripe.subscriptions.cancel(subscriptionId);
         logger.info({ slug, subscriptionId }, "billing: duplicate subscription cancelled");
       } catch (err) {
         logger.error({ err, slug, subscriptionId }, "billing: could not cancel duplicate subscription (manual cleanup may be needed)");

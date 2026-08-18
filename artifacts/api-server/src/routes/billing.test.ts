@@ -179,6 +179,10 @@ const stripeCalls = vi.hoisted(() => ({
   discountDeletes: [] as string[],
   // Records subscription ids that were cancelled via subscriptions.cancel.
   subscriptionCancels: [] as string[],
+  // Records session ids that were expired via checkout.sessions.expire.
+  sessionExpires: [] as string[],
+  // When true, the next finalizeCheckoutClaim call will throw (simulates DB error).
+  rejectFinalize: false,
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
@@ -187,6 +191,22 @@ const stripeCalls = vi.hoisted(() => ({
   // Swappable so tests can simulate a test-to-live credential change.
   secretKey: "sk_test_x",
 }));
+// Wrap finalizeCheckoutClaim so individual tests can simulate a DB write failure
+// by setting stripeCalls.rejectFinalize = true before calling the checkout endpoint.
+vi.mock("../lib/billing", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../lib/billing")>();
+  return {
+    ...real,
+    finalizeCheckoutClaim: async (...args: Parameters<typeof real.finalizeCheckoutClaim>) => {
+      if (stripeCalls.rejectFinalize) {
+        stripeCalls.rejectFinalize = false;
+        throw new Error("Simulated DB write failure in finalizeCheckoutClaim");
+      }
+      return real.finalizeCheckoutClaim(...args);
+    },
+  };
+});
+
 vi.mock("../lib/stripe-client", () => ({
   stripeConfigured: () => true,
   getStripeCredentials: () => Promise.resolve({ secretKey: stripeCalls.secretKey, webhookSecret: "whsec_x" }),
@@ -241,6 +261,10 @@ vi.mock("../lib/stripe-client", () => ({
             }
             stripeCalls.sessions.push(params);
             return Promise.resolve({ id: "cs_test_mock", url: "https://checkout.stripe.com/test-session" });
+          },
+          expire: (id: string) => {
+            stripeCalls.sessionExpires.push(id);
+            return Promise.resolve({ id, status: "expired" });
           },
         },
       },
@@ -1486,6 +1510,62 @@ describe("billing hardening", () => {
       .from(platformCompaniesTable)
       .where(eq(platformCompaniesTable.slug, "dup-sub-co"));
     expect(after?.stripeSubscriptionId).toBe("sub_dup_A");
+  });
+
+  it("cancelled account can re-subscribe with a new subscription id", async () => {
+    // Seed a cancelled account so stripeSubscriptionId is set but status is cancelled.
+    await seedWorkspace("newresub-co", "owner@newresub.test");
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeSubscriptionId: "sub_resub_old", subscriptionStatus: "cancelled" })
+      .where(eq(platformCompaniesTable.slug, "newresub-co"));
+
+    // A new checkout session completes with a different subscription id.
+    await handleStripeEvent(
+      fakeEvent("evt_newresub", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_newresub",
+        subscription: "sub_resub_new",
+        metadata: { slug: "newresub-co", plan: "inhouse", frequency: "annual" },
+      }),
+    );
+
+    // The new subscription must be stored and the account must be active.
+    const [company] = await db
+      .select({ stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId, subscriptionStatus: platformCompaniesTable.subscriptionStatus })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "newresub-co"));
+    expect(company?.subscriptionStatus).toBe("active");
+    expect(company?.stripeSubscriptionId).toBe("sub_resub_new");
+
+    // The old subscription id must NOT have been cancelled by the duplicate guard.
+    const cancelsBefore = stripeCalls.subscriptionCancels;
+    expect(cancelsBefore).not.toContain("sub_resub_old");
+    expect(cancelsBefore).not.toContain("sub_resub_new");
+  });
+
+  it("checkout endpoint expires the Stripe session and returns 500 when claim finalization fails", async () => {
+    const { sid } = await seedWorkspace("fin-fail-co", "owner@finfail.test");
+    const expiresBefore = stripeCalls.sessionExpires.length;
+
+    // Trigger a DB write failure on the next finalizeCheckoutClaim call.
+    stripeCalls.rejectFinalize = true;
+
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+
+    // Must return an error, not a checkout URL.
+    expect(res.status).toBe(500);
+    expect(res.json.url).toBeUndefined();
+
+    // The Stripe session must have been expired so the orphaned URL cannot complete.
+    expect(stripeCalls.sessionExpires.slice(expiresBefore)).toContain("cs_test_mock");
+
+    // The claim must have been released so the user can retry immediately.
+    const claim = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:fin-fail-co"));
+    expect(claim).toHaveLength(0);
   });
 
   it("checkout.session.completed syncs Stripe customer billing details back to the app", async () => {

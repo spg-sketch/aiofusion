@@ -31,7 +31,7 @@ import {
   type PlanKey,
 } from "../lib/billing-plans";
 import { getAppBaseUrl } from "../lib/notify-email";
-import { stripeConfigured } from "../lib/stripe-client";
+import { stripeConfigured, getUncachableStripeClient } from "../lib/stripe-client";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -201,9 +201,10 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       return;
     }
 
+    let sessionId: string | undefined;
     try {
       const base = getAppBaseUrl();
-      const { url, sessionId } = await createCheckoutSession({
+      const session = await createCheckoutSession({
         slug: billingSlug,
         plan: ctx.plan,
         frequency,
@@ -211,15 +212,32 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
         claimToken,
       });
-      // Persist the session id and url in the claim so a concurrent request
-      // can retrieve the URL, and so the webhook can identify the claim to release.
-      await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url).catch((err) => {
-        logger.warn({ err, slug: billingSlug }, "billing: could not finalize checkout claim (non-fatal)");
-      });
+      const url = session.url;
+      sessionId = session.sessionId;
+
+      // Finalization is REQUIRED for the durable-claim safety to hold.
+      // Without persisting the session id, the claim remains a pre-session
+      // record that can be TTL-preempted after 10 minutes, allowing a second
+      // process to open another session while this one is still open on Stripe.
+      // Failure here is therefore not recoverable: we expire the Stripe session
+      // so the returned URL cannot be used, release the claim, and return an error.
+      await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url);
+
       res.json({ url });
       // Claim is now held until checkout.session.completed fires. Do NOT release here.
     } catch (err) {
-      // Session creation failed - release the claim immediately so the user can retry.
+      // If we have a session id the session was created before the error occurred
+      // (finalization failure). Expire the Stripe session so the URL - which we
+      // are NOT returning - cannot be completed by the user.
+      if (sessionId) {
+        try {
+          const stripe = await getUncachableStripeClient();
+          await stripe.checkout.sessions.expire(sessionId);
+        } catch (expErr) {
+          logger.error({ expErr, slug: billingSlug, sessionId }, "billing: could not expire session after finalization failure");
+        }
+      }
+      // Release the claim so the user can try again immediately.
       await releaseCheckout(billingSlug, claimToken).catch((releaseErr) => {
         logger.warn({ releaseErr, slug: billingSlug }, "billing: could not release checkout claim after session error (non-fatal)");
       });
