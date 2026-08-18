@@ -216,31 +216,43 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       sessionId = session.sessionId;
 
       // Finalization is REQUIRED for the durable-claim safety to hold.
-      // Without persisting the session id, the claim remains a pre-session
-      // record that can be TTL-preempted after 10 minutes, allowing a second
-      // process to open another session while this one is still open on Stripe.
-      // Failure here is therefore not recoverable: we expire the Stripe session
-      // so the returned URL cannot be used, release the claim, and return an error.
+      // Without persisting the session id (and verifying the claim is still
+      // ours), the claim remains a pre-session record that can be TTL-preempted,
+      // allowing a second process to open another session while this one is still
+      // open on Stripe.  finalizeCheckoutClaim throws if 0 rows were updated
+      // (claim preempted between session creation and this write).
       await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url);
 
       res.json({ url });
       // Claim is now held until checkout.session.completed fires. Do NOT release here.
     } catch (err) {
-      // If we have a session id the session was created before the error occurred
-      // (finalization failure). Expire the Stripe session so the URL - which we
-      // are NOT returning - cannot be completed by the user.
       if (sessionId) {
+        // A session was created but could not be finalized into the claim.
+        // Expire the Stripe session so the URL cannot be used. Only release the
+        // claim if expiry is confirmed - if expiry fails the session could still
+        // complete, so the claim must stay locked until the webhook fires.
+        let sessionExpired = false;
         try {
           const stripe = await getUncachableStripeClient();
           await stripe.checkout.sessions.expire(sessionId);
+          sessionExpired = true;
         } catch (expErr) {
-          logger.error({ expErr, slug: billingSlug, sessionId }, "billing: could not expire session after finalization failure");
+          logger.error(
+            { expErr, slug: billingSlug, sessionId },
+            "billing: could not expire session after finalization failure - claim left locked until webhook fires",
+          );
         }
+        if (sessionExpired) {
+          await releaseCheckout(billingSlug, claimToken).catch((releaseErr) => {
+            logger.warn({ releaseErr, slug: billingSlug }, "billing: could not release checkout claim after confirmed session expiry (non-fatal)");
+          });
+        }
+      } else {
+        // No session was ever created - safe to release the claim immediately.
+        await releaseCheckout(billingSlug, claimToken).catch((releaseErr) => {
+          logger.warn({ releaseErr, slug: billingSlug }, "billing: could not release checkout claim after pre-session error (non-fatal)");
+        });
       }
-      // Release the claim so the user can try again immediately.
-      await releaseCheckout(billingSlug, claimToken).catch((releaseErr) => {
-        logger.warn({ releaseErr, slug: billingSlug }, "billing: could not release checkout claim after session error (non-fatal)");
-      });
       throw err;
     }
   } catch (err) {

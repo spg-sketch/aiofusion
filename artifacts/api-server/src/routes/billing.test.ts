@@ -181,8 +181,10 @@ const stripeCalls = vi.hoisted(() => ({
   subscriptionCancels: [] as string[],
   // Records session ids that were expired via checkout.sessions.expire.
   sessionExpires: [] as string[],
-  // When true, the next finalizeCheckoutClaim call will throw (simulates DB error).
+  // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
   rejectFinalize: false,
+  // When true, the next checkout.sessions.expire call will throw (simulates a Stripe API failure).
+  rejectExpire: false,
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
@@ -263,6 +265,10 @@ vi.mock("../lib/stripe-client", () => ({
             return Promise.resolve({ id: "cs_test_mock", url: "https://checkout.stripe.com/test-session" });
           },
           expire: (id: string) => {
+            if (stripeCalls.rejectExpire) {
+              stripeCalls.rejectExpire = false;
+              return Promise.reject(new Error("stripe: could not expire session"));
+            }
             stripeCalls.sessionExpires.push(id);
             return Promise.resolve({ id, status: "expired" });
           },
@@ -1548,7 +1554,8 @@ describe("billing hardening", () => {
     const { sid } = await seedWorkspace("fin-fail-co", "owner@finfail.test");
     const expiresBefore = stripeCalls.sessionExpires.length;
 
-    // Trigger a DB write failure on the next finalizeCheckoutClaim call.
+    // Simulate a DB write failure (or a 0-row update caused by claim preemption)
+    // on the next finalizeCheckoutClaim call.
     stripeCalls.rejectFinalize = true;
 
     const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
@@ -1560,12 +1567,38 @@ describe("billing hardening", () => {
     // The Stripe session must have been expired so the orphaned URL cannot complete.
     expect(stripeCalls.sessionExpires.slice(expiresBefore)).toContain("cs_test_mock");
 
-    // The claim must have been released so the user can retry immediately.
+    // Session expiry succeeded - the claim must be released so the user can retry.
     const claim = await db
       .select()
       .from(platformMetaTable)
       .where(eq(platformMetaTable.key, "checkout:pending:fin-fail-co"));
     expect(claim).toHaveLength(0);
+  });
+
+  it("checkout endpoint leaves the claim locked when session expiry fails after finalization failure", async () => {
+    // If finalization fails AND we cannot expire the Stripe session, the session
+    // could still complete on Stripe's side. The claim must stay locked until the
+    // checkout.session.completed or checkout.session.expired webhook fires.
+    const { sid } = await seedWorkspace("fin-exp-fail-co", "owner@finexpfail.test");
+
+    stripeCalls.rejectFinalize = true;
+    stripeCalls.rejectExpire = true;
+
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+
+    expect(res.status).toBe(500);
+    expect(res.json.url).toBeUndefined();
+
+    // Claim must still be present - releasing it here would allow a concurrent
+    // checkout to open a second session while the first one can still complete.
+    const claim = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:fin-exp-fail-co"));
+    expect(claim).toHaveLength(1);
+    // The claim must still be a pre-session record (no sid) since finalization failed.
+    const parsed = JSON.parse(claim[0]!.value) as Record<string, unknown>;
+    expect(parsed.sid).toBeUndefined();
   });
 
   it("checkout.session.completed syncs Stripe customer billing details back to the app", async () => {

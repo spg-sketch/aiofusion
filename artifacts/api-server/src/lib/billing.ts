@@ -319,12 +319,23 @@ export async function finalizeCheckoutClaim(
     sid: sessionId,
     url: sessionUrl,
   } satisfies CheckoutClaim);
-  await db.execute(sql`
+  // RETURNING is required to detect if the claim was preempted. If another
+  // process TTL-preempted this claim between claimCheckout and session
+  // creation, the stored token will no longer match and 0 rows are updated.
+  // We must throw in that case - returning the URL would give the user a
+  // session that is no longer protected by a durable claim.
+  const result = await db.execute(sql`
     UPDATE platform_meta
     SET value = ${value}
     WHERE key = ${key}
       AND (value::json->>'tok') = ${claimToken}
+    RETURNING key
   `);
+  if (result.rows.length === 0) {
+    throw new Error(
+      `billing: checkout claim preempted for ${slug} - token no longer owns the claim row`,
+    );
+  }
 }
 
 // Conditionally release the checkout claim.
