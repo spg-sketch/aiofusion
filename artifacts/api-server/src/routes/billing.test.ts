@@ -851,6 +851,46 @@ describe("project add-ons", () => {
     expect(await getProjectActionLimit("addon-recv", "xfer-proj")).toBe(75);
   });
 
+  it("a queued downgrade survives detachment and applies at renewal to the re-assigned slot", async () => {
+    const { detachAddonForProjectTransfer } = await import("../lib/billing");
+    const { sid } = await seedSubscribed("addon-dq", "owner@addondq.test");
+    await seedSubscribed("addon-dq-recv", "owner@addondqrecv.test");
+    await db.insert(projectsTable).values({ id: "dq-proj", name: "DQ", data: {}, owner: "addon-dq" });
+    await handleStripeEvent(
+      fakeEvent("evt_addon_dq", "checkout.session.completed", {
+        mode: "subscription",
+        customer: "cus_addon-dq",
+        subscription: "sub_addon_dq",
+        metadata: { slug: "addon-dq", kind: "project-addon", tier: "max", projectId: "dq-proj" },
+      }),
+    );
+    // Queue a downgrade (Stripe now bills standard from renewal)...
+    const down = await api("/api/platform/billing/project-tier", { sid, body: { projectId: "dq-proj", tier: "standard" } });
+    expect(down.json.applied).toBe("at_renewal");
+    // ...then transfer the project away. pendingTier must survive detachment.
+    await detachAddonForProjectTransfer("addon-dq", "dq-proj", "addon-dq-recv");
+    let addons = await getProjectAddons("addon-dq");
+    expect(addons[0]!.projectId).toBeNull();
+    expect(addons[0]!.pendingTier).toBe("standard");
+    // Assign the slot to a fresh project (gets the still-current max tier)...
+    await db.insert(projectsTable).values({ id: "dq-proj2", name: "DQ2", data: {}, owner: "addon-dq" });
+    await assignAddonToNewProject("addon-dq", "dq-proj2");
+    expect(await getProjectActionLimit("addon-dq", "dq-proj2")).toBe(150);
+    // ...and the renewal lowers it as billed.
+    await handleStripeEvent(
+      fakeEvent("evt_addon_dq_renew", "invoice.payment_succeeded", {
+        customer: "cus_addon-dq",
+        subscription: "sub_addon_dq",
+        billing_reason: "subscription_cycle",
+        lines: { data: [{ period: { end: 2_100_000_000 } }] },
+      }),
+    );
+    addons = await getProjectAddons("addon-dq");
+    expect(addons[0]!.tier).toBe("standard");
+    expect(addons[0]!.pendingTier).toBeUndefined();
+    expect(await getProjectActionLimit("addon-dq", "dq-proj2")).toBe(50);
+  });
+
   it("concurrent new projects cannot consume the same purchased slot twice", async () => {
     await seedSubscribed("addon-race", "owner@addonrace.test");
     await handleStripeEvent(

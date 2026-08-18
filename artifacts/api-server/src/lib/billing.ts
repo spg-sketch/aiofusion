@@ -289,10 +289,22 @@ export async function detachAddonForProjectTransfer(
     const addons = await getProjectAddons(oldRoot);
     const addon = addons.find((a) => a.projectId === projectId);
     if (!addon) return;
+    // Clear the tier FIRST; only persist the detached binding once the scoped
+    // clear confirms the project was still ours. If the clear matches nothing
+    // the project has already left the subtree (a concurrent transfer, which
+    // itself ran this detach) - leave the binding for that flow to resolve.
+    const cleared = await setProjectTierScoped(oldRoot, projectId, null);
+    if (!cleared && (await isProjectInBillingSubtree(oldRoot, projectId))) {
+      // Unexpected: still ours but nothing updated (deleted row, etc).
+      logger.warn({ oldRoot, projectId }, "billing: transfer detach could not clear tier - binding kept");
+      return;
+    }
+    // The slot returns to the purchaser unassigned. pendingTier is kept: it
+    // belongs to the SUBSCRIPTION (Stripe already bills the lower price from
+    // renewal), so the renewal webhook must still lower the add-on's tier
+    // even while it sits unassigned.
     addon.projectId = null;
-    delete addon.pendingTier;
     await saveProjectAddons(oldRoot, addons);
-    await setProjectTierScoped(oldRoot, projectId, null);
     logger.warn(
       { oldRoot, newRoot, projectId, subscriptionId: addon.subscriptionId },
       "billing: project left its billing subtree - add-on detached, tier cleared",
