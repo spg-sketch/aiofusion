@@ -34,6 +34,7 @@ type SubscriptionInfo = {
   includedProjects: number;
   projectAllowance: number | null;
   projectsUsed: number;
+  latestInvoiceUrl?: string | null;
   portalAvailable: boolean;
   checkoutAvailable: boolean;
   projects: BillingProject[];
@@ -184,6 +185,19 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
                 Your last payment did not go through. We'll retry automatically - please update your card details below to avoid interruption.
               </p>
             )}
+            {info.latestInvoiceUrl && (
+              <p className="text-[13px] mt-1">
+                <a
+                  href={info.latestInvoiceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold underline underline-offset-2"
+                  style={{ color: accent }}
+                >
+                  View your latest invoice
+                </a>
+              </p>
+            )}
             {info.portalAvailable && <PortalButtons />}
             {info.status === "cancelled" && (
               <div className="mt-3">
@@ -197,7 +211,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
         ) : (
           <div>
             <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-              Subscribe to the {planLabel} plan - {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. All prices exclude VAT.
+              Subscribe to the {planLabel} plan - {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Prices exclude VAT - tax is calculated at checkout based on your billing country, and business customers can enter a VAT number there.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
           </div>
@@ -306,7 +320,7 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a project</h2>
       <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-        Add another project workspace to your plan. Billed annually, excl. VAT. Once paid, your next new project uses the tier you choose here.
+        Add another project workspace to your plan. Billed annually, excl. VAT (added at checkout). Once paid, your next new project uses the tier you choose here.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
         {TIER_ORDER.map((t) => (

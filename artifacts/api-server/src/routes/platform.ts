@@ -4470,6 +4470,9 @@ router.post(
           billingAddress: billingAddressRaw || null,
         })
         .where(eq(platformCompaniesTable.slug, target));
+      // Keep the Stripe customer's invoice details in step (fail-soft inside).
+      const { syncStripeBillingDetails } = await import("../lib/billing");
+      void syncStripeBillingDetails(target);
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Could not save billing details" });

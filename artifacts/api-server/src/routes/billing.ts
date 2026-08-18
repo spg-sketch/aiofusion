@@ -11,6 +11,7 @@ import {
   createProjectCheckoutSession,
   createPortalSession,
   listCustomerInvoices,
+  getLatestInvoiceLink,
   getProjectAddons,
   listBillingProjects,
   changeAddonTier,
@@ -81,9 +82,10 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
     const state = await getBillingState(ctx.slug);
     const prices = PLAN_PRICES[ctx.plan];
     const entitled = isEntitled(state);
-    const [addons, projects] = await Promise.all([
+    const [addons, projects, latestInvoice] = await Promise.all([
       getProjectAddons(ctx.slug),
       listBillingProjects(ctx.slug),
+      getLatestInvoiceLink(ctx.slug),
     ]);
     const included = state?.plan ? INCLUDED_PROJECTS[state.plan] : INCLUDED_PROJECTS[ctx.plan];
     res.setHeader("Cache-Control", "no-store");
@@ -97,6 +99,7 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       includedProjects: included,
       projectAllowance: entitled ? included + addons.length : null,
       projectsUsed: projects.length,
+      latestInvoiceUrl: latestInvoice,
       portalAvailable: stripeConfigured() && !!state?.stripeCustomerId,
       checkoutAvailable: stripeConfigured(),
       projects: projects.map((p) => {

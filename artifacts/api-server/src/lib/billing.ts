@@ -885,6 +885,135 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Stripe Tax + customer billing details
+// ---------------------------------------------------------------------------
+
+// Full billing details for syncing to the Stripe customer. billing_address is
+// free text in the app, so it maps to address line1 (Stripe recomputes tax
+// from the address the customer confirms at checkout anyway).
+async function getBillingDetails(slug: string): Promise<{
+  email: string | null;
+  companyName: string;
+  vatNumber: string | null;
+  billingAddress: string | null;
+} | null> {
+  const [company] = await db
+    .select({
+      billingEmail: platformCompaniesTable.billingEmail,
+      email: platformCompaniesTable.email,
+      displayName: platformCompaniesTable.displayName,
+      slug: platformCompaniesTable.slug,
+      vatNumber: platformCompaniesTable.vatNumber,
+      billingAddress: platformCompaniesTable.billingAddress,
+    })
+    .from(platformCompaniesTable)
+    .where(eq(platformCompaniesTable.slug, normUsername(slug)))
+    .limit(1);
+  if (!company) return null;
+  return {
+    email: company.billingEmail || company.email || null,
+    companyName: company.displayName || company.slug,
+    vatNumber: company.vatNumber || null,
+    billingAddress: company.billingAddress || null,
+  };
+}
+
+// Maps a VAT number to a Stripe tax-id type. GB numbers use gb_vat; EU-prefixed
+// numbers use eu_vat. Anything else is returned as null (not synced - the
+// customer can still enter it at checkout via tax_id_collection).
+export function vatNumberToTaxId(vat: string): { type: "gb_vat" | "eu_vat"; value: string } | null {
+  const v = vat.replace(/\s+/g, "").toUpperCase();
+  if (!v) return null;
+  if (v.startsWith("GB") || v.startsWith("XI")) return { type: "gb_vat", value: v };
+  const EU_PREFIXES = [
+    "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR",
+    "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO",
+    "SE", "SI", "SK",
+  ];
+  if (EU_PREFIXES.some((p) => v.startsWith(p))) return { type: "eu_vat", value: v };
+  return null;
+}
+
+// Pushes the account's billing details (name, email, address, VAT number) to
+// its Stripe customer so invoices carry them. Fail-soft: billing-details saves
+// must never fail because Stripe is unreachable; the next checkout re-syncs.
+export async function syncStripeBillingDetails(slug: string): Promise<void> {
+  const key = normUsername(slug);
+  try {
+    const state = await getBillingState(key);
+    if (!state?.stripeCustomerId) return;
+    const details = await getBillingDetails(key);
+    if (!details) return;
+    const stripe = await getUncachableStripeClient();
+    await stripe.customers.update(state.stripeCustomerId, {
+      name: details.companyName,
+      ...(details.email ? { email: details.email } : {}),
+      ...(details.billingAddress
+        ? { address: { line1: details.billingAddress.slice(0, 500) } }
+        : {}),
+    });
+    // Reconcile the customer's tax IDs with the stored VAT number.
+    const wanted = details.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
+    const existing = await stripe.customers.listTaxIds(state.stripeCustomerId, { limit: 10 });
+    const alreadyThere = wanted
+      ? existing.data.some((t) => t.value.replace(/\s+/g, "").toUpperCase() === wanted.value)
+      : false;
+    for (const t of existing.data) {
+      const keep = wanted && t.value.replace(/\s+/g, "").toUpperCase() === wanted.value;
+      if (!keep) await stripe.customers.deleteTaxId(state.stripeCustomerId, t.id).catch(() => {});
+    }
+    if (wanted && !alreadyThere) {
+      try {
+        await stripe.customers.createTaxId(state.stripeCustomerId, wanted);
+      } catch (err) {
+        // An invalid VAT number must not block the rest of the sync.
+        logger.warn({ err, slug: key }, "billing: could not attach VAT number to Stripe customer");
+      }
+    }
+    logger.info({ slug: key }, "billing: synced billing details to Stripe customer");
+  } catch (err) {
+    logger.warn({ err, slug: key }, "billing: failed to sync billing details to Stripe (non-fatal)");
+  }
+}
+
+// True when a Stripe error means "Stripe Tax has not been activated in the
+// dashboard yet" - in that case checkout retries without automatic tax so
+// test mode keeps working before the one-time activation.
+function isTaxNotActivatedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /tax/i.test(msg) && /(activ|enabled|origin address|registration)/i.test(msg);
+}
+
+// Creates a Checkout Session with Stripe Tax (automatic tax + billing address
+// + VAT number collection). If Stripe Tax is not activated on the account yet,
+// logs loudly and falls back to a session without tax.
+async function createSessionWithTax(
+  stripe: Stripe,
+  slug: string,
+  params: Stripe.Checkout.SessionCreateParams,
+): Promise<Stripe.Checkout.Session> {
+  const withTax: Stripe.Checkout.SessionCreateParams = {
+    ...params,
+    automatic_tax: { enabled: true },
+    billing_address_collection: "required",
+    tax_id_collection: { enabled: true },
+    // Required when reusing an existing customer with automatic tax: the
+    // address and name confirmed at checkout are saved back to the customer.
+    customer_update: { address: "auto", name: "auto" },
+  };
+  try {
+    return await stripe.checkout.sessions.create(withTax);
+  } catch (err) {
+    if (!isTaxNotActivatedError(err)) throw err;
+    logger.error(
+      { err, slug },
+      "billing: Stripe Tax is not activated - checkout created WITHOUT VAT. Activate Stripe Tax in the dashboard (see replit.md).",
+    );
+    return stripe.checkout.sessions.create(params);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Checkout session creation
 // ---------------------------------------------------------------------------
 
@@ -900,22 +1029,8 @@ export async function createCheckoutSession(opts: {
   const price = PLAN_PRICES[opts.plan][opts.frequency];
   const priceId = await ensurePriceId(stripe, price);
 
-  // Reuse the stored customer, or create one with the billing email prefilled.
-  const state = await getBillingState(slug);
-  let customerId = state?.stripeCustomerId ?? null;
-  if (!customerId) {
-    const contact = await getBillingContact(slug);
-    const customer = await stripe.customers.create({
-      email: contact.email ?? undefined,
-      name: contact.companyName,
-      metadata: { slug },
-    });
-    customerId = customer.id;
-    await db
-      .update(platformCompaniesTable)
-      .set({ stripeCustomerId: customerId })
-      .where(eq(platformCompaniesTable.slug, slug));
-  }
+  // Reuse the stored customer, or create one with the billing details prefilled.
+  const customerId = await ensureStripeCustomerId(stripe, slug);
 
   // Invite-based discount: if this account redeemed a discount invite (and
   // the master admin hasn't ended it), attach the reusable coupon for that %
@@ -935,7 +1050,7 @@ export async function createCheckoutSession(opts: {
     throw err;
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await createSessionWithTax(stripe, slug, {
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
@@ -956,11 +1071,20 @@ export async function createCheckoutSession(opts: {
 // add-on checkout paths.
 async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<string> {
   const state = await getBillingState(slug);
-  if (state?.stripeCustomerId) return state.stripeCustomerId;
-  const contact = await getBillingContact(slug);
+  if (state?.stripeCustomerId) {
+    // Keep the customer's invoice details fresh before checkout.
+    await syncStripeBillingDetails(slug);
+    return state.stripeCustomerId;
+  }
+  const details = await getBillingDetails(slug);
+  const wanted = details?.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
   const customer = await stripe.customers.create({
-    email: contact.email ?? undefined,
-    name: contact.companyName,
+    email: details?.email ?? undefined,
+    name: details?.companyName ?? slug,
+    ...(details?.billingAddress
+      ? { address: { line1: details.billingAddress.slice(0, 500) } }
+      : {}),
+    ...(wanted ? { tax_id_data: [wanted] } : {}),
     metadata: { slug },
   });
   await db
@@ -991,7 +1115,7 @@ export async function createProjectCheckoutSession(opts: {
     tier: opts.tier,
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
   };
-  const session = await stripe.checkout.sessions.create({
+  const session = await createSessionWithTax(stripe, slug, {
     customer: customerId,
     mode: "subscription",
     line_items: [{ price: priceId, quantity: 1 }],
@@ -1071,6 +1195,21 @@ export async function listCustomerInvoices(slug: string): Promise<InvoiceSummary
     hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
     invoicePdf: inv.invoice_pdf ?? null,
   }));
+}
+
+// Hosted link for the most recent invoice, for a "view invoice" shortcut on
+// the subscription card. Fail-soft: the card renders without it.
+export async function getLatestInvoiceLink(slug: string): Promise<string | null> {
+  try {
+    const state = await getBillingState(normUsername(slug));
+    if (!state?.stripeCustomerId) return null;
+    const stripe = await getUncachableStripeClient();
+    const invoices = await stripe.invoices.list({ customer: state.stripeCustomerId, limit: 1 });
+    return invoices.data[0]?.hosted_invoice_url ?? null;
+  } catch (err) {
+    logger.warn({ err, slug }, "billing: could not load latest invoice link (non-fatal)");
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -212,3 +212,14 @@ On production the `activeFeatureFlags` array will be empty (`[]`). On staging it
 { "status": "ok", "features": ["aiCoverageSearch"] }
 ```
 Hit `https://<staging-url>/api/healthz` to confirm flags are on, and `https://<production-url>/api/healthz` to confirm `"features": []`.
+
+## Stripe Tax (VAT at checkout) — one-time dashboard steps for the owner
+
+Checkout is built to charge VAT automatically via Stripe Tax, but Stripe requires a one-time activation in the Stripe dashboard (test mode and, later, live mode separately):
+
+1. In the Stripe dashboard, go to **Settings → Tax** and click **Activate Stripe Tax**.
+2. Set your **origin address** (your business address) when prompted.
+3. Add your **tax registrations** (at minimum a UK VAT registration; add EU OSS or per-country registrations as needed).
+4. Under **Settings → Emails**, turn on **"Email finished invoices to customers"** (and receipts) so every subscription payment sends a compliant invoice PDF automatically.
+
+Until Stripe Tax is activated, checkout still works: the server detects the "not activated" error, logs it loudly, and creates the session without tax so test payments are not blocked. Once activated, no code change is needed — VAT appears at checkout automatically, customers confirm their billing address, and business customers can enter a VAT number (valid EU/UK numbers apply reverse charge where appropriate). Billing details saved in the app (billing email, VAT number, address) sync to the Stripe customer so invoices carry them.

@@ -167,6 +167,14 @@ const stripeCalls = vi.hoisted(() => ({
   sessions: [] as unknown[],
   subscriptionUpdates: [] as Array<{ id: string; params: any }>,
   portalSessions: [] as unknown[],
+  customerCreates: [] as any[],
+  customerUpdates: [] as Array<{ id: string; params: any }>,
+  taxIds: [] as Array<{ id: string; type: string; value: string }>,
+  taxIdCreates: [] as any[],
+  taxIdDeletes: [] as string[],
+  // When true, the next sessions.create with automatic_tax throws the
+  // "Stripe Tax not activated" error to exercise the fallback path.
+  rejectTaxNext: false,
 }));
 vi.mock("../lib/stripe-client", () => ({
   stripeConfigured: () => true,
@@ -182,11 +190,33 @@ vi.mock("../lib/stripe-client", () => ({
         create: () => Promise.resolve({ id: "prod_mock_created" }),
       },
       customers: {
-        create: () => Promise.resolve({ id: "cus_mock_1" }),
+        create: (params: any) => {
+          stripeCalls.customerCreates.push(params);
+          return Promise.resolve({ id: "cus_mock_1" });
+        },
+        update: (id: string, params: any) => {
+          stripeCalls.customerUpdates.push({ id, params });
+          return Promise.resolve({ id });
+        },
+        listTaxIds: () => Promise.resolve({ data: stripeCalls.taxIds }),
+        createTaxId: (_id: string, params: any) => {
+          stripeCalls.taxIdCreates.push(params);
+          return Promise.resolve({ id: "txi_mock", ...params });
+        },
+        deleteTaxId: (_id: string, taxIdId: string) => {
+          stripeCalls.taxIdDeletes.push(taxIdId);
+          return Promise.resolve({});
+        },
       },
       checkout: {
         sessions: {
-          create: (params: unknown) => {
+          create: (params: any) => {
+            if (stripeCalls.rejectTaxNext && params.automatic_tax?.enabled) {
+              stripeCalls.rejectTaxNext = false;
+              return Promise.reject(
+                new Error("You must activate Stripe Tax and set an origin address before using automatic_tax."),
+              );
+            }
             stripeCalls.sessions.push(params);
             return Promise.resolve({ url: "https://checkout.stripe.com/test-session" });
           },
@@ -250,6 +280,8 @@ import {
   getProjectAddons,
   getProjectAllowance,
   assignAddonToNewProject,
+  syncStripeBillingDetails,
+  vatNumberToTaxId,
 } from "../lib/billing";
 
 // ---------------------------------------------------------------------------
@@ -616,6 +648,85 @@ describe("billing routes", () => {
       .where(eq(platformCompaniesTable.slug, "buyer-co"));
     const again = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(again.status).toBe(409);
+  });
+
+  it("checkout enables Stripe Tax with address and VAT collection", async () => {
+    const { sid } = await seedWorkspace("taxed-co", "owner@taxed.test", { accountRole: "client" });
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res.status).toBe(200);
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.automatic_tax).toEqual({ enabled: true });
+    expect(params.billing_address_collection).toBe("required");
+    expect(params.tax_id_collection).toEqual({ enabled: true });
+    expect(params.customer_update).toEqual({ address: "auto", name: "auto" });
+  });
+
+  it("falls back to a taxless session when Stripe Tax is not activated", async () => {
+    const { sid } = await seedWorkspace("untaxed-co", "owner@untaxed.test", { accountRole: "client" });
+    stripeCalls.rejectTaxNext = true;
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res.status).toBe(200);
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.automatic_tax).toBeUndefined();
+    expect(params.metadata.slug).toBe("untaxed-co");
+  });
+
+  it("creates the Stripe customer with address and VAT number from billing details", async () => {
+    const { sid } = await seedWorkspace("detailed-co", "owner@detailed.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({
+        billingEmail: "accounts@detailed.test",
+        vatNumber: "GB123456789",
+        billingAddress: "1 High Street, London",
+      })
+      .where(eq(platformCompaniesTable.slug, "detailed-co"));
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res.status).toBe(200);
+    const created = stripeCalls.customerCreates[stripeCalls.customerCreates.length - 1];
+    expect(created.email).toBe("accounts@detailed.test");
+    expect(created.address).toEqual({ line1: "1 High Street, London" });
+    expect(created.tax_id_data).toEqual([{ type: "gb_vat", value: "GB123456789" }]);
+  });
+
+  it("syncStripeBillingDetails pushes name, email, address and reconciles tax IDs", async () => {
+    await seedWorkspace("sync-co", "owner@sync.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({
+        stripeCustomerId: "cus_sync_1",
+        billingEmail: "bills@sync.test",
+        vatNumber: "DE123456789",
+        billingAddress: "2 Kaiserstrasse, Berlin",
+      })
+      .where(eq(platformCompaniesTable.slug, "sync-co"));
+    stripeCalls.taxIds.length = 0;
+    stripeCalls.taxIds.push({ id: "txi_old", type: "gb_vat", value: "GB999999999" });
+    await syncStripeBillingDetails("sync-co");
+    const upd = stripeCalls.customerUpdates[stripeCalls.customerUpdates.length - 1];
+    expect(upd.id).toBe("cus_sync_1");
+    expect(upd.params.email).toBe("bills@sync.test");
+    expect(upd.params.address).toEqual({ line1: "2 Kaiserstrasse, Berlin" });
+    expect(stripeCalls.taxIdDeletes).toContain("txi_old");
+    expect(stripeCalls.taxIdCreates).toContainEqual({ type: "eu_vat", value: "DE123456789" });
+  });
+
+  it("vatNumberToTaxId maps GB and EU prefixes and rejects the rest", () => {
+    expect(vatNumberToTaxId("gb 123 456 789")).toEqual({ type: "gb_vat", value: "GB123456789" });
+    expect(vatNumberToTaxId("FR12345678901")).toEqual({ type: "eu_vat", value: "FR12345678901" });
+    expect(vatNumberToTaxId("US12-3456789")).toBeNull();
+    expect(vatNumberToTaxId("")).toBeNull();
+  });
+
+  it("subscription state includes the latest invoice link once a customer exists", async () => {
+    const { sid } = await seedWorkspace("inv-link-co", "owner@invlink.test", { accountRole: "client" });
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: "cus_invlink", subscriptionStatus: "active", plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "inv-link-co"));
+    const res = await api("/api/platform/billing/subscription", { sid });
+    expect(res.status).toBe(200);
+    expect(res.json.latestInvoiceUrl).toBe("https://invoice.stripe.com/i/hosted");
   });
 });
 
