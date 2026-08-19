@@ -60,6 +60,7 @@ export async function sendInviteReminders(): Promise<void> {
         and(
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
           isNull(platformInvitationsTable.reminderSentAt),
           gt(platformInvitationsTable.expiresAt, now),       // not yet expired
           lte(platformInvitationsTable.expiresAt, high),     // within 25 h window

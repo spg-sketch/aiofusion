@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, primaryKey, serial, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 
 // Platform accounts are the AIO Fusion application logins (an agency and the
 // client sub-accounts it creates). They are separate from the Replit Auth
@@ -190,6 +190,10 @@ export const platformInvitationsTable = pgTable("platform_invitations", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // An invitee can explicitly decline an invitation. Keep the row so the
+  // inviter can see the outcome, while excluding it from all active seat and
+  // reminder calculations.
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
   //  reminderSentAt — set once the 24h-before-expiry reminder email is sent.
   //  NULL = reminder not yet sent (or not applicable for expired/used invites).
   reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
@@ -199,6 +203,20 @@ export const platformInvitationsTable = pgTable("platform_invitations", {
 });
 
 export type PlatformInvitationRow = typeof platformInvitationsTable.$inferSelect;
+
+// A short, support-safe audit trail of failed team-invite link attempts.
+// Tokens are deliberately never stored here: the prefix is enough to correlate
+// a support report without turning this table into a credential store.
+export const platformInviteLinkFailuresTable = pgTable("platform_invite_link_failures", {
+  id: serial("id").primaryKey(),
+  tokenPrefix: varchar("token_prefix", { length: 8 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  companySlug: varchar("company_slug", { length: 64 }),
+  reason: varchar("reason", { length: 32 }).notNull(),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // Server-issued sessions for platform accounts. Kept separate from the OIDC
 // `sessions` table so the two auth systems never interfere. The session id is a

@@ -104,6 +104,7 @@ vi.mock("@workspace/db", async () => {
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
       revoked_at timestamptz,
+      declined_at timestamptz,
       reminder_sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
@@ -596,6 +597,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/change-email",
   "POST /platform/request-set-password",
   "POST /platform/team/invites/:token/resend",
+  "POST /platform/invite/:token/decline",
+  "POST /platform/my-invites/:token/decline",
   "POST /platform/logout",
 
   // ── platform - MFA ────────────────────────────────────────────────────────
@@ -749,6 +752,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /contact/enquiry",
 
   // ── support (support.ts) ─────────────────────────────────────────────────
+  "GET /support/invite-link-failures",
   "GET /support/faq",
   "POST /support/faq",
   "PATCH /support/faq/:id",

@@ -73,6 +73,7 @@ vi.mock("@workspace/db", async () => {
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
       revoked_at timestamptz,
+      declined_at timestamptz,
       reminder_sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );

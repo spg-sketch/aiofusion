@@ -31,6 +31,7 @@ export type AdminAction =
   | "team_invite_sent"
   | "team_invite_resent"
   | "team_invite_accepted_inapp"
+  | "team_invite_declined_inapp"
   | "team_member_removed"
   | "team_violations_fixed"
   | "email_changed";

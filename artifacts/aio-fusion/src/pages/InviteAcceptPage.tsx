@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Mail, ShieldCheck, AlertTriangle } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type InviteInfo, serverGetInviteInfo, serverAcceptInvite } from "../lib/auth";
+import { type InviteInfo, serverDeclineInvite, serverGetInviteInfo, serverAcceptInvite } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 
 const ink = "#0a1628";
@@ -22,6 +22,8 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [declining, setDeclining] = useState(false);
+  const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
     void serverGetInviteInfo(token).then((r) => {
@@ -52,6 +54,17 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
     });
   };
 
+  const handleDecline = () => {
+    if (!window.confirm("Decline this workspace invitation? Your inviter will be notified.")) return;
+    setSubmitError(null);
+    setDeclining(true);
+    void serverDeclineInvite(token).then((r) => {
+      setDeclining(false);
+      if (r.ok) setDeclined(true);
+      else setSubmitError(r.error ?? "Failed to decline invitation.");
+    });
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
       <div className="w-full max-w-md">
@@ -69,6 +82,17 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
               <AlertTriangle size={28} color={accent} className="mx-auto mb-3" />
               <h1 className="text-[18px] font-bold mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>Invitation not available</h1>
               <p className="text-[13px] leading-[1.6]" style={{ color: vars.g600 }}>{loadError}</p>
+              <a href={import.meta.env.BASE_URL} className="inline-block mt-5 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: ink, color: "#fff" }}>
+                Go to AIO Fusion
+              </a>
+            </div>
+          ) : declined ? (
+            <div className="text-center py-6">
+              <Mail size={28} color={accent} className="mx-auto mb-3" />
+              <h1 className="text-[18px] font-bold mb-2" style={{ fontFamily: "'Alice', Georgia, serif" }}>Invitation declined</h1>
+              <p className="text-[13px] leading-[1.6]" style={{ color: vars.g600 }}>
+                Your inviter can now see that you are not joining this workspace.
+              </p>
               <a href={import.meta.env.BASE_URL} className="inline-block mt-5 px-6 py-3 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: ink, color: "#fff" }}>
                 Go to AIO Fusion
               </a>
@@ -124,6 +148,15 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
                 >
                   {submitting ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
                   {submitting ? "Joining…" : needsPassword ? "Set password & join" : "Accept & join"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDecline}
+                  disabled={submitting || declining}
+                  className="w-full px-5 py-2 text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-75 disabled:opacity-60"
+                  style={{ color: vars.g600 }}
+                >
+                  {declining ? "Declining…" : "Decline invitation"}
                 </button>
               </form>
 

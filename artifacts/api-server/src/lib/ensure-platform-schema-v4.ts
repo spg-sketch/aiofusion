@@ -29,6 +29,7 @@ export async function ensurePlatformSchemaV4(): Promise<void> {
         expires_at          timestamptz NOT NULL,
         used_at             timestamptz,
         revoked_at          timestamptz,
+        declined_at         timestamptz,
         created_at          timestamptz NOT NULL DEFAULT now()
       )
     `);

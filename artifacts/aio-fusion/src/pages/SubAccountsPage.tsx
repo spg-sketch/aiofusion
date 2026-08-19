@@ -270,6 +270,18 @@ function SubAccountsPage({
     })();
   };
 
+  const handleResendWelcome = (username: string) => {
+    if (accessBusy) return;
+    setAccessError(null);
+    setAccessBusy(true);
+    void (async () => {
+      const result = await serverSetClientAccess(username, "resend-welcome");
+      setAccessBusy(false);
+      if (!result.ok) { setAccessError(result.error); return; }
+      setAccessNotice({ username, text: "We've sent a fresh set-password link to the key contact (valid 7 days)." });
+    })();
+  };
+
   /** Human-friendly phrase for how recently the client last signed in. */
   const describeLastSignIn = (iso: string): string => {
     const then = new Date(iso).getTime();
@@ -1387,6 +1399,15 @@ function SubAccountsPage({
                           </button>
                         ) : (
                           <>
+                            <button
+                              onClick={() => handleResendWelcome(u.username)}
+                              disabled={accessBusy}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5 disabled:opacity-60"
+                              style={{ color: accent, border: `1.5px solid ${accent}40` }}
+                              title="Send a fresh set-password email"
+                            >
+                              {accessBusy ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Resend welcome email
+                            </button>
                             <button
                               onClick={() => handleRevokeAccess(u.username)}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"

@@ -47,6 +47,15 @@ type TicketMessage = {
   createdAt: string;
 };
 
+type InviteLinkFailure = {
+  id: number;
+  tokenPrefix: string;
+  email: string | null;
+  companySlug: string | null;
+  reason: string;
+  attemptedAt: string;
+};
+
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   open: { bg: "#fef3c7", text: "#92400e" },
   in_progress: { bg: "#dbeafe", text: "#1e40af" },
@@ -77,7 +86,7 @@ const CATEGORIES = [
 ];
 
 export function SupportAdminPage({ onBack }: { onBack: () => void }) {
-  const [tab, setTab] = useState<"tickets" | "faq">("tickets");
+  const [tab, setTab] = useState<"tickets" | "faq" | "invite-failures">("tickets");
   const navy = vars.navy;
   const accent = vars.accent ?? "#C8497A";
   const teal = vars.teal ?? "#1F748F";
@@ -96,7 +105,7 @@ export function SupportAdminPage({ onBack }: { onBack: () => void }) {
         <div className="h-5 w-px" style={{ background: vars.g200 }} />
         <h1 className="text-[18px] font-bold" style={{ color: navy }}>Support Management</h1>
         <div className="ml-auto flex gap-1 rounded-xl p-1" style={{ background: vars.g100 }}>
-          {([["tickets", "Ticket Queue", Ticket], ["faq", "FAQ Library", BookOpen]] as const).map(([id, label, Icon]) => (
+          {([["tickets", "Ticket Queue", Ticket], ["invite-failures", "Invite link failures", MailX], ["faq", "FAQ Library", BookOpen]] as const).map(([id, label, Icon]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -115,13 +124,51 @@ export function SupportAdminPage({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-6">
-        {tab === "tickets" ? (
-          <TicketQueue navy={navy} accent={accent} teal={teal} />
-        ) : (
-          <FaqManager navy={navy} accent={accent} teal={teal} />
-        )}
+        {tab === "tickets" ? <TicketQueue navy={navy} accent={accent} teal={teal} /> : tab === "faq" ? <FaqManager navy={navy} accent={accent} teal={teal} /> : <InviteLinkFailures navy={navy} accent={accent} />}
       </div>
     </div>
+  );
+}
+
+function InviteLinkFailures({ navy, accent }: { navy: string; accent: string }) {
+  const [failures, setFailures] = useState<InviteLinkFailure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`${apiBase()}/api/support/invite-link-failures`, { credentials: "include" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data?.error || "Failed to load invite link failures.");
+      setFailures(Array.isArray(data.failures) ? data.failures : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load invite link failures.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  return (
+    <section className="rounded-2xl border bg-white p-5" style={{ borderColor: vars.g200 }}>
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-[16px] font-bold" style={{ color: navy }}>Recent failed invite-link attempts</h2>
+          <p className="text-[12px] mt-1" style={{ color: vars.g500 }}>The last 100 invalid links. Full invitation tokens are never stored.</p>
+        </div>
+        <button onClick={() => void load()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: accent }}>
+          <RefreshCw size={13} /> Refresh
+        </button>
+      </div>
+      {loading ? <div className="py-10 flex justify-center"><Loader2 className="animate-spin" color={accent} /></div> : error ? <p className="text-[13px]" style={{ color: accent }}>{error}</p> : failures.length === 0 ? <p className="py-8 text-center text-[13px]" style={{ color: vars.g500 }}>No failed invite-link attempts have been recorded.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12px]">
+            <thead style={{ color: vars.g500 }}><tr className="border-b" style={{ borderColor: vars.g200 }}><th className="py-2 pr-3">When</th><th className="py-2 pr-3">Reason</th><th className="py-2 pr-3">Workspace</th><th className="py-2 pr-3">Invitee</th><th className="py-2">Link ref.</th></tr></thead>
+            <tbody>{failures.map((f) => <tr key={f.id} className="border-b" style={{ borderColor: vars.g100 }}><td className="py-2.5 pr-3">{new Date(f.attemptedAt).toLocaleString()}</td><td className="py-2.5 pr-3 font-semibold" style={{ color: accent }}>{f.reason}</td><td className="py-2.5 pr-3">{f.companySlug || "-"}</td><td className="py-2.5 pr-3">{f.email || "-"}</td><td className="py-2.5 font-mono">{f.tokenPrefix}…</td></tr>)}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

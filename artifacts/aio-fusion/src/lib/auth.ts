@@ -695,7 +695,7 @@ export async function serverResetMfa(
 // client out everywhere.
 export async function serverSetClientAccess(
   username: string,
-  action: "grant" | "revoke" | "mark-managed",
+  action: "grant" | "revoke" | "mark-managed" | "resend-welcome",
   password?: string,
   opts?: { confirmRecentSignIn?: boolean },
 ): Promise<
@@ -1112,6 +1112,9 @@ export type TeamInvite = {
   createdAt: string;
   /** True when expiresAt is in the past but the invite has not been used or revoked. */
   expired: boolean;
+  /** True when the invitee explicitly declined; retained for the inviter to see. */
+  declined?: boolean;
+  declinedAt?: string | null;
 };
 
 export type TeamMode = "standard" | "agency" | "client";
@@ -1154,6 +1157,20 @@ export async function serverAcceptInvite(data: {
   };
   setSession(session);
   return { ok: true, session };
+}
+
+export async function serverDeclineInvite(token: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/invite/${encodeURIComponent(token)}/decline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    const json = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, error: json?.error };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
 }
 
 export type InviteInfo = {
@@ -1298,6 +1315,19 @@ export async function serverAcceptMyInvite(token: string): Promise<{
       companyName: json?.companyName,
       role: json?.role,
     };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
+
+export async function serverDeclineMyInvite(token: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const resp = await fetch(
+      `${apiBase()}/api/platform/my-invites/${encodeURIComponent(token)}/decline`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include" },
+    );
+    const json = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, error: json?.error };
   } catch {
     return { ok: false, error: "Network error." };
   }

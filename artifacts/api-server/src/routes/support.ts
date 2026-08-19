@@ -6,6 +6,7 @@ import {
   supportTicketMessagesTable,
   platformMetaTable,
   platformAccountsTable,
+  platformInviteLinkFailuresTable,
 } from "@workspace/db";
 import {
   and,
@@ -46,6 +47,31 @@ const router: IRouter = Router();
 function isAdmin(req: Request): boolean {
   return req.account?.role === "admin";
 }
+
+// ── GET /api/support/invite-link-failures ───────────────────────────────────
+// Support-only diagnostics for expired, revoked, malformed, and otherwise
+// invalid invite links. Full tokens are never persisted or returned.
+router.get(
+  "/support/invite-link-failures",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (!isAdmin(req)) {
+      res.status(403).json({ error: "Admin access required." });
+      return;
+    }
+    try {
+      const failures = await db
+        .select()
+        .from(platformInviteLinkFailuresTable)
+        .orderBy(desc(platformInviteLinkFailuresTable.attemptedAt))
+        .limit(100);
+      res.json({ failures });
+    } catch (err) {
+      console.error("[support] GET /invite-link-failures", err);
+      res.status(500).json({ error: "Failed to load invite link failures" });
+    }
+  },
+);
 
 // ── GET /api/support/faq ───────────────────────────────────────────────────
 // Returns FAQ entries. Optional query params:

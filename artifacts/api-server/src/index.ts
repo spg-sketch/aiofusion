@@ -24,6 +24,7 @@ import { ensurePlatformSchemaV8 } from "./lib/ensure-platform-schema-v8";
 import { initStripe } from "./lib/stripe-init";
 import { sendInviteReminders } from "./lib/invite-reminders";
 import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
+import { ensurePlatformSchemaV9 } from "./lib/ensure-platform-schema-v9";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -114,6 +115,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v6 additions", ensurePlatformSchemaV6],
     ["platform schema v7 additions", ensurePlatformSchemaV7],
     ["platform schema v8 additions", ensurePlatformSchemaV8],
+    ["platform schema v9 additions", ensurePlatformSchemaV9],
     ["platform_password_resets table", ensurePasswordResetsTable],
   ];
   for (const [label, step] of steps) {

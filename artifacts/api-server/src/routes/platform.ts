@@ -95,7 +95,7 @@ import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMess
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, sendAccountTypeChangedEmail, getAppBaseUrl } from "../lib/notify-email";
-import { getValidInvite, getInviteInvalidReason, consumeInvite } from "../lib/team-invites";
+import { INVITE_INVALID_MESSAGES, getValidInvite, getInviteInvalidReason, consumeInvite } from "../lib/team-invites";
 import { getDiscountInvite, consumeDiscountInvite, applyInviteAccountType } from "../lib/discount-invites";
 
 const router: IRouter = Router();
@@ -3529,6 +3529,7 @@ router.get(
             eq(platformInvitationsTable.email, userRow.email),
             isNull(platformInvitationsTable.usedAt),
             isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
             gt(platformInvitationsTable.expiresAt, new Date()),
           ),
         )
@@ -3639,6 +3640,68 @@ router.post(
     } catch (err) {
       logger.error({ err }, "my-invites: failed to accept");
       res.status(500).json({ error: "Failed to accept invitation." });
+    }
+  },
+);
+
+// POST /platform/my-invites/:token/decline - decline an invite addressed to
+// the signed-in user. The email match prevents a user from declining another
+// person's invitation merely by learning its token.
+router.post(
+  "/platform/my-invites/:token/decline",
+  requirePlatformAuth,
+  loginLimiter,
+  async (req: Request, res: Response) => {
+    const userId = req.account?.userId;
+    if (!userId) {
+      res.status(403).json({ error: "Legacy sessions cannot decline invitations. Please use the link in the invitation email." });
+      return;
+    }
+    try {
+      const token = String(req.params.token || "").trim();
+      const invite = await getValidInvite(token);
+      if (!invite) {
+        const reason = await getInviteInvalidReason(token);
+        res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+        return;
+      }
+      const [userRow] = await db
+        .select({ email: platformUsersTable.email })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, userId))
+        .limit(1);
+      if (!userRow?.email || userRow.email !== invite.email) {
+        res.status(403).json({ error: "This invitation is for a different email address." });
+        return;
+      }
+      const declined = await db
+        .update(platformInvitationsTable)
+        .set({ declinedAt: new Date() })
+        .where(
+          and(
+            eq(platformInvitationsTable.token, invite.token),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
+            gt(platformInvitationsTable.expiresAt, new Date()),
+          ),
+        )
+        .returning({ token: platformInvitationsTable.token });
+      if (declined.length === 0) {
+        res.status(409).json({ error: "This invitation is no longer available." });
+        return;
+      }
+      void logAdminEvent(
+        { username: req.account!.username, id: userId },
+        "team_invite_declined_inapp",
+        userId,
+        "invitation",
+        { companySlug: invite.companySlug },
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      logger.error({ err }, "my-invites: failed to decline");
+      res.status(500).json({ error: "Failed to decline invitation." });
     }
   },
 );
@@ -4221,8 +4284,8 @@ router.post(
       // "mark-managed" is the agency-facing backfill for client accounts that
       // were created as managed before the flag existed: it records the flag
       // and (like revoke) makes sure no sign-in credential remains usable.
-      if (action !== "grant" && action !== "revoke" && action !== "mark-managed") {
-        res.status(400).json({ error: "Action must be 'grant', 'revoke' or 'mark-managed'." });
+      if (action !== "grant" && action !== "revoke" && action !== "mark-managed" && action !== "resend-welcome") {
+        res.status(400).json({ error: "Action must be 'grant', 'revoke', 'mark-managed' or 'resend-welcome'." });
         return;
       }
       if (target === normUsername(actor.username)) {
@@ -4245,8 +4308,54 @@ router.post(
       // Agency partner clients are permanently managed: sign-in access can
       // never be granted to them. (Revoke/mark-managed stay available as a
       // clean-up path for any legacy passworded client under an agency.)
-      if (action === "grant" && (await isAgencyPartnerClient(target))) {
+      if ((action === "grant" || action === "resend-welcome") && (await isAgencyPartnerClient(target))) {
         res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
+        return;
+      }
+
+      if (action === "resend-welcome") {
+        if (!existing.email) {
+          res.status(400).json({ error: "This client has no email address for a set-password link. Set a password directly instead." });
+          return;
+        }
+        try {
+          const existingContact = await getUserByEmail(existing.email);
+          if (existingContact && !(await userBelongsOnlyTo(existingContact.id, target))) {
+            res.status(409).json({
+              error: "The key contact's email already belongs to a user with other workspaces, so a set-password link can't be sent. Set a password directly instead.",
+            });
+            return;
+          }
+        } catch { /* requireToken below remains the final credential safeguard */ }
+        let contactName = "";
+        let companyName = target;
+        try {
+          const [metaRow] = await db
+            .select()
+            .from(platformMetaTable)
+            .where(eq(platformMetaTable.key, profileKey(target)))
+            .limit(1);
+          if (metaRow?.value) {
+            const parsed = JSON.parse(metaRow.value) as { displayName?: unknown; ownerName?: unknown };
+            if (typeof parsed.displayName === "string" && parsed.displayName.trim()) companyName = parsed.displayName.trim();
+            if (typeof parsed.ownerName === "string" && parsed.ownerName.trim()) contactName = parsed.ownerName.trim();
+          }
+        } catch { /* fall back to username */ }
+        const { tokenIssued } = await sendWelcomeSetPasswordEmail({
+          targetUsername: target,
+          contactEmail: existing.email,
+          contactName,
+          companyName,
+          actorUsername: actor.username,
+          companyRole: "client",
+          allowExistingUserToken: true,
+          requireToken: true,
+        });
+        if (!tokenIssued) {
+          res.status(502).json({ error: "Couldn't create a new set-password link. Try again, or set a password directly." });
+          return;
+        }
+        res.json({ ok: true, emailSent: true });
         return;
       }
 

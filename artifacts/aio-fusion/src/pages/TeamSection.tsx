@@ -13,6 +13,7 @@ import {
   serverRemoveTeamMember,
   serverGetMyInvites,
   serverAcceptMyInvite,
+  serverDeclineMyInvite,
   serverSwitchWorkspace,
 } from "../lib/auth";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -57,6 +58,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const [myInvitesAccepted, setMyInvitesAccepted] = useState<Record<string, { companyName: string; companyId: string }>>({});
   const [myInviteError, setMyInviteError] = useState<string | null>(null);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [decliningInvite, setDecliningInvite] = useState<string | null>(null);
 
   // Project chips must come from the SERVER (which only returns projects this
   // workspace owns), not the browser's cached list - the cache can hold stale
@@ -134,6 +136,16 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
     await serverSwitchWorkspace(companyId);
     // serverSwitchWorkspace reloads on success; setSwitchingId(null) only reached on error.
     setSwitchingId(null);
+  };
+
+  const handleDeclineMyInvite = async (token: string) => {
+    if (!window.confirm("Decline this workspace invitation? Your inviter will be notified.")) return;
+    setMyInviteError(null);
+    setDecliningInvite(token);
+    const result = await serverDeclineMyInvite(token);
+    setDecliningInvite(null);
+    if (result.ok) reloadMyInvites();
+    else setMyInviteError(result.error ?? "Failed to decline invitation.");
   };
 
   const handleInvite = (e: React.FormEvent) => {
@@ -263,6 +275,14 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
               {myInvitesBusy === i.token ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
               {myInvitesBusy === i.token ? "Accepting…" : "Accept"}
             </button>
+            <button
+              onClick={() => void handleDeclineMyInvite(i.token)}
+              disabled={myInvitesBusy === i.token || decliningInvite === i.token}
+              className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] disabled:opacity-50"
+              style={{ color: "#92400E" }}
+            >
+              {decliningInvite === i.token ? "Declining…" : "Decline"}
+            </button>
           </div>
         ))}
         {Object.entries(myInvitesAccepted).map(([token, info]) => (
@@ -319,8 +339,9 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   // In agency mode a full account pool only blocks account-seat invites -
   // project seats have their own per-project pools.
   const submitBlocked = seatsFull && !(isAgency && restrict);
-  const pendingInvites = team.invites.filter((i) => !i.expired);
-  const expiredInvites = team.invites.filter((i) => i.expired);
+  const pendingInvites = team.invites.filter((i) => !i.declined && !i.expired);
+  const expiredInvites = team.invites.filter((i) => !i.declined && i.expired);
+  const declinedInvites = team.invites.filter((i) => i.declined);
 
   return (
     <>
@@ -711,6 +732,33 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                     {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove
                   </button>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {declinedInvites.length > 0 && (
+        <div className="mt-5">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: vars.g600 }}>Declined invitations</h3>
+          <div className="space-y-2">
+            {declinedInvites.map((i) => (
+              <div key={i.token} className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: "#f8fafc", border: `1px solid ${vars.g200}` }}>
+                <X size={13} color={vars.g500} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold truncate" style={{ color: vars.g600 }}>{i.name ? `${i.name} · ${i.email}` : i.email}</p>
+                  <p className="text-[11px]" style={{ color: vars.g400 ?? "#94a3b8" }}>
+                    {roleLabel(i.role)} · declined {i.declinedAt ? new Date(i.declinedAt).toLocaleDateString() : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRevoke(i.token)}
+                  disabled={busy === i.token}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] border transition-all hover:bg-white"
+                  style={{ borderColor: vars.g200, color: vars.g600 ?? "#64748b" }}
+                >
+                  {busy === i.token ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Remove
+                </button>
               </div>
             ))}
           </div>

@@ -206,7 +206,7 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
       .orderBy(desc(platformInvitationsTable.createdAt));
 
     const now = new Date();
-    const pendingCount = inviteRows.filter((i) => i.expiresAt > now).length;
+    const pendingCount = inviteRows.filter((i) => !i.declinedAt && i.expiresAt > now).length;
         const seatLimit = await getTeamSeatLimit(company.slug);
 
     // Agency mode: the headline seat counter covers the ACCOUNT pool only
@@ -244,7 +244,9 @@ router.get("/platform/team", requirePlatformAuth, async (req: Request, res: Resp
         projectAccess: parseProjectAccess(i.projectAccess),
         expiresAt: i.expiresAt,
         createdAt: i.createdAt,
-        expired: i.expiresAt <= now,
+        expired: !i.declinedAt && i.expiresAt <= now,
+        declined: !!i.declinedAt,
+        declinedAt: i.declinedAt,
       })),
       seatLimit,
       seatsUsed,
@@ -360,6 +362,7 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
           eq(platformInvitationsTable.email, email),
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
           gt(platformInvitationsTable.expiresAt, new Date()),
         ),
       )
@@ -386,18 +389,28 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
     }
 
     const token = crypto.randomBytes(32).toString("hex");
-    await db.insert(platformInvitationsTable).values({
-      token,
-      email,
-      companyId: company.id,
-      companySlug: company.slug,
-      role,
-      projectAccess,
-      invitedName: invitedName || null,
-      position: position || null,
-      invitedByUserId: req.account!.userId ?? null,
-      expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-    });
+    try {
+      await db.insert(platformInvitationsTable).values({
+        token,
+        email,
+        companyId: company.id,
+        companySlug: company.slug,
+        role,
+        projectAccess,
+        invitedName: invitedName || null,
+        position: position || null,
+        invitedByUserId: req.account!.userId ?? null,
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      });
+    } catch (err) {
+      // The partial unique index is the final guard when two invite requests
+      // pass the friendly application-level lookup at the same time.
+      if ((err as { code?: string }).code === "23505") {
+        res.status(409).json({ error: "An invitation for that email is already pending. Revoke it first to re-invite." });
+        return;
+      }
+      throw err;
+    }
 
     const inviteUrl = `${getAppBaseUrl()}/?invite=${token}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
@@ -472,6 +485,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
             eq(platformInvitationsTable.companyId, company.id),
             isNull(platformInvitationsTable.usedAt),
             isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
           ),
         )
         .limit(1);
@@ -525,6 +539,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
               eq(platformInvitationsTable.companyId, company.id),
               isNull(platformInvitationsTable.usedAt),
               isNull(platformInvitationsTable.revokedAt),
+              isNull(platformInvitationsTable.declinedAt),
             ),
           )
           .limit(1);
@@ -611,6 +626,7 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
               eq(platformInvitationsTable.companyId, company.id),
               isNull(platformInvitationsTable.usedAt),
               isNull(platformInvitationsTable.revokedAt),
+              isNull(platformInvitationsTable.declinedAt),
             ),
           )
           .returning({ token: platformInvitationsTable.token });
@@ -949,6 +965,45 @@ router.get("/platform/invite/:token", async (req: Request, res: Response) => {
   }
 });
 
+// --- Public: decline an invitation ----------------------------------------------
+//
+// The invitation URL is itself an unguessable, single-use capability. Declining
+// from the landing page therefore does not require an account or a session.
+// Keep the row (rather than revoking it) so the inviter can see a clear outcome.
+router.post("/platform/invite/:token/decline", loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const token = String(req.params.token || "").trim();
+    const invite = await getValidInvite(token);
+    if (!invite) {
+      const reason = await getInviteInvalidReason(token);
+      res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+      return;
+    }
+    const declined = await db
+      .update(platformInvitationsTable)
+      .set({ declinedAt: new Date() })
+      .where(
+        and(
+          eq(platformInvitationsTable.token, invite.token),
+          isNull(platformInvitationsTable.usedAt),
+          isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
+          gt(platformInvitationsTable.expiresAt, new Date()),
+        ),
+      )
+      .returning({ token: platformInvitationsTable.token });
+    if (declined.length === 0) {
+      const reason = await getInviteInvalidReason(token);
+      res.status(409).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "team: failed to decline invite");
+    res.status(500).json({ error: "Failed to decline invitation." });
+  }
+});
+
 // --- Public: accept an invitation with a password ---------------------------------
 
 router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: Response) => {
@@ -1117,7 +1172,7 @@ async function collectTeamViolations(): Promise<CompanyViolations[]> {
       }
     }
 
-    // -- pending invites (including expired ones not yet revoked) ---------
+    // -- pending invites (including expired ones not yet revoked/declined) ---
     const invites = await db
       .select()
       .from(platformInvitationsTable)
@@ -1126,6 +1181,7 @@ async function collectTeamViolations(): Promise<CompanyViolations[]> {
           eq(platformInvitationsTable.companyId, company.id),
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
         ),
       );
 

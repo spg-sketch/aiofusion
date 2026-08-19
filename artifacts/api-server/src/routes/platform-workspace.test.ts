@@ -81,6 +81,7 @@ vi.mock("@workspace/db", async () => {
       expires_at timestamptz NOT NULL,
       used_at timestamptz,
       revoked_at timestamptz,
+      declined_at timestamptz,
       reminder_sent_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     );
@@ -453,6 +454,19 @@ describe("GET /platform/my-invites", () => {
     const res = await api("/api/platform/my-invites", { sid });
     expect(res.status).toBe(200);
     expect(res.json.invites).toHaveLength(0);
+  });
+
+  it("excludes invitations after the invitee declines them", async () => {
+    const { sid } = await seedAgency("inv-decline-a", "inv-decline@test.local");
+    const { company: targetCompany } = await seedAgency("inv-decline-b", "inv-decline-b@test.local");
+    const token = await seedInvite(targetCompany.id, "inv-decline-b", "inv-decline@test.local", "viewer");
+
+    const declined = await api(`/api/platform/my-invites/${token}/decline`, { sid, body: {} });
+    expect(declined.status).toBe(200);
+
+    const listed = await api("/api/platform/my-invites", { sid });
+    expect(listed.status).toBe(200);
+    expect(listed.json.invites).toEqual([]);
   });
 
   it("returns empty array for legacy session without userId", async () => {

@@ -5,6 +5,7 @@ import {
   platformUsersTable,
   platformMetaTable,
   platformCompaniesTable,
+  platformInviteLinkFailuresTable,
   type PlatformInvitationRow,
 } from "@workspace/db";
 import { and, eq, isNull, isNotNull, gt, sql } from "drizzle-orm";
@@ -81,6 +82,7 @@ export async function countSeatsUsed(
         eq(platformInvitationsTable.companyId, companyId),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
+        isNull(platformInvitationsTable.declinedAt),
         gt(platformInvitationsTable.expiresAt, new Date()),
       ),
     );
@@ -129,6 +131,7 @@ export async function countAccountPoolSeats(
         isNull(platformInvitationsTable.projectAccess),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
+        isNull(platformInvitationsTable.declinedAt),
         gt(platformInvitationsTable.expiresAt, new Date()),
       ),
     );
@@ -183,6 +186,7 @@ export async function countProjectSeatHolders(
         isNotNull(platformInvitationsTable.projectAccess),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
+        isNull(platformInvitationsTable.declinedAt),
         gt(platformInvitationsTable.expiresAt, new Date()),
       ),
     );
@@ -249,6 +253,7 @@ export async function getProjectSeatHolders(
         isNotNull(platformInvitationsTable.projectAccess),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
+        isNull(platformInvitationsTable.declinedAt),
         gt(platformInvitationsTable.expiresAt, new Date()),
       ),
     );
@@ -263,7 +268,8 @@ export async function getProjectSeatHolders(
   return holders;
 }
 
-// Load an invitation that is still valid (unused, unrevoked, unexpired).
+// Load an invitation that is still valid (unused, unrevoked, not declined,
+// unexpired).
 export async function getValidInvite(rawToken: string): Promise<PlatformInvitationRow | null> {
   const token = normalizeInviteToken(rawToken);
   if (!token) return null;
@@ -273,7 +279,7 @@ export async function getValidInvite(rawToken: string): Promise<PlatformInvitati
     .where(eq(platformInvitationsTable.token, token))
     .limit(1);
   if (!row) return null;
-  if (row.usedAt || row.revokedAt || row.expiresAt < new Date()) return null;
+  if (row.usedAt || row.revokedAt || row.declinedAt || row.expiresAt < new Date()) return null;
   // The company must still exist and be active.
   const [company] = await db
     .select({ status: platformCompaniesTable.status })
@@ -289,13 +295,14 @@ export async function getValidInvite(rawToken: string): Promise<PlatformInvitati
 // invitation, since each resend overwrites the token in place). "replaced"
 // means the token belongs to a revoked invite whose email has a newer pending
 // invitation - the recipient should open their latest email instead.
-export type InviteInvalidReason = "unknown" | "used" | "revoked" | "replaced" | "expired" | "inactive";
+export type InviteInvalidReason = "unknown" | "used" | "revoked" | "declined" | "replaced" | "expired" | "inactive";
 
 export const INVITE_INVALID_MESSAGES: Record<InviteInvalidReason, string> = {
   unknown:
     "This invitation link isn't valid. If the invitation was re-sent, only the link in the newest email works - older links stop working.",
   used: "This invitation has already been used. If that was you, just sign in with your email and password.",
   revoked: "This invitation was withdrawn. Ask your team admin to send a new one.",
+  declined: "You've already declined this invitation. Ask your team admin to send a new one if that has changed.",
   replaced:
     "This link was replaced by a newer invitation. Please open the most recent invitation email - only the newest link works.",
   expired: "This invitation has expired - links last 7 days. Ask your team admin to re-send it.",
@@ -321,6 +328,8 @@ export async function getInviteInvalidReason(rawToken: string): Promise<InviteIn
     reason = "unknown";
   } else if (row.usedAt) {
     reason = "used";
+  } else if (row.declinedAt) {
+    reason = "declined";
   } else if (row.revokedAt) {
     // A revoked invite whose email now has a fresh pending invitation in the
     // same workspace was effectively replaced - point the user at the new one.
@@ -333,6 +342,7 @@ export async function getInviteInvalidReason(rawToken: string): Promise<InviteIn
           eq(platformInvitationsTable.email, row.email),
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
           gt(platformInvitationsTable.expiresAt, new Date()),
         ),
       )
@@ -353,6 +363,18 @@ export async function getInviteInvalidReason(rawToken: string): Promise<InviteIn
     },
     "invite lookup failed",
   );
+  // Best-effort only: a failed lookup must always keep its original user-facing
+  // result even if the support diagnostic store is temporarily unavailable.
+  try {
+    await db.insert(platformInviteLinkFailuresTable).values({
+      tokenPrefix,
+      email: row?.email ?? null,
+      companySlug: row?.companySlug ?? null,
+      reason,
+    });
+  } catch (err) {
+    logger.debug({ err, reason, tokenPrefix }, "invite failure log unavailable");
+  }
   return reason;
 }
 
@@ -374,6 +396,7 @@ export async function consumeInvite(
         eq(platformInvitationsTable.token, invite.token),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
+        isNull(platformInvitationsTable.declinedAt),
       ),
     )
     .returning({ token: platformInvitationsTable.token });

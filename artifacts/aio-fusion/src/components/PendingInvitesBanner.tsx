@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Loader2, X } from "lucide-react";
-import { type MembershipRole, type PendingMyInvite, serverAcceptMyInvite, serverSwitchWorkspace } from "../lib/auth";
+import { type MembershipRole, type PendingMyInvite, serverAcceptMyInvite, serverDeclineMyInvite, serverSwitchWorkspace } from "../lib/auth";
 
 const ROLE_LABELS: Record<MembershipRole, string> = {
   owner: "Owner",
@@ -27,6 +27,7 @@ interface AcceptState {
 export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: Props) {
   const [acceptState, setAcceptState] = useState<Record<string, AcceptState>>({});
   const [switching, setSwitching] = useState<string | null>(null);
+  const [declining, setDeclining] = useState<string | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
 
   // Keep --banner-h CSS variable in sync with the banner's rendered height so
@@ -69,6 +70,15 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
     // serverSwitchWorkspace reloads the page on success; setSwitching(null) is
     // only reached if the call returns an error.
     setSwitching(null);
+  };
+
+  const handleDecline = async (token: string) => {
+    if (!window.confirm("Decline this workspace invitation? Your inviter will be notified.")) return;
+    setDeclining(token);
+    const result = await serverDeclineMyInvite(token);
+    setDeclining(null);
+    if (result.ok) onInviteAccepted();
+    else setAcceptState((s) => ({ ...s, [token]: { loading: false, accepted: false, error: result.error } }));
   };
 
   if (invites.length === 0) return null;
@@ -125,6 +135,14 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
               >
                 {st?.loading ? <Loader2 size={11} className="animate-spin" /> : null}
                 {st?.loading ? "Accepting…" : "Accept"}
+              </button>
+              <button
+                onClick={() => void handleDecline(inv.token)}
+                disabled={st?.loading || declining === inv.token}
+                className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] disabled:opacity-50"
+                style={{ color: "#92400E" }}
+              >
+                {declining === inv.token ? "Declining…" : "Decline"}
               </button>
             </div>
           );
