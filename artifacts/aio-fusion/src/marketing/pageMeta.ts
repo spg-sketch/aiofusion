@@ -1,4 +1,5 @@
 /** Per-page SEO metadata used by PageHead (client) and the prerender script (build-time). */
+import type { PublicView } from "../types";
 
 export interface PageMeta {
   title: string;
@@ -21,7 +22,14 @@ export const DEFAULT_META: PageMeta = {
   ogType: "website",
 };
 
-export const PAGE_META: Record<string, PageMeta> = {
+/**
+ * `PublicView` is the application-level list of public marketing views. Keeping
+ * this Record exhaustive makes a new public view a TypeScript error until it
+ * has crawler-visible metadata.
+ */
+type PublicPageMetaKey = "landing" | PublicView;
+
+export const PAGE_META: Record<PublicPageMetaKey, PageMeta> = {
   landing: {
     title: "AIO Fusion - GEO Platform for PR & Marketing Teams",
     description:
@@ -540,19 +548,39 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
   },
 };
 
-/** All public URL paths for sitemap generation (route → slug). */
-export const PUBLIC_ROUTES: Array<{ slug: string; priority: string }> = [
-  { slug: "", priority: "1.0" },
-  { slug: "for-inhouse", priority: "0.9" },
-  { slug: "for-agencies", priority: "0.9" },
-  { slug: "for-agents", priority: "0.8" },
-  { slug: "insights", priority: "0.9" },
-  { slug: "pricing", priority: "0.9" },
-  { slug: "about", priority: "0.8" },
-  { slug: "contact", priority: "0.8" },
-  { slug: "trust-security", priority: "0.5" },
-  { slug: "privacy-policy", priority: "0.4" },
-  { slug: "terms-conditions", priority: "0.4" },
-];
+/**
+ * The canonical public-route registry. The SPA derives its canonical URLs from
+ * it, while the prerender build and sitemap consume the same entries.
+ */
+export const PUBLIC_PAGE_DEFINITIONS = [
+  { view: "landing", slug: "", priority: "1.0" },
+  { view: "for-inhouse", slug: "for-inhouse", priority: "0.9" },
+  { view: "for-agencies", slug: "for-agencies", priority: "0.9" },
+  { view: "for-agents", slug: "for-agents", priority: "0.8" },
+  { view: "insights", slug: "insights", priority: "0.9" },
+  { view: "pricing", slug: "pricing", priority: "0.9" },
+  { view: "about", slug: "about", priority: "0.8" },
+  { view: "contact", slug: "contact", priority: "0.8" },
+  { view: "trust-security", slug: "trust-security", priority: "0.5" },
+  { view: "privacy-policy", slug: "privacy-policy", priority: "0.4" },
+  { view: "terms-conditions", slug: "terms-conditions", priority: "0.4" },
+] as const satisfies readonly {
+  view: "landing" | PublicView;
+  slug: string;
+  priority: string;
+}[];
+
+type DeclaredPublicView = typeof PUBLIC_PAGE_DEFINITIONS[number]["view"];
+type MissingPublicRouteDefinition = Exclude<PublicView, DeclaredPublicView>;
+// Deliberately fails TypeScript when a view is added to PublicView but is not
+// registered for sitemap/pre-rendering. This is a build-time SEO guard.
+const everyPublicViewHasRouteDefinition: MissingPublicRouteDefinition extends never
+  ? true
+  : never = true;
+void everyPublicViewHasRouteDefinition;
+
+/** All public URL paths for sitemap generation. */
+export const PUBLIC_ROUTES: Array<{ slug: string; priority: string }> =
+  PUBLIC_PAGE_DEFINITIONS.map(({ slug, priority }) => ({ slug, priority }));
 
 export const ARTICLE_SLUGS = Object.keys(ARTICLE_META);

@@ -30,7 +30,13 @@ import TrustSecurityPage from "./marketing/TrustSecurityPage";
 import PrivacyPolicyPage from "./marketing/PrivacyPolicyPage";
 import TermsConditionsPage from "./marketing/TermsConditionsPage";
 
-import { PAGE_META, ARTICLE_META, PUBLIC_ROUTES, ARTICLE_SLUGS } from "./marketing/pageMeta";
+import {
+  PAGE_META,
+  ARTICLE_META,
+  PUBLIC_PAGE_DEFINITIONS,
+  PUBLIC_ROUTES,
+  ARTICLE_SLUGS,
+} from "./marketing/pageMeta";
 import type { PageMeta, ArticleMeta } from "./marketing/pageMeta";
 
 // ---------------------------------------------------------------------------
@@ -217,12 +223,12 @@ function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta
   }
 }
 
-// Render each top-level route
-for (const { slug } of PUBLIC_ROUTES) {
-  const metaKey = slug === "" ? "landing" : slug;
-  const meta = PAGE_META[metaKey];
+// Render every canonical public route. Never skip a definition because of
+// missing metadata or a missing component: both are fatal SEO regressions.
+for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
+  const meta = PAGE_META[view];
   if (!meta) {
-    console.error(`  ✗  No pageMeta for route "${metaKey}" - add it to PAGE_META`);
+    console.error(`  ✗  No pageMeta for route "${view}" - add it to PAGE_META`);
     errors++;
     continue;
   }
@@ -262,10 +268,18 @@ for (const { slug } of PUBLIC_ROUTES) {
 // Render each complete article
 for (const articleSlug of ARTICLE_SLUGS) {
   const meta: ArticleMeta = ARTICLE_META[articleSlug];
-  if (!meta) continue;
+  if (!meta) {
+    console.error(`  ✗  No article metadata for "${articleSlug}"`);
+    errors++;
+    continue;
+  }
 
   const el = buildElement("insights", articleSlug);
-  if (!el) continue;
+  if (!el) {
+    console.error(`  ✗  No component for article "${articleSlug}"`);
+    errors++;
+    continue;
+  }
 
   let bodyHtml = "";
   try {

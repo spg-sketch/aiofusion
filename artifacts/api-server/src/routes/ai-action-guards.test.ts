@@ -571,6 +571,9 @@ const PAID_AI_PREFIXES = [
 const PUBLIC_ALLOWLIST = new Set<string>([
   // ── health ────────────────────────────────────────────────────────────────
   "GET /healthz",
+  // Durable public image used by email clients. It exposes one fixed asset only
+  // and has no AI, user-data or state-changing behaviour.
+  "GET /assets/email-logo",
 
   // ── legacy Replit auth (auth.ts) ─────────────────────────────────────────
   "GET /auth/user",

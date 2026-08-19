@@ -10,6 +10,7 @@
     "restore:download": "tsx ./src/restore-db.ts --download",
     "restore:verify": "tsx ./src/restore-db.ts --verify-restore",
     "seed-staging": "tsx ./src/seed-staging.ts",
+    "upload-email-logo": "tsx ./src/upload-email-logo.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

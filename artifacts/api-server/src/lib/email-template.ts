@@ -27,9 +27,16 @@ export interface EmailTemplateOpts {
   footerNote?: string;
 }
 
-// LOGO_URL is intentionally always the production URL: the logo asset only
-// exists on www.aiofusion.ai, and email clients need a stable absolute URL.
-const LOGO_URL = "https://www.aiofusion.ai/images/logo-color.png";
+const LEGACY_LOGO_URL = "https://www.aiofusion.ai/images/logo-color.png";
+
+/**
+ * EMAIL_LOGO_URL is the durable App Storage/CDN URL once its runtime grant has
+ * been verified. Keep the known-working static image as the safe fallback so
+ * a missing storage grant never turns every email logo into a 503.
+ */
+export function getEmailLogoUrl(): string {
+  return process.env.EMAIL_LOGO_URL?.trim() || LEGACY_LOGO_URL;
+}
 const CONTACT_EMAIL = "info@aiofusion.ai";
 
 const RASPBERRY = "#C8497A";
@@ -42,6 +49,7 @@ const BORDER = "#E2E8F0";
 export function buildEmailHtml(opts: EmailTemplateOpts): string {
   // Compute at call-time so staging/dev deployments link to the right environment.
   const siteUrl = getAppBaseUrl();
+  const logoUrl = getEmailLogoUrl();
 
   const ctaBlock = opts.cta
     ? `
@@ -95,7 +103,7 @@ export function buildEmailHtml(opts: EmailTemplateOpts): string {
           <tr>
             <td style="padding-bottom: 24px; text-align: center;">
               <a href="${siteUrl}" style="text-decoration: none;">
-                <img src="${LOGO_URL}" alt="AIO Fusion" width="160"
+                <img src="${logoUrl}" alt="AIO Fusion" width="160"
                      style="height: auto; max-width: 160px;" />
               </a>
             </td>

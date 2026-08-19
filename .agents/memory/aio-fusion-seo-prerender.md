@@ -11,4 +11,3 @@ description: How public marketing pages get static pre-rendered HTML, sitemap, a
 - **Why:** crawlers previously got an empty SPA shell; this keeps SSG without a framework migration.
 - **How to apply:** when adding public pages/articles, update pageMeta.ts and confirm the prerender route list picks them up; keep robots.txt `Disallow: /api/` and AI-crawler allowances intact.
 
-Verification note (Aug 2026): staging.aiofusion.ai serves pre-rendered pages correctly; routes 301 to a trailing slash (/about -> /about/) before serving the route's index.html, so curl checks need -L. The production site (www.aiofusion.ai, separate repl) was serving the un-prerendered "AIO Fusion Demo" shell on /about - the prod repl needs the 3-step build + a republish there; nothing in this repl can fix it.

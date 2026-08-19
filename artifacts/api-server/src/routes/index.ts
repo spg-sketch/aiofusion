@@ -17,10 +17,12 @@ import teamRouter from "./team";
 import adminRouter from "./admin";
 import contactRouter from "./contact";
 import supportRouter from "./support";
+import publicAssetsRouter from "./public-assets";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(publicAssetsRouter);
 router.use(authRouter);
 router.use(platformRouter);
 router.use(billingRouter);

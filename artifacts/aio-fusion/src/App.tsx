@@ -36,7 +36,7 @@ import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
 import { getImpersonationState } from "./lib/auth";
 import { vars } from "./marketing/vars";
-import { PUBLIC_ROUTES } from "./marketing/pageMeta";
+import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import {
@@ -236,35 +236,32 @@ const LeadsAdminPage = lazy(() =>
 migrateStoredIntakeKeys();
 
 // --- URL <-> view mapping for the public marketing pages ------------------
-// Derived from PUBLIC_ROUTES (marketing/pageMeta.ts) - the single source of
+// Derived from PUBLIC_PAGE_DEFINITIONS (marketing/pageMeta.ts) - the single source of
 // truth that also drives the prerender build and sitemap. Adding a public page
 // therefore forces the pageMeta entry (and prerendered HTML) to exist, which
 // pageMeta.consistency.test.ts enforces.
 const VIEW_TO_SLUG: Record<string, string> = Object.fromEntries(
-  PUBLIC_ROUTES.map(({ slug }) => [slug === "" ? "landing" : slug, slug]),
+  PUBLIC_PAGE_DEFINITIONS.map(({ view, slug }) => [view, slug]),
 );
 
+const CANONICAL_SLUG_TO_VIEW: Record<string, PublicView> = Object.fromEntries(
+  PUBLIC_PAGE_DEFINITIONS.map(({ view, slug }) => [slug, view]),
+);
+
+// Canonical slug resolution comes from the same registry as prerendering and
+// sitemap generation. These are deliberately aliases only: a public route can
+// no longer be added to one direction of navigation and omitted from the other.
 const SLUG_TO_VIEW: Record<string, PublicView> = {
-  "": "landing",
+  ...CANONICAL_SLUG_TO_VIEW,
   home: "landing",
-  about: "about",
-  contact: "contact",
-  insights: "insights",
-  pricing: "pricing",
-  "for-inhouse": "for-inhouse",
   inhouse: "for-inhouse",
   "in-house": "for-inhouse",
-  "for-agencies": "for-agencies",
   agencies: "for-agencies",
-  "for-agents": "for-agents",
   "ai-agents": "for-agents",
   aiagents: "for-agents",
-  "trust-security": "trust-security",
   trust: "trust-security",
   security: "trust-security",
-  "privacy-policy": "privacy-policy",
   privacy: "privacy-policy",
-  "terms-conditions": "terms-conditions",
   terms: "terms-conditions",
 };
 
