@@ -23,8 +23,10 @@ import { ensurePlatformSchemaV7 } from "./lib/ensure-platform-schema-v7";
 import { ensurePlatformSchemaV8 } from "./lib/ensure-platform-schema-v8";
 import { initStripe } from "./lib/stripe-init";
 import { sendInviteReminders } from "./lib/invite-reminders";
+import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Staging isolation guard
@@ -243,4 +245,17 @@ app.listen(port, (err) => {
       logger.error({ err }, "Failed to run invite reminder sweep (scheduled)");
     });
   }, REMINDER_INTERVAL_MS).unref();
+
+  // Microsoft credentials are external configuration and can expire or be
+  // rotated while this process remains online. Check once at startup and
+  // periodically so a broken SSO provider is visible in server logs before a
+  // user reports a failed sign-in.
+  checkMicrosoftOAuthCredentials().catch((err) => {
+    logger.error({ err }, "Microsoft OAuth credential health check crashed");
+  });
+  setInterval(() => {
+    checkMicrosoftOAuthCredentials().catch((err) => {
+      logger.error({ err }, "Microsoft OAuth credential health check crashed");
+    });
+  }, MICROSOFT_HEALTH_INTERVAL_MS).unref();
 });

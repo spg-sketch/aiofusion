@@ -23,6 +23,9 @@ description: Schema, API, and frontend patterns for email verification, account 
 - State in `aio_ms_state` cookie (httpOnly, 10 min). User info from Microsoft Graph `/v1.0/me`.
 - Email: `profile.mail || profile.userPrincipalName`. Identity resolution: by microsoftId → email in platform_users → email in platform_accounts → create.
 - Env vars: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` — without them routes return `?oauth_status=error&oauth_msg=microsoft_not_configured`.
+- Credential health probes use a deliberately invalid authorization code: Microsoft returning `invalid_grant` confirms it accepted the client ID and secret, without requiring unused app-only Graph permissions. Startup and six-hour checks log success/failure without logging credentials or provider response bodies.
+  **Why:** a client-credentials probe can falsely alert when the app has no app-only Graph grant, even though delegated user sign-in is healthy.
+  **How to apply:** preserve the `invalid_grant`-is-healthy interpretation when changing the Microsoft OAuth health check; treat `invalid_client`, missing variables, network failures, and other endpoint responses as loud failures.
 
 ## Email base URL
 - `getAppBaseUrl()` reads `CANONICAL_DOMAIN` env var (fallback: `https://www.aiofusion.ai`).
