@@ -62,6 +62,9 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes("/api/platform/me")) return agencyMeResponse();
+    if (url.includes("/api/store/projects")) {
+      return makeResponse({ projects: [], deletedIds: [] });
+    }
     return makeResponse({ error: "unavailable" }, 404);
   }));
 

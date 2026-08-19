@@ -362,6 +362,7 @@ function UsersAdminPage({
   const [pwError, setPwError] = useState<string | null>(null);
   const [nameUser, setNameUser] = useState<string | null>(null);
   const [nameValue, setNameValue] = useState("");
+  const [websiteValue, setWebsiteValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [roleUser, setRoleUser] = useState<string | null>(null);
   const [roleValue, setRoleValue] = useState<LocalRole>("agency");
@@ -640,13 +641,14 @@ function UsersAdminPage({
     setNameError(null);
     if (!nameUser) return;
     void (async () => {
-      const result = await serverSetDisplayName(nameUser, nameValue);
+      const result = await serverSetDisplayName(nameUser, nameValue, websiteValue);
       if (!result.ok) {
         setNameError(result.error);
         return;
       }
       setNameUser(null);
       setNameValue("");
+      setWebsiteValue("");
       refresh();
     })();
   };
@@ -802,11 +804,17 @@ function UsersAdminPage({
                     style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 12px 32px -8px rgba(16,43,54,0.22)" }}
                   >
                     <button
-                      onClick={() => { setManageMenuUser(null); setNameUser(u.username); setNameValue(u.displayName || ""); setNameError(null); }}
+                      onClick={() => {
+                        setManageMenuUser(null);
+                        setNameUser(u.username);
+                        setNameValue(u.displayName || "");
+                        setWebsiteValue(u.website || "");
+                        setNameError(null);
+                      }}
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12px] font-medium text-left hover:bg-black/5"
                       style={{ color: ink }}
                     >
-                      <FileEdit size={13} /> Edit name
+                      <FileEdit size={13} /> Edit profile
                     </button>
                     <button
                       onClick={() => { setManageMenuUser(null); setPwUser(u.username); setPwValue(""); setPwError(null); }}
@@ -978,6 +986,14 @@ function UsersAdminPage({
                 value={nameValue}
                 onChange={(e) => setNameValue(e.target.value)}
                 placeholder="Display name (leave blank to clear)"
+                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+              />
+              <input
+                type="url"
+                value={websiteValue}
+                onChange={(e) => setWebsiteValue(e.target.value)}
+                placeholder="Website (leave blank to clear)"
                 className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
                 style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
               />

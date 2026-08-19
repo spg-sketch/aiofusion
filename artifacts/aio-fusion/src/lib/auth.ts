@@ -34,11 +34,17 @@ export type User = {
   // Managed client accounts have no sign-in access - the agency works on
   // their behalf via "Login as client".
   managed?: boolean;
+  // Client account owned by an agency/partner. These accounts are permanently
+  // managed and must never expose client credential actions.
+  agencyManaged?: boolean;
   // Optional cap on the number of client seats an agency account may create.
   seatCap?: number | null;
   // ISO timestamp of the account's most recent sign-in (from active sessions).
-  // Undefined = no live session known (shown as "never" in warnings).
+  // Undefined = no sign-in has been recorded (shown as "never" in lists).
   lastSignInAt?: string;
+  // Company website, used when an agency starts a project's fresh intake for
+  // this client. It is account metadata, not an arbitrary project setting.
+  website?: string;
 };
 
 export type Session = {
@@ -313,7 +319,7 @@ export function changePassword(username: string, newPassword: string): { ok: tru
 
 const apiBase = () => (import.meta.env.DEV ? `https://${window.location.host}` : "");
 
-type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean; lastSignInAt?: string };
+type ServerAccount = { username: string; role: Role; parent?: string; displayName?: string; archived?: boolean; mfaEnabled?: boolean; managed?: boolean; agencyManaged?: boolean; lastSignInAt?: string; website?: string };
 
 async function postJson(path: string, body?: unknown): Promise<{ ok: boolean; status: number; json: any }> {
   try {
@@ -348,7 +354,9 @@ function cacheAccounts(accounts: ServerAccount[]): void {
     ...(a.archived ? { archived: true } : {}),
     ...(a.mfaEnabled ? { mfaEnabled: true } : {}),
     ...(a.managed ? { managed: true } : {}),
+    ...(a.agencyManaged ? { agencyManaged: true } : {}),
     ...(a.lastSignInAt ? { lastSignInAt: a.lastSignInAt } : {}),
+    ...(a.website ? { website: a.website } : {}),
   }));
   saveUsers(users);
 }
@@ -639,10 +647,12 @@ export async function serverAddUser(
 export async function serverSetDisplayName(
   username: string,
   displayName: string,
+  website?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts/profile", {
     username,
     displayName,
+    ...(website !== undefined ? { website } : {}),
   });
   if (!ok) return { ok: false, error: json?.error || "Failed to update account." };
   await refreshAccountsCache();

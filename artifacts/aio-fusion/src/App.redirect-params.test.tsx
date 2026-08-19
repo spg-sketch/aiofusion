@@ -50,12 +50,18 @@ beforeEach(() => {
 
   // No server: every network call fails closed. bootstrapAuth treats this as
   // signed-out; content-store sync becomes a no-op.
-  vi.stubGlobal("fetch", vi.fn(async () =>
-    new Response(JSON.stringify({ error: "unauthorized" }), {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).includes("/api/store/projects")) {
+      return new Response(JSON.stringify({ projects: [], deletedIds: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
-    }),
-  ));
+    });
+  }));
 
   localStorage.clear();
 });

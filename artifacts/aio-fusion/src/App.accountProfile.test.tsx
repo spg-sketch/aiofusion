@@ -168,6 +168,9 @@ describe("accountProfile - boot path via bootstrapAuth", () => {
   it("brand client: intake shows brand prefill note", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/api/platform/me")) return brandMeResponse();
+      if (String(url).includes("/api/store/projects")) {
+        return makeResponse({ projects: [], deletedIds: [] });
+      }
       return makeResponse(unauthorizedBody, 401);
     }));
 

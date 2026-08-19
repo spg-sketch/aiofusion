@@ -10,6 +10,7 @@ import {
   platformMetaTable,
 } from "@workspace/db";
 import { and, eq, ne, desc, sql, isNull } from "drizzle-orm";
+import { logger } from "./logger";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
 // sub-accounts it creates). Passwords are hashed with scrypt and sessions are
@@ -723,6 +724,43 @@ export async function createPlatformSession(
     expiresAt: new Date(Date.now() + PLATFORM_SESSION_TTL),
     ipHint: ipHint ?? null,
   });
+  return sid;
+}
+
+// Genuine authentication must be remembered independently of session rows:
+// logout removes sessions, while impersonation and workspace switching create
+// sessions that must never be reported as the client's own sign-in.
+export const LAST_SIGN_IN_PREFIX = "account:last-sign-in:";
+export const lastSignInKey = (username: string) =>
+  `${LAST_SIGN_IN_PREFIX}${normUsername(username)}`;
+
+export async function recordLastSignIn(username: string): Promise<void> {
+  const value = new Date().toISOString();
+  await db
+    .insert(platformMetaTable)
+    .values({ key: lastSignInKey(username), value })
+    .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+export async function createSignedInSession(
+  username: string,
+  rawIp: string | undefined,
+  userId?: string,
+  activeCompanyId?: string,
+): Promise<string> {
+  const sid = await createPlatformSession(
+    username,
+    makeIpHint(rawIp),
+    userId,
+    activeCompanyId,
+  );
+  try {
+    await recordLastSignIn(username);
+  } catch (err) {
+    // Authentication remains available if the non-critical activity record
+    // cannot be written; the next genuine sign-in retries it.
+    logger.warn({ err, username }, "platform sign-in timestamp was not recorded");
+  }
   return sid;
 }
 

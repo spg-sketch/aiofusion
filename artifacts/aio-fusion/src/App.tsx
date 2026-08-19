@@ -324,7 +324,7 @@ function App() {
   // When set, the project being named was started from a client placeholder
   // card in the hub: pre-fill the client's company name and, once created,
   // assign the project to that client account.
-  const [startProjectFor, setStartProjectFor] = useState<{ username: string; name: string } | null>(null);
+  const [startProjectFor, setStartProjectFor] = useState<{ username: string; name: string; website?: string } | null>(null);
   const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
@@ -475,7 +475,7 @@ function App() {
 
   // Start a new project on behalf of a client sub-account (from the hub's
   // "Start project" placeholder card). Same limit pre-check as above.
-  const beginStartProjectForClient = (client: { username: string; name: string }) => requireSessionThen(() => {
+  const beginStartProjectForClient = (client: { username: string; name: string; website?: string }) => requireSessionThen(() => {
     if (session && session.role !== "admin" && visibleProjects.length >= 2) {
       window.alert(
         "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
@@ -502,16 +502,19 @@ function App() {
     setStartProjectFor(null);
     const project = createStoredProject(name);
     // Agency starting a project on a client's behalf: pre-fill the client's
-    // company name (intake field 4.1) into the fresh project's intake blob so
-    // the agency doesn't have to retype it. Only seed a genuinely new project
-    // (no existing intake key) and only when we have a client name to use.
-    if (assignTo?.name?.trim()) {
+    // company name (intake field 4.1) and website into the fresh project's
+    // intake blob so the agency doesn't have to retype either. Only seed a
+    // genuinely new project (no existing intake key).
+    if (assignTo?.name?.trim() || assignTo?.website?.trim()) {
       try {
         const intakeKey = `aio.intake.v2::${project.id}`;
         if (localStorage.getItem(intakeKey) === null) {
           localStorage.setItem(
             intakeKey,
-            JSON.stringify({ formData: { "4.1": assignTo.name.trim() } }),
+            JSON.stringify({
+              formData: assignTo.name?.trim() ? { "4.1": assignTo.name.trim() } : {},
+              ...(assignTo.website?.trim() ? { aiWebsite: assignTo.website.trim() } : {}),
+            }),
           );
         }
       } catch { /* noop - prefill is best-effort */ }
@@ -683,7 +686,7 @@ function App() {
     const owners = new Set(storedProjects.map((p) => (p.owner || "").toLowerCase()));
     return getLocalSubAccounts(session.username)
       .filter((u) => u.role === "client" && !u.archived && !owners.has(u.username.toLowerCase()))
-      .map((u) => ({ username: u.username, name: accountLabel(u) }));
+      .map((u) => ({ username: u.username, name: accountLabel(u), website: u.website }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedProjects, session, accountsTick]);
 

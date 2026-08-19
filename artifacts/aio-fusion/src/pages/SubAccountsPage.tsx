@@ -146,11 +146,10 @@ function SubAccountsPage({
   // Guards against a slow earlier image load overwriting a later selection.
   const logoRequestRef = useRef(0);
 
-  // Per-client logo blob URLs. null = checked but none; undefined = not yet fetched.
-  const [clientLogos, setClientLogos] = useState<Map<string, string | null>>(new Map());
-  const clientLogoBlobsRef = useRef<Map<string, string>>(new Map());
   // Bumped whenever a logo may have changed (own upload, another tab/session,
-  // returning from "View account") so the list refetches without a reload.
+  // returning from "View account"). Logo images use this as a cache buster;
+  // native lazy loading keeps a long client list from downloading every
+  // source logo before it is visible.
   const [logoTick, setLogoTick] = useState(0);
 
   useEffect(() => {
@@ -163,46 +162,8 @@ function SubAccountsPage({
     };
   }, []);
 
-  // Fetch logos for all sub-accounts (active + archived) whenever the list changes.
-  useEffect(() => {
-    const usernames = allSubAccounts.map((u) => u.username);
-    if (usernames.length === 0) return;
-    let cancelled = false;
-    const newBlobs = new Map<string, string>();
-    Promise.all(
-      usernames.map(async (username) => {
-        try {
-          const res = await fetch(`${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/logo`, {
-            credentials: "include",
-          });
-          if (!res.ok || cancelled) return;
-          const blob = await res.blob();
-          if (cancelled) return;
-          const blobUrl = URL.createObjectURL(blob);
-          newBlobs.set(username, blobUrl);
-        } catch {
-          /* non-fatal: no logo or not authorized */
-        }
-      }),
-    ).then(() => {
-      if (cancelled) {
-        newBlobs.forEach((url) => URL.revokeObjectURL(url));
-        return;
-      }
-      // Revoke old blobs before replacing.
-      clientLogoBlobsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      clientLogoBlobsRef.current = newBlobs;
-      const map = new Map<string, string | null>();
-      usernames.forEach((u) => {
-        map.set(u, newBlobs.get(u) ?? null);
-      });
-      setClientLogos(map);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allSubAccounts, logoTick]);
+  const clientLogoUrl = (username: string) =>
+    `${apiBase()}/api/platform/accounts/${encodeURIComponent(username)}/logo?v=${logoTick}`;
 
   /** Downscale the chosen client logo to a data URL for the create form. */
   const handleNewClientLogo = (file: File) => {
@@ -241,6 +202,10 @@ function SubAccountsPage({
   const [pwUser, setPwUser] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
+  const [profileUser, setProfileUser] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [profileWebsite, setProfileWebsite] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // "Give client access" inline panel state (per managed client account).
   const [accessUser, setAccessUser] = useState<string | null>(null);
@@ -507,6 +472,7 @@ function SubAccountsPage({
             return;
           }
           (kind === "avatar" ? setAvatarUrl : setLogoUrl)(profileImageUrl(kind));
+          if (kind === "logo") window.dispatchEvent(new Event("aio:logo-changed"));
         })
         .catch(() => setImageError("Failed to save the image."))
         .finally(() => setUploadingImage(null));
@@ -523,7 +489,10 @@ function SubAccountsPage({
     setImageError(null);
     fetch(`${apiBase()}/api/platform/profile/image/${kind}`, { method: "DELETE", credentials: "include" })
       .then((r) => {
-        if (r.ok) (kind === "avatar" ? setAvatarUrl : setLogoUrl)(null);
+        if (r.ok) {
+          (kind === "avatar" ? setAvatarUrl : setLogoUrl)(null);
+          if (kind === "logo") window.dispatchEvent(new Event("aio:logo-changed"));
+        }
       })
       .catch(() => { /* non-fatal */ });
   };
@@ -705,6 +674,23 @@ function SubAccountsPage({
       }
       setPwUser(null);
       setPwValue("");
+      refresh();
+    })();
+  };
+
+  const handleSaveClientProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileError(null);
+    if (!profileUser) return;
+    void (async () => {
+      const result = await serverSetDisplayName(profileUser, profileName, profileWebsite);
+      if (!result.ok) {
+        setProfileError(result.error);
+        return;
+      }
+      setProfileUser(null);
+      setProfileName("");
+      setProfileWebsite("");
       refresh();
     })();
   };
@@ -1343,18 +1329,23 @@ function SubAccountsPage({
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {subAccounts.map((u) => {
                 const editingPw = pwUser === u.username;
+                const editingProfile = profileUser === u.username;
                 const owned = manageable.filter((p) => (p.owner || "").toLowerCase() === u.username.toLowerCase());
-                const clientLogoUrl = clientLogos.get(u.username);
+                const logoSrc = clientLogoUrl(u.username);
                 return (
                   <li key={u.username} className="px-6 py-4">
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: accentSoft, color: accent, border: clientLogoUrl ? `1px solid ${vars.g200}` : undefined }}>
-                          {clientLogoUrl ? (
-                            <img src={clientLogoUrl} alt={`${u.displayName ?? u.username} logo`} className="w-full h-full object-contain p-0.5" />
-                          ) : (
-                            <User size={16} />
-                          )}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden relative" style={{ background: accentSoft, color: accent, border: `1px solid ${vars.g200}` }}>
+                          <User size={16} />
+                          <img
+                            src={logoSrc}
+                            alt={`${u.displayName ?? u.username} logo`}
+                            loading="lazy"
+                            decoding="async"
+                            className="absolute inset-0 w-full h-full object-contain p-0.5"
+                            onError={(event) => { event.currentTarget.hidden = true; }}
+                          />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1371,6 +1362,10 @@ function SubAccountsPage({
                           </div>
                         </div>
                       </div>
+                      <p className="flex items-center gap-1.5 text-[11px] font-medium sm:pl-[52px]" style={{ color: vars.g500 }}>
+                        <Clock size={12} />
+                        {u.lastSignInAt ? `Last signed in ${formatLastSignIn(u.lastSignInAt)}` : "Never signed in"}
+                      </p>
                       <div className="flex items-center gap-2 flex-wrap sm:pl-[52px]">
                         <button
                           onClick={() => (isAgencyPartner ? handleOpenClientProjects(u.username, owned) : handleEnterAccount(u.username))}
@@ -1380,7 +1375,24 @@ function SubAccountsPage({
                         >
                           {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : isAgencyPartner ? <FolderOpen size={12} /> : <LogIn size={12} />} {isAgencyPartner ? "Client projects" : u.managed ? "Open account" : "Login as client"}
                         </button>
-                        {!isAgencyPartner && (
+                        <button
+                          onClick={() => {
+                            if (editingProfile) {
+                              setProfileUser(null);
+                              setProfileError(null);
+                              return;
+                            }
+                            setProfileUser(u.username);
+                            setProfileName(u.displayName || "");
+                            setProfileWebsite(u.website || "");
+                            setProfileError(null);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                          style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                        >
+                          <FileEdit size={12} /> {editingProfile ? "Cancel" : "Edit details"}
+                        </button>
+                        {!isAgencyPartner && !u.agencyManaged && (
                         <button
                           onClick={() => { setPwUser(editingPw ? null : u.username); setPwValue(""); setPwError(null); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -1389,7 +1401,7 @@ function SubAccountsPage({
                           <KeyRound size={12} /> {editingPw ? "Cancel" : "Change password"}
                         </button>
                         )}
-                        {isAgencyPartner ? null : u.managed ? (
+                        {isAgencyPartner || u.agencyManaged ? null : u.managed ? (
                           <button
                             onClick={() => { setAccessUser(accessUser === u.username ? null : u.username); setAccessPassword(""); setAccessError(null); setAccessNotice(null); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
@@ -1443,6 +1455,30 @@ function SubAccountsPage({
                     </div>
                     {enterError && enteringUsername === null && (
                       <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: accent }}>{enterError}</p>
+                    )}
+                    {editingProfile && (
+                      <form onSubmit={handleSaveClientProfile} className="mt-3 flex flex-wrap items-center gap-2 sm:pl-[52px]">
+                        <input
+                          type="text"
+                          value={profileName}
+                          onChange={(e) => setProfileName(e.target.value)}
+                          placeholder="Client name (leave blank to clear)"
+                          className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                        />
+                        <input
+                          type="url"
+                          value={profileWebsite}
+                          onChange={(e) => setProfileWebsite(e.target.value)}
+                          placeholder="Website (leave blank to clear)"
+                          className="flex-1 min-w-[180px] px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                          style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                        />
+                        <button type="submit" className="px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white" style={{ background: accent }}>
+                          Save details
+                        </button>
+                        {profileError && <span className="text-[12px] font-semibold w-full" style={{ color: accent }}>{profileError}</span>}
+                      </form>
                     )}
                     {accessNotice?.username === u.username && (
                       <p className="mt-2 text-[12px] font-semibold sm:pl-[52px]" style={{ color: vars.green }}>{accessNotice.text}</p>
@@ -1538,17 +1574,22 @@ function SubAccountsPage({
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {archivedSubAccounts.map((u) => {
                 const owned = manageable.filter((p) => (p.owner || "").toLowerCase() === u.username.toLowerCase());
-                const clientLogoUrl = clientLogos.get(u.username);
+                const logoSrc = clientLogoUrl(u.username);
                 return (
                   <li key={u.username} className="px-6 py-4" style={{ background: vars.g100 + "40" }}>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="flex items-center gap-3 opacity-60">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ background: clientLogoUrl ? "white" : vars.g200, color: vars.g400, border: `1px solid ${vars.g200}` }}>
-                          {clientLogoUrl ? (
-                            <img src={clientLogoUrl} alt={`${u.displayName ?? u.username} logo`} className="w-full h-full object-contain p-0.5" style={{ filter: "grayscale(0.5) opacity(0.7)" }} />
-                          ) : (
-                            <User size={16} />
-                          )}
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden relative" style={{ background: vars.g200, color: vars.g400, border: `1px solid ${vars.g200}` }}>
+                          <User size={16} />
+                          <img
+                            src={logoSrc}
+                            alt={`${u.displayName ?? u.username} logo`}
+                            loading="lazy"
+                            decoding="async"
+                            className="absolute inset-0 w-full h-full object-contain p-0.5"
+                            style={{ filter: "grayscale(0.5) opacity(0.7)" }}
+                            onError={(event) => { event.currentTarget.hidden = true; }}
+                          />
                         </div>
                         <div>
                           <p className="text-[14px] font-bold" style={{ color: vars.g500 }}>{u.displayName ?? u.username}</p>

@@ -34,24 +34,29 @@ vi.mock("../components/BillingDetailsCard", () => ({
 
 const serverAddUser = vi.fn(async () => ({ ok: true as const, username: "new-client" }));
 const serverImpersonate = vi.fn(async () => ({ ok: true as const }));
+const serverSetDisplayName = vi.fn(async () => ({ ok: true as const }));
+const serverSetClientAccess = vi.fn(async () => ({ ok: true as const }));
+const getSubAccounts = vi.fn();
+
+const partnerClientRows = [
+  { username: "client-one", role: "client", parent: "acme-agency", managed: true, agencyManaged: true },
+  { username: "client-two", role: "client", parent: "acme-agency", managed: false },
+];
 
 vi.mock("../lib/auth", () => ({
-  getSubAccounts: () => [
-    { username: "client-one", role: "client", parent: "acme-agency", managed: true },
-    { username: "client-two", role: "client", parent: "acme-agency", managed: false },
-  ],
+  getSubAccounts: (...args: unknown[]) => getSubAccounts(...(args as [])),
   serverAddUser: (...args: unknown[]) => serverAddUser(...(args as [])),
   serverDeleteUser: async () => ({ ok: true as const }),
   serverChangePassword: async () => ({ ok: true as const }),
   serverAssignOwner: async () => ({ ok: true as const }),
-  serverSetDisplayName: async () => ({ ok: true as const }),
+  serverSetDisplayName: (...args: unknown[]) => serverSetDisplayName(...(args as [])),
   serverArchiveUser: async () => ({ ok: true as const }),
   serverSetSeatCap: async () => ({ ok: true as const }),
   refreshAccountsCache: async () => {},
   serverImpersonate: (...args: unknown[]) => serverImpersonate(...(args as [])),
   serverSwitchToMaster: async () => ({ ok: true as const }),
   serverChangeAccountType: async () => ({ ok: true as const }),
-  serverSetClientAccess: async () => ({ ok: true as const }),
+   serverSetClientAccess: (...args: unknown[]) => serverSetClientAccess(...(args as [])),
   canCreateSubAccounts: (role: string) => role === "agency" || role === "admin",
 }));
 
@@ -61,6 +66,8 @@ beforeEach(() => {
   );
   serverAddUser.mockClear();
   serverImpersonate.mockClear();
+   serverSetClientAccess.mockClear();
+  getSubAccounts.mockReturnValue(partnerClientRows);
   sessionStorage.clear();
 });
 
@@ -98,10 +105,21 @@ describe("agency partner client rows", () => {
     expect(screen.queryByRole("button", { name: /give client access/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove client access/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /mark as managed/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /resend welcome email/i })).toBeNull();
     // No Managed badge either - it's implied for every partner client.
     expect(screen.queryByText(/^managed$/i)).toBeNull();
     expect(screen.getAllByRole("button", { name: /archive/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /delete/i }).length).toBeGreaterThan(0);
+  });
+
+  it("does not expose client credential actions to an admin for an agency-managed client", () => {
+    getSubAccounts.mockReturnValue([partnerClientRows[0]]);
+    render(<SubAccountsPage {...baseProps} session={{ username: "admin", role: "admin" } as any} />);
+    fireEvent.click(screen.getAllByRole("button", { name: /client accounts/i })[0]);
+    expect(screen.queryByRole("button", { name: /change password/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /give client access/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /resend welcome email/i })).toBeNull();
+    expect(serverSetClientAccess).not.toHaveBeenCalled();
   });
 
   it("Client projects stashes the sole project id and impersonates", async () => {
@@ -145,5 +163,20 @@ describe("agency partner create-client form", () => {
     expect(password).toBe("");
     expect(role).toBe("client");
     expect(opts.managed).toBe(true);
+  });
+
+  it("lets an agency update a client's name and website for future projects", async () => {
+    openClientsSection();
+    fireEvent.click(screen.getAllByRole("button", { name: /edit details/i })[0]);
+    fireEvent.change(screen.getByPlaceholderText(/client name/i), { target: { value: "Updated Client" } });
+    fireEvent.change(screen.getByPlaceholderText(/website/i), { target: { value: "https://updated.example" } });
+    fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+    await vi.waitFor(() => {
+      expect(serverSetDisplayName).toHaveBeenCalledWith(
+        "client-one",
+        "Updated Client",
+        "https://updated.example",
+      );
+    });
   });
 });

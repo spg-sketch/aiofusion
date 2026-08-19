@@ -66,6 +66,9 @@ import {
   getCompanyBySlug,
   incrementSessionVersion,
   normalizeMembershipRole,
+  createSignedInSession,
+  LAST_SIGN_IN_PREFIX,
+  lastSignInKey,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { cspHeaderWithScriptNonce } from "../middleware/csp";
@@ -187,12 +190,13 @@ async function transitionWorkspaceAccountType(
 }
 
 function publicAccount(
-  row: { username: string; role: string; parent: string | null },
+  row: { username: string; role: string; parent: string | null; website?: string | null },
   displayName?: string,
   archived?: boolean,
   mfaEnabled?: boolean,
   managed?: boolean,
   lastSignInAt?: string,
+  agencyManaged?: boolean,
 ) {
   return {
     username: row.username,
@@ -202,26 +206,27 @@ function publicAccount(
     ...(archived ? { archived: true } : {}),
     ...(mfaEnabled ? { mfaEnabled: true } : {}),
     ...(managed ? { managed: true } : {}),
+    ...(agencyManaged ? { agencyManaged: true } : {}),
     ...(lastSignInAt ? { lastSignInAt } : {}),
+    ...(row.website ? { website: row.website } : {}),
   };
 }
 
-// Most recent sign-in per account, derived from active platform_sessions
-// (created_at is when the session was issued). Accounts with no live session
-// have no entry - the client shows "never" / unknown.
+function parseLastSignIn(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const at = new Date(value);
+  return Number.isFinite(at.getTime()) ? at.toISOString() : undefined;
+}
+
 async function getLastSignIns(): Promise<Map<string, string>> {
-  const rows = await db
-    .select({
-      username: platformSessionsTable.username,
-      lastAt: sql<string>`max(${platformSessionsTable.createdAt})`,
-    })
-    .from(platformSessionsTable)
-    // Expired rows linger until lazy cleanup; they are not live sessions.
-    .where(gt(platformSessionsTable.expiresAt, new Date()))
-    .groupBy(platformSessionsTable.username);
+  const storedRows = await db
+    .select()
+    .from(platformMetaTable)
+    .where(like(platformMetaTable.key, `${LAST_SIGN_IN_PREFIX}%`));
   const map = new Map<string, string>();
-  for (const r of rows) {
-    if (r.lastAt) map.set(normUsername(r.username), new Date(r.lastAt).toISOString());
+  for (const row of storedRows) {
+    const at = parseLastSignIn(row.value);
+    if (at) map.set(row.key.slice(LAST_SIGN_IN_PREFIX.length), at);
   }
   return map;
 }
@@ -324,16 +329,16 @@ const MANAGED_LOGIN_ERROR =
 // and "Mark as managed" flows.
 const RECENT_SIGN_IN_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Most recent sign-in we know about for an account: the newest session row.
-// (Sessions are deleted on logout/revoke, so this reflects active usage.)
+// Most recent genuine sign-in for an account. Never infer this from sessions:
+// those are also issued for impersonation and workspace switching.
 async function getLastSignInAt(username: string): Promise<Date | null> {
-  const [row] = await db
-    .select({ createdAt: platformSessionsTable.createdAt })
-    .from(platformSessionsTable)
-    .where(eq(platformSessionsTable.username, normUsername(username)))
-    .orderBy(desc(platformSessionsTable.createdAt))
+  const [stored] = await db
+    .select()
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, lastSignInKey(username)))
     .limit(1);
-  return row?.createdAt ?? null;
+  const remembered = parseLastSignIn(stored?.value);
+  return remembered ? new Date(remembered) : null;
 }
 
 async function setManaged(username: string, managed: boolean): Promise<void> {
@@ -645,9 +650,9 @@ async function finishLoginOrChallenge(
     // "Remember this device": a validly signed, unrevoked trusted-device cookie
     // lets this browser skip the code until it expires or is revoked.
     if (await isTrustedDevice(identity.username, trustedDeviceCookie)) {
-      const sid = await createPlatformSession(
+      const sid = await createSignedInSession(
         identity.username,
-        makeIpHint(rawIp),
+        rawIp,
         identity.userId,
         identity.activeCompanyId,
       );
@@ -684,9 +689,9 @@ async function finishLoginOrChallenge(
     return;
   }
 
-  const sid = await createPlatformSession(
+  const sid = await createSignedInSession(
     identity.username,
-    makeIpHint(rawIp),
+    rawIp,
     identity.userId,
     identity.activeCompanyId,
   );
@@ -711,7 +716,7 @@ async function completeMfaLogin(
   }
   // Full authentication complete: clear the MFA-stage lockout counter.
   try { await clearLoginFailures("mfa:" + payload.u); } catch { /* non-fatal */ }
-  const sid = await createPlatformSession(payload.u, makeIpHint(rawIp), payload.uid, payload.cid);
+  const sid = await createSignedInSession(payload.u, rawIp, payload.uid, payload.cid);
   setPlatformCookie(res, sid);
   res.json({
     account: { username: payload.u, role: payload.role },
@@ -758,9 +763,9 @@ async function finishOauthLoginOrChallenge(
       identity.username,
       (req.cookies as Record<string, string> | undefined)?.[TRUSTED_DEVICE_COOKIE],
     )) {
-      const sid = await createPlatformSession(
+      const sid = await createSignedInSession(
         identity.username,
-        makeIpHint(req.ip),
+        req.ip,
         identity.userId,
         identity.activeCompanyId,
       );
@@ -787,9 +792,9 @@ async function finishOauthLoginOrChallenge(
     return;
   }
 
-  const sid = await createPlatformSession(
+  const sid = await createSignedInSession(
     identity.username,
-    makeIpHint(req.ip),
+    req.ip,
     identity.userId,
     identity.activeCompanyId,
   );
@@ -1568,7 +1573,7 @@ router.get("/platform/verify-email", async (req: Request, res: Response) => {
     // Issue the first session
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
-    const sid = await createPlatformSession(mem.companySlug, makeIpHint(rawIp), row.userId, mem.companyId);
+    const sid = await createSignedInSession(mem.companySlug, rawIp, row.userId, mem.companyId);
     setPlatformCookie(res, sid);
     res.redirect(`${origin}/?needs_setup=true`);
   } catch (err) {
@@ -2569,7 +2574,7 @@ async function handleSsoInvite(
 
   // Invited users skip account-type selection: session goes straight into the
   // inviting workspace.
-  const sid = await createPlatformSession(invite.companySlug, makeIpHint(req.ip), user.id, invite.companyId);
+  const sid = await createSignedInSession(invite.companySlug, req.ip, user.id, invite.companyId);
   setPlatformCookie(res, sid);
   return `/?oauth_status=ok`;
 }
@@ -3427,6 +3432,8 @@ router.post(
       }
       const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
         ?? req.socket.remoteAddress;
+      // This is agency impersonation, not a client authentication event. Do
+      // not overwrite the client's true last-sign-in timestamp.
       const sid = await createPlatformSession(account.username, makeIpHint(rawIp));
       setImpersonationStashCookie(res, adminSid);
       setPlatformCookie(res, sid);
@@ -3926,6 +3933,7 @@ router.get(
           username: platformAccountsTable.username,
           role: platformAccountsTable.role,
           parent: platformAccountsTable.parent,
+          website: platformAccountsTable.website,
         })
         .from(platformAccountsTable);
       const visible = await getVisibleUsernames(account);
@@ -3933,6 +3941,11 @@ router.get(
         visible === null
           ? rows
           : rows.filter((r) => visible.includes(normUsername(r.username)));
+      const agencyParentSlugs = new Set(
+        rows
+          .filter((r) => normalizeRole(r.role) === "agency")
+          .map((r) => normUsername(r.username)),
+      );
       const [names, archivedSet, mfaSet, managedSet, lastSignIns] = await Promise.all([
         getDisplayNames(),
         getArchivedSet(),
@@ -3949,6 +3962,9 @@ router.get(
             mfaSet.has(normUsername(r.username)),
             managedSet.has(normUsername(r.username)),
             lastSignIns.get(normUsername(r.username)),
+            normalizeRole(r.role) === "client" &&
+              !!r.parent &&
+              agencyParentSlugs.has(normUsername(r.parent)),
           ),
         ),
       });
@@ -4661,6 +4677,9 @@ router.post(
       const target = normUsername(req.body?.username);
       const displayName =
         typeof req.body?.displayName === "string" ? req.body.displayName : "";
+      const websiteProvided = typeof req.body?.website === "string";
+      let website = websiteProvided ? req.body.website.trim().slice(0, 200) : "";
+      if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
       if (!target) {
         res.status(400).json({ error: "Username is required." });
         return;
@@ -4676,6 +4695,18 @@ router.post(
         return;
       }
       await setDisplayName(target, displayName);
+      if (websiteProvided) {
+        await db
+          .update(platformAccountsTable)
+          .set({ website: website || null })
+          .where(eq(platformAccountsTable.username, target));
+        // Modern workspace records carry the same profile value. Keep both
+        // stores aligned so /platform/me and any future company reads agree.
+        await db
+          .update(platformCompaniesTable)
+          .set({ website: website || null })
+          .where(eq(platformCompaniesTable.slug, target));
+      }
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to update account" });

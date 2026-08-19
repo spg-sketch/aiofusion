@@ -431,13 +431,11 @@ describe("POST /api/platform/accounts/access", () => {
   // -------------------------------------------------------------------------
   // Last sign-in exposure (GET /platform/accounts)
   // -------------------------------------------------------------------------
-  it("GET /platform/accounts includes lastSignInAt for accounts with a live session and omits it otherwise", async () => {
+  it("GET /platform/accounts includes a persisted lastSignInAt and omits it otherwise", async () => {
     const createdAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
-    await db.insert(platformSessionsTable).values({
-      sid: "ca-last-signin-sid",
-      username: CLIENT,
-      createdAt,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    await db.insert(platformMetaTable).values({
+      key: `account:last-sign-in:${CLIENT}`,
+      value: createdAt.toISOString(),
     });
 
     const res = await fetch(`${baseUrl}/api/platform/accounts`, {
@@ -454,7 +452,7 @@ describe("POST /api/platform/accounts/access", () => {
     expect(agency!.lastSignInAt).toBeUndefined();
   });
 
-  it("GET /platform/accounts omits lastSignInAt when the account's only sessions have expired", async () => {
+  it("GET /platform/accounts omits lastSignInAt when no authentication timestamp exists", async () => {
     await db.insert(platformSessionsTable).values({
       sid: "ca-expired-sid",
       username: CLIENT,
@@ -470,6 +468,32 @@ describe("POST /api/platform/accounts/access", () => {
     const client = body.accounts.find((a) => a.username === CLIENT);
     expect(client).toBeDefined();
     expect(client!.lastSignInAt).toBeUndefined();
+  });
+
+  it("impersonating a never-signed-in client does not create a sign-in listing or revoke warning", async () => {
+    await db.insert(platformSessionsTable).values({
+      sid: "ca-agency-impersonation-sid",
+      username: AGENCY,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await fetch(`${baseUrl}/api/platform/accounts/${CLIENT}/impersonate`, {
+      method: "POST",
+      headers: {
+        "x-test-account": JSON.stringify({ username: AGENCY, role: "agency", userId: null }),
+        cookie: "aio_sid=ca-agency-impersonation-sid",
+      },
+    });
+    expect(res.status).toBe(200);
+
+    const accounts = await fetch(`${baseUrl}/api/platform/accounts`, {
+      headers: { "x-test-account": JSON.stringify({ username: AGENCY, role: "agency", userId: null }) },
+    });
+    const body = (await accounts.json()) as { accounts: Array<{ username: string; lastSignInAt?: string }> };
+    expect(body.accounts.find((account) => account.username === CLIENT)?.lastSignInAt).toBeUndefined();
+
+    const revoke = await callAccess({ username: CLIENT, action: "revoke" });
+    expect(revoke.status).toBe(200);
   });
 
   // -------------------------------------------------------------------------
@@ -622,8 +646,12 @@ describe("POST /api/platform/accounts/access", () => {
       userId: u!.id,
       expiresAt: new Date(Date.now() + 86400000),
     });
+    await db.insert(platformMetaTable).values({
+      key: `account:last-sign-in:${CLIENT}`,
+      value: new Date().toISOString(),
+    });
 
-    // The fresh session above trips the recent-sign-in warning first.
+    // The persisted authentication timestamp trips the recent-sign-in warning.
     const warned = await callAccess({ username: CLIENT, action: "revoke" });
     expect(warned.status).toBe(409);
     const warnedBody = (await warned.json()) as { requiresConfirmation?: boolean; lastSignInAt?: string };
@@ -689,10 +717,9 @@ describe("POST /api/platform/accounts/access", () => {
   });
 
   it("mark-managed: warns with 409 + lastSignInAt when the client signed in recently, proceeds with confirmRecentSignIn", async () => {
-    await db.insert(platformSessionsTable).values({
-      sid: "mark-managed-recent-sid",
-      username: CLIENT,
-      expiresAt: new Date(Date.now() + 86400000),
+    await db.insert(platformMetaTable).values({
+      key: `account:last-sign-in:${CLIENT}`,
+      value: new Date().toISOString(),
     });
 
     const warned = await callAccess({ username: CLIENT, action: "mark-managed" });
@@ -715,12 +742,9 @@ describe("POST /api/platform/accounts/access", () => {
   });
 
   it("mark-managed: no warning when the last sign-in is outside the recent window", async () => {
-    // A session created 60 days ago - long outside the 30-day window.
-    await db.insert(platformSessionsTable).values({
-      sid: "mark-managed-old-sid",
-      username: CLIENT,
-      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-      expiresAt: new Date(Date.now() + 86400000),
+    await db.insert(platformMetaTable).values({
+      key: `account:last-sign-in:${CLIENT}`,
+      value: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
     });
 
     const res = await callAccess({ username: CLIENT, action: "mark-managed" });
@@ -938,7 +962,29 @@ describe("POST /api/platform/accounts/access", () => {
     expect(before.status).toBe(200);
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, CLIENT));
 
-    const revoke = await callAccess({ username: CLIENT, action: "revoke" });
+    // The client-list API retains the timestamp after logout/session removal.
+    const accounts = await fetch(`${baseUrl}/api/platform/accounts`, {
+      headers: { "x-test-account": JSON.stringify({ username: AGENCY, role: "agency", userId: null }) },
+    });
+    expect(accounts.status).toBe(200);
+    const accountList = (await accounts.json()) as {
+      accounts: Array<{ username: string; lastSignInAt?: string }>;
+    };
+    expect(accountList.accounts.find((account) => account.username === CLIENT)?.lastSignInAt).toBeTruthy();
+
+    // The sign-in is remembered independently of the now-deleted session, so
+    // an agency must acknowledge that it is interrupting recent access.
+    const initialRevoke = await callAccess({ username: CLIENT, action: "revoke" });
+    expect(initialRevoke.status).toBe(409);
+    const warning = (await initialRevoke.json()) as { requiresConfirmation?: boolean; lastSignInAt?: string };
+    expect(warning.requiresConfirmation).toBe(true);
+    expect(warning.lastSignInAt).toBeTruthy();
+
+    const revoke = await callAccess({
+      username: CLIENT,
+      action: "revoke",
+      confirmRecentSignIn: true,
+    });
     expect(revoke.status).toBe(200);
 
     // Old password is dead AND the managed flag blocks the path outright.
@@ -1137,6 +1183,16 @@ describe("agency partner clients are permanently managed", () => {
       .where(eq(platformAccountsTable.username, PARTNER_CLIENT))
       .limit(1);
     expect(verifyPassword("ClientPass123", row!.passwordHash)).toBe(true);
+  });
+
+  it("the parent cannot resend a welcome email for the permanently managed client", async () => {
+    const res = await fetch(`${baseUrl}/api/platform/accounts/access`, {
+      method: "POST",
+      headers: partnerHeaders,
+      body: JSON.stringify({ username: PARTNER_CLIENT, action: "resend-welcome" }),
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error?: string }).error).toMatch(/managed by your agency/i);
   });
 
   it("creation by an agency partner is always managed - even without the managed flag, and with a contact email", async () => {

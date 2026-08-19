@@ -14,9 +14,8 @@ import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   normUsername,
   hashPassword,
-  createPlatformSession,
+  createSignedInSession,
   setPlatformCookie,
-  makeIpHint,
   canManageTeam,
   normalizeMembershipRole,
   parseProjectAccess,
@@ -1318,7 +1317,7 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
     // skip account-type selection - the workspace is already set up.
     const rawIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim()
       ?? req.socket.remoteAddress;
-    const sid = await createPlatformSession(invite.companySlug, makeIpHint(rawIp), userId, invite.companyId);
+    const sid = await createSignedInSession(invite.companySlug, rawIp, userId, invite.companyId);
     setPlatformCookie(res, sid);
 
     const [company] = await db

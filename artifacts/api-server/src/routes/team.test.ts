@@ -330,7 +330,7 @@ import {
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
 import { PROJECT_TEAM_SEATS } from "../lib/team-invites";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
@@ -465,6 +465,12 @@ describe("team invitations", () => {
     expect(accept.json.account.membershipRole).toBe("content");
     const staffSid = /aio_sid=([^;]+)/.exec(accept.setCookie ?? "")?.[1];
     expect(staffSid).toBeTruthy();
+    const [recordedSignIn] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "account:last-sign-in:acme-agency"));
+    expect(recordedSignIn?.value).toBeTruthy();
+    expect(new Date(recordedSignIn!.value).getTime()).toBeGreaterThan(Date.now() - 10_000);
 
     // Single-use: second accept fails.
     const again = await api("/api/platform/invite/accept", {
@@ -606,6 +612,42 @@ describe("team invitations", () => {
     await api(`/api/platform/team/invites/${first.json.token}/revoke`, { sid, body: {} });
     expect((await api(`/api/platform/invite/${first.json.token}`)).status).toBe(404);
     expect((await api("/api/platform/invite/accept", { body: { token: first.json.token, password: "some-pass-1" } })).status).toBe(404);
+  });
+
+  it("replaces an expired invite for the same email under the live-invite uniqueness guard", async () => {
+    const { sid, company } = await seedAgency("expired-live-reinvite", "owner@expired-live-reinvite.test");
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS platform_invitations_one_live_email_idx
+        ON platform_invitations (company_id, email)
+        WHERE used_at IS NULL AND revoked_at IS NULL AND declined_at IS NULL
+    `);
+    await db.insert(platformInvitationsTable).values({
+      token: "expired-reinvite-token",
+      email: "member@expired-live-reinvite.test",
+      companyId: company.id,
+      companySlug: company.slug,
+      role: "viewer",
+      expiresAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+
+    const replacement = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "member@expired-live-reinvite.test", role: "viewer" },
+    });
+    expect(replacement.status).toBe(201);
+
+    const rows = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(
+        and(
+          eq(platformInvitationsTable.companyId, company.id),
+          eq(platformInvitationsTable.email, "member@expired-live-reinvite.test"),
+        ),
+      );
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.token === "expired-reinvite-token")?.revokedAt).not.toBeNull();
+    expect(rows.find((row) => row.token === replacement.json.token)?.revokedAt).toBeNull();
   });
 
   it("enforces scoping and roles on archive, planner and audit surfaces", async () => {
