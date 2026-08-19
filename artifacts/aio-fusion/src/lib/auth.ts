@@ -1132,6 +1132,15 @@ export type TeamOverview = {
   projectSeats?: Record<string, number>;
 };
 
+export type TeamRoleViolation = {
+  kind: "member" | "invite";
+  userId?: string | null;
+  inviteToken?: string | null;
+  email: string | null;
+  name?: string | null;
+  currentRole: MembershipRole;
+  reason: string;
+};
 export async function serverInviteTeamMember(data: {
   email: string;
   role: MembershipRole;
@@ -1211,6 +1220,20 @@ export async function serverGetTeam(): Promise<{ ok: boolean; team?: TeamOvervie
   }
 }
 
+export async function serverGetTeamViolations(): Promise<{
+  ok: boolean;
+  violations?: TeamRoleViolation[];
+  error?: string;
+}> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/team/violations`, { credentials: "include" });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to load team role issues." };
+    return { ok: true, violations: Array.isArray(json?.violations) ? json.violations : [] };
+  } catch {
+    return { ok: false, error: "Network error." };
+  }
+}
 export async function serverSetTeamSeatLimit(
   username: string,
   seats: number,
@@ -1410,4 +1433,14 @@ export async function serverSwitchWorkspace(companyId: string): Promise<{
   } catch {
     return { ok: false, error: "Network error." };
   }
+}
+
+export async function serverFixTeamViolations(): Promise<{
+  ok: boolean;
+  fixed?: number;
+  error?: string;
+}> {
+  const { ok, json } = await postJson("/api/platform/team/violations/fix");
+  if (!ok) return { ok: false, error: json?.error ?? "Failed to fix team role issues." };
+  return { ok: true, fixed: Number(json?.fixed ?? 0) };
 }

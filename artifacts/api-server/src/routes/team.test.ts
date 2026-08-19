@@ -330,8 +330,9 @@ import {
   platformMetaTable,
   projectsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
+import { PROJECT_TEAM_SEATS } from "../lib/team-invites";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 import teamRouter from "./team";
@@ -505,6 +506,67 @@ describe("team invitations", () => {
     expect(revoke.status).toBe(200);
     const c2 = await api("/api/platform/team/invite", { sid, body: { email: "c@seats.test", role: "viewer" } });
     expect(c2.status).toBe(201);
+  });
+
+  it("replaces an expired invite even when the unresolved-invite unique index exists", async () => {
+    const { sid } = await seedAgency("expired-reinvite", "owner@expired-reinvite.test");
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS platform_invitations_one_unresolved_email_test_idx
+        ON platform_invitations (company_id, email)
+        WHERE used_at IS NULL AND revoked_at IS NULL AND declined_at IS NULL
+    `);
+
+    const first = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "expired@reinvite.test", role: "content" },
+    });
+    expect(first.status).toBe(201);
+    await db
+      .update(platformInvitationsTable)
+      .set({ expiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(platformInvitationsTable.token, first.json.token));
+
+    const replacement = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "expired@reinvite.test", role: "content" },
+    });
+    expect(replacement.status).toBe(201);
+
+    const invites = await db
+      .select({ token: platformInvitationsTable.token, revokedAt: platformInvitationsTable.revokedAt })
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.email, "expired@reinvite.test"));
+    expect(invites).toHaveLength(2);
+    expect(invites.find((invite) => invite.token === first.json.token)?.revokedAt).not.toBeNull();
+  });
+
+  it("clears existing and requested project restrictions when updating a client colleague", async () => {
+    const { sid, company } = await seedAgency("client-member-scope", "owner@client-member-scope.test");
+    await db.update(platformCompaniesTable).set({ role: "client" }).where(eq(platformCompaniesTable.id, company.id));
+    await db.update(platformAccountsTable).set({ role: "client" }).where(eq(platformAccountsTable.username, "client-member-scope"));
+    const [member] = await db
+      .insert(platformUsersTable)
+      .values({ email: "colleague@client-member-scope.test", passwordHash: hashPassword("member-password-1") })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: member!.id,
+      companyId: company.id,
+      companySlug: "client-member-scope",
+      role: "content",
+      projectAccess: JSON.stringify(["legacy-project"]),
+    });
+
+    const updated = await api(`/api/platform/team/members/${member!.id}`, {
+      method: "PATCH",
+      sid,
+      body: { role: "content", projectIds: ["ignored-project"] },
+    });
+    expect(updated.status).toBe(200);
+    const [stored] = await db
+      .select({ projectAccess: platformMembershipsTable.projectAccess })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, member!.id));
+    expect(stored?.projectAccess).toBeNull();
   });
 
   it("blocks viewer members from writes and billing members from project access entirely", async () => {
@@ -1554,6 +1616,40 @@ describe("agency two-pool seat model", () => {
     expect(resend.status).toBe(403);
     expect(resend.json.limitReached).toBe(true);
   });
+
+  it("a project invite and expired project-seat resend cannot claim the final seat together", async () => {
+    const { sid, company } = await seedWorkspace("project-resend-race", "owner@project-resend-race.test", "agency");
+    await seedProject("race-project", "project-resend-race");
+    const expired = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "expired@project-resend-race.test", role: "content", projectIds: ["race-project"] },
+    });
+    await db
+      .update(platformInvitationsTable)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(platformInvitationsTable.token, expired.json.token));
+    // The expired invitation does not hold a seat; two live invites leave one.
+    for (const email of ["one@project-resend-race.test", "two@project-resend-race.test"]) {
+      expect(
+        (await api("/api/platform/team/invite", {
+          sid,
+          body: { email, role: "content", projectIds: ["race-project"] },
+        })).status,
+      ).toBe(201);
+    }
+
+    const [newInvite, resend] = await Promise.all([
+      api("/api/platform/team/invite", {
+        sid,
+        body: { email: "new@project-resend-race.test", role: "content", projectIds: ["race-project"] },
+      }),
+      api(`/api/platform/team/invites/${expired.json.token}/resend`, { sid, body: {} }),
+    ]);
+    expect([newInvite.status, resend.status].filter((status) => status === 403)).toHaveLength(1);
+    expect([newInvite.status, resend.status].filter((status) => status === 201 || status === 200)).toHaveLength(1);
+    const team = await api("/api/platform/team", { sid });
+    expect(team.json.projectSeats?.["race-project"]).toBe(PROJECT_TEAM_SEATS);
+  });
 });
 
 describe("direct-client teams", () => {
@@ -1706,8 +1802,8 @@ describe("project ownership: downward-only + resend validation", () => {
       .where(eq(platformInvitationsTable.email, "x@par-own-cl.test"));
     expect(stored!.projectAccess).toBeNull();
 
-    // Nor can a member update smuggle the parent's project in: accept the
-    // invite, then try to scope the member to the parent-owned project.
+    // Nor can a member update smuggle the parent's project in: client-mode
+    // updates silently clear all project scoping.
     const accept = await api("/api/platform/invite/accept", { body: { token: r.json.token, password: "member-pass-9" } });
     expect(accept.status).toBe(200);
     const [member] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, "x@par-own-cl.test"));
@@ -1716,8 +1812,12 @@ describe("project ownership: downward-only + resend validation", () => {
       method: "PATCH",
       body: { projectIds: ["parent-owned-proj"] },
     });
-    expect(patch.status).toBe(400);
-    expect(patch.json.error).toContain("don't belong");
+    expect(patch.status).toBe(200);
+    const [updatedMember] = await db
+      .select({ projectAccess: platformMembershipsTable.projectAccess })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, member!.id));
+    expect(updatedMember?.projectAccess).toBeNull();
   });
 
   it("resend refuses an expired invite whose project no longer belongs to the workspace", async () => {
@@ -1776,6 +1876,34 @@ describe("admin team-violation report and fix", () => {
     expect(r.status).toBe(403);
     const rf = await api("/api/platform/admin/team-violations/fix", { sid, body: {} });
     expect(rf.status).toBe(403);
+  });
+
+  it("lets a workspace owner review and fix only their own role mismatches", async () => {
+    const { sid, company } = await seedWorkspace("owner-role-review", "owner@role-review.test", "client");
+    const [member] = await db
+      .insert(platformUsersTable)
+      .values({ email: "viewer@role-review.test", passwordHash: hashPassword("viewer-pass"), emailVerified: true })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: member!.id,
+      companyId: company.id,
+      companySlug: "owner-role-review",
+      role: "viewer",
+    });
+
+    const report = await api("/api/platform/team/violations", { sid });
+    expect(report.status).toBe(200);
+    expect(report.json.violations).toHaveLength(1);
+    expect(report.json.violations[0]).toMatchObject({ kind: "member", currentRole: "viewer" });
+
+    const fixed = await api("/api/platform/team/violations/fix", { sid, body: {} });
+    expect(fixed.status).toBe(200);
+    expect(fixed.json.fixed).toBe(1);
+    const [updated] = await db
+      .select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, member!.id));
+    expect(updated?.role).toBe("content");
   });
 
   it("reports violations: agency project-seat member with non-content role and client member with non-content role", async () => {

@@ -9,12 +9,14 @@ description: Queries that deadlock inside db.transaction() + FOR UPDATE in PGlit
 Never call these inside `db.transaction()` when the transaction already holds a `FOR UPDATE` lock:
 1. Any query using `isNotNull(column)` — hangs indefinitely (PGlite deadlock)
 2. `getOwnedProjectIds(slug)` — uses plain `db` internally, deadlocks on the single connection
+3. Any helper that reaches back to the global `db` connection (including account lookups used to resolve workspace mode).
 
 ## What Works Fine Inside `db.transaction(tx)`
 - `countAccountPoolSeats(companyId, tx)` — uses `isNull(projectAccess)`, simple COUNT — OK
 - `countSeatsUsed(companyId, tx)` — uses `isNull(projectAccess)`, simple COUNT — OK
 - `tx.select()...where(eq(...), isNull(...), gt(...))` — basic conditions without `isNotNull` — OK
 - `tx.update(...).where(...)` — writes — OK
+- Transaction-local account and parent-role lookups — use `tx.select()` rather than helpers that call `db`.
 
 ## Pattern: Pre-compute Before the Transaction
 ```typescript
@@ -32,4 +34,4 @@ PGlite has a single database connection. `db.transaction()` acquires and holds t
 
 **Why:** Discovered while adding atomic seat-cap enforcement to the team resend handler. The account-pool path (isNull-based COUNT queries) worked fine; the project-pool path (isNotNull-based queries, LEFT JOIN, getOwnedProjectIds) deadlocked.
 
-**How to apply:** Whenever writing a new `db.transaction()` handler that needs project-access data or ownership checks, pre-compute those values before the transaction block and capture them in the closure.
+**How to apply:** Whenever writing a new `db.transaction()` handler that needs project-access data or ownership checks, pre-compute global-connection work before the transaction. For data that must be fresh after a `FOR UPDATE` lock (such as the workspace type), reproduce the lookup with `tx` queries inside the transaction rather than calling a global-`db` helper.

@@ -9,7 +9,7 @@ import {
   platformAccountsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, isNull, isNotNull, gt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, isNotNull, gt, lte, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import {
   normUsername,
@@ -372,44 +372,154 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
       return;
     }
 
-    // Seat limit. Agency project seats were checked above against their own
-    // per-project pools; everything else counts against the workspace pool
-    // (agency mode: account-level members/invites only).
-    if (!isAgencyProjectSeat) {
-      const seatLimit = await getTeamSeatLimit(company.slug);
-      const { members, pendingInvites } =
-        teamMode === "agency" ? await countAccountPoolSeats(company.id) : await countSeatsUsed(company.id);
-      if (members + pendingInvites >= seatLimit) {
-        res.status(403).json({
-          error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
-          limitReached: true,
-        });
-        return;
-      }
-    }
-
     const token = crypto.randomBytes(32).toString("hex");
-    try {
-      await db.insert(platformInvitationsTable).values({
+    // Seat cap enforcement must be serialized in the database. A pre-flight
+    // count alone lets two simultaneous invites both observe the last seat as
+    // free. Locking the company row makes the count + invitation insert one
+    // atomic allocation for the workspace's account-seat pool.
+    const seatLimit = await getTeamSeatLimit(company.slug);
+    const inviteResult = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
+      // The type may have changed while this request waited on the workspace
+      // lock. Never allocate using the mode observed before the lock: an
+      // agency project-seat invite must become a client-pool allocation (or be
+      // rejected) if the workspace was converted in the meantime.
+      const [lockedCompany] = await tx
+        .select()
+        .from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.id, company.id))
+        .limit(1);
+      let lockedTeamMode: TeamMode | null = null;
+      if (lockedCompany) {
+        const lockedRole = normalizeRole(lockedCompany.role);
+        if (lockedRole === "agency") {
+          lockedTeamMode = "agency";
+        } else if (lockedRole !== "client") {
+          lockedTeamMode = "standard";
+        } else {
+          // Do not call getAccount()/resolveTeamMode here: those use the
+          // global connection and can deadlock while this transaction owns the
+          // workspace lock. Resolve the managed-client exception locally.
+          const [lockedAccount] = await tx
+            .select({ parent: platformAccountsTable.parent })
+            .from(platformAccountsTable)
+            .where(eq(platformAccountsTable.username, lockedCompany.slug))
+            .limit(1);
+          if (lockedAccount?.parent) {
+            const [parent] = await tx
+              .select({ role: platformAccountsTable.role })
+              .from(platformAccountsTable)
+              .where(eq(platformAccountsTable.username, normUsername(lockedAccount.parent)))
+              .limit(1);
+            lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "client";
+          } else {
+            lockedTeamMode = "client";
+          }
+        }
+      }
+      if (!lockedCompany || !lockedTeamMode) {
+        return { ok: false as const, reason: "team_unavailable" as const };
+      }
+
+      let allocationRole = role;
+      let allocationProjectAccess = projectAccess;
+      if (lockedTeamMode === "client") {
+        if (allocationRole !== "content") {
+          return { ok: false as const, reason: "client_role" as const };
+        }
+        allocationRole = "content";
+        allocationProjectAccess = null;
+      }
+      const allocationProjectIds = parseProjectAccess(allocationProjectAccess);
+      const allocationIsAgencyProjectSeat =
+        lockedTeamMode === "agency" && allocationProjectAccess !== null;
+
+      // The partial unique index protects unresolved invitations. PostgreSQL
+      // cannot put a moving expiry predicate in that index, so reclaim expired
+      // links while holding this same workspace lock before inserting a new one.
+      await tx
+        .update(platformInvitationsTable)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(platformInvitationsTable.companyId, company.id),
+            eq(platformInvitationsTable.email, email),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
+            lte(platformInvitationsTable.expiresAt, new Date()),
+          ),
+        );
+
+      const [freshDupe] = await tx
+        .select({ token: platformInvitationsTable.token })
+        .from(platformInvitationsTable)
+        .where(
+          and(
+            eq(platformInvitationsTable.companyId, company.id),
+            eq(platformInvitationsTable.email, email),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
+            gt(platformInvitationsTable.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (freshDupe) return { ok: false as const, reason: "duplicate" as const };
+
+      if (allocationIsAgencyProjectSeat) {
+        // The workspace lock serializes every allocation. Re-count after the
+        // lock so two concurrent requests cannot both claim a final project
+        // seat based on stale pre-flight checks.
+        for (const projectId of allocationProjectIds!) {
+          if (await countProjectSeatHolders(company.id, projectId, tx) >= PROJECT_TEAM_SEATS) {
+            return { ok: false as const, reason: "project_full" as const, projectId };
+          }
+        }
+      } else {
+        const usage =
+          lockedTeamMode === "agency"
+            ? await countAccountPoolSeats(company.id, tx)
+            : await countSeatsUsed(company.id, tx);
+        if (usage.members + usage.pendingInvites >= seatLimit) {
+          return { ok: false as const, reason: "full" as const };
+        }
+      }
+
+      await tx.insert(platformInvitationsTable).values({
         token,
         email,
         companyId: company.id,
         companySlug: company.slug,
-        role,
-        projectAccess,
+        role: allocationRole,
+        projectAccess: allocationProjectAccess,
         invitedName: invitedName || null,
         position: position || null,
         invitedByUserId: req.account!.userId ?? null,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
       });
-    } catch (err) {
-      // The partial unique index is the final guard when two invite requests
-      // pass the friendly application-level lookup at the same time.
-      if ((err as { code?: string }).code === "23505") {
+      return { ok: true as const };
+    });
+    if (!inviteResult.ok) {
+      if (inviteResult.reason === "duplicate") {
         res.status(409).json({ error: "An invitation for that email is already pending. Revoke it first to re-invite." });
-        return;
+      } else if (inviteResult.reason === "project_full") {
+        res.status(403).json({
+          error: `This project already has its ${PROJECT_TEAM_SEATS} team seats filled.`,
+          limitReached: true,
+          projectId: inviteResult.projectId,
+        });
+      } else if (inviteResult.reason === "client_role") {
+        res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
+      } else if (inviteResult.reason === "team_unavailable") {
+        res.status(403).json({ error: "Team invitations are not available for this account." });
+      } else {
+        res.status(403).json({
+          error: `You've reached your team seat limit (${seatLimit}). Contact info@aiofusion.ai to add more seats.`,
+          limitReached: true,
+        });
       }
-      throw err;
+      return;
     }
 
     const inviteUrl = `${getAppBaseUrl()}/?invite=${token}`;
@@ -460,16 +570,10 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     // lifetime of this request so the pre-read is safe.
     const ownedProjectIds = teamMode === "agency" ? await getOwnedProjectIds(company.slug) : null;
 
-    // Project-seat pre-check (outside transaction).
-    //
-    // PGlite deadlocks when isNotNull(projectAccess) is used inside a transaction
-    // that holds a FOR UPDATE lock, so we check project-pool seat caps here with
-    // plain `db` instead.  The FOR UPDATE lock (acquired below) still serialises
-    // concurrent resend operations; a simultaneous invite + resend race was
-    // already a pre-existing limitation in both pools.
-    //
-    // We only apply this check when the invite exists, is expired (only expired
-    // invites need a re-count), and is project-scoped for an agency workspace.
+    // Project-seat pre-check (outside transaction) gives an immediate response
+    // for a plainly full project. The authoritative re-check happens inside
+    // the workspace lock below, so a concurrent invite cannot take the last
+    // seat between this read and the resend.
     if (teamMode === "agency") {
       const [preInvite] = await db
         .select({
@@ -588,13 +692,19 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
         const isExpiredNow = fresh.expiresAt <= new Date();
         if (isExpiredNow) {
           if (teamMode === "agency" && freshProjects && freshProjects.length > 0) {
-            // Project seat check was done PRE-TRANSACTION (see below): if the
-            // pre-check found a full project, we returned 403 before this point.
-            // PGlite deadlocks on isNotNull(projectAccess) inside a FOR UPDATE
-            // transaction, so we cannot re-check here with `tx`.  The FOR UPDATE
-            // lock on the company row already serialises concurrent resend
-            // operations; a concurrent invite vs resend race is a pre-existing
-            // limitation also present in the account-pool path.
+            // countProjectSeatHolders avoids the PGlite-hostile isNotNull
+            // predicate, so it is safe inside this locked transaction.
+            for (const projectId of freshProjects) {
+              if (await countProjectSeatHolders(company.id, projectId, tx) >= PROJECT_TEAM_SEATS) {
+                return {
+                  ok: false as const,
+                  status: 403 as const,
+                  error: `That project already has ${PROJECT_TEAM_SEATS} team members. Remove one before resending this invitation.`,
+                  limitReached: true as const,
+                  projectId,
+                };
+              }
+            }
           } else {
             const { members, pendingInvites } =
               teamMode === "agency"
@@ -778,13 +888,27 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
     const resultingRole = normalizeMembershipRole(
       updates.role !== undefined ? (updates.role as string) : target.role,
     );
-    const resultingAccess =
+    let resultingAccess =
       updates.projectAccess !== undefined
         ? parseProjectAccess(updates.projectAccess as string | null)
         : parseProjectAccess(target.projectAccess);
+    const movesIntoAgencyAccountPool =
+      teamMode === "agency" &&
+      parseProjectAccess(target.projectAccess) !== null &&
+      resultingAccess === null;
+    const addedProjectSeats =
+      teamMode === "agency" && resultingAccess !== null
+        ? resultingAccess.filter((id) => !(parseProjectAccess(target.projectAccess) ?? []).includes(id))
+        : [];
     if (teamMode === "client" && resultingRole !== "content") {
       res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
       return;
+    }
+    if (teamMode === "client") {
+      // Client colleagues are never project-scoped. This also heals a legacy
+      // project restriction whenever a client member is updated.
+      updates.projectAccess = null;
+      resultingAccess = null;
     }
     if (updates.projectAccess !== undefined && resultingAccess && resultingAccess.length > 0) {
       if (await rejectForeignProjects(company.slug, resultingAccess, res)) return;
@@ -803,11 +927,9 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
           res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
           return;
         }
-        const previous = parseProjectAccess(target.projectAccess) ?? [];
-        const added = resultingAccess.filter((id) => !previous.includes(id));
-        if (added.length > 0) {
+        if (addedProjectSeats.length > 0) {
           const holders = await getProjectSeatHolders(company.id);
-          for (const projectId of added) {
+          for (const projectId of addedProjectSeats) {
             const held = (holders.get(projectId) ?? []).filter((h) => h.userId !== targetUserId);
             if (held.length >= PROJECT_TEAM_SEATS) {
               res.status(403).json({ error: projectFullError(projectId, held), limitReached: true, projectId });
@@ -817,7 +939,8 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
         }
       } else if (wasProjectSeat) {
         // Moving from a project seat to an account seat consumes an account
-        // seat, so the account pool must have room.
+        // seat. This first check gives a quick response; the authoritative
+        // check is repeated below while the company row is locked.
         const seatLimit = await getTeamSeatLimit(company.slug);
         const { members, pendingInvites } = await countAccountPoolSeats(company.id);
         if (members + pendingInvites >= seatLimit) {
@@ -830,15 +953,137 @@ router.patch("/platform/team/members/:userId", requirePlatformAuth, async (req: 
       }
     }
 
-    await db
-      .update(platformMembershipsTable)
-      .set(updates)
-      .where(
-        and(
-          eq(platformMembershipsTable.userId, targetUserId),
-          eq(platformMembershipsTable.companyId, company.id),
-        ),
+    // Every member edit takes the workspace lock, not only seat-consuming
+    // moves. An agency→client conversion can complete while an edit waits;
+    // the final role/access rules must therefore use the fresh, locked mode.
+    const allocation = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
+      const [lockedCompany] = await tx
+        .select()
+        .from(platformCompaniesTable)
+        .where(eq(platformCompaniesTable.id, company.id))
+        .limit(1);
+      if (!lockedCompany) return { ok: false as const, reason: "team_unavailable" as const };
+
+      let lockedTeamMode: TeamMode | null;
+      const lockedRole = normalizeRole(lockedCompany.role);
+      if (lockedRole === "agency") {
+        lockedTeamMode = "agency";
+      } else if (lockedRole !== "client") {
+        lockedTeamMode = "standard";
+      } else {
+        const [lockedAccount] = await tx
+          .select({ parent: platformAccountsTable.parent })
+          .from(platformAccountsTable)
+          .where(eq(platformAccountsTable.username, lockedCompany.slug))
+          .limit(1);
+        if (lockedAccount?.parent) {
+          const [parent] = await tx
+            .select({ role: platformAccountsTable.role })
+            .from(platformAccountsTable)
+            .where(eq(platformAccountsTable.username, normUsername(lockedAccount.parent)))
+            .limit(1);
+          lockedTeamMode = parent && normalizeRole(parent.role) === "agency" ? null : "client";
+        } else {
+          lockedTeamMode = "client";
+        }
+      }
+      if (!lockedTeamMode) return { ok: false as const, reason: "team_unavailable" as const };
+
+      const [freshTarget] = await tx
+        .select()
+        .from(platformMembershipsTable)
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, targetUserId),
+            eq(platformMembershipsTable.companyId, company.id),
+          ),
+        )
+        .limit(1);
+      if (!freshTarget) return { ok: false as const, reason: "missing_member" as const };
+      if (normalizeMembershipRole(freshTarget.role) === "owner") {
+        return { ok: false as const, reason: "owner" as const };
+      }
+
+      const freshRole = normalizeMembershipRole(
+        updates.role !== undefined ? (updates.role as string) : freshTarget.role,
       );
+      const freshAccess = updates.projectAccess !== undefined
+        ? parseProjectAccess(updates.projectAccess as string | null)
+        : parseProjectAccess(freshTarget.projectAccess);
+
+      if (lockedTeamMode === "client") {
+        if (freshRole !== "content") return { ok: false as const, reason: "client_role" as const };
+        await tx
+          .update(platformMembershipsTable)
+          .set({ ...updates, role: "content", projectAccess: null })
+          .where(
+            and(
+              eq(platformMembershipsTable.userId, targetUserId),
+              eq(platformMembershipsTable.companyId, company.id),
+            ),
+          );
+        return { ok: true as const };
+      }
+
+      if (lockedTeamMode === "agency") {
+        const oldAccess = parseProjectAccess(freshTarget.projectAccess);
+        if (freshAccess !== null) {
+          if (freshAccess.length === 0) return { ok: false as const, reason: "project_empty" as const };
+          if (freshRole !== "content") return { ok: false as const, reason: "project_role" as const };
+          const added = freshAccess.filter((id) => !(oldAccess ?? []).includes(id));
+          for (const projectId of added) {
+            if (await countProjectSeatHolders(company.id, projectId, tx) >= PROJECT_TEAM_SEATS) {
+              return { ok: false as const, reason: "project_full" as const, projectId };
+            }
+          }
+        } else if (oldAccess !== null) {
+          const seatLimit = await getTeamSeatLimit(company.slug);
+          const { members, pendingInvites } = await countAccountPoolSeats(company.id, tx);
+          if (members + pendingInvites >= seatLimit) {
+            return { ok: false as const, reason: "account_full" as const, seatLimit };
+          }
+        }
+      }
+
+      await tx
+        .update(platformMembershipsTable)
+        .set(updates)
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, targetUserId),
+            eq(platformMembershipsTable.companyId, company.id),
+          ),
+        );
+      return { ok: true as const };
+    });
+    if (!allocation.ok) {
+      if (allocation.reason === "project_full") {
+        res.status(403).json({
+          error: `This project already has its ${PROJECT_TEAM_SEATS} team seats filled.`,
+          limitReached: true,
+          projectId: allocation.projectId,
+        });
+      } else if (allocation.reason === "client_role") {
+        res.status(400).json({ error: "Colleagues on a client account are always Content Team Members." });
+      } else if (allocation.reason === "project_role") {
+        res.status(400).json({ error: "Project team members are always Content Team Members. Use an account seat for admin, billing or viewer roles." });
+      } else if (allocation.reason === "project_empty") {
+        res.status(400).json({ error: "Choose at least one project for a project team member." });
+      } else if (allocation.reason === "missing_member") {
+        res.status(404).json({ error: "Member not found." });
+      } else if (allocation.reason === "owner") {
+        res.status(403).json({ error: "The account owner's role cannot be changed here." });
+      } else if (allocation.reason === "team_unavailable") {
+        res.status(403).json({ error: NO_TEAM_MESSAGE });
+      } else {
+        res.status(403).json({
+          error: `You've reached your account seat limit (${allocation.seatLimit ?? await getTeamSeatLimit(company.slug)}). Contact info@aiofusion.ai to add more seats.`,
+          limitReached: true,
+        });
+      }
+      return;
+    }
     // Access changed: invalidate the member's existing sessions immediately.
     await incrementSessionVersion(targetUserId);
     res.json({ ok: true });
@@ -1120,11 +1365,18 @@ type CompanyViolations = {
   violations: ViolationItem[];
 };
 
-async function collectTeamViolations(): Promise<CompanyViolations[]> {
+async function collectTeamViolations(companySlug?: string): Promise<CompanyViolations[]> {
   const companies = await db
     .select()
     .from(platformCompaniesTable)
-    .where(eq(platformCompaniesTable.status, "active"));
+    .where(
+      companySlug
+        ? and(
+            eq(platformCompaniesTable.status, "active"),
+            eq(platformCompaniesTable.slug, normUsername(companySlug)),
+          )
+        : eq(platformCompaniesTable.status, "active"),
+    );
 
   const results: CompanyViolations[] = [];
 
@@ -1160,19 +1412,21 @@ async function collectTeamViolations(): Promise<CompanyViolations[]> {
           currentRole: role,
           reason: "Agency project-seat member must be Content Team Member",
         });
-      } else if (teamMode === "client" && role !== "content") {
+      } else if (teamMode === "client" && (role !== "content" || projectIds !== null)) {
         violations.push({
           kind: "member",
           userId: m.userId,
           email: m.email,
           name: m.name ?? null,
           currentRole: role,
-          reason: "Client account members must be Content Team Members",
+          reason: role !== "content"
+            ? "Client account members must be Content Team Members"
+            : "Client account members cannot have project restrictions",
         });
       }
     }
 
-    // -- pending invites (including expired ones not yet revoked/declined) ---
+    // -- pending invites (including expired ones not yet revoked) ---------
     const invites = await db
       .select()
       .from(platformInvitationsTable)
@@ -1181,7 +1435,6 @@ async function collectTeamViolations(): Promise<CompanyViolations[]> {
           eq(platformInvitationsTable.companyId, company.id),
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
-          isNull(platformInvitationsTable.declinedAt),
         ),
       );
 
@@ -1196,13 +1449,15 @@ async function collectTeamViolations(): Promise<CompanyViolations[]> {
           currentRole: role,
           reason: "Agency project-seat invite must be for Content Team Member",
         });
-      } else if (teamMode === "client" && role !== "content") {
+      } else if (teamMode === "client" && (role !== "content" || projectIds !== null)) {
         violations.push({
           kind: "invite",
           inviteToken: inv.token,
           email: inv.email,
           currentRole: role,
-          reason: "Client account invite must be for Content Team Member",
+          reason: role !== "content"
+            ? "Client account invite must be for Content Team Member"
+            : "Client account invites cannot have project restrictions",
         });
       }
     }
@@ -1257,7 +1512,7 @@ async function applyTeamViolationFixes(
         if (!dryRun) {
           await db
             .update(platformMembershipsTable)
-            .set({ role: "content" })
+            .set(company.teamMode === "client" ? { role: "content", projectAccess: null } : { role: "content" })
             .where(
               and(
                 eq(platformMembershipsTable.userId, v.userId),
@@ -1271,7 +1526,7 @@ async function applyTeamViolationFixes(
         if (!dryRun) {
           await db
             .update(platformInvitationsTable)
-            .set({ role: "content" })
+            .set(company.teamMode === "client" ? { role: "content", projectAccess: null } : { role: "content" })
             .where(eq(platformInvitationsTable.token, v.inviteToken));
         }
         companyFixed++;
@@ -1309,6 +1564,72 @@ async function applyTeamViolationFixes(
 
   return { fixed, companies: violations.length, notifications };
 }
+
+// Used by account-type changes as well as the owner-facing team review. The
+// account row is already updated before this runs, so collection sees the
+// workspace's new team model and corrects only now-invalid roles.
+export async function sweepTeamViolationsForCompany(
+  companySlug: string,
+  actor: { username: string; id?: string },
+): Promise<{ fixed: number; companies: number; notifications: number }> {
+  const violations = await collectTeamViolations(companySlug);
+  return applyTeamViolationFixes(violations, actor, false);
+}
+
+function isWorkspaceOwner(req: Request): boolean {
+  const role = req.account?.membershipRole;
+  // Undefined is a legacy direct-account session, which has always carried
+  // owner authority. Modern workspaces must have an explicit owner role.
+  return role === undefined || role === null || role === "owner";
+}
+
+// Workspace owners can review only their own stale memberships/invitations.
+// Master admins retain the cross-workspace endpoints below.
+router.get("/platform/team/violations", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isWorkspaceOwner(req)) {
+      res.status(403).json({ error: "Only the account owner can review team role issues." });
+      return;
+    }
+    const company = await getActiveCompany(req);
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) {
+      res.status(403).json({ error: NO_TEAM_MESSAGE });
+      return;
+    }
+    const [workspace] = await collectTeamViolations(company.slug);
+    res.json({ violations: workspace?.violations ?? [] });
+  } catch (err) {
+    logger.error({ err }, "team: failed to load workspace role violations");
+    res.status(500).json({ error: "Failed to load team role issues." });
+  }
+});
+
+// Correct every stale role in the active owner workspace. Each listed member
+// or invite is normalized to Content Team Member, then affected sessions are
+// revoked by the shared fixer.
+router.post("/platform/team/violations/fix", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isWorkspaceOwner(req)) {
+      res.status(403).json({ error: "Only the account owner can fix team role issues." });
+      return;
+    }
+    const company = await getActiveCompany(req);
+    const teamMode = company ? await resolveTeamMode(company) : null;
+    if (!company || !teamMode) {
+      res.status(403).json({ error: NO_TEAM_MESSAGE });
+      return;
+    }
+    const result = await sweepTeamViolationsForCompany(company.slug, {
+      username: req.account!.username,
+      id: req.account!.userId ?? undefined,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    logger.error({ err }, "team: failed to fix workspace role violations");
+    res.status(500).json({ error: "Failed to fix team role issues." });
+  }
+});
 
 // GET /platform/admin/team-violations : report all violations across all workspaces
 router.get("/platform/admin/team-violations", requirePlatformAuth, async (req: Request, res: Response) => {

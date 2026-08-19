@@ -148,8 +148,8 @@ export type ProjectSeatHolder = {
 };
 
 // Lightweight COUNT-only version of the per-project seat check - no JOINs.
-// Use inside transactions (where a LEFT JOIN may deadlock on some PGlite builds)
-// when only the seat count is needed, not the holder labels.
+// Use inside transactions (where a LEFT JOIN or isNotNull predicate may
+// deadlock on some PGlite builds) when only the seat count is needed.
 //
 // Returns the number of seats currently held for `projectId`.
 export async function countProjectSeatHolders(
@@ -165,12 +165,7 @@ export async function countProjectSeatHolders(
       projectAccess: platformMembershipsTable.projectAccess,
     })
     .from(platformMembershipsTable)
-    .where(
-      and(
-        eq(platformMembershipsTable.companyId, companyId),
-        isNotNull(platformMembershipsTable.projectAccess),
-      ),
-    );
+    .where(eq(platformMembershipsTable.companyId, companyId));
   const memberCount = memberRows.filter((r: { projectAccess: string | null }) =>
     (parseProjectAccess(r.projectAccess) ?? []).includes(projectId),
   ).length;
@@ -183,7 +178,6 @@ export async function countProjectSeatHolders(
     .where(
       and(
         eq(platformInvitationsTable.companyId, companyId),
-        isNotNull(platformInvitationsTable.projectAccess),
         isNull(platformInvitationsTable.usedAt),
         isNull(platformInvitationsTable.revokedAt),
         isNull(platformInvitationsTable.declinedAt),

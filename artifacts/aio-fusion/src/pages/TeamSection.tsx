@@ -4,8 +4,11 @@ import { vars } from "../marketing/vars";
 import {
   type MembershipRole,
   type TeamOverview,
+  type TeamRoleViolation,
   type PendingMyInvite,
   serverGetTeam,
+  serverGetTeamViolations,
+  serverFixTeamViolations,
   serverInviteTeamMember,
   serverRevokeTeamInvite,
   serverResendTeamInvite,
@@ -51,6 +54,9 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [roleViolations, setRoleViolations] = useState<TeamRoleViolation[]>([]);
+  const [fixingRoleViolations, setFixingRoleViolations] = useState(false);
+  const [roleViolationError, setRoleViolationError] = useState<string | null>(null);
 
   // Invites addressed to the current user's own email (they are the invitee).
   const [myInvites, setMyInvites] = useState<PendingMyInvite[]>([]);
@@ -97,10 +103,14 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   const projectScoped = isClient ? false : isAgency ? true : effectiveRole === "content" || effectiveRole === "viewer";
 
   const reload = () => {
-    void serverGetTeam().then((r) => {
+    void Promise.all([serverGetTeam(), serverGetTeamViolations()]).then(([r, violations]) => {
       setLoading(false);
       if (r.ok && r.team) { setTeam(r.team); setLoadError(null); }
       else setLoadError(r.error ?? "Failed to load team.");
+      // The server only grants this report to the workspace owner. Team
+      // admins still use the rest of this page normally, just without a
+      // workspace-wide role correction control.
+      setRoleViolations(violations.ok ? (violations.violations ?? []) : []);
     });
   };
   useEffect(reload, []);
@@ -236,6 +246,19 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
     });
   };
 
+  const handleFixRoleViolations = () => {
+    setFixingRoleViolations(true);
+    setRoleViolationError(null);
+    void serverFixTeamViolations().then((result) => {
+      setFixingRoleViolations(false);
+      if (!result.ok) {
+        setRoleViolationError(result.error ?? "Failed to fix team role issues.");
+        return;
+      }
+      reload();
+    });
+  };
+
   // Workspace invitations - shown regardless of team-load state so users always
   // see pending cross-workspace invites even when the team members API fails.
   const invitationsBlock = (myInvites.length > 0 || Object.keys(myInvitesAccepted).length > 0) ? (
@@ -346,6 +369,38 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
   return (
     <>
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+      {roleViolations.length > 0 && (
+        <div className="mb-5 rounded-xl p-4" style={{ background: "#FFFBEB", border: "1px solid #FDE68A" }}>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="flex-1">
+              <p className="text-[13px] font-bold" style={{ color: "#92400E" }}>
+                {roleViolations.length} team role {roleViolations.length === 1 ? "needs" : "need"} updating
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "#92400E" }}>
+                These existing members or invitations no longer match this account’s team set-up. Fixing them changes each to Content Team Member.
+              </p>
+              <ul className="mt-2 space-y-1 text-[11px]" style={{ color: "#92400E" }}>
+                {roleViolations.map((violation) => (
+                  <li key={violation.userId ?? violation.inviteToken ?? violation.email ?? violation.reason}>
+                    {violation.name || violation.email || "Team member"} - {violation.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              type="button"
+              onClick={handleFixRoleViolations}
+              disabled={fixingRoleViolations}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-[0.12em] transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: "#92400E", color: "white" }}
+            >
+              {fixingRoleViolations && <Loader2 size={12} className="animate-spin" />}
+              Fix roles
+            </button>
+          </div>
+          {roleViolationError && <p className="mt-2 text-[12px] font-semibold" style={{ color: "#B3261E" }}>{roleViolationError}</p>}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Team members</h2>
         <span className="text-[11px] font-bold uppercase tracking-[0.14em] px-3 py-1 rounded-full" style={{ background: seatsFull ? "#FDECEC" : accentSoft, color: seatsFull ? "#B3261E" : accent }}>

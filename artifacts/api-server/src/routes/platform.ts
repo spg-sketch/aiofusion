@@ -95,12 +95,96 @@ import { lockoutRemainingMs, recordLoginFailure, clearLoginFailures, lockoutMess
 import { loginLimiter } from "../middleware/rate-limit";
 import { logAdminEvent } from "../lib/admin-events";
 import { sendNewSignupAlert, sendApprovalEmail, sendVerificationEmail, sendPasswordResetEmail, sendMfaAdminResetEmail, sendMfaChangedEmail, sendPasswordChangedEmail, sendEmailChangedEmail, sendNewTrustedDeviceEmail, sendClientAccountCreatedEmail, sendClientAccessChangedEmail, sendAccountTypeChangedEmail, getAppBaseUrl } from "../lib/notify-email";
-import { INVITE_INVALID_MESSAGES, getValidInvite, getInviteInvalidReason, consumeInvite } from "../lib/team-invites";
+import {
+  INVITE_INVALID_MESSAGES,
+  getValidInvite,
+  getInviteInvalidReason,
+  consumeInvite,
+  countSeatsUsed,
+  getTeamSeatLimit,
+} from "../lib/team-invites";
 import { getDiscountInvite, consumeDiscountInvite, applyInviteAccountType } from "../lib/discount-invites";
+import { sweepTeamViolationsForCompany } from "./team";
 
 const router: IRouter = Router();
 
 const MIGRATED_FLAG = "accounts_migrated";
+
+type AccountTypeTransitionResult =
+  | { ok: true }
+  | { ok: false; reason: "missing" | "seat_limit"; seatsUsed?: number; seatLimit?: number };
+
+// Apply a workspace account-type change atomically. Moving an agency to client
+// turns every project-scoped person into an account-pool colleague, so the
+// client capacity check must happen before the role change and normalization.
+async function transitionWorkspaceAccountType(
+  username: string,
+  newRole: "admin" | "agency" | "client",
+  markSetupComplete = false,
+): Promise<AccountTypeTransitionResult> {
+  const seatLimit = newRole === "client" ? await getTeamSeatLimit(username) : null;
+
+  return db.transaction(async (tx) => {
+    const [company] = await tx
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, username))
+      .limit(1);
+    if (!company) return { ok: false as const, reason: "missing" as const };
+
+    await tx.execute(sql`SELECT 1 FROM platform_companies WHERE id = ${company.id} FOR UPDATE`);
+    await tx.execute(sql`SELECT 1 FROM platform_accounts WHERE username = ${username} FOR UPDATE`);
+
+    if (newRole === "client") {
+      const { members, pendingInvites } = await countSeatsUsed(company.id, tx);
+      const seatsUsed = members + pendingInvites;
+      if (seatsUsed > seatLimit!) {
+        return { ok: false as const, reason: "seat_limit" as const, seatsUsed, seatLimit: seatLimit! };
+      }
+    }
+
+    await tx
+      .update(platformAccountsTable)
+      .set({ role: newRole })
+      .where(eq(platformAccountsTable.username, username));
+    await tx
+      .update(platformCompaniesTable)
+      .set(markSetupComplete ? { role: newRole, setupComplete: true } : { role: newRole })
+      .where(eq(platformCompaniesTable.id, company.id));
+
+    if (newRole === "client") {
+      // Every client colleague is content and has workspace-wide access.
+      // Keeping this inside the transition prevents a temporarily invalid
+      // role/access shape from escaping between the type change and the sweep.
+      await tx
+        .update(platformMembershipsTable)
+        .set({ projectAccess: null })
+        .where(eq(platformMembershipsTable.companyId, company.id));
+      await tx
+        .update(platformMembershipsTable)
+        .set({ role: "content" })
+        .where(
+          and(
+            eq(platformMembershipsTable.companyId, company.id),
+            ne(platformMembershipsTable.role, "owner"),
+          ),
+        );
+      await tx
+        .update(platformInvitationsTable)
+        .set({ role: "content", projectAccess: null })
+        .where(
+          and(
+            eq(platformInvitationsTable.companyId, company.id),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
+          ),
+        );
+    }
+
+    return { ok: true as const };
+  });
+}
 
 function publicAccount(
   row: { username: string; role: string; parent: string | null },
@@ -330,6 +414,33 @@ async function deleteProfile(username: string): Promise<void> {
     .where(eq(platformMetaTable.key, profileKey(username)));
 }
 
+// Account type changes are sensitive enough that the person who owns the
+// workspace must be notified. Prefer the oldest owner membership (the same
+// ownership rule used for other security notices), then fall back to the
+// legacy account contact for accounts that predate platform_users.
+async function getAccountOwnerContact(username: string): Promise<{ email: string; name: string } | null> {
+  const [owner] = await db
+    .select({ email: platformUsersTable.email, name: platformUsersTable.name })
+    .from(platformMembershipsTable)
+    .innerJoin(platformUsersTable, eq(platformMembershipsTable.userId, platformUsersTable.id))
+    .where(
+      and(
+        eq(platformMembershipsTable.companySlug, normUsername(username)),
+        eq(platformMembershipsTable.role, "owner"),
+      ),
+    )
+    .orderBy(platformMembershipsTable.createdAt)
+    .limit(1);
+  if (owner?.email) return { email: owner.email, name: owner.name || username };
+
+  const [account] = await db
+    .select({ email: platformAccountsTable.email })
+    .from(platformAccountsTable)
+    .where(eq(platformAccountsTable.username, normUsername(username)))
+    .limit(1);
+  return account?.email ? { email: account.email, name: username } : null;
+}
+
 // --- Session lifecycle ------------------------------------------------------
 
 // Who is signed in (or null). Drives the client's view of the current session.
@@ -389,8 +500,17 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       agencyManagedClient = await isAgencyPartnerClient(req.account.username);
     } catch { /* non-fatal */ }
     try {
-      const co = await getCompanyBySlug(normUsername(req.account.username));
-      setupComplete = co?.setupComplete ?? null;
+       const co = await getCompanyBySlug(normUsername(req.account.username));
+       setupComplete = co?.setupComplete ?? null;
+       // Legacy accounts still use the old "user" role and have no stored
+       // setup flag. Prompt their owner once to choose an explicit account
+       // type, but never put a teammate or an impersonating admin through a
+       // setup flow they cannot safely complete.
+       const isLegacyUntyped = normalizeRole(req.account.role) === "user";
+       const isOwner = req.account.membershipRole === undefined
+         || req.account.membershipRole === null
+         || req.account.membershipRole === "owner";
+       if (isLegacyUntyped && isOwner && !stashSid) setupComplete = false;
     } catch { /* non-fatal */ }
     // displayName lives in platform_meta
     try {
@@ -2103,20 +2223,38 @@ router.post("/platform/request-set-password", requirePlatformAuth, loginLimiter,
 // Set account type after signup (Agency/Partner vs Client). Requires a session.
 router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
+    const account = req.account!;
+    if (normalizeRole(account.role) !== "user") {
+      res.status(409).json({ error: "Your account type has already been selected." });
+      return;
+    }
+    const membershipRole = account.membershipRole;
+    if (membershipRole !== undefined && membershipRole !== null && membershipRole !== "owner") {
+      res.status(403).json({ error: "Only the account owner can choose the account type." });
+      return;
+    }
     const accountType = typeof req.body?.accountType === "string" ? req.body.accountType : "";
     if (accountType !== "agency" && accountType !== "client") {
       res.status(400).json({ error: "accountType must be 'agency' or 'client'." });
       return;
     }
-    const username = normUsername(req.account!.username);
-    await db
-      .update(platformAccountsTable)
-      .set({ role: accountType })
-      .where(eq(platformAccountsTable.username, username));
-    await db
-      .update(platformCompaniesTable)
-      .set({ role: accountType, setupComplete: true })
-      .where(eq(platformCompaniesTable.slug, username));
+    const username = normUsername(account.username);
+    const transition = await transitionWorkspaceAccountType(username, accountType, true);
+    if (!transition.ok) {
+      res.status(transition.reason === "missing" ? 404 : 400).json({
+        error: transition.reason === "seat_limit"
+          ? `This workspace has ${transition.seatsUsed} team seats in use, above its Client limit of ${transition.seatLimit}. Remove team members or pending invites before changing account type.`
+          : "Account workspace not found.",
+        ...(transition.reason === "seat_limit" ? { limitReached: true } : {}),
+      });
+      return;
+    }
+    if (accountType !== "client") {
+      await sweepTeamViolationsForCompany(username, {
+        username: account.username,
+        id: account.userId,
+      });
+    }
     logger.info({ username, accountType }, "setup/account-type: role set");
     res.json({ ok: true, role: accountType });
   } catch (err) {
@@ -2173,15 +2311,23 @@ router.post("/platform/settings/account-type", requirePlatformAuth, async (req: 
       }
     }
 
-    // Update both tables. setupComplete is intentionally NOT touched here.
-    await db
-      .update(platformAccountsTable)
-      .set({ role: accountType })
-      .where(eq(platformAccountsTable.username, username));
-    await db
-      .update(platformCompaniesTable)
-      .set({ role: accountType })
-      .where(eq(platformCompaniesTable.slug, username));
+    // setupComplete is intentionally NOT touched on settings changes.
+    const transition = await transitionWorkspaceAccountType(username, accountType);
+    if (!transition.ok) {
+      res.status(transition.reason === "missing" ? 404 : 400).json({
+        error: transition.reason === "seat_limit"
+          ? `This workspace has ${transition.seatsUsed} team seats in use, above its Client limit of ${transition.seatLimit}. Remove team members or pending invites before changing account type.`
+          : "Account workspace not found.",
+        ...(transition.reason === "seat_limit" ? { limitReached: true } : {}),
+      });
+      return;
+    }
+    if (accountType !== "client") {
+      await sweepTeamViolationsForCompany(username, {
+        username: account.username,
+        id: account.userId,
+      });
+    }
 
     logger.info({ username, accountType }, "settings/account-type: role updated");
     // Confirmation email to the owner - a type change reshapes the whole
@@ -2191,27 +2337,11 @@ router.post("/platform/settings/account-type", requirePlatformAuth, async (req: 
     if (currentRole !== accountType) {
       void (async () => {
         try {
-          let toEmail: string | null = account.email ?? null;
-          if (!toEmail && account.userId) {
-            const [u] = await db
-              .select({ email: platformUsersTable.email })
-              .from(platformUsersTable)
-              .where(eq(platformUsersTable.id, account.userId))
-              .limit(1);
-            toEmail = u?.email ?? null;
-          }
-          if (!toEmail) {
-            const [a] = await db
-              .select({ email: platformAccountsTable.email })
-              .from(platformAccountsTable)
-              .where(eq(platformAccountsTable.username, username))
-              .limit(1);
-            toEmail = a?.email ?? null;
-          }
-          if (toEmail) {
+          const owner = await getAccountOwnerContact(username);
+          if (owner) {
             await sendAccountTypeChangedEmail({
-              toEmail,
-              contactName: account.username,
+              toEmail: owner.email,
+              contactName: owner.name,
               previousType: currentRole,
               newType: accountType,
               changedByAdmin: false,
@@ -5340,17 +5470,18 @@ router.post(
         res.status(400).json({ error: "Role must be admin, agency, or client." });
         return;
       }
+      const accountTypeRole = newRole as "admin" | "agency" | "client";
       const existing = await getAccount(target);
       if (!existing) {
         res.status(404).json({ error: "Account not found." });
         return;
       }
-      if (existing.role === newRole) {
+      if (existing.role === accountTypeRole) {
         res.json({ ok: true });
         return;
       }
       // Prevent removing the last admin.
-      if (existing.role === "admin" && newRole !== "admin") {
+      if (existing.role === "admin" && accountTypeRole !== "admin") {
         const admins = await db
           .select({ username: platformAccountsTable.username })
           .from(platformAccountsTable)
@@ -5361,24 +5492,27 @@ router.post(
         }
       }
       const prevRole = existing.role;
-      await db
-        .update(platformAccountsTable)
-        .set({ role: newRole })
-        .where(eq(platformAccountsTable.username, target));
-      // Keep platform_companies.role in sync so membership queries that join
-      // on the company layer see the correct workspace role without needing to
-      // fall back to the legacy accounts table.
-      await db
-        .update(platformCompaniesTable)
-        .set({ role: newRole })
-        .where(eq(platformCompaniesTable.slug, target));
-      // Update the membership role for the owner of this company so the
-      // membership layer reflects the current role (owner membership role
-      // mirrors the account role for single-owner companies).
-      await db
-        .update(platformMembershipsTable)
-        .set({ role: newRole === "admin" ? "admin" : "owner" })
-        .where(eq(platformMembershipsTable.companySlug, target));
+      const transition = await transitionWorkspaceAccountType(target, accountTypeRole);
+      if (!transition.ok) {
+        res.status(transition.reason === "missing" ? 404 : 400).json({
+          error: transition.reason === "seat_limit"
+            ? `This workspace has ${transition.seatsUsed} team seats in use, above its Client limit of ${transition.seatLimit}. Remove team members or pending invites before changing account type.`
+            : "Account workspace not found.",
+          ...(transition.reason === "seat_limit" ? { limitReached: true } : {}),
+        });
+        return;
+      }
+      if (accountTypeRole !== "client") {
+        await sweepTeamViolationsForCompany(target, {
+          username: actor.username,
+          id: actor.userId,
+        });
+      }
+      // Membership roles describe a person's permissions *inside* a
+      // workspace. They are intentionally independent of the workspace's
+      // account type: changing an account type must never promote every team
+      // member to owner. The sweep above changes only roles made invalid by
+      // the new team model.
       void logAdminEvent(
         { username: actor.username, id: actor.userId },
         "account_role_change",
@@ -5388,15 +5522,21 @@ router.post(
       );
       // Tell the account owner by email. Fire-and-forget - the role change
       // has already been committed, so a mail failure must not fail the API.
-      if (existing.email) {
-        void sendAccountTypeChangedEmail({
-          toEmail: existing.email,
-          contactName: existing.username,
-          previousType: prevRole,
-          newType: newRole,
-          changedByAdmin: true,
-        });
-      }
+      void (async () => {
+        try {
+          const owner = await getAccountOwnerContact(target);
+          if (!owner) return;
+          await sendAccountTypeChangedEmail({
+            toEmail: owner.email,
+            contactName: owner.name,
+            previousType: prevRole,
+            newType: newRole,
+            changedByAdmin: true,
+          });
+        } catch (err) {
+          logger.warn({ err, target }, "accounts/role: failed to send account type email (non-fatal)");
+        }
+      })();
       res.json({ ok: true });
     } catch {
       res.status(500).json({ error: "Failed to change account role" });

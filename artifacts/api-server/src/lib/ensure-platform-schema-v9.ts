@@ -4,7 +4,7 @@ import { logger } from "./logger";
 
 // Idempotent schema additions for durable team-invite outcomes:
 //   - declined_at preserves an explicit decline for the inviter to see
-//   - a partial unique index prevents duplicate live invites per workspace/email
+//   - a partial unique index prevents duplicate unresolved invites per workspace/email
 //   - invite-link failures give support a small, safe diagnostic trail
 export async function ensurePlatformSchemaV9(): Promise<void> {
   // Keep the failure log available even if a legacy data issue needs manual
@@ -34,8 +34,20 @@ export async function ensurePlatformSchemaV9(): Promise<void> {
   }
 
   try {
+    // A partial index cannot use `expires_at > now()` because PostgreSQL index
+    // predicates must be immutable. Revoke expired unresolved links before
+    // building the invariant; the invite endpoint repeats this under its
+    // workspace lock before every new insert.
+    await db.execute(sql`
+      UPDATE platform_invitations
+      SET revoked_at = now()
+      WHERE used_at IS NULL
+        AND revoked_at IS NULL
+        AND declined_at IS NULL
+        AND expires_at <= now()
+    `);
     // Older deployments could have created more than one active invitation
-    // before the database guard existed. Preserve the newest live invitation
+    // before the database guard existed. Preserve the newest unresolved invitation
     // and revoke earlier duplicates so the invariant can be introduced without
     // leaving an account with two usable links.
     await db.execute(sql`

@@ -571,9 +571,6 @@ const PAID_AI_PREFIXES = [
 const PUBLIC_ALLOWLIST = new Set<string>([
   // ── health ────────────────────────────────────────────────────────────────
   "GET /healthz",
-  // Durable public image used by email clients. It exposes one fixed asset only
-  // and has no AI, user-data or state-changing behaviour.
-  "GET /assets/email-logo",
 
   // ── legacy Replit auth (auth.ts) ─────────────────────────────────────────
   "GET /auth/user",
@@ -600,8 +597,6 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/change-email",
   "POST /platform/request-set-password",
   "POST /platform/team/invites/:token/resend",
-  "POST /platform/invite/:token/decline",
-  "POST /platform/my-invites/:token/decline",
   "POST /platform/logout",
 
   // ── platform - MFA ────────────────────────────────────────────────────────
@@ -656,6 +651,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/accounts/role",
   "PATCH /platform/accounts/:username/seat-cap",
   "GET /platform/accounts/:username/logo",
+  "GET /assets/email-logo",
   "GET /platform/accounts/:username/sessions",
   "DELETE /platform/sessions/:sid",
   "GET /platform/sessions",
@@ -671,7 +667,10 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PATCH /platform/team/members/:userId",
   "POST /platform/team/members/:userId/remove",
   "POST /platform/team/seat-limit",
+  "GET /platform/team/violations",
+  "POST /platform/team/violations/fix",
   "GET /platform/invite/:token",
+  "POST /platform/invite/:token/decline",
   "POST /platform/invite/accept",
   "GET /platform/admin/team-violations",
   "POST /platform/admin/team-violations/fix",
@@ -679,6 +678,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // ── platform - workspace / in-app invites ─────────────────────────────────
   "GET /platform/my-invites",
   "POST /platform/my-invites/:token/accept",
+  "POST /platform/my-invites/:token/decline",
   "POST /platform/switch-workspace",
 
   // ── admin panel (admin.ts) ────────────────────────────────────────────────
@@ -696,6 +696,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "DELETE /admin/audit-lock",
   "POST /admin/test-email-alerts",
   "GET /admin/leads",
+  "GET /support/invite-link-failures",
   "PATCH /admin/leads/:id/status",
   "POST /admin/leads/:id/resend",
   "POST /admin/test-contact-forms",
@@ -755,7 +756,6 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /contact/enquiry",
 
   // ── support (support.ts) ─────────────────────────────────────────────────
-  "GET /support/invite-link-failures",
   "GET /support/faq",
   "POST /support/faq",
   "PATCH /support/faq/:id",

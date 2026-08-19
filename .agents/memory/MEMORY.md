@@ -57,3 +57,4 @@
 - [Stripe Tax / VAT at checkout](aio-fusion-stripe-tax.md) — test-mode-only taxless fallback, fail-soft VAT attach, serialised billing-details sync, owner dashboard steps in replit.md.
 - [Discount invites + admin subscriptions](aio-fusion-discount-invites.md) — meta keys, CAS single-use claim, email-bound redemption, `aio-invite-<pct>pct` coupons, end-at-renewal semantics.
 - [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.
+- [Invite expiry uniqueness](invite-expiry-unique-index.md) — PostgreSQL partial indexes cannot use a moving expiry predicate; reclaim expired unresolved invites under the workspace lock before inserting replacements.
