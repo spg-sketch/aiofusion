@@ -4,6 +4,22 @@ import Anthropic from "@anthropic-ai/sdk";
 import { and, eq } from "drizzle-orm";
 import { db, auditLocksTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import {
+  completeAssessmentOutcome,
+  completeAssessmentStatus,
+  fallbackAssessmentOutcome,
+  fallbackAssessmentStatus,
+  type AssessmentOutcome,
+  type AssessmentReasonCategory,
+  type AssessmentStatus,
+} from "../lib/assessment-outcome";
+import {
+  AUTHORITY_DIMENSION_NAMES,
+  authorityGradeFor,
+  isCompleteAuthorityAssessmentPayload,
+} from "../lib/authority-assessment-validation";
+
+export { isCompleteAuthorityAssessmentPayload } from "../lib/authority-assessment-validation";
 import { llmCheckLimiter } from "../middleware/rate-limit";
 import { deepStripEmDashes } from "../lib/text-sanitise";
 import { llmCheckConcurrencyGuard } from "../middleware/concurrency-guard";
@@ -764,6 +780,12 @@ interface AuthorityAssessment {
   narrativeSignals?: { gpt: string[]; claude: string[]; divergence: string | null };
 }
 
+export interface AuthorityAssessmentResult {
+  assessment: AuthorityAssessment | null;
+  assessmentStatus: AssessmentStatus;
+  assessmentOutcome: AssessmentOutcome;
+}
+
 // Whether the brand's name cleanly identifies it, or is shared with other
 // well-known organisations (namesakes) that AI engines surface for the bare
 // name. Used by the report's entity-clarity section to separate "not present"
@@ -777,16 +799,7 @@ export interface EntityClarity {
   note: string;
 }
 
-const DIMENSION_NAMES = [
-  "Presence",
-  "Prominence",
-  "Share of voice",
-  "Message fidelity",
-  "Factual accuracy",
-  "Source quality",
-  "Entity clarity",
-  "Spokesperson authority",
-];
+const DIMENSION_NAMES = AUTHORITY_DIMENSION_NAMES;
 
 function sanitizeProjectData(raw: unknown): ProjectAuthorityData {
   const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -836,10 +849,6 @@ function clampScore(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-function gradeFor(idx: number): string {
-  return idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
 }
 
 // Pull the first balanced JSON object out of a model response, tolerating
@@ -970,14 +979,12 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
     const divergence = typeof rawNs.divergence === "string" && rawNs.divergence.trim()
       ? rawNs.divergence.trim().slice(0, 400)
       : null;
-    if (gptArr.length > 0 || claudeArr.length > 0) {
-      narrativeSignals = { gpt: gptArr, claude: claudeArr, divergence };
-    }
+    narrativeSignals = { gpt: gptArr, claude: claudeArr, divergence };
   }
 
   return {
     index,
-    grade: typeof parsed.grade === "string" && /^(A\*|[A-E])$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : gradeFor(index),
+    grade: typeof parsed.grade === "string" && /^(A\*|[A-E])$/i.test(parsed.grade.trim()) ? parsed.grade.trim().toUpperCase() : authorityGradeFor(index),
     summary: typeof parsed.summary === "string" ? parsed.summary.trim().slice(0, 1200) : "",
     dimensions,
     topGaps,
@@ -989,7 +996,32 @@ export function parseAssessment(text: string): AuthorityAssessment | null {
   };
 }
 
-export async function scoreAuthority(
+export function isCompleteAuthorityAssessment(
+  assessment: AuthorityAssessment | null,
+): assessment is AuthorityAssessment {
+  if (!assessment || !assessment.summary.trim()) return false;
+  if (assessment.dimensions.length !== DIMENSION_NAMES.length) return false;
+  const names = new Set(assessment.dimensions.map((d) => d.name));
+  if (!DIMENSION_NAMES.every((name) => names.has(name))) return false;
+  if (assessment.dimensions.some((d) => !d.justification.trim())) return false;
+  if (assessment.queryTable.length === 0) return false;
+  if (!assessment.categoryFraming || assessment.categoryFraming.length === 0) return false;
+  const signals = assessment.narrativeSignals;
+  if (!signals || !Array.isArray(signals.gpt) || !Array.isArray(signals.claude)) return false;
+  return true;
+}
+
+function fallbackAuthorityResult(
+  reasonCategory: AssessmentReasonCategory,
+): AuthorityAssessmentResult {
+  return {
+    assessment: null,
+    assessmentStatus: fallbackAssessmentStatus(),
+    assessmentOutcome: fallbackAssessmentOutcome(reasonCategory),
+  };
+}
+
+export async function scoreAuthorityWithOutcome(
   companyName: string,
   projectData: ProjectAuthorityData,
   evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
@@ -999,9 +1031,9 @@ export async function scoreAuthority(
   accountId?: string,
   projectId?: string,
   tokenAccum?: { input: number; output: number },
-): Promise<AuthorityAssessment | null> {
+): Promise<AuthorityAssessmentResult> {
   const client = createAnthropicClient();
-  if (!client) return null;
+  if (!client) return fallbackAuthorityResult("scoring_unavailable");
 
   const sp = (projectData.spokespeople || []).map((s) => ({
     name: s.name,
@@ -1128,11 +1160,56 @@ ${JSON.stringify(evidence, null, 1)}`;
       void logTokenUsage(accountId, "llm-check-scoring", "claude-sonnet-4-5", _inputTokens, _outputTokens, projectId);
     }
     if (tokenAccum) { tokenAccum.input += _inputTokens; tokenAccum.output += _outputTokens; }
-    return parseAssessment(text);
+    const rawAssessmentText = extractJson(text);
+    if (!rawAssessmentText) return fallbackAuthorityResult("invalid_response");
+    let rawAssessment: unknown;
+    try {
+      rawAssessment = JSON.parse(rawAssessmentText);
+    } catch {
+      return fallbackAuthorityResult("invalid_response");
+    }
+    const assessment = parseAssessment(text);
+    if (!assessment) return fallbackAuthorityResult("invalid_response");
+    if (
+      !isCompleteAuthorityAssessmentPayload(rawAssessment) ||
+      !isCompleteAuthorityAssessment(assessment)
+    ) {
+      return fallbackAuthorityResult("incomplete_response");
+    }
+    return {
+      assessment,
+      assessmentStatus: completeAssessmentStatus(),
+      assessmentOutcome: completeAssessmentOutcome(),
+    };
   } catch (err: any) {
     logger.error({ err, companyName }, "Authority scoring (stage 2) failed");
-    return null;
+    return fallbackAuthorityResult("scoring_error");
   }
+}
+
+export async function scoreAuthority(
+  companyName: string,
+  projectData: ProjectAuthorityData,
+  evidence: { question: string; appeared: boolean; competitors: string[]; chatgpt: string; claude: string }[],
+  metrics: { presence: number; shareOfVoice: number; visibilityScore: number; weightedVisibilityScore?: number; topCompetitors: { name: string; mentions: number }[] },
+  entityClarity?: EntityClarity | null,
+  narrativeContext?: { gptContexts: string[]; claudeContexts: string[]; failedQuestions: string[] },
+  accountId?: string,
+  projectId?: string,
+  tokenAccum?: { input: number; output: number },
+): Promise<AuthorityAssessment | null> {
+  const result = await scoreAuthorityWithOutcome(
+    companyName,
+    projectData,
+    evidence,
+    metrics,
+    entityClarity,
+    narrativeContext,
+    accountId,
+    projectId,
+    tokenAccum,
+  );
+  return result.assessment;
 }
 
 // Parse a model's "Name - description" list of namesake organisations into
@@ -1622,7 +1699,7 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
 
     const entityClarity = await entityClarityPromise;
 
-    const assessment = await scoreAuthority(
+    const authorityResult = await scoreAuthorityWithOutcome(
       companyName,
       authorityData,
       evidence,
@@ -1656,7 +1733,9 @@ llmCheckRouter.post("/llm-check", llmCheckLimiter, llmCheckConcurrencyGuard, asy
       },
       topCompetitors,
       probes,
-      assessment,
+      assessment: authorityResult.assessment,
+      assessmentStatus: authorityResult.assessmentStatus,
+      assessmentOutcome: authorityResult.assessmentOutcome,
       entityClarity,
       detectionVersion: 2,
       _tokenUsage: { inputTokens: tokenAccum.input, outputTokens: tokenAccum.output },

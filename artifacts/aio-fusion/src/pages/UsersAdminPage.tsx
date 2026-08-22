@@ -451,6 +451,53 @@ function UsersAdminPage({
   const [auditTo, setAuditTo] = useState("");
   const [auditExporting, setAuditExporting] = useState(false);
 
+  type AssessmentOutcomeRow = {
+    auditId: string;
+    projectId: string;
+    projectName: string;
+    owner: string;
+    savedAt: string;
+    status: "complete" | "fallback" | "unknown";
+    reasonCategory:
+      | "scoring_unavailable"
+      | "invalid_response"
+      | "incomplete_response"
+      | "scoring_error"
+      | null;
+    authorityIndex: number | null;
+    grade: string | null;
+    visibilityScore: number | null;
+  };
+  const [assessmentOutcomes, setAssessmentOutcomes] = useState<AssessmentOutcomeRow[] | null>(null);
+  const [assessmentOutcomesLoading, setAssessmentOutcomesLoading] = useState(false);
+  const [assessmentOutcomesError, setAssessmentOutcomesError] = useState<string | null>(null);
+  const [assessmentProjectFilter, setAssessmentProjectFilter] = useState("");
+  const [assessmentStatusFilter, setAssessmentStatusFilter] = useState("");
+
+  const loadAssessmentOutcomes = () => {
+    setAssessmentOutcomesLoading(true);
+    setAssessmentOutcomesError(null);
+    const params = new URLSearchParams();
+    if (assessmentProjectFilter.trim()) params.set("projectId", assessmentProjectFilter.trim());
+    if (assessmentStatusFilter) params.set("status", assessmentStatusFilter);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    void fetch(`${apiBase()}/api/admin/audit-outcomes${qs}`, { credentials: "include" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Failed to load assessment outcomes");
+        const data = await r.json() as { outcomes: AssessmentOutcomeRow[] };
+        setAssessmentOutcomes(data.outcomes ?? []);
+      })
+      .catch(() => setAssessmentOutcomesError("Could not load assessment outcomes. Please try again."))
+      .finally(() => setAssessmentOutcomesLoading(false));
+  };
+
+  const ASSESSMENT_REASON_LABELS: Record<NonNullable<AssessmentOutcomeRow["reasonCategory"]>, string> = {
+    scoring_unavailable: "Scoring unavailable",
+    invalid_response: "Invalid scoring response",
+    incomplete_response: "Incomplete scoring response",
+    scoring_error: "Scoring service error",
+  };
+
   const loadAuditEvents = () => {
     setAuditLoading(true);
     setAuditError(null);
@@ -1501,6 +1548,113 @@ function UsersAdminPage({
 
         {/* SUBSCRIPTIONS + DISCOUNT INVITES (master admin only) */}
         {session.role === "admin" && <SubscriptionsAdminCard />}
+
+        {/* AUTHORITY ASSESSMENT OUTCOMES */}
+        {session.role === "admin" && (
+          <div className="rounded-2xl p-6 sm:p-8 mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-5">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#FFFBEB" }}>
+                  <BarChart3 size={16} color="#D97706" />
+                </div>
+                <div>
+                  <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Authority assessment outcomes</h2>
+                  <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
+                    Safe status metadata for saved Earned Media reports. Raw probes, prompts and report narratives are not shown here.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={loadAssessmentOutcomes}
+                disabled={assessmentOutcomesLoading}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] border transition-all hover:opacity-80 disabled:opacity-40"
+                style={{ borderColor: vars.g200, color: vars.navy }}
+              >
+                {assessmentOutcomesLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                Load / Refresh
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-3 mb-4">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Project ID</label>
+                <input
+                  value={assessmentProjectFilter}
+                  onChange={(e) => setAssessmentProjectFilter(e.target.value)}
+                  placeholder="Optional exact project ID"
+                  className="w-full px-3 py-2.5 rounded-lg border text-[13px] focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.14em] block mb-1.5" style={{ color: vars.g500 }}>Outcome</label>
+                <select
+                  value={assessmentStatusFilter}
+                  onChange={(e) => setAssessmentStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-lg border text-[13px] bg-white focus:outline-none focus:ring-2"
+                  style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                >
+                  <option value="">All outcomes</option>
+                  <option value="complete">Complete</option>
+                  <option value="fallback">Fallback</option>
+                  <option value="unknown">Legacy / unknown</option>
+                </select>
+              </div>
+            </div>
+
+            {assessmentOutcomesError && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg mb-4" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
+                <AlertTriangle size={14} color={vars.red} className="shrink-0 mt-0.5" />
+                <p className="text-[12px] font-medium" style={{ color: vars.red }}>{assessmentOutcomesError}</p>
+              </div>
+            )}
+            {assessmentOutcomesLoading && (
+              <div className="flex items-center gap-2 text-[13px] py-4" style={{ color: vars.g500 }}>
+                <Loader2 size={14} className="animate-spin" /> Loading assessment outcomes…
+              </div>
+            )}
+            {!assessmentOutcomesLoading && assessmentOutcomes && assessmentOutcomes.length === 0 && (
+              <p className="text-[13px] font-light italic py-4" style={{ color: vars.g400 }}>No saved audits match these filters.</p>
+            )}
+            {!assessmentOutcomesLoading && assessmentOutcomes && assessmentOutcomes.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `2px solid ${vars.g200}` }}>
+                      {["Project", "Saved", "Outcome", "Fallback reason", "Authority", "Visibility"].map((heading) => (
+                        <th key={heading} className="text-[10px] font-bold uppercase tracking-[0.08em] py-2 pr-4 whitespace-nowrap" style={{ color: vars.g500 }}>{heading}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assessmentOutcomes.map((row) => {
+                      const statusColour = row.status === "complete" ? vars.green : row.status === "fallback" ? "#D97706" : vars.g400;
+                      return (
+                        <tr key={row.auditId} style={{ borderBottom: `1px solid ${vars.g100}` }}>
+                          <td className="text-[12px] py-3 pr-4 align-top">
+                            <strong style={{ color: vars.navy }}>{row.projectName}</strong>
+                            <span className="block text-[10px] mt-0.5" style={{ color: vars.g400 }}>{row.projectId}</span>
+                          </td>
+                          <td className="text-[11px] py-3 pr-4 align-top whitespace-nowrap" style={{ color: vars.g500 }}>
+                            {new Date(row.savedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </td>
+                          <td className="text-[11px] font-semibold py-3 pr-4 align-top capitalize" style={{ color: statusColour }}>{row.status === "unknown" ? "Legacy / unknown" : row.status}</td>
+                          <td className="text-[11px] py-3 pr-4 align-top" style={{ color: vars.g500 }}>
+                            {row.reasonCategory ? ASSESSMENT_REASON_LABELS[row.reasonCategory] : "-"}
+                          </td>
+                          <td className="text-[11px] py-3 pr-4 align-top whitespace-nowrap" style={{ color: vars.g600 }}>
+                            {row.authorityIndex === null ? "-" : `${row.authorityIndex}${row.grade ? ` (${row.grade})` : ""}`}
+                          </td>
+                          <td className="text-[11px] py-3 align-top" style={{ color: vars.g600 }}>{row.visibilityScore ?? "-"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* AUDIT LOG */}
         <div className="rounded-2xl p-6 sm:p-8 mt-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>

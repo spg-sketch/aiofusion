@@ -7,11 +7,14 @@ description: How the Earned Media Visibility Audit produces its AI Authority Ind
 
 The audit is two stages: stage one fires the buyer's non-branded category questions at the LLMs as blind probes (brand not named) and measures presence/share-of-voice; stage two passes the probe evidence plus the project's intake data to a single Claude scoring call that returns a structured `assessment` (AI Authority Index 0-100, grade, 8 dimensions, top gaps, prioritised actions, per-query authority read).
 
-**Why:** Patrick liked a report Opus produced this way. Presence metrics alone undersell the story; the structured scorecard is what made the report land.
+**Why:** Patrick liked a report Opus produced this way. Presence metrics alone undersell the story; the structured scorecard is what made the report land. A later Stage 2 regression silently produced short visibility-only reports that looked complete, so fallback state must be explicit end to end.
 
 **How to apply / invariants:**
-- `assessment` is OPTIONAL on the result and on saved audits. Every in-app card and every report block that uses it must be presence-gated, so legacy audits saved before this feature still render through the original visibility flow. Do not make assessment a hard dependency.
+- `assessment` is OPTIONAL. New results must carry a coherent `assessmentStatus` + `assessmentOutcome` pair. Only structurally complete assessments may be marked complete; all other new results retain blind-probe evidence with `assessment: null` and a bounded fallback reason.
+- Validate complete assessments before parser defaults are applied, then re-validate at the saved-audit boundary. Never trust client-supplied complete metadata. Saved-list, admin, live and print classifications must agree.
+- Metadata-free legacy assessments may render only when they pass strict structural validation. Partial, malformed or contradictory metadata stays on the visibility-fallback path.
+- Live and printable fallback reports must say that the Authority assessment is incomplete, avoid Authority Index/grade claims, suppress scorecard/action sections, and offer a retry in the live UI. Admin diagnostics expose compact outcome metadata only, never prompts or model output.
 - The scoring prompt explicitly forbids invention: dimensions with no supporting evidence must score low and justifications default to "No evidence in this run." Keep that intent if you touch the prompt. The grounding evidence the backend supplies is what keeps it honest (verified working: it scored message-fidelity/factual-accuracy 0 and flagged the engines misdescribing the brand rather than inventing positives).
-- Stage two is defensive: a balanced-brace JSON extractor + a parser that clamps ranges, normalises to the canonical 8 dimensions, and returns null on any failure. On null the whole UI/report degrades gracefully. Preserve this fail-soft behaviour.
+- Stage two is defensive: a balanced-brace JSON extractor + strict raw validation + a parser that normalises the canonical 8 dimensions. Unavailable, invalid, incomplete and request-error cases are saveable visibility fallbacks, not silent nulls.
 - Probe questions are seeded with the verbatim buyer questions first (capped), so intake quality directly drives probe relevance.
 - The audit takes ~70s end to end (multiple runs per model + the scoring call). Test against the api-server at localhost:8080, not the dev domain.

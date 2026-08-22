@@ -44,6 +44,8 @@ const LEGACY_RESULT = {
 const MODERN_RESULT = {
   ...LEGACY_RESULT,
   checkedAt: "2026-06-01T10:00:00.000Z",
+  assessmentStatus: { status: "complete" as const, reason: null },
+  assessmentOutcome: { status: "complete" as const, reasonCategory: null },
   assessment: {
     index: 64,
     grade: "B",
@@ -52,8 +54,8 @@ const MODERN_RESULT = {
       { name: "Presence", score: 60, justification: "Appeared in 4 of 10 probes.", confidence: "high" },
       { name: "Prominence", score: 50, justification: "Often a passing mention.", confidence: "medium" },
       { name: "Share of voice", score: 40, justification: "Behind Globex.", confidence: "medium" },
-      { name: "Message fidelity", score: 0, justification: "No evidence in this run.", confidence: "low" },
-      { name: "Factual accuracy", score: 0, justification: "No evidence in this run.", confidence: "low" },
+      { name: "Message fidelity", score: 30, justification: "Core sector positioning appears occasionally.", confidence: "low" },
+      { name: "Factual accuracy", score: 45, justification: "The available descriptions are broadly accurate.", confidence: "low" },
       { name: "Source quality", score: 20, justification: "Few URLs supplied.", confidence: "low" },
       { name: "Entity clarity", score: 55, justification: "Reasonably distinct.", confidence: "medium" },
       { name: "Spokesperson authority", score: 10, justification: "No spokespeople supplied.", confidence: "low" },
@@ -65,6 +67,77 @@ const MODERN_RESULT = {
     queryTable: [
       { query: "Top consulting firms?", appeared: false, notes: "Recommended Globex instead." },
     ],
+    categoryFraming: [
+      { query: "Top consulting firms?", themes: "Sector depth and independent proof dominate the category." },
+    ],
+    narrativeSignals: {
+      gpt: ["Independent consultancy"],
+      claude: ["Specialist adviser"],
+      divergence: null,
+    },
+  },
+};
+
+const FALLBACK_RESULT = {
+  ...LEGACY_RESULT,
+  checkedAt: "2026-08-20T12:39:00.000Z",
+  assessment: null,
+  assessmentStatus: {
+    status: "fallback" as const,
+    reason: "The AI Authority assessment could not be completed. This report contains the visibility evidence only. Run the audit again to retry.",
+  },
+  assessmentOutcome: {
+    status: "fallback" as const,
+    reasonCategory: "incomplete_response" as const,
+  },
+};
+
+const MALFORMED_LEGACY_RESULT = {
+  ...LEGACY_RESULT,
+  checkedAt: "2026-05-01T10:00:00.000Z",
+  assessment: {
+    ...MODERN_RESULT.assessment,
+    dimensions: MODERN_RESULT.assessment.dimensions.slice(0, 1),
+  },
+};
+
+const A_STAR_RESULT = {
+  ...MODERN_RESULT,
+  assessment: { ...MODERN_RESULT.assessment, index: 75, grade: "A*" },
+};
+
+const OUT_OF_RANGE_RESULT = {
+  ...MODERN_RESULT,
+  assessment: { ...MODERN_RESULT.assessment, index: 999, grade: "A*" },
+};
+
+const STATUS_ONLY_RESULT = {
+  ...MODERN_RESULT,
+  assessmentOutcome: undefined,
+};
+
+const OUTCOME_ONLY_RESULT = {
+  ...MODERN_RESULT,
+  assessmentStatus: undefined,
+};
+
+const CONTRADICTORY_METADATA_RESULT = {
+  ...MODERN_RESULT,
+  assessmentOutcome: {
+    status: "fallback" as const,
+    reasonCategory: "scoring_error" as const,
+  },
+};
+
+const INVERSE_CONTRADICTORY_METADATA_RESULT = {
+  ...MODERN_RESULT,
+  assessmentStatus: {
+    status: "fallback" as const,
+    reason: "The assessment could not be completed.",
+  },
+  assessmentOutcome: {
+    status: "complete" as const,
+    reasonCategory: null,
   },
 };
 
@@ -127,6 +200,7 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
 
     // The assessment-only scorecard must be ABSENT for legacy audits.
     expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
+    expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
   });
 
   it("always renders the Executive summary, with fallback text when there is no assessment or ICP", () => {
@@ -166,6 +240,110 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     expect(screen.getByText("Appeared in 4 of 10 probes.")).toBeInTheDocument();
   });
 
+  it("shows a visible warning and retry action for a fallback assessment", () => {
+    seedSavedAudit(FALLBACK_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
+    expect(screen.getByText(/This is not the complete AI Authority Scorecard/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry audit/i })).toBeInTheDocument();
+    expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prioritised actions")).not.toBeInTheDocument();
+  });
+
+  it("does not show fallback messaging for a complete assessment", () => {
+    seedSavedAudit(MODERN_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.queryByText(/Authority assessment incomplete/i)).not.toBeInTheDocument();
+    expect(screen.getByText("AI Authority scorecard")).toBeInTheDocument();
+  });
+
+  it("treats a structurally incomplete legacy assessment as a visibility fallback", () => {
+    seedSavedAudit(MALFORMED_LEGACY_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
+    expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prioritised actions")).not.toBeInTheDocument();
+  });
+
+  it("renders a valid A-star assessment and rejects an out-of-range complete payload", () => {
+    seedSavedAudit(A_STAR_RESULT);
+    const valid = render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+    expect(screen.getByText("AI Authority scorecard")).toBeInTheDocument();
+    valid.unmount();
+
+    seedSavedAudit(OUT_OF_RANGE_RESULT);
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+    expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
+    expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
+  });
+
+  it("labels malformed explicit-complete entries as fallback in the saved list", () => {
+    seedSavedAudit(OUT_OF_RANGE_RESULT);
+    render(<LlmCheckPage activeClient={CLIENT} />);
+
+    expect(
+      screen.getByText("Assessment fallback: incomplete scoring response"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Assessment complete")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["status-only", STATUS_ONLY_RESULT],
+    ["outcome-only", OUTCOME_ONLY_RESULT],
+    ["contradictory", CONTRADICTORY_METADATA_RESULT],
+    ["inverse-contradictory", INVERSE_CONTRADICTORY_METADATA_RESULT],
+  ])("keeps %s assessment metadata on the visibility fallback path", (_name, auditResult) => {
+    seedSavedAudit(auditResult);
+
+    let written = "";
+    const fakeWindow = {
+      document: {
+        write: (html: string) => {
+          written += html;
+        },
+        close: () => {},
+      },
+      focus: () => {},
+      print: () => {},
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(fakeWindow);
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+
+    expect(screen.getByText(/Authority assessment incomplete - showing visibility fallback/i)).toBeInTheDocument();
+    expect(screen.queryByText("AI Authority scorecard")).not.toBeInTheDocument();
+    screen.getByText(/Open report \/ Save as PDF/i).click();
+    expect(written).toContain("Assessment incomplete - visibility fallback");
+    expect(written).not.toContain("<h2>AI Authority scorecard</h2>");
+    expect(written).not.toContain("<h2>Prioritised actions</h2>");
+  });
+
+  it.each([
+    ["outcome-only", OUTCOME_ONLY_RESULT, "Assessment outcome: legacy / unknown"],
+    ["status-fallback/outcome-complete", INVERSE_CONTRADICTORY_METADATA_RESULT, "Assessment fallback: incomplete scoring response"],
+  ])("does not label %s metadata complete in the saved list", (_name, auditResult, expectedLabel) => {
+    seedSavedAudit(auditResult);
+    render(<LlmCheckPage activeClient={CLIENT} />);
+
+    expect(screen.getByText(expectedLabel)).toBeInTheDocument();
+    expect(screen.queryByText("Assessment complete")).not.toBeInTheDocument();
+  });
+
   it("openReport builds a printable report for a legacy audit without throwing", () => {
     seedSavedAudit(LEGACY_RESULT);
 
@@ -197,6 +375,35 @@ describe("LlmCheckPage saved-audit backward compatibility", () => {
     expect(written).not.toContain("AI Authority scorecard");
     expect(written).not.toContain("Prioritised actions");
     expect(written).not.toContain("Per-query authority read");
+    expect(written).toContain("Assessment incomplete - visibility fallback");
+    expect(written).toContain("This is not the complete AI Authority Scorecard");
+  });
+
+  it("openReport includes the printable warning for a fallback assessment", () => {
+    seedSavedAudit(FALLBACK_RESULT);
+
+    let written = "";
+    const fakeWindow = {
+      document: {
+        write: (html: string) => {
+          written += html;
+        },
+        close: () => {},
+      },
+      focus: () => {},
+      print: () => {},
+    } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(fakeWindow);
+
+    render(
+      <LlmCheckPage activeClient={CLIENT} pendingAuditId="audit-1" onConsumePending={() => {}} />,
+    );
+    screen.getByText(/Open report \/ Save as PDF/i).click();
+
+    expect(written).toContain("Assessment incomplete - visibility fallback");
+    expect(written).toContain("visibility evidence only");
+    expect(written).not.toContain("<h2>AI Authority scorecard</h2>");
+    expect(written).not.toContain("<h2>Prioritised actions</h2>");
   });
 
   it("openReport includes the assessment sections for a modern audit", () => {

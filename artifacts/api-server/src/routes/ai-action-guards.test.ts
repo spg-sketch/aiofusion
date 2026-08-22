@@ -768,6 +768,10 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /support/tickets/:id/seen",
   "POST /support/tickets/:id/messages",
 
+  // ── admin support diagnosis (admin.ts) ───────────────────────────────────
+  // Read-only and independently protected by platform admin authentication.
+  "GET /admin/audit-outcomes",
+
   // ── llm-check audit lock ──────────────────────────────────────────────────
   // Intentionally ungated: read-only lock-status check so the UI can disable
   // the Run button before the user has committed to a full AI action.

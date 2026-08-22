@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { memberProjectGate, inAssignedScope } from "../lib/member-guards";
+import { normaliseSavedAssessmentResult } from "../lib/assessment-outcome";
 
 const router: IRouter = Router();
 
@@ -108,6 +109,7 @@ router.post(
         return;
       }
       const owner = normUsername(req.account!.username);
+      const savedResult = normaliseSavedAssessmentResult(audit.result);
       await db
         .insert(savedAuditsTable)
         .values({
@@ -115,14 +117,14 @@ router.post(
           projectId,
           owner,
           savedAt: String(audit.savedAt),
-          result: audit.result as object,
+          result: savedResult,
           deletedAt: null,
         })
         .onConflictDoUpdate({
           target: savedAuditsTable.id,
           set: {
             savedAt: String(audit.savedAt),
-            result: audit.result as object,
+            result: savedResult,
             deletedAt: null,
           },
           where: eq(savedAuditsTable.projectId, projectId),

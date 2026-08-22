@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, auditLocksTable, projectsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable, contactSubmissionsTable } from "@workspace/db";
-import { and, desc, eq, inArray, sql, gte } from "drizzle-orm";
+import { db, auditLocksTable, projectsTable, savedAuditsTable, tokenUsageTable, platformMembershipsTable, platformUsersTable, platformAccountsTable, platformCompaniesTable, platformMetaTable, contactSubmissionsTable } from "@workspace/db";
+import { and, desc, eq, inArray, isNull, sql, gte } from "drizzle-orm";
 import { computeSpikeFlagsForAccounts, getThirtyDayCostByAccount, getCurrentMonthSpendByAccount, getSpendLimitsByAccount, DEFAULT_FAIR_USAGE_LIMIT, DEFAULT_MONTHLY_SPEND_LIMIT_GBP } from "../lib/fair-usage";
 import { logger } from "../lib/logger";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -30,6 +30,7 @@ import {
   isValidDiscountPercent,
 } from "../lib/discount-invites";
 import { getProjectAddons } from "../lib/billing";
+import { classifySavedAssessmentResult } from "../lib/assessment-outcome";
 
 const adminRouter = Router();
 
@@ -1227,6 +1228,94 @@ async function cascadeRestoreDescendants(agencySlug: string): Promise<string[]> 
   }
   return restored;
 }
+
+// List compact saved-audit outcomes for support diagnosis. This deliberately
+// excludes prompts, probe responses, narratives and the full scorecard.
+adminRouter.get(
+  "/admin/audit-outcomes",
+  requirePlatformAuth,
+  async (req: Request, res: Response) => {
+    if (req.account?.role !== "admin") {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+
+    const projectId =
+      typeof req.query.projectId === "string" ? req.query.projectId.trim() : "";
+    const requestedStatus =
+      typeof req.query.status === "string" ? req.query.status.trim() : "";
+    if (
+      requestedStatus &&
+      !["complete", "fallback", "unknown"].includes(requestedStatus)
+    ) {
+      res.status(400).json({ error: "Invalid status filter" });
+      return;
+    }
+
+    try {
+      const conditions = [isNull(savedAuditsTable.deletedAt)];
+      if (projectId) conditions.push(eq(savedAuditsTable.projectId, projectId));
+      const rows = await db
+        .select({
+          auditId: savedAuditsTable.id,
+          projectId: savedAuditsTable.projectId,
+          projectName: projectsTable.name,
+          owner: savedAuditsTable.owner,
+          savedAt: savedAuditsTable.savedAt,
+          result: savedAuditsTable.result,
+        })
+        .from(savedAuditsTable)
+        .leftJoin(projectsTable, eq(savedAuditsTable.projectId, projectsTable.id))
+        .where(and(...conditions))
+        .orderBy(desc(savedAuditsTable.savedAt));
+
+      const outcomes = rows
+        .map((row) => {
+          const result =
+            row.result && typeof row.result === "object"
+              ? (row.result as Record<string, unknown>)
+              : {};
+          const outcome = classifySavedAssessmentResult(result);
+          const assessment =
+            result.assessment && typeof result.assessment === "object"
+              ? (result.assessment as Record<string, unknown>)
+              : null;
+          const authorityIndex =
+            outcome.status === "complete" &&
+            typeof assessment?.index === "number" &&
+            Number.isFinite(assessment.index)
+              ? assessment.index
+              : null;
+          const grade =
+            outcome.status === "complete" && typeof assessment?.grade === "string"
+              ? assessment.grade
+              : null;
+          return {
+            auditId: row.auditId,
+            projectId: row.projectId,
+            projectName: row.projectName || row.projectId,
+            owner: row.owner,
+            savedAt: row.savedAt,
+            status: outcome.status,
+            reasonCategory: outcome.reasonCategory,
+            authorityIndex,
+            grade,
+            visibilityScore:
+              typeof result.visibilityScore === "number" &&
+              Number.isFinite(result.visibilityScore)
+                ? result.visibilityScore
+                : null,
+          };
+        })
+        .filter((row) => !requestedStatus || row.status === requestedStatus);
+
+      res.json({ outcomes });
+    } catch (err) {
+      logger.error({ err, projectId, requestedStatus }, "admin audit-outcomes: query failed");
+      res.status(500).json({ error: "Could not load assessment outcomes." });
+    }
+  },
+);
 
 // List all audit locks (admin only).
 adminRouter.get(

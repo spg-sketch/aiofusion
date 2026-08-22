@@ -90,6 +90,9 @@ import llmCheckRouter, {
   extractJson,
   parseAssessment,
   scoreAuthority,
+  scoreAuthorityWithOutcome,
+  isCompleteAuthorityAssessment,
+  isCompleteAuthorityAssessmentPayload,
   isMentioned,
   brandAliases,
   extractCompetitors,
@@ -121,7 +124,7 @@ function probe(overrides: Partial<ProbeResult> = {}): ProbeResult {
 
 // A well-formed assessment payload the model is supposed to return.
 const VALID_ASSESSMENT = {
-  index: 72,
+  index: 64,
   grade: "B",
   summary: "The brand appears in some answers but is inconsistent.",
   dimensions: [
@@ -142,6 +145,14 @@ const VALID_ASSESSMENT = {
     { query: "What do you know about Acme?", appeared: true, notes: "Described accurately." },
     { query: "Top boutique firms?", appeared: false, notes: "Recommended rivals instead." },
   ],
+  categoryFraming: [
+    { query: "Top boutique firms?", themes: "Independent expertise and sector proof dominate the answers." },
+  ],
+  narrativeSignals: {
+    gpt: ["independent consultancy"],
+    claude: ["specialist adviser"],
+    divergence: null,
+  },
 };
 
 function modelReply(text: string) {
@@ -208,18 +219,71 @@ describe("parseAssessment fallback behaviour", () => {
   it("parses a complete, well-formed assessment", () => {
     const result = parseAssessment(JSON.stringify(VALID_ASSESSMENT));
     expect(result).not.toBeNull();
-    expect(result!.index).toBe(72);
+    expect(result!.index).toBe(64);
     expect(result!.grade).toBe("B");
     expect(result!.dimensions).toHaveLength(8);
     expect(result!.priorityActions).toHaveLength(1);
     expect(result!.queryTable).toHaveLength(2);
+    expect(isCompleteAuthorityAssessment(result)).toBe(true);
+    expect(isCompleteAuthorityAssessmentPayload(VALID_ASSESSMENT)).toBe(true);
+  });
+
+  it("rejects raw payloads that rely on parser defaults for scorecard material", () => {
+    const { dimensions: _dimensions, ...withoutDimensions } = VALID_ASSESSMENT;
+    expect(isCompleteAuthorityAssessmentPayload(withoutDimensions)).toBe(false);
+    expect(
+      isCompleteAuthorityAssessmentPayload({
+        ...VALID_ASSESSMENT,
+        dimensions: VALID_ASSESSMENT.dimensions.map((dimension, index) =>
+          index === 0 ? { ...dimension, justification: "" } : dimension,
+        ),
+      }),
+    ).toBe(false);
+    expect(
+      isCompleteAuthorityAssessmentPayload({
+        ...VALID_ASSESSMENT,
+        priorityActions: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts every grade boundary and rejects invalid or inconsistent scores", () => {
+    expect(
+      isCompleteAuthorityAssessmentPayload({ ...VALID_ASSESSMENT, index: 0, grade: "E" }),
+    ).toBe(true);
+    expect(
+      isCompleteAuthorityAssessmentPayload({ ...VALID_ASSESSMENT, index: 10, grade: "D" }),
+    ).toBe(true);
+    expect(
+      isCompleteAuthorityAssessmentPayload({ ...VALID_ASSESSMENT, index: 75, grade: "A*" }),
+    ).toBe(true);
+    expect(
+      isCompleteAuthorityAssessmentPayload({
+        ...VALID_ASSESSMENT,
+        narrativeSignals: { gpt: [], claude: [], divergence: null },
+      }),
+    ).toBe(true);
+    expect(
+      isCompleteAuthorityAssessmentPayload({ ...VALID_ASSESSMENT, index: 999, grade: "A*" }),
+    ).toBe(false);
+    expect(
+      isCompleteAuthorityAssessmentPayload({ ...VALID_ASSESSMENT, index: 75, grade: "B" }),
+    ).toBe(false);
+    expect(
+      isCompleteAuthorityAssessmentPayload({
+        ...VALID_ASSESSMENT,
+        dimensions: VALID_ASSESSMENT.dimensions.map((dimension, index) =>
+          index === 0 ? { ...dimension, score: 100.5 } : dimension,
+        ),
+      }),
+    ).toBe(false);
   });
 
   it("parses assessment wrapped in a code fence and surrounding prose", () => {
     const text = "Sure, here is the JSON:\n```json\n" + JSON.stringify(VALID_ASSESSMENT) + "\n```\nLet me know if you need more.";
     const result = parseAssessment(text);
     expect(result).not.toBeNull();
-    expect(result!.index).toBe(72);
+    expect(result!.index).toBe(64);
   });
 
   it("fills defaults for a partial object instead of crashing or returning null", () => {
@@ -304,10 +368,53 @@ describe("scoreAuthority end-to-end fallback", () => {
     expect(messagesCreate).not.toHaveBeenCalled();
   });
 
+  it("returns scoring_unavailable metadata when credentials are absent", async () => {
+    delete process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
+    delete process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentStatus.status).toBe("fallback");
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "scoring_unavailable",
+    });
+  });
+
   it("returns null when the model emits non-JSON prose", async () => {
     messagesCreate.mockResolvedValue(modelReply("Sorry, I cannot score this brand."));
     const result = await scoreAuthority("Acme", {}, baseEvidence, baseMetrics);
     expect(result).toBeNull();
+  });
+
+  it("returns invalid_response metadata for malformed scoring output", async () => {
+    messagesCreate.mockResolvedValue(modelReply("Sorry, I cannot score this brand."));
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "invalid_response",
+    });
+  });
+
+  it("returns incomplete_response metadata for parseable but incomplete output", async () => {
+    messagesCreate.mockResolvedValue(modelReply('{"index":33}'));
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "incomplete_response",
+    });
+  });
+
+  it("rejects polished partial output that omits the raw dimensions", async () => {
+    const { dimensions: _dimensions, ...withoutDimensions } = VALID_ASSESSMENT;
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(withoutDimensions)));
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "incomplete_response",
+    });
   });
 
   it("returns null when the model emits truncated JSON", async () => {
@@ -328,12 +435,30 @@ describe("scoreAuthority end-to-end fallback", () => {
     expect(result).toBeNull();
   });
 
+  it("returns scoring_error metadata when the scoring call throws", async () => {
+    messagesCreate.mockRejectedValue(new Error("upstream 500"));
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).toBeNull();
+    expect(result.assessmentOutcome).toEqual({
+      status: "fallback",
+      reasonCategory: "scoring_error",
+    });
+  });
+
   it("returns a normalised assessment when the model returns valid JSON", async () => {
     messagesCreate.mockResolvedValue(modelReply(JSON.stringify(VALID_ASSESSMENT)));
     const result = await scoreAuthority("Acme", {}, baseEvidence, baseMetrics);
     expect(result).not.toBeNull();
-    expect(result!.index).toBe(72);
+    expect(result!.index).toBe(64);
     expect(result!.dimensions).toHaveLength(8);
+  });
+
+  it("returns complete metadata when all report material is present", async () => {
+    messagesCreate.mockResolvedValue(modelReply(JSON.stringify(VALID_ASSESSMENT)));
+    const result = await scoreAuthorityWithOutcome("Acme", {}, baseEvidence, baseMetrics);
+    expect(result.assessment).not.toBeNull();
+    expect(result.assessmentStatus).toEqual({ status: "complete", reason: null });
+    expect(result.assessmentOutcome).toEqual({ status: "complete", reasonCategory: null });
   });
 
   it("recovers an assessment even when valid JSON is wrapped in prose and fences", async () => {

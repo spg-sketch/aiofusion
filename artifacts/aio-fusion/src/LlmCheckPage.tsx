@@ -99,6 +99,20 @@ interface EntityClarity {
   note: string;
 }
 
+type AssessmentReasonCategory =
+  | "scoring_unavailable"
+  | "invalid_response"
+  | "incomplete_response"
+  | "scoring_error";
+
+type AssessmentOutcome =
+  | { status: "complete"; reasonCategory: null }
+  | { status: "fallback"; reasonCategory: AssessmentReasonCategory };
+
+type AssessmentStatus =
+  | { status: "complete"; reason: null }
+  | { status: "fallback"; reason: string };
+
 interface LlmCheckResult {
   companyName: string;
   sector: string;
@@ -116,6 +130,8 @@ interface LlmCheckResult {
   topCompetitors: { name: string; mentions: number }[];
   probes: ProbeItem[];
   assessment?: AuthorityAssessment | null;
+  assessmentStatus?: AssessmentStatus;
+  assessmentOutcome?: AssessmentOutcome;
   entityClarity?: EntityClarity | null;
   detectionVersion?: number;
 }
@@ -241,11 +257,149 @@ interface ReportData {
 }
 
 export function authorityIndexFor(result: LlmCheckResult): number {
-  return result.assessment ? result.assessment.index : result.visibilityScore;
+  const assessment = assessmentForDisplay(result);
+  return assessment ? assessment.index : result.visibilityScore;
+}
+
+const ASSESSMENT_FALLBACK_COPY =
+  "The AI Authority assessment could not be completed. This report contains the visibility evidence only. Run the audit again to retry.";
+
+const OUTCOME_LABELS: Record<AssessmentReasonCategory, string> = {
+  scoring_unavailable: "Assessment fallback: scoring unavailable",
+  invalid_response: "Assessment fallback: invalid scoring response",
+  incomplete_response: "Assessment fallback: incomplete scoring response",
+  scoring_error: "Assessment fallback: scoring service error",
+};
+
+const AUTHORITY_DIMENSION_NAMES = [
+  "Presence",
+  "Prominence",
+  "Share of voice",
+  "Message fidelity",
+  "Factual accuracy",
+  "Source quality",
+  "Entity clarity",
+  "Spokesperson authority",
+] as const;
+
+function expectedAuthorityGrade(index: number): string {
+  return index >= 75 ? "A*" : index >= 65 ? "A" : index >= 50 ? "B" : index >= 30 ? "C" : index >= 10 ? "D" : "E";
+}
+
+function isRenderableAuthorityAssessment(
+  assessment: AuthorityAssessment | null | undefined,
+  allowNoEvidenceJustification: boolean,
+): assessment is AuthorityAssessment {
+  if (!assessment) return false;
+  if (
+    !Number.isInteger(assessment.index) ||
+    assessment.index < 0 ||
+    assessment.index > 100 ||
+    assessment.grade !== expectedAuthorityGrade(assessment.index)
+  ) return false;
+  if (!assessment.summary?.trim()) return false;
+  if (!Array.isArray(assessment.dimensions) || assessment.dimensions.length !== AUTHORITY_DIMENSION_NAMES.length) return false;
+  const dimensionNames = new Set(assessment.dimensions.map((dimension) => dimension.name));
+  if (!AUTHORITY_DIMENSION_NAMES.every((name) => dimensionNames.has(name))) return false;
+  if (
+    assessment.dimensions.some(
+      (dimension) =>
+        !Number.isInteger(dimension.score) ||
+        dimension.score < 0 ||
+        dimension.score > 100 ||
+        !dimension.justification?.trim() ||
+        (!allowNoEvidenceJustification && dimension.justification.trim() === "No evidence in this run."),
+    )
+  ) return false;
+  if (!Array.isArray(assessment.priorityActions) || assessment.priorityActions.length === 0) return false;
+  if (
+    assessment.priorityActions.some(
+      (recommendation) =>
+        !recommendation.action?.trim() ||
+        !recommendation.rationale?.trim() ||
+        !["high", "medium", "low"].includes(recommendation.priority),
+    )
+  ) return false;
+  if (!Array.isArray(assessment.queryTable) || assessment.queryTable.length === 0) return false;
+  if (assessment.queryTable.some((row) => !row.query?.trim() || !row.notes?.trim())) return false;
+  if (!Array.isArray(assessment.categoryFraming) || assessment.categoryFraming.length === 0) return false;
+  if (assessment.categoryFraming.some((row) => !row.query?.trim() || !row.themes?.trim())) return false;
+  const signals = assessment.narrativeSignals;
+  if (!signals || !Array.isArray(signals.gpt) || !Array.isArray(signals.claude)) return false;
+  if (
+    signals.gpt.some((item) => typeof item !== "string" || !item.trim()) ||
+    signals.claude.some((item) => typeof item !== "string" || !item.trim())
+  ) return false;
+  return true;
+}
+
+function hasCoherentCompleteAssessmentMetadata(result: LlmCheckResult): boolean {
+  return (
+    result.assessmentStatus?.status === "complete" &&
+    result.assessmentStatus.reason === null &&
+    result.assessmentOutcome?.status === "complete" &&
+    result.assessmentOutcome.reasonCategory === null
+  );
+}
+
+function assessmentForDisplay(result: LlmCheckResult): AuthorityAssessment | null {
+  const hasStatusMetadata = result.assessmentStatus !== undefined;
+  const hasOutcomeMetadata = result.assessmentOutcome !== undefined;
+  const coherentCompleteMetadata = hasCoherentCompleteAssessmentMetadata(result);
+
+  if (hasStatusMetadata || hasOutcomeMetadata) {
+    if (!coherentCompleteMetadata) return null;
+    if (!isRenderableAuthorityAssessment(result.assessment, true)) return null;
+    return result.assessment;
+  }
+
+  if (!isRenderableAuthorityAssessment(result.assessment, false)) return null;
+  return result.assessment;
+}
+
+function assessmentFallbackReason(result: LlmCheckResult): string {
+  if (
+    result.assessmentStatus?.status === "fallback" &&
+    typeof result.assessmentStatus.reason === "string" &&
+    result.assessmentStatus.reason.trim()
+  ) {
+    return result.assessmentStatus.reason.trim();
+  }
+  return ASSESSMENT_FALLBACK_COPY;
+}
+
+function savedAssessmentOutcome(
+  result: LlmCheckResult,
+): AssessmentOutcome | { status: "unknown"; reasonCategory: null } {
+  const outcome = result.assessmentOutcome;
+  if (outcome?.status === "complete" && outcome.reasonCategory === null) {
+    if (!hasCoherentCompleteAssessmentMetadata(result)) {
+      return result.assessmentStatus?.status === "fallback"
+        ? { status: "fallback", reasonCategory: "incomplete_response" }
+        : { status: "unknown", reasonCategory: null };
+    }
+    return isRenderableAuthorityAssessment(result.assessment, true)
+      ? outcome
+      : { status: "fallback", reasonCategory: "incomplete_response" };
+  }
+  if (
+    outcome?.status === "fallback" &&
+    outcome.reasonCategory in OUTCOME_LABELS
+  ) {
+    return outcome;
+  }
+  return { status: "unknown", reasonCategory: null };
+}
+
+function savedAssessmentOutcomeLabel(result: LlmCheckResult): string {
+  const outcome = savedAssessmentOutcome(result);
+  if (outcome.status === "complete") return "Assessment complete";
+  if (outcome.status === "fallback") return OUTCOME_LABELS[outcome.reasonCategory];
+  return "Assessment outcome: legacy / unknown";
 }
 
 function deriveReportData(result: LlmCheckResult, tracked: string[]): ReportData {
-  const assess = result.assessment || null;
+  const assess = assessmentForDisplay(result);
   const idx = authorityIndexFor(result);
   const grade = assess && assess.grade ? assess.grade : idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
   const presencePct = result.totalProbes > 0 ? Math.round((result.totalMentions / result.totalProbes) * 100) : 0;
@@ -900,7 +1054,7 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
       return;
     }
     const aioLogo = `${window.location.origin}${import.meta.env.BASE_URL}images/logo-color.png`;
-    const assess = result.assessment || null;
+    const assess = assessmentForDisplay(result);
     const idx = authorityIndexFor(result);
     const grade = assess && assess.grade ? assess.grade : idx >= 75 ? "A*" : idx >= 65 ? "A" : idx >= 50 ? "B" : idx >= 30 ? "C" : idx >= 10 ? "D" : "E";
     const gradeRead =
@@ -984,6 +1138,12 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         : `<p class="muted box">No discovery gaps - ${escapeHtml(result.companyName)} appeared in every probed query.</p>`;
 
     const summaryHtml = assess && assess.summary ? escapeHtml(assess.summary) : execSummary;
+    const fallbackWarningBlock = !assess
+      ? `<div class="fallback-warning">
+      <h2>Assessment incomplete - visibility fallback</h2>
+      <p>${escapeHtml(assessmentFallbackReason(result))} This is not the complete AI Authority Scorecard.</p>
+    </div>`
+      : "";
 
     const scorecardBlock = assess
       ? `<div class="card">
@@ -1101,6 +1261,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   h1 { font-size: 24px; color: #165265; margin: 0 0 4px; }
   .sub { color: #6B7280; font-size: 13px; margin: 0 0 18px; }
   .card { border: 1px solid #E5E5E5; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  .fallback-warning { background: #FFFBEB; border: 2px solid #F59E0B; border-radius: 14px; padding: 16px 18px; margin-bottom: 16px; color: #78350F; }
+  .fallback-warning h2 { color: #92400E; font-size: 13px; margin-bottom: 6px; }
+  .fallback-warning p { margin: 0; font-size: 13px; line-height: 1.55; }
   .index-row { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
   .index-num { font-size: 50px; font-weight: 700; color: #165265; line-height: 1; }
   .index-num span { font-size: 22px; color: #9CA3AF; font-weight: 600; }
@@ -1161,13 +1324,14 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
   <div class="wrap">
     <h1>AI Authority &amp; Earned-Media Visibility Assessment</h1>
     <p class="sub">${escapeHtml(result.companyName)} &middot; ${escapeHtml(checked)} &middot; Blind probes across ChatGPT and Claude${sectorsUsed.length > 0 ? ` &middot; ${escapeHtml(sectorsUsed.join(", "))}` : ""}${trackedNormExport.length > 0 ? ` &middot; ${trackedNormExport.length} tracked competitors` : ""}</p>
+    ${fallbackWarningBlock}
     <div class="card">
       <div class="index-row">
         <div>
           <div class="index-num">${idx}<span> / 100</span></div>
-          <div class="index-label">AI Authority Index</div>
+          <div class="index-label">${assess ? "AI Authority Index" : "Visibility score"}</div>
         </div>
-        <div class="grade ${grade}">Grade ${grade}</div>
+        ${assess ? `<div class="grade ${grade}">Grade ${grade}</div>` : ""}
         <div class="stats">
           <div class="stat"><b>${presencePct}%</b><small>Presence</small></div>
           <div class="stat"><b>${sov}%</b><small>Share of voice</small></div>
@@ -1175,7 +1339,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
       </div>
       <div style="margin-top:14px;font-size:11px;color:#6B7280;">ChatGPT: ${result.byModel.chatgpt.rate}% &middot; Claude: ${result.byModel.claude.rate}% &middot; Cycle ${cycleData.cycle}</div>
-      <p style="margin-top:10px;font-size:10px;color:#9CA3AF;">Methodology: the Authority Index applies intent-tier weighting &mdash; buyer-intent queries (1.5&times;) carry more signal than sector queries (1.0&times;) or the direct identity probe (0.5&times;).</p>
+      <p style="margin-top:10px;font-size:10px;color:#9CA3AF;">${assess
+        ? "Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5&times;) carry more signal than sector queries (1.0&times;) or the direct identity probe (0.5&times;)."
+        : "Methodology: this visibility score is based on the valid blind-probe evidence only. The structured AI Authority assessment was not completed."}</p>
     </div>
     <div class="card">
       <h2>Executive summary</h2>
@@ -1766,11 +1932,19 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                 const affected = isLikelyAffectedByCorroborationFix(a.result);
                 const superseded = affected && isSupersededByNewerRun(a, savedAudits);
                 const showWarning = affected && !superseded;
+                const assessmentOutcome = savedAssessmentOutcome(a.result);
+                const assessmentFallback = assessmentOutcome.status === "fallback";
+                const outcomeColour =
+                  assessmentOutcome.status === "complete"
+                    ? vars.green
+                    : assessmentFallback
+                      ? "#D97706"
+                      : vars.g400;
                 return (
                   <div
                     key={a.id}
                     className="flex flex-col rounded-lg border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-[rgba(200,73,122,0.03)]"
-                    style={{ borderColor: showWarning ? "#F59E0B" : vars.g200 }}
+                    style={{ borderColor: showWarning || assessmentFallback ? "#F59E0B" : vars.g200 }}
                   >
                     <div className="flex items-center gap-3 p-3">
                       <button onClick={() => openSavedAudit(a)} className="flex items-center gap-3 flex-1 text-left">
@@ -1786,6 +1960,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
                           </p>
                           <p className="text-[11px] font-light" style={{ color: vars.g500 }}>
                             Saved {new Date(a.savedAt).toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: outcomeColour }}>
+                            {savedAssessmentOutcomeLabel(a.result)}
                           </p>
                         </div>
                       </button>
@@ -1899,6 +2076,30 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </div>
       </div>
 
+      {!rd.assess && (
+        <div
+          className="rounded-xl border-2 px-4 py-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3"
+          style={{ background: "#FFFBEB", borderColor: "#F59E0B" }}
+        >
+          <AlertTriangle size={18} className="shrink-0 mt-0.5" style={{ color: "#D97706" }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold mb-1" style={{ color: "#92400E" }}>
+              Authority assessment incomplete - showing visibility fallback
+            </p>
+            <p className="text-[12px] leading-relaxed" style={{ color: "#78350F" }}>
+              {assessmentFallbackReason(result)} This is not the complete AI Authority Scorecard.
+            </p>
+          </div>
+          <button
+            onClick={() => { setResult(null); setError(""); setResultIsFromSaved(false); }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold shrink-0 transition-all hover:brightness-95"
+            style={{ background: "#D97706", color: "white" }}
+          >
+            <Repeat size={13} /> Retry audit
+          </button>
+        </div>
+      )}
+
       {/* Stale-result warning for saved audits affected by the corroboration-fix */}
       {resultIsFromSaved && isLikelyAffectedByCorroborationFix(result) &&
         !savedAudits.some(
@@ -1935,12 +2136,16 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
           <div className="flex items-center gap-5 flex-shrink-0 lg:border-r lg:pr-7" style={{ borderColor: vars.g200 }}>
             <ScoreRing score={rd.idx} unit="" size={120} />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.g400 }}>AI Authority Index</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: vars.g400 }}>
+                {rd.assess ? "AI Authority Index" : "Visibility score"}
+              </p>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-4xl font-bold leading-none" style={{ color: vars.navy }}>{rd.idx}</span>
                 <span className="text-base font-medium" style={{ color: vars.g400 }}>/ 100</span>
               </div>
-              <span className="inline-block mt-2 text-sm font-bold px-2.5 py-1 rounded-lg" style={gradeStyle(rd.idx)}>Grade {rd.grade}</span>
+              {rd.assess && (
+                <span className="inline-block mt-2 text-sm font-bold px-2.5 py-1 rounded-lg" style={gradeStyle(rd.idx)}>Grade {rd.grade}</span>
+              )}
               {previousScore !== null && (() => {
                 const delta = rd.idx - previousScore;
                 const positive = delta > 0;
@@ -1975,7 +2180,9 @@ export default function LlmCheckPage({ activeClient, onNavigate, pendingAuditId,
         </p>
         <p className="text-[10px] mt-2 flex items-start gap-1" style={{ color: vars.g400 }}>
           <Info size={10} className="flex-shrink-0 mt-0.5" />
-          Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.
+          {rd.assess
+            ? 'Methodology: the Authority Index applies intent-tier weighting - buyer-intent queries (1.5x) carry more signal than sector queries (1.0x) or the direct identity probe (0.5x), so a brand cited on high-intent buyer questions scores meaningfully higher than one cited only on generic "who are the leaders in X" probes.'
+            : "Methodology: this visibility score is based on the valid blind-probe evidence only. The structured AI Authority assessment was not completed."}
         </p>
       </div>
 
