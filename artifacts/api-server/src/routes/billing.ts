@@ -20,6 +20,7 @@ import {
   withBillingLock,
   claimCheckout,
   releaseCheckout,
+  getCheckoutErrorResponse,
 } from "../lib/billing";
 import {
   PLAN_PRICES,
@@ -37,11 +38,14 @@ import { getCompanyBillingRecord } from "../lib/company-billing-record";
 
 const router: IRouter = Router();
 
-// Server-side billing access rules (mirrors the billing-details card, but
-// enforced here - UI hiding is never enough):
-//  - agency-managed partner clients can NEVER reach billing (the agency pays);
-//  - members must be owner/admin/billing (undefined = legacy full session);
-//  - master admin accounts do not subscribe.
+function sendCheckoutError(res: Response, err: unknown): void {
+  const known = getCheckoutErrorResponse(err);
+  if (known) {
+    res.status(known.status).json({ error: known.error, code: known.code });
+    return;
+  }
+  res.status(500).json({ error: "Could not start checkout. Please try again." });
+}
 function memberMayBill(req: Request): boolean {
   const r = req.account?.membershipRole;
   return r === undefined || r === "owner" || r === "admin" || r === "billing";
@@ -272,7 +276,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
 
     let sessionId: string | undefined;
     try {
-      const base = getAppBaseUrl();
+    const base = getAppBaseUrl();
       const session = await createCheckoutSession({
         slug: billingSlug,
         plan: ctx.plan,
@@ -326,7 +330,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
     }
   } catch (err) {
     logger.error({ err }, "billing: failed to create checkout session");
-    res.status(500).json({ error: "Could not start checkout. Please try again." });
+    sendCheckoutError(res, err);
   }
 });
 
@@ -425,7 +429,7 @@ router.post("/platform/billing/project-checkout", requirePlatformAuth, async (re
     res.json({ url });
   } catch (err) {
     logger.error({ err }, "billing: failed to create project checkout session");
-    res.status(500).json({ error: "Could not start checkout. Please try again." });
+    sendCheckoutError(res, err);
   }
 });
 

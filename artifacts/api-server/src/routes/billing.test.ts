@@ -183,9 +183,6 @@ const stripeCalls = vi.hoisted(() => ({
   subscriptionCancels: [] as string[],
   // Records session ids that were expired via checkout.sessions.expire.
   sessionExpires: [] as string[],
-  // Per-id metadata for checkout.sessions.retrieve, used for legacy claims
-  // created before pending checkout records stored their billing frequency.
-  sessionRetrieveOverrides: {} as Record<string, { metadata?: Record<string, string> | null }>,
   // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
   rejectFinalize: false,
   // When true, the next checkout.sessions.expire call will throw (simulates a Stripe API failure).
@@ -193,8 +190,7 @@ const stripeCalls = vi.hoisted(() => ({
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
-  // When true, the next sessions.create with automatic_tax throws Stripe's
-  // test-mode missing head-office address error.
+  // When true, Stripe returns its real missing head-office-address wording.
   rejectTaxHeadOfficeNext: false,
   // When true, tax.calculations.create throws, simulating Tax not activated.
   rejectTaxCalculation: false,
@@ -263,28 +259,24 @@ vi.mock("../lib/stripe-client", () => ({
       checkout: {
         sessions: {
           create: (params: any) => {
-            if (stripeCalls.rejectTaxNext && params.automatic_tax?.enabled) {
+            if (
+              (stripeCalls.rejectTaxNext || stripeCalls.rejectTaxHeadOfficeNext) &&
+              params.automatic_tax?.enabled
+            ) {
+              const missingHeadOffice = stripeCalls.rejectTaxHeadOfficeNext;
               stripeCalls.rejectTaxNext = false;
-              return Promise.reject(
-                new Error("You must activate Stripe Tax and set an origin address before using automatic_tax."),
-              );
-            }
-            if (stripeCalls.rejectTaxHeadOfficeNext && params.automatic_tax?.enabled) {
               stripeCalls.rejectTaxHeadOfficeNext = false;
               return Promise.reject(
                 new Error(
-                  "You must have a valid head office address to enable automatic tax calculation in test mode. Visit https://dashboard.stripe.com/test/settings/tax to update it.",
+                  missingHeadOffice
+                    ? "You must have a valid head office address to enable automatic tax calculation in test mode. Visit https://dashboard.stripe.com/test/settings/tax to update it."
+                    : "You must activate Stripe Tax and set an origin address before using automatic_tax.",
                 ),
               );
             }
             stripeCalls.sessions.push(params);
             return Promise.resolve({ id: "cs_test_mock", url: "https://checkout.stripe.com/test-session" });
           },
-          retrieve: (id: string) =>
-            Promise.resolve({
-              id,
-              metadata: stripeCalls.sessionRetrieveOverrides[id]?.metadata ?? null,
-            }),
           expire: (id: string) => {
             if (stripeCalls.rejectExpire) {
               stripeCalls.rejectExpire = false;
@@ -375,6 +367,8 @@ import {
   assignAddonToNewProject,
   syncStripeBillingDetails,
   vatNumberToTaxId,
+  CheckoutStartError,
+  getCheckoutErrorResponse,
   claimCheckout,
   finalizeCheckoutClaim,
   releaseCheckout,
@@ -773,16 +767,16 @@ describe("billing routes", () => {
     expect(params.metadata.slug).toBe("untaxed-co");
   });
 
-  it("falls back to a taxless session when test-mode head office tax setup is incomplete", async () => {
-    const { sid } = await seedWorkspace("head-office-missing-co", "owner@head-office-missing.test", {
-      accountRole: "client",
-    });
+  it("falls back in test mode when Stripe Tax has no valid head office address", async () => {
+    const { sid } = await seedWorkspace("tax-address-co", "owner@tax-address.test", { accountRole: "client" });
     stripeCalls.rejectTaxHeadOfficeNext = true;
-    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
     expect(res.status).toBe(200);
+    expect(res.json.url).toBe("https://checkout.stripe.com/test-session");
     const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
     expect(params.automatic_tax).toBeUndefined();
-    expect(params.metadata.slug).toBe("head-office-missing-co");
+    expect(params.metadata.slug).toBe("tax-address-co");
+    expect(params.metadata.frequency).toBe("quarterly");
   });
 
   it("refuses a taxless fallback in live mode, even after a test-mode fallback in the same process", async () => {
@@ -807,11 +801,56 @@ describe("billing routes", () => {
       stripeCalls.rejectTaxNext = true;
       const sessionsBefore = stripeCalls.sessions.length;
       const liveRes = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
-      expect(liveRes.status).toBe(500); // live mode: checkout refused
+      expect(liveRes.status).toBe(503); // live mode: checkout refused
+      expect(liveRes.json).toEqual({
+        error: "Stripe Tax setup is incomplete. The account owner must activate Stripe Tax and set a valid head office address in Stripe, then try again.",
+        code: "stripe_tax_incomplete",
+      });
       expect(stripeCalls.sessions.length).toBe(sessionsBefore); // no taxless session created
     } finally {
       stripeCalls.secretKey = "sk_test_x";
     }
+  });
+
+  it("maps known Stripe setup failures to actionable checkout responses", () => {
+    expect(
+      getCheckoutErrorResponse(
+        Object.assign(new Error("Invalid API Key provided"), {
+          type: "StripeAuthenticationError",
+        }),
+      ),
+    ).toEqual({
+      status: 503,
+      error: "Checkout is temporarily unavailable because the Stripe connection needs attention. Please contact support.",
+      code: "stripe_connection_unavailable",
+    });
+
+    expect(
+      getCheckoutErrorResponse(
+        Object.assign(new Error("No such price: price_missing"), {
+          code: "resource_missing",
+        }),
+      ),
+    ).toEqual({
+      status: 503,
+      error: "Checkout is temporarily unavailable because the Stripe price setup is incomplete. Please contact support.",
+      code: "stripe_price_unavailable",
+    });
+
+    expect(
+      getCheckoutErrorResponse(
+        new CheckoutStartError(
+          "discount_verification_failed",
+          "We could not verify this account's discount, so no payment was started. Please contact support before retrying.",
+        ),
+      ),
+    ).toEqual({
+      status: 503,
+      error: "We could not verify this account's discount, so no payment was started. Please contact support before retrying.",
+      code: "discount_verification_failed",
+    });
+
+    expect(getCheckoutErrorResponse(new Error("unexpected failure"))).toBeNull();
   });
 
   it("creates the Stripe customer with address and VAT number from billing details", async () => {
@@ -1453,7 +1492,7 @@ describe("billing hardening", () => {
     const { sid } = await seedWorkspace("checkrace-co", "owner@checkrace.test", { accountRole: "client" });
     // Simulate another process having claimed the checkout slot but not yet created
     // the Stripe session (no url in the claim value).
-    const claimResult = await claimCheckout("checkrace-co", "annual");
+    const claimResult = await claimCheckout("checkrace-co");
     if (!claimResult.claimed) throw new Error("expected first claim to succeed");
     try {
       const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
@@ -1515,61 +1554,6 @@ describe("billing hardening", () => {
     expect(res3.json.error).toMatch(/active subscription/i);
   });
 
-  it("switching billing frequency expires the open session and creates a matching checkout", async () => {
-    const { sid } = await seedWorkspace("switch-frequency-co", "owner@switch-frequency.test", {
-      accountRole: "agency",
-    });
-
-    const annual = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
-    expect(annual.status).toBe(200);
-    const sessionsBeforeSwitch = stripeCalls.sessions.length;
-    const expiresBeforeSwitch = stripeCalls.sessionExpires.length;
-
-    const quarterly = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
-    expect(quarterly.status).toBe(200);
-    expect(stripeCalls.sessionExpires.slice(expiresBeforeSwitch)).toContain("cs_test_mock");
-    expect(stripeCalls.sessions).toHaveLength(sessionsBeforeSwitch + 1);
-
-    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
-    expect(params.metadata.frequency).toBe("quarterly");
-    expect(params.line_items).toEqual([{ price: "price_mock_1", quantity: 1 }]);
-
-    const [claim] = await db
-      .select({ value: platformMetaTable.value })
-      .from(platformMetaTable)
-      .where(eq(platformMetaTable.key, "checkout:pending:switch-frequency-co"));
-    expect(JSON.parse(claim!.value).frequency).toBe("quarterly");
-    await cleanupCheckoutClaims();
-  });
-
-  it("switching frequency replaces a legacy open session whose claim has no frequency", async () => {
-    const { sid } = await seedWorkspace("legacy-frequency-co", "owner@legacy-frequency.test", {
-      accountRole: "agency",
-    });
-    await db.insert(platformMetaTable).values({
-      key: "checkout:pending:legacy-frequency-co",
-      value: JSON.stringify({
-        at: new Date().toISOString(),
-        tok: "legacy-frequency-token",
-        sid: "cs_legacy_annual",
-        url: "https://checkout.stripe.com/legacy-annual",
-      }),
-    });
-    stripeCalls.sessionRetrieveOverrides.cs_legacy_annual = {
-      metadata: { frequency: "annual" },
-    };
-    const sessionsBeforeSwitch = stripeCalls.sessions.length;
-
-    const quarterly = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
-    expect(quarterly.status).toBe(200);
-    expect(stripeCalls.sessionExpires).toContain("cs_legacy_annual");
-    expect(stripeCalls.sessions).toHaveLength(sessionsBeforeSwitch + 1);
-    expect((stripeCalls.sessions[stripeCalls.sessions.length - 1] as any).metadata.frequency).toBe("quarterly");
-
-    delete stripeCalls.sessionRetrieveOverrides.cs_legacy_annual;
-    await cleanupCheckoutClaims();
-  });
-
   it("TTL preemption: a stale claim is preempted but the old claimant's release does not remove the new claim", async () => {
     // Plant a stale claim directly (older than CHECKOUT_PENDING_TTL_MS).
     const staleToken = "stale-token-uuid-for-test";
@@ -1580,7 +1564,7 @@ describe("billing hardening", () => {
     });
 
     // New process preempts the stale claim.
-    const result = await claimCheckout("ttlrace-co", "annual");
+    const result = await claimCheckout("ttlrace-co");
     expect(result.claimed).toBe(true);
     if (!result.claimed) throw new Error("expected preemption to succeed");
     const newToken = result.claimToken;
@@ -1616,7 +1600,7 @@ describe("billing hardening", () => {
     });
 
     // Even though the claim is stale, it has a sid - it must not be preempted.
-    const result = await claimCheckout("finalized-stale-co", "annual");
+    const result = await claimCheckout("finalized-stale-co");
     expect(result.claimed).toBe(false);
     if (result.claimed) throw new Error("expected finalized claim to block preemption");
     expect(result.existingUrl).toBe("https://checkout.stripe.com/finalized-open");

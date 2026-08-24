@@ -225,7 +225,7 @@ export async function withBillingLock<T>(
 // A DB-backed pending-checkout record bridges that gap.
 //
 // Design:
-//  - The first request INSERTs a claim with { at, tok, frequency, sid?, url? }.
+//  - The first request INSERTs a claim with { at, tok, sid?, url? }.
 //    "at" is the claim timestamp (for TTL), "tok" is a unique token (UUID).
 //  - After the Stripe session is created, the claim is updated (finalizeCheckoutClaim)
 //    to include the session id and url. Subsequent requests can reuse this URL.
@@ -250,24 +250,23 @@ export const CHECKOUT_PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const checkoutPendingKey = (slug: string) => `checkout:pending:${normUsername(slug)}`;
 
 type CheckoutClaim = {
-  at: string;                         // ISO timestamp of claim (used for TTL comparison)
-  tok: string;                        // unique claim token (UUID); release is conditional on this
-  frequency?: BillingFrequency;       // optional only for claims created before frequency-aware reuse
-  sid?: string;                       // Stripe Checkout Session id (set after session created)
-  url?: string;                       // Stripe Checkout Session url (set after session created)
+  at: string;
+  tok: string;
+  frequency?: BillingFrequency;
+  sid?: string;
+  url?: string;
 };
 
 // Atomically claim the checkout-in-progress slot for a billing account.
 //
 // Returns:
 //  { claimed: true,  claimToken }               - slot acquired, proceed to create session
-//  { claimed: false, existingUrl, ... }         - live session already open; the caller may
-//                                                 reuse it only when its frequency still matches
+//  { claimed: false, existingUrl }              - live session already open; reuse this URL
 //  { claimed: false, existingUrl: undefined }   - mid-claim race (another process is creating
 //                                                  the session but has not finalized yet)
 export async function claimCheckout(
   slug: string,
-  frequency: BillingFrequency,
+  frequency?: BillingFrequency,
 ): Promise<
   | { claimed: true; claimToken: string }
   | {
@@ -335,7 +334,7 @@ export async function finalizeCheckoutClaim(
   claimToken: string,
   sessionId: string,
   sessionUrl: string,
-  frequency: BillingFrequency,
+  frequency?: BillingFrequency,
 ): Promise<void> {
   const key = checkoutPendingKey(slug);
   const value = JSON.stringify({
@@ -1361,23 +1360,95 @@ async function attachVatNumber(stripe: Stripe, customerId: string, slug: string,
   }
 }
 
-// True only when the Stripe error unambiguously means that Stripe Tax is not
-// activated or is incomplete for this Checkout request (an invalid_request
-// error on automatic_tax, Stripe's activation message, or the known
-// test-mode missing-head-office-address message). Deliberately narrow: other
-// tax/config errors must FAIL the checkout rather than silently selling
-// without VAT.
-function isTaxUnavailableError(err: unknown): boolean {
+// True only when the Stripe error unambiguously means "Stripe Tax has not
+// been activated in the dashboard yet" (an invalid_request_error on the
+// automatic_tax parameter, or Stripe's activation message). Deliberately
+// narrow: other tax/config errors must FAIL the checkout rather than silently
+// selling without VAT.
+function isTaxConfigurationError(err: unknown): boolean {
   const e = err as { type?: string; param?: string; message?: string } | null;
   if (!e || e.type !== "StripeInvalidRequestError") {
     // Plain Errors from mocks/tests carry no type; fall through to message.
     if (e?.type !== undefined) return false;
   }
-  if (e?.param === "automatic_tax") return true;
+  if (e?.param?.startsWith("automatic_tax")) return true;
   const msg = e?.message ?? "";
-  if (/stripe tax/i.test(msg) && /activat/i.test(msg)) return true;
-  return /valid head office address/i.test(msg) &&
-    /automatic tax calculation in test mode/i.test(msg);
+  return (
+    (/stripe tax/i.test(msg) && /activat/i.test(msg)) ||
+    (/automatic tax calculation/i.test(msg) && /head office address/i.test(msg))
+  );
+}
+
+export type CheckoutStartFailureCode =
+  | "stripe_tax_incomplete"
+  | "discount_verification_failed";
+
+export class CheckoutStartError extends Error {
+  readonly code: CheckoutStartFailureCode;
+  readonly publicMessage: string;
+  readonly statusCode: number;
+
+  constructor(
+    code: CheckoutStartFailureCode,
+    publicMessage: string,
+    options?: { cause?: unknown; statusCode?: number },
+  ) {
+    super(publicMessage, { cause: options?.cause });
+    this.name = "CheckoutStartError";
+    this.code = code;
+    this.publicMessage = publicMessage;
+    this.statusCode = options?.statusCode ?? 503;
+  }
+}
+
+export type CheckoutErrorResponse = {
+  status: number;
+  error: string;
+  code: string;
+};
+
+// Convert known checkout setup failures into safe, actionable API responses.
+// Unknown failures remain generic so internal or Stripe details are never
+// leaked to the browser.
+export function getCheckoutErrorResponse(err: unknown): CheckoutErrorResponse | null {
+  if (err instanceof CheckoutStartError) {
+    return {
+      status: err.statusCode,
+      error: err.publicMessage,
+      code: err.code,
+    };
+  }
+
+  const e = err as { type?: string; code?: string; message?: string } | null;
+  const type = e?.type ?? "";
+  const code = e?.code ?? "";
+  const message = e?.message ?? "";
+
+  if (
+    type === "StripeAuthenticationError" ||
+    type === "StripePermissionError" ||
+    /^(api_key_expired|account_invalid|oauth_not_supported)$/.test(code) ||
+    /invalid api key|stripe integration not connected|missing secret key|failed to fetch stripe credentials/i.test(message)
+  ) {
+    return {
+      status: 503,
+      error: "Checkout is temporarily unavailable because the Stripe connection needs attention. Please contact support.",
+      code: "stripe_connection_unavailable",
+    };
+  }
+
+  if (
+    code === "resource_missing" &&
+    /\b(price|product)\b/i.test(message)
+  ) {
+    return {
+      status: 503,
+      error: "Checkout is temporarily unavailable because the Stripe price setup is incomplete. Please contact support.",
+      code: "stripe_price_unavailable",
+    };
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1386,8 +1457,8 @@ function isTaxUnavailableError(err: unknown): boolean {
 
 // Probe whether Stripe Tax is activated by attempting a stateless Tax
 // Calculation. This is read-only (calculations are not persisted) so it has
-// no side effects. If Tax is not configured, the call throws an error that
-// matches isTaxNotActivatedError and a loud warning is logged. Called at
+// no side effects. If Tax is not fully configured, the call throws an error
+// that matches isTaxConfigurationError and a loud warning is logged. Called at
 // server startup in live mode only; test-mode omission is intentional since
 // Tax activation is a one-time dashboard step.
 export async function warnIfTaxDeactivated(stripe: Stripe): Promise<void> {
@@ -1399,12 +1470,12 @@ export async function warnIfTaxDeactivated(stripe: Stripe): Promise<void> {
       });
     // Success - Stripe Tax is active; nothing to warn about.
   } catch (err) {
-    if (isTaxUnavailableError(err)) {
+    if (isTaxConfigurationError(err)) {
       logger.error(
         {},
-        "billing: STARTUP - Stripe Tax is NOT active or fully configured in LIVE mode. " +
+        "billing: STARTUP - Stripe Tax is NOT fully configured in LIVE mode. " +
           "All live checkout attempts will be refused until you activate Stripe Tax " +
-          "and set a valid head-office address in the Stripe dashboard. " +
+          "and set a valid head office address in the Stripe dashboard. " +
           "See the 'Owner setup' section in replit.md for steps.",
       );
       return;
@@ -1451,17 +1522,21 @@ async function createSessionWithTax(
   try {
     return await stripe.checkout.sessions.create(withTax);
   } catch (err) {
-    if (!isTaxUnavailableError(err)) throw err;
+    if (!isTaxConfigurationError(err)) throw err;
     if (await isLiveStripeMode()) {
       logger.error(
         { err, slug },
-        "billing: Stripe Tax is not active or fully configured in LIVE mode - checkout refused. Configure Stripe Tax in the dashboard (see replit.md).",
+        "billing: Stripe Tax setup is incomplete in LIVE mode - checkout refused. Activate Stripe Tax and set a valid head office address (see replit.md).",
       );
-      throw err;
+      throw new CheckoutStartError(
+        "stripe_tax_incomplete",
+        "Stripe Tax setup is incomplete. The account owner must activate Stripe Tax and set a valid head office address in Stripe, then try again.",
+        { cause: err },
+      );
     }
     logger.error(
       { err, slug },
-      "billing: Stripe Tax is not active or fully configured - TEST checkout created WITHOUT VAT. Configure Stripe Tax in the dashboard (see replit.md).",
+      "billing: Stripe Tax setup is incomplete - TEST checkout created WITHOUT VAT. Activate Stripe Tax and set a valid head office address (see replit.md).",
     );
     return stripe.checkout.sessions.create(params);
   }
@@ -1504,7 +1579,11 @@ export async function createCheckoutSession(opts: {
     // Fail LOUD: silently charging an invited beta tester full price would be
     // worse than a failed checkout attempt.
     logger.error({ err, slug }, "billing: failed to resolve discount for checkout");
-    throw err;
+    throw new CheckoutStartError(
+      "discount_verification_failed",
+      "We could not verify this account's discount, so no payment was started. Please contact support before retrying.",
+      { cause: err },
+    );
   }
 
   const extraMeta: Record<string, string> = {};

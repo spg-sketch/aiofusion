@@ -164,7 +164,6 @@ This project uses **two separate Replit Deployments** to keep experimental featu
 | Secret | Value | Purpose |
 |---|---|---|
 | `DEPLOYMENT_ENV` | `staging` | Tells the server it is running in the staging environment; triggers the DB isolation guard below |
-| `CANONICAL_DOMAIN` | `staging.aiofusion.ai` | Required for absolute email links and email-logo URLs. Prevents staging invites, resets and security alerts pointing to the live site. |
 | `PRODUCTION_DB_IDENTIFIERS` | *(comma-separated list of production DB hostnames / DB names, e.g. `prod-db.example.com,aio_prod`)* | **Required when `DEPLOYMENT_ENV=staging`.** Substrings that must **not** appear in `DATABASE_URL` — the server exits non-zero if unset or if any identifier matches, preventing accidental production DB usage |
 | `VITE_FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables AI Coverage Search in the frontend |
 | `FEATURE_AI_COVERAGE_SEARCH` | `true` | Enables the matching API route on the server |
@@ -219,11 +218,11 @@ Hit `https://<staging-url>/api/healthz` to confirm flags are on, and `https://<p
 Checkout is built to charge VAT automatically via Stripe Tax, but Stripe requires a one-time activation in the Stripe dashboard (test mode and, later, live mode separately):
 
 1. In the Stripe dashboard, go to **Settings → Tax** and click **Activate Stripe Tax**.
-2. Set your **origin address** (your business address) when prompted.
+2. Set a valid **head office/origin address** (your business address) when prompted. Stripe rejects automatic tax calculation if this address is missing, even in test mode.
 3. Add your **tax registrations** (at minimum a UK VAT registration; add EU OSS or per-country registrations as needed).
 4. Under **Settings → Emails**, turn on **"Email finished invoices to customers"** (and receipts) so every subscription payment sends a compliant invoice PDF automatically.
 
-Until Stripe Tax is active and fully configured, behaviour differs by mode. In **test mode**, checkout still works: the server detects Stripe's known Tax activation or missing-test-head-office-address errors, logs the condition loudly, and creates the session without tax so test payments are not blocked. In **live mode**, checkout is refused instead — the business must never silently sell without VAT, so live payments fail with an error until Stripe Tax is active and fully configured. Once configured, no code change is needed — VAT appears at checkout automatically, customers confirm their billing address, and business customers can enter a VAT number (valid EU/UK numbers apply reverse charge where appropriate). Billing details saved in the app (billing email, VAT number, address) sync to the Stripe customer so invoices carry them.
+Until Stripe Tax is fully configured, behaviour differs by mode. In **test mode**, checkout still works: the server detects both activation and missing-head-office-address errors, logs them loudly, and creates the session without tax so test payments are not blocked. In **live mode**, checkout is refused instead - the business must never silently sell without VAT, so live payments fail with an actionable setup message until Stripe Tax is active and has a valid head office address. Once configured, no code change is needed - VAT appears at checkout automatically, customers confirm their billing address, and business customers can enter a VAT number (valid EU/UK numbers apply reverse charge where appropriate). Billing details saved in the app (billing email, VAT number, address) sync to the Stripe customer so invoices carry them.
 
 ### Post-activation verification checklist (test mode)
 
