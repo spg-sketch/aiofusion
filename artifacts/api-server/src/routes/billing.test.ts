@@ -188,6 +188,9 @@ const stripeCalls = vi.hoisted(() => ({
   // When true, the next sessions.create with automatic_tax throws the
   // "Stripe Tax not activated" error to exercise the fallback path.
   rejectTaxNext: false,
+  // When true, the next sessions.create with automatic_tax throws Stripe's
+  // test-mode missing head-office address error.
+  rejectTaxHeadOfficeNext: false,
   // When true, tax.calculations.create throws, simulating Tax not activated.
   rejectTaxCalculation: false,
   // Swappable so tests can simulate a test-to-live credential change.
@@ -259,6 +262,14 @@ vi.mock("../lib/stripe-client", () => ({
               stripeCalls.rejectTaxNext = false;
               return Promise.reject(
                 new Error("You must activate Stripe Tax and set an origin address before using automatic_tax."),
+              );
+            }
+            if (stripeCalls.rejectTaxHeadOfficeNext && params.automatic_tax?.enabled) {
+              stripeCalls.rejectTaxHeadOfficeNext = false;
+              return Promise.reject(
+                new Error(
+                  "You must have a valid head office address to enable automatic tax calculation in test mode. Visit https://dashboard.stripe.com/test/settings/tax to update it.",
+                ),
               );
             }
             stripeCalls.sessions.push(params);
@@ -746,6 +757,18 @@ describe("billing routes", () => {
     const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
     expect(params.automatic_tax).toBeUndefined();
     expect(params.metadata.slug).toBe("untaxed-co");
+  });
+
+  it("falls back to a taxless session when test-mode head office tax setup is incomplete", async () => {
+    const { sid } = await seedWorkspace("head-office-missing-co", "owner@head-office-missing.test", {
+      accountRole: "client",
+    });
+    stripeCalls.rejectTaxHeadOfficeNext = true;
+    const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(res.status).toBe(200);
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.automatic_tax).toBeUndefined();
+    expect(params.metadata.slug).toBe("head-office-missing-co");
   });
 
   it("refuses a taxless fallback in live mode, even after a test-mode fallback in the same process", async () => {

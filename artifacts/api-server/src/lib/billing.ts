@@ -1296,12 +1296,13 @@ async function attachVatNumber(stripe: Stripe, customerId: string, slug: string,
   }
 }
 
-// True only when the Stripe error unambiguously means "Stripe Tax has not
-// been activated in the dashboard yet" (an invalid_request_error on the
-// automatic_tax parameter, or Stripe's activation message). Deliberately
-// narrow: other tax/config errors must FAIL the checkout rather than silently
-// selling without VAT.
-function isTaxNotActivatedError(err: unknown): boolean {
+// True only when the Stripe error unambiguously means that Stripe Tax is not
+// activated or is incomplete for this Checkout request (an invalid_request
+// error on automatic_tax, Stripe's activation message, or the known
+// test-mode missing-head-office-address message). Deliberately narrow: other
+// tax/config errors must FAIL the checkout rather than silently selling
+// without VAT.
+function isTaxUnavailableError(err: unknown): boolean {
   const e = err as { type?: string; param?: string; message?: string } | null;
   if (!e || e.type !== "StripeInvalidRequestError") {
     // Plain Errors from mocks/tests carry no type; fall through to message.
@@ -1309,7 +1310,9 @@ function isTaxNotActivatedError(err: unknown): boolean {
   }
   if (e?.param === "automatic_tax") return true;
   const msg = e?.message ?? "";
-  return /stripe tax/i.test(msg) && /activat/i.test(msg);
+  if (/stripe tax/i.test(msg) && /activat/i.test(msg)) return true;
+  return /valid head office address/i.test(msg) &&
+    /automatic tax calculation in test mode/i.test(msg);
 }
 
 // ---------------------------------------------------------------------------
@@ -1331,12 +1334,12 @@ export async function warnIfTaxDeactivated(stripe: Stripe): Promise<void> {
       });
     // Success - Stripe Tax is active; nothing to warn about.
   } catch (err) {
-    if (isTaxNotActivatedError(err)) {
+    if (isTaxUnavailableError(err)) {
       logger.error(
         {},
-        "billing: STARTUP - Stripe Tax is NOT activated in LIVE mode. " +
+        "billing: STARTUP - Stripe Tax is NOT active or fully configured in LIVE mode. " +
           "All live checkout attempts will be refused until you activate Stripe Tax " +
-          "and set an origin address in the Stripe dashboard. " +
+          "and set a valid head-office address in the Stripe dashboard. " +
           "See the 'Owner setup' section in replit.md for steps.",
       );
       return;
@@ -1383,17 +1386,17 @@ async function createSessionWithTax(
   try {
     return await stripe.checkout.sessions.create(withTax);
   } catch (err) {
-    if (!isTaxNotActivatedError(err)) throw err;
+    if (!isTaxUnavailableError(err)) throw err;
     if (await isLiveStripeMode()) {
       logger.error(
         { err, slug },
-        "billing: Stripe Tax is not activated in LIVE mode - checkout refused. Activate Stripe Tax in the dashboard (see replit.md).",
+        "billing: Stripe Tax is not active or fully configured in LIVE mode - checkout refused. Configure Stripe Tax in the dashboard (see replit.md).",
       );
       throw err;
     }
     logger.error(
       { err, slug },
-      "billing: Stripe Tax is not activated - TEST checkout created WITHOUT VAT. Activate Stripe Tax in the dashboard (see replit.md).",
+      "billing: Stripe Tax is not active or fully configured - TEST checkout created WITHOUT VAT. Configure Stripe Tax in the dashboard (see replit.md).",
     );
     return stripe.checkout.sessions.create(params);
   }
