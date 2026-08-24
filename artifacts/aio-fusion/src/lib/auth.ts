@@ -1404,6 +1404,13 @@ export function clearWorkspaceScopedCaches(): void {
       "aio.projects.v1",
       "aio.clientLogos.v1",
       "aio.intake.updatedAt.v1",
+      // Default-project data predates globally unique project ids and uses bare
+      // keys. It must not survive a workspace switch: the next workspace could
+      // otherwise display it or migrate/sync it as its own data.
+      "aio.intake.v2",
+      "aio.archive.v1",
+      "aio.planner.projects.v1",
+      "aio.projectData.archive.v1",
     ]);
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {

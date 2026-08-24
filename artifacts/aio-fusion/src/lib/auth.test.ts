@@ -6,6 +6,7 @@ import {
   canViewOwner,
   saveUsers,
   bootstrapAuth,
+  clearWorkspaceScopedCaches,
   type Session,
 } from "./auth";
 
@@ -152,5 +153,35 @@ describe("bootstrapAuth - accountProfile server→client path", () => {
 
     expect(result.session?.username).toBe("someagency");
     expect(result.accountProfile).toBeNull();
+  });
+});
+
+describe("workspace switch cache isolation", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("removes every bare workspace cache while retaining safe migration and project-id scoped keys", () => {
+    const outgoingWorkspaceCaches = [
+      "aio.activeProjectId",
+      "aio.projects.v1",
+      "aio.clientLogos.v1",
+      "aio.intake.updatedAt.v1",
+      "aio.intake.v2",
+      "aio.archive.v1",
+      "aio.planner.projects.v1",
+      "aio.projectData.archive.v1",
+      "aio.scoring.v1",
+      "aio.auditTiming.visibility",
+    ];
+    for (const key of outgoingWorkspaceCaches) localStorage.setItem(key, "old-workspace-data");
+    localStorage.setItem("aio.store.migrated.v1", "1");
+    localStorage.setItem("aio.intake.v2::globally-unique-project-id", "safe-project-data");
+
+    clearWorkspaceScopedCaches();
+
+    for (const key of outgoingWorkspaceCaches) {
+      expect(localStorage.getItem(key)).toBeNull();
+    }
+    expect(localStorage.getItem("aio.store.migrated.v1")).toBe("1");
+    expect(localStorage.getItem("aio.intake.v2::globally-unique-project-id")).toBe("safe-project-data");
   });
 });

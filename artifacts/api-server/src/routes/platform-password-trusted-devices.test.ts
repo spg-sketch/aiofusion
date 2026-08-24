@@ -255,8 +255,8 @@ import {
   platformMetaTable,
   platformPasswordResetsTable,
 } from "@workspace/db";
-import { eq, like } from "drizzle-orm";
-import { hashPassword, ensurePlatformUser } from "../lib/platform-auth";
+import { eq, inArray, like } from "drizzle-orm";
+import { hashPassword, ensurePlatformUser, verifyPassword } from "../lib/platform-auth";
 import {
   generateTotpSecret,
   saveMfaState,
@@ -343,6 +343,8 @@ const RESET_USER = "pw-reset-user";
 const RESET_EMAIL = "pw-reset@example.com";
 
 const ADMIN_USER = "pw-admin-target";
+const ADMIN_EMAIL = "pw-admin-target@example.com";
+const SECONDARY_USER = "pw-admin-target-secondary";
 
 describe("change-password clears trusted devices", () => {
   let server: Server;
@@ -486,6 +488,7 @@ describe("reset-password clears trusted devices", () => {
 describe("admin accounts/password clears trusted devices", () => {
   let server: Server;
   let baseUrl: string;
+  let targetUserId: string;
 
   beforeEach(async () => {
     actorOverride = null;
@@ -494,13 +497,33 @@ describe("admin accounts/password clears trusted devices", () => {
       passwordHash: hashPassword(PASSWORD),
       role: "agency",
       status: "active",
+      email: ADMIN_EMAIL,
+    });
+    targetUserId = await seedUser(ADMIN_EMAIL, ADMIN_USER, PASSWORD);
+    await db.insert(platformAccountsTable).values({
+      username: SECONDARY_USER,
+      passwordHash: hashPassword(PASSWORD),
+      role: "agency",
+      status: "active",
+      email: ADMIN_EMAIL,
+    });
+    await ensurePlatformUser({
+      email: ADMIN_EMAIL,
+      passwordHash: hashPassword(PASSWORD),
+      companyUsername: SECONDARY_USER,
+      membershipRole: "owner",
+      companyRole: "agency",
+      companyStatus: "active",
     });
     ({ server, baseUrl } = await startServer());
   });
 
   afterEach(async () => {
     await stopServer(server);
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, targetUserId));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, targetUserId));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, ADMIN_USER));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, SECONDARY_USER));
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, `account:mfa%`));
   });
 
@@ -519,6 +542,67 @@ describe("admin accounts/password clears trusted devices", () => {
     expect(r.json.ok).toBe(true);
 
     expect(await listTrustedDevices(ADMIN_USER)).toEqual([]);
+  });
+
+  it("updates the linked password and invalidates every target session", async () => {
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await db.insert(platformSessionsTable).values([
+      {
+        sid: "target-device-one",
+        username: ADMIN_USER,
+        userId: targetUserId,
+        sessionVersion: 0,
+        expiresAt,
+      },
+      {
+        sid: "target-device-two",
+        username: ADMIN_USER,
+        userId: targetUserId,
+        sessionVersion: 0,
+        expiresAt,
+      },
+      {
+        sid: "target-legacy-device",
+        username: ADMIN_USER,
+        userId: null,
+        sessionVersion: null,
+        expiresAt,
+      },
+      {
+        sid: "secondary-legacy-device",
+        username: SECONDARY_USER,
+        userId: null,
+        sessionVersion: null,
+        expiresAt,
+      },
+    ]);
+    actorOverride = { username: "admin", role: "admin" };
+
+    const r = await post(baseUrl, "/api/platform/accounts/password", {
+      username: ADMIN_USER,
+      newPassword: NEW_PASSWORD,
+    });
+
+    expect(r.status).toBe(200);
+    const [user] = await db
+      .select({
+        passwordHash: platformUsersTable.passwordHash,
+        sessionVersion: platformUsersTable.sessionVersion,
+      })
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.id, targetUserId));
+    expect(verifyPassword(NEW_PASSWORD, user!.passwordHash!)).toBe(true);
+    expect(user!.sessionVersion).toBe(1);
+    const [secondaryAccount] = await db
+      .select({ passwordHash: platformAccountsTable.passwordHash })
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, SECONDARY_USER));
+    expect(verifyPassword(NEW_PASSWORD, secondaryAccount!.passwordHash)).toBe(true);
+    const remainingSessions = await db
+      .select()
+      .from(platformSessionsTable)
+      .where(inArray(platformSessionsTable.username, [ADMIN_USER, SECONDARY_USER]));
+    expect(remainingSessions).toEqual([]);
   });
 
   it("does not clear trusted devices when the target account is not found", async () => {

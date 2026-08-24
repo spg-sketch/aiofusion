@@ -4326,12 +4326,84 @@ router.post(
         res.status(403).json({ error: AGENCY_PARTNER_CLIENT_MESSAGE });
         return;
       }
+      const passwordHash = hashPassword(newPassword);
       await db
         .update(platformAccountsTable)
-        .set({ passwordHash: hashPassword(newPassword) })
+        .set({ passwordHash })
         .where(eq(platformAccountsTable.username, target));
+
+      // A modern login verifies platform_users.password_hash before the legacy
+      // account record. Keep that credential in sync, then invalidate every
+      // session belonging to this human as well as legacy slug sessions. This
+      // route is also used by admins resetting another account's password, so
+      // there is no target session to preserve in that case.
+      const targetUser = existing.email
+        ? await getUserByEmail(existing.email)
+        : undefined;
+      const memberships = targetUser
+        ? await db
+          .select({
+            companySlug: platformMembershipsTable.companySlug,
+            role: platformMembershipsTable.role,
+          })
+          .from(platformMembershipsTable)
+          .where(eq(platformMembershipsTable.userId, targetUser.id))
+        : [];
+      const currentSid = getPlatformSessionId(req);
+      const preserveCurrentSession = Boolean(
+        currentSid && targetUser && actor.userId === targetUser.id,
+      );
+      if (targetUser) {
+        await db
+          .update(platformUsersTable)
+          .set({ passwordHash })
+          .where(eq(platformUsersTable.id, targetUser.id));
+        // One person can own or administer multiple workspaces. Legacy
+        // slug-based login may still be used for each of those workspaces, so
+        // update every matching credential too; otherwise the former password
+        // would still work through a different workspace slug.
+        for (const membership of memberships) {
+          if (
+            (membership.role === "owner" || membership.role === "admin")
+            && !(await isAgencyPartnerClient(normUsername(membership.companySlug)))
+          ) {
+            await db
+              .update(platformAccountsTable)
+              .set({ passwordHash })
+              .where(eq(platformAccountsTable.username, membership.companySlug));
+          }
+        }
+        const newSessionVersion = await incrementSessionVersion(targetUser.id);
+        if (preserveCurrentSession && currentSid) {
+          await db
+            .update(platformSessionsTable)
+            .set({ sessionVersion: newSessionVersion })
+            .where(eq(platformSessionsTable.sid, currentSid));
+        }
+        await db
+          .delete(platformSessionsTable)
+          .where(and(
+            eq(platformSessionsTable.userId, targetUser.id),
+            preserveCurrentSession ? ne(platformSessionsTable.sid, currentSid!) : sql`true`,
+          ));
+      }
+      // Version checks do not apply to legacy sessions (their user_id is NULL).
+      // Remove those for every workspace associated with this identity.
+      const legacySessionUsernames = new Set([
+        target,
+        ...memberships.map((membership) => normUsername(membership.companySlug)),
+      ]);
+      for (const username of legacySessionUsernames) {
+        await db
+          .delete(platformSessionsTable)
+          .where(and(
+            eq(platformSessionsTable.username, username),
+            preserveCurrentSession ? ne(platformSessionsTable.sid, currentSid!) : sql`true`,
+          ));
+      }
       // Clear MFA trusted devices so all devices must re-enter a TOTP code
-      // after an admin-set password change.
+      // after an admin-set password change. This must happen after all password
+      // writes succeed, so a rejected password never logs devices out.
       await clearTrustedDevices(target);
 
       // Security alert to the target account - non-fatal, fire-and-forget.

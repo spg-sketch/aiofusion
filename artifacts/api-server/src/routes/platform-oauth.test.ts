@@ -478,6 +478,11 @@ describe("Google GET callback - scanner / bot guard", () => {
     expect(body).toContain('method="POST"');
     expect(body).toContain(`value="${code}"`);
     expect(body).toContain(`value="${state}"`);
+    // The same form contains a real submit button inside <noscript>, so a
+    // browser with JavaScript disabled can complete the OAuth hop manually.
+    expect(body).toContain("<noscript>");
+    expect(body).toContain('<button type="submit"');
+    expect(body).toContain(">Continue</button>");
     expect(tracker.called).toBe(false);
 
     // State cookie must NOT be cleared by the GET (Max-Age=0 absent).
