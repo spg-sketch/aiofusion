@@ -325,9 +325,9 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
 
   return (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-      <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a project</h2>
+       <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a project workspace</h2>
       <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-        Add another project workspace to your plan. Billed annually, excl. VAT (added at checkout). Once paid, your next new project uses the tier you choose here.
+         Add one independent project workspace for another brand, client, or programme. Billed annually, excl. VAT (added at checkout). Once paid, your next new project uses the tier you choose here. This adds a separate workspace, not extra runtime capacity inside an existing project.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 max-w-2xl">
         {TIER_ORDER.map((t) => (

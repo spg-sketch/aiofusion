@@ -34,3 +34,8 @@ The completion webhook conditional UPDATE must allow: (a) first purchase (null s
 - **How to apply:** allowance check + insert + slot assignment must be one critical section under the billing-root lock; tier/delete writes must carry subtree ownership in the SQL predicate and treat 0 rows as stale. Cross-account transfer detaches the binding (clear first, then persist) but keeps a queued downgrade — it belongs to the subscription.
 - Queued downgrades apply only on `billing_reason === "subscription_cycle"` invoices (Stripe webhooks are unordered). Legacy cap 2 is for unsubscribed accounts only — never Math.max it into entitled allowances.
 - Locks are in-process; multi-process deployment needs DB-backed locking first.
+
+## Product meaning of an instance
+- Treat an "instance" as one additional independent project workspace for another brand, client, or programme.
+- **Why:** customers may also use "instance" to mean extra environments or parallel runtime workloads inside one project, but that is a separate capacity need and should not be bundled into project packs.
+- **How to apply:** describe Standard, Premium, and Max packs as independent project workspaces. Do not introduce an instance-capacity add-on until a confirmed customer requirement calls for multiple environments or parallel workloads within one existing project.

@@ -210,8 +210,8 @@ const ARTICLES: Article[] = [
     readTime: "3 min read",
     content: (
       <div>
-        <Section title="The Project Hub">
-          The Project Hub is the home screen of the platform. It lists all your active projects and gives you quick access to create a new one, browse your archived work, and open this guidance library. Each project is a self-contained workspace with its own Set-Up data, audits, content, and comms plan.
+         <Section title="The Project Hub">
+           The Project Hub is the home screen of the platform. It lists all your active projects and gives you quick access to create a new one, browse your archived work, and open this guidance library. Each project is a self-contained workspace with its own Set-Up data, audits, content, and comms plan. In billing language, an "additional project" or "instance" means another independent workspace for a brand, client, or programme.
         </Section>
         <Section title="Switching between projects">
           <Step n={1} title="Select from the Hub">
@@ -228,7 +228,7 @@ const ARTICLES: Article[] = [
           When a client programme ends, archive the project rather than deleting it. Archived projects are moved to the <strong>Archived Projects</strong> section of the Hub. All data - Set-Up, audits, content, and comms plan - is retained and fully searchable. If the client returns, you can restore the project and pick up exactly where you left off.
         </Section>
         <Section title="Project limits">
-          Agency accounts include 2 active projects as standard. Additional projects can be added at any time - contact the team or use the billing section of your account settings. Archived projects do not count towards your active project limit.
+           Agency accounts include 2 active projects as standard. Additional independent project workspaces can be added at any time - contact the team or use the billing section of your account settings. Archived projects do not count towards your active project limit. Project packs add workspaces; they do not add runtime capacity or parallel environments inside an existing project.
         </Section>
         <Tip>Use clear, specific project names that include the client or brand name. When you have multiple projects it becomes much easier to navigate quickly.</Tip>
       </div>

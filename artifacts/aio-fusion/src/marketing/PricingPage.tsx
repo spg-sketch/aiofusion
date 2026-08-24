@@ -284,20 +284,23 @@ export default function PricingPage({
         </div>
       </section>
 
-      {/* Additional Projects */}
+       {/* Additional Project Workspaces */}
       <section className="py-16 px-4 sm:px-8" style={{ background: "white" }}>
         <div className="max-w-5xl mx-auto">
           <div className="mb-10">
-            <h2 className="text-3xl md:text-4xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Additional Project Pricing</h2>
+             <h2 className="text-3xl md:text-4xl mb-5" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Additional Project Workspaces</h2>
             <p className="text-[15px] font-light leading-[1.7] mb-4 max-w-2xl" style={{ color: vars.g600 }}>
-              Because no two clients are the same, we have created three price brackets for additional projects to add to your plan.
+               Need another brand, client, or programme? Add an independent, self-contained project workspace to your plan with one of the packs below.
             </p>
             <p className="text-[15px] font-light leading-[1.7] mb-4 max-w-2xl" style={{ color: vars.g600 }}>
-              Each 'action' refers to the number of pieces of content you create and optimise and/or marketing and media intelligence searches run per month.
+               Each pack adds one separate project with its own Set-Up data, audits, content, comms plan, and monthly activity allowance. Each 'action' refers to the number of pieces of content you create and optimise and/or marketing and media intelligence searches run per month.
             </p>
             <p className="text-[15px] font-semibold mb-8" style={{ color: ink }}>
               Choose the activity level to match your client or brand requirements:
             </p>
+             <p className="text-[13px] font-light leading-[1.7] max-w-2xl" style={{ color: vars.g500 }}>
+               These packs are for additional project workspaces, not extra runtime capacity or parallel environments inside an existing project.
+             </p>
           </div>
           <div className="flex flex-col gap-4 max-w-2xl">
             {ADDITIONAL_PROJECT_TIERS.map((tier) => (
