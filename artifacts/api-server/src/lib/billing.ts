@@ -25,6 +25,11 @@ import {
 } from "./billing-plans";
 import { getAccount, normUsername } from "./platform-auth";
 import { sendPaymentFailedEmail, sendSubscriptionCancelledEmail } from "./notify-email";
+import {
+  composeStoredBillingAddress,
+  getCompanyBillingRecord,
+  splitStoredBillingAddress,
+} from "./company-billing-record";
 
 // ---------------------------------------------------------------------------
 // Subscription state
@@ -879,10 +884,27 @@ export async function handleCheckoutCompleted(event: Stripe.Event): Promise<void
       const customer = await stripe.customers.retrieve(customerId);
       if (customer && !customer.deleted) {
         const c = customer as Stripe.Customer;
-        const patch: Record<string, string> = {};
-        if (c.name) patch["displayName"] = c.name;
-        if (c.email) patch["billingEmail"] = c.email;
-        if (c.address?.line1) patch["billingAddress"] = c.address.line1;
+        const current = await getCompanyBillingRecord(slug);
+        const patch: Record<string, string | number> = {};
+        const companyName = c.name?.trim() || current?.companyName || "";
+        if (companyName) patch["displayName"] = companyName;
+        if (c.email) patch["billingEmail"] = c.email.trim().toLowerCase();
+        const addressLine1 = c.address?.line1?.trim() || current?.addressLine1 || "";
+        const townCity = c.address?.city?.trim() || current?.townCity || "";
+        const postcode = c.address?.postal_code?.trim() || current?.postcode || "";
+        const country = c.address?.country?.trim() || current?.country || "";
+        if (current && addressLine1 && townCity && postcode && country) {
+          patch["billingAddress"] = composeStoredBillingAddress({
+            ...current,
+            companyName,
+            addressLine1,
+            addressLine2: c.address?.line2?.trim() || current.addressLine2,
+            townCity,
+            postcode,
+            country,
+          });
+          patch["billingAddressVersion"] = 1;
+        }
         if (Object.keys(patch).length > 0) {
           await db
             .update(platformCompaniesTable)
@@ -1204,6 +1226,13 @@ async function getBillingDetails(slug: string): Promise<{
   companyName: string;
   vatNumber: string | null;
   billingAddress: string | null;
+  address: {
+    line1: string;
+    line2?: string;
+    city: string;
+    postal_code: string;
+    country: string;
+  } | null;
 } | null> {
   const [company] = await db
     .select({
@@ -1213,16 +1242,29 @@ async function getBillingDetails(slug: string): Promise<{
       slug: platformCompaniesTable.slug,
       vatNumber: platformCompaniesTable.vatNumber,
       billingAddress: platformCompaniesTable.billingAddress,
+      billingAddressVersion: platformCompaniesTable.billingAddressVersion,
     })
     .from(platformCompaniesTable)
     .where(eq(platformCompaniesTable.slug, normUsername(slug)))
     .limit(1);
   if (!company) return null;
+  const storedAddress = company.billingAddressVersion === 1
+    ? splitStoredBillingAddress(company.billingAddress)
+    : splitStoredBillingAddress("");
   return {
     email: company.billingEmail || company.email || null,
     companyName: company.displayName || company.slug,
     vatNumber: company.vatNumber || null,
     billingAddress: company.billingAddress || null,
+    address: storedAddress.addressLine1 && storedAddress.townCity && storedAddress.postcode && storedAddress.country
+      ? {
+          line1: storedAddress.addressLine1,
+          ...(storedAddress.addressLine2 ? { line2: storedAddress.addressLine2 } : {}),
+          city: storedAddress.townCity,
+          postal_code: storedAddress.postcode,
+          country: storedAddress.country,
+        }
+      : null,
   };
 }
 
@@ -1261,9 +1303,11 @@ export async function syncStripeBillingDetails(slug: string): Promise<void> {
         ...(details.email ? { email: details.email } : {}),
         // Clearing the address in the app deliberately clears it in Stripe
         // too, so old invoice addresses do not linger.
-        address: details.billingAddress
-          ? { line1: details.billingAddress.slice(0, 500) }
-          : ("" as unknown as Stripe.Emptyable<Stripe.AddressParam>),
+        ...(details.address
+          ? { address: details.address }
+          : details.billingAddress
+            ? {}
+            : { address: "" as unknown as Stripe.Emptyable<Stripe.AddressParam> }),
       });
       // Reconcile the customer's tax IDs with the stored VAT number.
       const wanted = details.vatNumber ? vatNumberToTaxId(details.vatNumber) : null;
@@ -1495,8 +1539,8 @@ async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<str
   const customer = await stripe.customers.create({
     email: details?.email ?? undefined,
     name: details?.companyName ?? slug,
-    ...(details?.billingAddress
-      ? { address: { line1: details.billingAddress.slice(0, 500) } }
+    ...(details?.address
+      ? { address: details.address }
       : {}),
     metadata: { slug },
   });

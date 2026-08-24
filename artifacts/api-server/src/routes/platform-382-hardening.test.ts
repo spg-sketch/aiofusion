@@ -35,8 +35,10 @@ vi.mock("@workspace/db", async () => {
       max_seats int,
       email varchar(255),
       billing_email varchar(255),
+      key_account_holder_email varchar(255),
       vat_number varchar(64),
       billing_address varchar(512),
+      billing_address_version integer,
       website varchar(512),
       display_name varchar(128),
       free_access boolean NOT NULL DEFAULT false,
@@ -269,8 +271,10 @@ import {
   db,
   platformAccountsTable,
   platformCompaniesTable,
+  platformMembershipsTable,
   platformMetaTable,
   platformSessionsTable,
+  platformUsersTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/platform-auth";
@@ -675,13 +679,23 @@ describe("review regressions", () => {
 // Billing details
 // ---------------------------------------------------------------------------
 describe("billing details", () => {
-  it("owner can save and read billing email + VAT", async () => {
+  it("owner can save and read the complete company record", async () => {
     await seedAccount("billco", { role: "client" });
     await withServer(async (base) => {
       const save = await fetch(`${base}/api/platform/billing-details`, {
         method: "POST",
         headers: acctHeader({ username: "billco", role: "client", membershipRole: "owner" }),
-        body: JSON.stringify({ billingEmail: "Accounts@BillCo.com", vatNumber: "gb123456789" }),
+        body: JSON.stringify({
+          companyName: "BillCo Ltd",
+          billingEmail: "Accounts@BillCo.com",
+          keyAccountHolderEmail: "director@billco.com",
+          addressLine1: "1 High Street",
+          addressLine2: "",
+          townCity: "London",
+          postcode: "SW1A 1AA",
+          country: "United Kingdom",
+          vatNumber: "gb123456789",
+        }),
       });
       expect(save.status).toBe(200);
       const read = await fetch(`${base}/api/platform/billing-details`, {
@@ -690,7 +704,11 @@ describe("billing details", () => {
       expect(read.status).toBe(200);
       const json = await read.json() as Record<string, any>;
       expect(json.billingEmail).toBe("accounts@billco.com");
+      expect(json.keyAccountHolderEmail).toBe("director@billco.com");
+      expect(json.companyName).toBe("BillCo Ltd");
+      expect(json.addressLine1).toBe("1 High Street");
       expect(json.vatNumber).toBe("GB123456789");
+      expect(json.complete).toBe(true);
     });
   });
 
@@ -718,9 +736,78 @@ describe("billing details", () => {
       const save = await fetch(`${base}/api/platform/billing-details`, {
         method: "POST",
         headers: acctHeader({ username: "billco3", role: "client" }),
-        body: JSON.stringify({ billingEmail: "not-an-email" }),
+        body: JSON.stringify({
+          companyName: "BillCo 3 Ltd",
+          billingEmail: "not-an-email",
+          keyAccountHolderEmail: "owner@billco3.test",
+          addressLine1: "1 Test Street",
+          townCity: "London",
+          postcode: "SW1A 1AA",
+          country: "United Kingdom",
+        }),
       });
       expect(save.status).toBe(400);
+      const json = await save.json() as { fieldErrors?: Record<string, string> };
+      expect(json.fieldErrors?.billingEmail).toBeTruthy();
+    });
+  });
+
+  it("prefills missing values without treating the legacy record as saved", async () => {
+    await seedAccount("prefill-billco", { role: "client" });
+    await db.update(platformAccountsTable)
+      .set({ email: "workspace@prefill.test" })
+      .where(eq(platformAccountsTable.username, "prefill-billco"));
+    const [company] = await db.update(platformCompaniesTable)
+      .set({ email: "company@prefill.test" })
+      .where(eq(platformCompaniesTable.slug, "prefill-billco"))
+      .returning();
+    const [owner] = await db.insert(platformUsersTable)
+      .values({ email: "owner@prefill.test", name: "Owner" })
+      .returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: owner.id,
+      companyId: company.id,
+      companySlug: "prefill-billco",
+      role: "owner",
+    });
+    await db.insert(platformMetaTable).values({
+      key: "account:profile:prefill-billco",
+      value: JSON.stringify({ displayName: "Prefill BillCo" }),
+    });
+
+    await withServer(async (base) => {
+      const read = await fetch(`${base}/api/platform/billing-details`, {
+        headers: acctHeader({ username: "prefill-billco", role: "client", membershipRole: "owner" }),
+      });
+      expect(read.status).toBe(200);
+      const json = await read.json() as Record<string, unknown>;
+      expect(json.companyName).toBe("Prefill BillCo");
+      expect(json.billingEmail).toBe("company@prefill.test");
+      expect(json.keyAccountHolderEmail).toBe("owner@prefill.test");
+      expect(json.complete).toBe(false);
+    });
+  });
+
+  it("preserves an unversioned multiline legacy address without inferring its fields", async () => {
+    await seedAccount("legacy-address-co", { role: "client" });
+    const legacyAddress = "9 Old Road\nBristol\nBS1 1AA\nUnited Kingdom";
+    await db.update(platformCompaniesTable).set({
+      displayName: "Legacy Address Co",
+      email: "owner@legacy-address.test",
+      billingAddress: legacyAddress,
+    }).where(eq(platformCompaniesTable.slug, "legacy-address-co"));
+
+    await withServer(async (base) => {
+      const read = await fetch(`${base}/api/platform/billing-details`, {
+        headers: acctHeader({ username: "legacy-address-co", role: "client", membershipRole: "owner" }),
+      });
+      expect(read.status).toBe(200);
+      const json = await read.json() as Record<string, unknown>;
+      expect(json.companyName).toBe("Legacy Address Co");
+      expect(json.legacyBillingAddress).toBe(legacyAddress);
+      expect(json.addressLine1).toBe("");
+      expect(json.townCity).toBe("");
+      expect(json.complete).toBe(false);
     });
   });
 });

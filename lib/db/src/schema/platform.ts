@@ -55,6 +55,8 @@ export const platformAccountsTable = pgTable("platform_accounts", {
 //  - `email`        Primary contact email for the company.
 //  - `billingEmail` Separate billing contact — invoices sent here. Defaults to
 //                   `email` if null.
+//  - `keyAccountHolderEmail` Operational account-management contact. This is
+//                   deliberately separate from login and invoice recipients.
 //  - `vatNumber`    VAT registration number, shown on Stripe invoices.
 //  - `website`      Company website URL.
 //  - `displayName`  Human-readable company name (e.g. "Acme PR Agency"). Replaces
@@ -73,8 +75,10 @@ export const platformCompaniesTable = pgTable("platform_companies", {
   maxSeats: integer("max_seats"),
   email: varchar("email", { length: 255 }),
   billingEmail: varchar("billing_email", { length: 255 }),
+  keyAccountHolderEmail: varchar("key_account_holder_email", { length: 255 }),
   vatNumber: varchar("vat_number", { length: 64 }),
   billingAddress: varchar("billing_address", { length: 512 }),
+  billingAddressVersion: integer("billing_address_version"),
   website: varchar("website", { length: 512 }),
   displayName: varchar("display_name", { length: 128 }),
   freeAccess: boolean("free_access").notNull().default(false),

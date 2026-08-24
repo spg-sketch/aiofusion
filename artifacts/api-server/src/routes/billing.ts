@@ -33,6 +33,7 @@ import {
 import { getAppBaseUrl } from "../lib/notify-email";
 import { stripeConfigured, getUncachableStripeClient } from "../lib/stripe-client";
 import { logger } from "../lib/logger";
+import { getCompanyBillingRecord } from "../lib/company-billing-record";
 
 const router: IRouter = Router();
 
@@ -86,10 +87,11 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
     const state = await getBillingState(ctx.slug);
     const prices = PLAN_PRICES[ctx.plan];
     const entitled = isEntitled(state);
-    const [addons, projects, latestInvoice] = await Promise.all([
+    const [addons, projects, latestInvoice, companyRecord] = await Promise.all([
       getProjectAddons(ctx.slug),
       listBillingProjects(ctx.slug),
       getLatestInvoiceLink(ctx.slug),
+      getCompanyBillingRecord(ctx.slug),
     ]);
     const included = state?.plan ? INCLUDED_PROJECTS[state.plan] : INCLUDED_PROJECTS[ctx.plan];
     res.setHeader("Cache-Control", "no-store");
@@ -106,6 +108,7 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       latestInvoiceUrl: latestInvoice,
       portalAvailable: stripeConfigured() && !!state?.stripeCustomerId,
       checkoutAvailable: stripeConfigured(),
+      companyRecordComplete: companyRecord?.complete ?? false,
       projects: projects.map((p) => {
         const addon = addons.find((a) => a.projectId === p.id);
         return {
@@ -150,6 +153,14 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
     const frequency = req.body?.frequency;
     if (!isBillingFrequency(frequency)) {
       res.status(400).json({ error: "Choose annual or quarterly billing." });
+      return;
+    }
+    const companyRecord = await getCompanyBillingRecord(ctx.slug);
+    if (!companyRecord?.complete) {
+      res.status(409).json({
+        error: "Complete and save your company and billing information before continuing to payment.",
+        code: "COMPANY_RECORD_INCOMPLETE",
+      });
       return;
     }
 
@@ -360,6 +371,14 @@ router.post("/platform/billing/project-checkout", requirePlatformAuth, async (re
   try {
     const ctx = await resolveBillingContext(req, res);
     if (!ctx) return;
+    const companyRecord = await getCompanyBillingRecord(ctx.slug);
+    if (!companyRecord?.complete) {
+      res.status(409).json({
+        error: "Complete and save your company and billing information before continuing to payment.",
+        code: "COMPANY_RECORD_INCOMPLETE",
+      });
+      return;
+    }
 
     const tier = req.body?.tier;
     if (!isProjectTier(tier)) {

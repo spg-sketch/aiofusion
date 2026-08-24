@@ -108,6 +108,11 @@ import {
 } from "../lib/team-invites";
 import { getDiscountInvite, consumeDiscountInvite, applyInviteAccountType } from "../lib/discount-invites";
 import { sweepTeamViolationsForCompany } from "./team";
+import {
+  getCompanyBillingRecord,
+  saveCompanyBillingRecord,
+  validateCompanyBillingFields,
+} from "../lib/company-billing-record";
 
 const router: IRouter = Router();
 
@@ -4786,7 +4791,7 @@ router.post(
   },
 );
 
-// --- Billing details (billing email + VAT number) ---------------------------
+// --- Company and billing information ----------------------------------------
 //
 // Stored on platform_companies (billing_email / vat_number, schema v2).
 // Read/write allowed for the account itself when the member is owner, admin,
@@ -4819,17 +4824,13 @@ router.get(
         res.status(403).json({ error: "You cannot view this account's billing details." });
         return;
       }
-      const company = await getCompanyBySlug(target);
-      if (!company) {
+      const record = await getCompanyBillingRecord(target);
+      if (!record) {
         res.status(404).json({ error: "Account not found." });
         return;
       }
       res.setHeader("Cache-Control", "no-store");
-      res.json({
-        billingEmail: company.billingEmail ?? "",
-        vatNumber: company.vatNumber ?? "",
-        billingAddress: company.billingAddress ?? "",
-      });
+      res.json(record);
     } catch {
       res.status(500).json({ error: "Could not load billing details" });
     }
@@ -4855,19 +4856,12 @@ router.post(
         res.status(403).json({ error: "You cannot change this account's billing details." });
         return;
       }
-      const billingEmailRaw = typeof req.body?.billingEmail === "string" ? req.body.billingEmail.trim().toLowerCase() : "";
-      const vatNumberRaw = typeof req.body?.vatNumber === "string" ? req.body.vatNumber.trim().toUpperCase() : "";
-      if (billingEmailRaw && !EMAIL_RE.test(billingEmailRaw)) {
-        res.status(400).json({ error: "Enter a valid billing email address." });
-        return;
-      }
-      if (vatNumberRaw.length > 64) {
-        res.status(400).json({ error: "VAT number is too long." });
-        return;
-      }
-      const billingAddressRaw = typeof req.body?.billingAddress === "string" ? req.body.billingAddress.trim() : "";
-      if (billingAddressRaw.length > 512) {
-        res.status(400).json({ error: "Billing address is too long (512 characters max)." });
+      const validation = validateCompanyBillingFields(req.body);
+      if (!validation.ok) {
+        res.status(400).json({
+          error: "Complete the highlighted company and billing information.",
+          fieldErrors: validation.fieldErrors,
+        });
         return;
       }
       const company = await getCompanyBySlug(target);
@@ -4875,20 +4869,13 @@ router.post(
         res.status(404).json({ error: "Account not found." });
         return;
       }
-      await db
-        .update(platformCompaniesTable)
-        .set({
-          billingEmail: billingEmailRaw || null,
-          vatNumber: vatNumberRaw || null,
-          billingAddress: billingAddressRaw || null,
-        })
-        .where(eq(platformCompaniesTable.slug, target));
+      await saveCompanyBillingRecord(target, validation.fields, validation.billingAddress);
       // Keep the Stripe customer's invoice details in step. Awaited so a
       // failed sync is at least logged before we respond; fail-soft inside,
       // so a Stripe outage never blocks saving details in the app.
       const { syncStripeBillingDetails } = await import("../lib/billing");
       await syncStripeBillingDetails(target);
-      res.json({ ok: true });
+      res.json({ ok: true, record: await getCompanyBillingRecord(target) });
     } catch {
       res.status(500).json({ error: "Could not save billing details" });
     }

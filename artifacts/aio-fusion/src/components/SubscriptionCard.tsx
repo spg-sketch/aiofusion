@@ -37,6 +37,7 @@ type SubscriptionInfo = {
   latestInvoiceUrl?: string | null;
   portalAvailable: boolean;
   checkoutAvailable: boolean;
+  companyRecordComplete: boolean;
   projects: BillingProject[];
   unassignedAddons: { tier: ProjectTier; purchasedAt: string }[];
   tierPrices: Record<ProjectTier, { yearlyTotal: number; actionsPerMonth: number }>;
@@ -105,6 +106,12 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
     })();
     return () => { cancelled = true; };
   }, [checkoutResult, refreshTick]);
+
+  useEffect(() => {
+    const refresh = () => setRefreshTick((tick) => tick + 1);
+    window.addEventListener("aio:company-billing-saved", refresh);
+    return () => window.removeEventListener("aio:company-billing-saved", refresh);
+  }, []);
 
   async function startCheckout() {
     setStarting(true);
@@ -340,11 +347,16 @@ function AddProjectCard({ info }: { info: SubscriptionInfo }) {
           </button>
         ))}
       </div>
+      {info.checkoutAvailable && !info.companyRecordComplete && (
+        <p className="text-[13px] mb-3" style={{ color: "#92400E" }}>
+          Save your company and billing information before adding another project.
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={buy}
-          disabled={busy || !info.checkoutAvailable}
+          disabled={busy || !info.checkoutAvailable || !info.companyRecordComplete}
           className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
           style={{ background: accent }}
         >
@@ -465,6 +477,11 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
           This project is included in your plan at Premium. Upgrading it adds a paid project tier ({tier !== "" ? `${pounds(info.tierPrices[tier].yearlyTotal)}/yr` : "billed annually"}) on top of your plan.
         </p>
       )}
+      {selected && !selectedIsAddon && info.checkoutAvailable && !info.companyRecordComplete && (
+        <p className="text-[12px] mt-2" style={{ color: "#92400E" }}>
+          Save your company and billing information before continuing to payment.
+        </p>
+      )}
       {selected && selectedIsAddon && tier !== "" && !isUpgrade && (
         <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
           This is a downgrade - the lower price and allowance apply from your next renewal.
@@ -474,7 +491,7 @@ function ChangeTierCard({ info, onChanged }: { info: SubscriptionInfo; onChanged
         <button
           type="button"
           onClick={submit}
-          disabled={busy || !selected || tier === ""}
+          disabled={busy || !selected || tier === "" || (!selectedIsAddon && (!info.checkoutAvailable || !info.companyRecordComplete))}
           className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
           style={{ background: accent }}
         >
@@ -604,11 +621,16 @@ function RestartChooser({
           Online checkout isn't available right now - contact info@aiofusion.ai to subscribe.
         </p>
       )}
+      {info.checkoutAvailable && !info.companyRecordComplete && (
+        <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ color: "#92400E", background: "#FEF3C7" }}>
+          Complete and save your company and billing information below before continuing to payment.
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onStart}
-          disabled={starting || !info.checkoutAvailable}
+          disabled={starting || !info.checkoutAvailable || !info.companyRecordComplete}
           className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white transition-all hover:opacity-90 disabled:opacity-50"
           style={{ background: accent }}
         >

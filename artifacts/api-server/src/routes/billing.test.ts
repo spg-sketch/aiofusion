@@ -35,8 +35,10 @@ vi.mock("@workspace/db", async () => {
       max_seats int,
       email varchar(255),
       billing_email varchar(255),
+      key_account_holder_email varchar(255),
       vat_number varchar(64),
       billing_address varchar(512),
+      billing_address_version integer,
       website varchar(512),
       display_name varchar(128),
       free_access boolean NOT NULL DEFAULT false,
@@ -425,6 +427,10 @@ async function seedWorkspace(
       displayName: `${slug} Ltd`,
       setupComplete: true,
       email,
+      billingEmail: email,
+      keyAccountHolderEmail: email,
+      billingAddress: `${slug} Ltd\n1 Test Street\nLondon\nSW1A 1AA\nUnited Kingdom`,
+      billingAddressVersion: 1,
     })
     .returning();
   const [user] = await db
@@ -815,14 +821,19 @@ describe("billing routes", () => {
       .set({
         billingEmail: "accounts@detailed.test",
         vatNumber: "GB123456789",
-        billingAddress: "1 High Street, London",
+        billingAddress: "Detailed Co Ltd\n1 High Street\nLondon\nSW1A 1AA\nUnited Kingdom",
       })
       .where(eq(platformCompaniesTable.slug, "detailed-co"));
     const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(res.status).toBe(200);
     const created = stripeCalls.customerCreates[stripeCalls.customerCreates.length - 1];
     expect(created.email).toBe("accounts@detailed.test");
-    expect(created.address).toEqual({ line1: "1 High Street, London" });
+    expect(created.address).toEqual({
+      line1: "1 High Street",
+      city: "London",
+      postal_code: "SW1A 1AA",
+      country: "United Kingdom",
+    });
     // The VAT number is attached separately (fail-soft), not inline on create.
     expect(created.tax_id_data).toBeUndefined();
     expect(stripeCalls.taxIdCreates).toContainEqual({ type: "gb_vat", value: "GB123456789" });
@@ -836,7 +847,7 @@ describe("billing routes", () => {
         stripeCustomerId: "cus_sync_1",
         billingEmail: "bills@sync.test",
         vatNumber: "DE123456789",
-        billingAddress: "2 Kaiserstrasse, Berlin",
+        billingAddress: "Sync Co Ltd\n2 Kaiserstrasse\nBerlin\n10115\nGermany",
       })
       .where(eq(platformCompaniesTable.slug, "sync-co"));
     stripeCalls.taxIds.length = 0;
@@ -845,9 +856,32 @@ describe("billing routes", () => {
     const upd = stripeCalls.customerUpdates[stripeCalls.customerUpdates.length - 1];
     expect(upd.id).toBe("cus_sync_1");
     expect(upd.params.email).toBe("bills@sync.test");
-    expect(upd.params.address).toEqual({ line1: "2 Kaiserstrasse, Berlin" });
+    expect(upd.params.address).toEqual({
+      line1: "2 Kaiserstrasse",
+      city: "Berlin",
+      postal_code: "10115",
+      country: "Germany",
+    });
     expect(stripeCalls.taxIdDeletes).toContain("txi_old");
     expect(stripeCalls.taxIdCreates).toContainEqual({ type: "eu_vat", value: "DE123456789" });
+  });
+
+  it("does not reinterpret or push an unversioned legacy address to Stripe", async () => {
+    await seedWorkspace("legacy-sync-co", "owner@legacy-sync.test", { accountRole: "client" });
+    const legacy = "4 Old Street\nBristol\nBS1 1AA\nUnited Kingdom";
+    await db.update(platformCompaniesTable).set({
+      stripeCustomerId: "cus_legacy_sync",
+      billingAddress: legacy,
+      billingAddressVersion: null,
+    }).where(eq(platformCompaniesTable.slug, "legacy-sync-co"));
+
+    await syncStripeBillingDetails("legacy-sync-co");
+    const update = stripeCalls.customerUpdates[stripeCalls.customerUpdates.length - 1];
+    expect(update.params.address).toBeUndefined();
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "legacy-sync-co"));
+    expect(company.billingAddress).toBe(legacy);
+    expect(company.billingAddressVersion).toBeNull();
   });
 
   it("a malformed stored VAT number does not block customer creation or checkout", async () => {
@@ -1370,6 +1404,46 @@ describe("portal and invoices", () => {
 // Billing hardening: checkout race, billing details sync, discount edge cases
 // ---------------------------------------------------------------------------
 describe("billing hardening", () => {
+  it.each(["annual", "quarterly"] as const)(
+    "blocks %s checkout until the company record has been saved",
+    async (frequency) => {
+      const { sid } = await seedWorkspace(`incomplete-${frequency}`, `owner-${frequency}@incomplete.test`, { accountRole: "client" });
+      await db.update(platformCompaniesTable)
+        .set({ keyAccountHolderEmail: null })
+        .where(eq(platformCompaniesTable.slug, `incomplete-${frequency}`));
+      const sessionsBefore = stripeCalls.sessions.length;
+
+      const state = await api("/api/platform/billing/subscription", { sid });
+      expect(state.status).toBe(200);
+      expect(state.json.companyRecordComplete).toBe(false);
+
+      const checkout = await api("/api/platform/billing/checkout", { sid, body: { frequency } });
+      expect(checkout.status).toBe(409);
+      expect(checkout.json.code).toBe("COMPANY_RECORD_INCOMPLETE");
+      expect(stripeCalls.sessions).toHaveLength(sessionsBefore);
+    },
+  );
+
+  it("blocks project add-on checkout until the company record has been saved", async () => {
+    const { sid } = await seedWorkspace("incomplete-addon", "owner@incomplete-addon.test", { accountRole: "client" });
+    await db.update(platformCompaniesTable)
+      .set({
+        subscriptionStatus: "active",
+        plan: "inhouse",
+        keyAccountHolderEmail: null,
+      })
+      .where(eq(platformCompaniesTable.slug, "incomplete-addon"));
+    const sessionsBefore = stripeCalls.sessions.length;
+
+    const checkout = await api("/api/platform/billing/project-checkout", {
+      sid,
+      body: { tier: "standard" },
+    });
+    expect(checkout.status).toBe(409);
+    expect(checkout.json.code).toBe("COMPANY_RECORD_INCOMPLETE");
+    expect(stripeCalls.sessions).toHaveLength(sessionsBefore);
+  });
+
   // Helper: remove any lingering checkout claims after a test so they don't bleed.
   async function cleanupCheckoutClaims() {
     await db.execute(sql`DELETE FROM platform_meta WHERE key LIKE 'checkout:pending:%'`);
@@ -1728,7 +1802,10 @@ describe("billing hardening", () => {
       .where(eq(platformCompaniesTable.slug, "syncback-co"));
     expect(company!.displayName).toBe("Syncback Ltd (corrected)");
     expect(company!.billingEmail).toBe("billing-corrected@syncback.test");
-    expect(company!.billingAddress).toBe("99 Corrected Road, London");
+    expect(company!.keyAccountHolderEmail).toBe("owner@syncback.test");
+    expect(company!.billingAddress).toBe(
+      "Syncback Ltd (corrected)\n99 Corrected Road, London\nLondon\nSW1A 1AA\nUnited Kingdom",
+    );
     // Clean up the override so it does not bleed into other tests.
     delete stripeCalls.customerRetrieveOverrides["cus_syncback"];
   });
