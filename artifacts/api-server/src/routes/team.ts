@@ -523,13 +523,33 @@ router.post("/platform/team/invite", requirePlatformAuth, async (req: Request, r
 
     const inviteUrl = `${getAppBaseUrl()}/?invite=${token}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
-    void sendTeamInviteEmail({
+    const emailSent = await sendTeamInviteEmail({
       toEmail: email,
       companyName: company.displayName || company.slug,
       inviterName,
       roleLabel: MEMBERSHIP_ROLE_LABELS[role],
       inviteUrl,
     });
+    if (!emailSent) {
+      // Do not leave a live seat allocation behind when the recipient never
+      // received the only usable link. Guard by token so a concurrent state
+      // change cannot be overwritten.
+      await db
+        .update(platformInvitationsTable)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(platformInvitationsTable.token, token),
+            eq(platformInvitationsTable.companyId, company.id),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+          ),
+        );
+      res.status(502).json({
+        error: "The invitation email could not be delivered. No active invitation was created - please try again.",
+      });
+      return;
+    }
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },
@@ -620,7 +640,15 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     // This eliminates the TOCTOU window where an invite could expire, or a seat
     // could be taken, between the initial read and the seat check.
     type ResendResult =
-      | { ok: true; newToken: string; newExpiresAt: Date; email: string; role: string }
+      | {
+          ok: true;
+          newToken: string;
+          newExpiresAt: Date;
+          oldExpiresAt: Date;
+          oldReminderSentAt: Date | null;
+          email: string;
+          role: string;
+        }
       | { ok: false; status: 404 | 409 | 403; error: string; limitReached?: true; projectId?: string };
 
     let resendResult: ResendResult;
@@ -752,6 +780,8 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
           ok: true as const,
           newToken: freshToken,
           newExpiresAt: freshExpiresAt,
+          oldExpiresAt: fresh.expiresAt,
+          oldReminderSentAt: fresh.reminderSentAt,
           email: fresh.email,
           role: fresh.role,
         };
@@ -772,16 +802,47 @@ router.post("/platform/team/invites/:token/resend", requirePlatformAuth, async (
     }
 
 
-    const { newToken, newExpiresAt, email: resendEmail, role: resendRole } = resendResult;
+    const {
+      newToken,
+      newExpiresAt,
+      oldExpiresAt,
+      oldReminderSentAt,
+      email: resendEmail,
+      role: resendRole,
+    } = resendResult;
     const inviteUrl = `${getAppBaseUrl()}/?invite=${newToken}`;
     const inviterName = req.platformUser?.name || req.platformUser?.email || company.displayName || company.slug;
-    void sendTeamInviteEmail({
+    const emailSent = await sendTeamInviteEmail({
       toEmail: resendEmail,
       companyName: company.displayName || company.slug,
       inviterName,
       roleLabel: MEMBERSHIP_ROLE_LABELS[normalizeMembershipRole(resendRole)] ?? resendRole,
       inviteUrl,
     });
+    if (!emailSent) {
+      // Restore the previously usable invitation when the replacement email
+      // fails. The token guard ensures we do not undo a later resend/accept.
+      await db
+        .update(platformInvitationsTable)
+        .set({
+          token: oldToken,
+          expiresAt: oldExpiresAt,
+          reminderSentAt: oldReminderSentAt,
+        })
+        .where(
+          and(
+            eq(platformInvitationsTable.token, newToken),
+            eq(platformInvitationsTable.companyId, company.id),
+            isNull(platformInvitationsTable.usedAt),
+            isNull(platformInvitationsTable.revokedAt),
+            isNull(platformInvitationsTable.declinedAt),
+          ),
+        );
+      res.status(502).json({
+        error: "The replacement invitation email could not be delivered. The previous invitation link is still valid.",
+      });
+      return;
+    }
 
     void logAdminEvent(
       { username: req.account!.username, id: req.account!.userId },

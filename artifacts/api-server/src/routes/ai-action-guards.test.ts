@@ -387,7 +387,7 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   return {
     ...actual,
     getAppBaseUrl: () => "https://test.example.com",
-    sendTeamInviteEmail: () => Promise.resolve(),
+    sendTeamInviteEmail: () => Promise.resolve(true),
     sendNewSignupAlert: () => Promise.resolve(),
     sendApprovalEmail: () => Promise.resolve(),
     sendVerificationEmail: () => Promise.resolve(),

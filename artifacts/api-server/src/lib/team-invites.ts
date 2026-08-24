@@ -274,13 +274,15 @@ export async function getValidInvite(rawToken: string): Promise<PlatformInvitati
     .limit(1);
   if (!row) return null;
   if (row.usedAt || row.revokedAt || row.declinedAt || row.expiresAt < new Date()) return null;
-  // The company must still exist and be active.
+  // The company must still exist and must not be suspended. Legacy
+  // `pending_approval` workspaces are treated as active everywhere else in the
+  // authentication system, so invitation acceptance must follow the same rule.
   const [company] = await db
     .select({ status: platformCompaniesTable.status })
     .from(platformCompaniesTable)
     .where(eq(platformCompaniesTable.id, row.companyId))
     .limit(1);
-  if (!company || company.status !== "active") return null;
+  if (!company || company.status === "suspended") return null;
   return row;
 }
 

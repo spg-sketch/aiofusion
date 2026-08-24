@@ -284,11 +284,11 @@ export async function sendTeamInviteEmail(opts: {
   inviterName: string;
   roleLabel: string;
   inviteUrl: string;
-}): Promise<void> {
+}): Promise<boolean> {
   const resend = getClient();
   if (!resend) {
     logger.warn({ toEmail: opts.toEmail }, "notify-email: RESEND_API_KEY not set - team invite email not sent");
-    return;
+    return false;
   }
 
   const subject = `You've been invited to join ${opts.companyName} on AIO Fusion`;
@@ -326,10 +326,19 @@ export async function sendTeamInviteEmail(opts: {
   });
 
   try {
-    await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    const result = await resend.emails.send({ from: fromAddress(), to: [opts.toEmail], subject, text, html });
+    if (result.error) {
+      logger.warn(
+        { error: result.error, toEmail: opts.toEmail },
+        "notify-email: team invite email rejected by provider",
+      );
+      return false;
+    }
     logger.info({ toEmail: opts.toEmail }, "notify-email: team invite email sent");
+    return true;
   } catch (err) {
-    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send team invite email (non-fatal)");
+    logger.warn({ err, toEmail: opts.toEmail }, "notify-email: failed to send team invite email");
+    return false;
   }
 }
 

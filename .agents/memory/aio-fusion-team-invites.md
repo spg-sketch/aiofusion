@@ -18,3 +18,9 @@ description: How agency team invitations, 5-tier membership roles, and per-membe
 - Session list/revoke endpoints must scope by per-human `userId`, never the shared workspace slug (`platform_sessions.username`) - slug scoping leaks and lets any member revoke colleagues' sessions.
 
 **Ownership on seat assignment:** invite/PATCH/resend validate projectIds against a downward-only owned set (self + descendant sub-accounts, NOT getVisibleUsernames which includes the parent); client-mode invites null out projectAccess before storage. The "Client projects" shortcut stash must only suppress the leftover account_section=clients deep-link, never other sections (security/billing email links).
+
+**Invite email delivery is part of the transaction boundary:** await `sendTeamInviteEmail` and treat both thrown errors and Resend's returned `error` field as failures. A failed first send retires the new invite; a failed resend restores the previous token and expiry.
+
+**Why:** Resend commonly reports provider rejection in its resolved response rather than throwing. Fire-and-forget sending can therefore show "Invitation sent" and consume a seat even though the recipient never received a usable link.
+
+**How to apply:** any new invitation email path must expose delivery success to its caller and keep invitation state consistent with the link the recipient actually received.

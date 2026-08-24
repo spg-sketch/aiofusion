@@ -7,4 +7,4 @@ description: How legacy pending_approval account status is treated after the sig
 
 **Why:** SSO callbacks used to redirect legacy pending accounts to `/?oauth_status=pending`, which the frontend didn't handle — the user silently landed back on the sign-in form with no error (looked like login "did nothing"). Password login already admitted them, so the gate was inconsistent dead policy.
 
-**How to apply:** When debugging "SSO succeeds but user isn't signed in", check the account's `status` in `platform_accounts`/`platform_companies` first (staging prod DB is queryable read-only). Never reintroduce a pending gate in one login path only; keep suspended checks in all paths and in `getPlatformSessionAccount`.
+**How to apply:** When debugging "SSO succeeds but user isn't signed in" or an invite says the workspace is inactive, check `status` in `platform_accounts`/`platform_companies` first. Never gate `pending_approval` in login, session, OAuth, or invitation acceptance; only `suspended` blocks.

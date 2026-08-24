@@ -38,7 +38,7 @@ import { getImpersonationState } from "./lib/auth";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
-import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense, startTransition } from "react";
 import {
   ChevronRight,
   Lock,
@@ -301,6 +301,15 @@ function App() {
   const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => publicViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  // Lazy route chunks can take a moment on their first visit. Navigation is a
+  // transition so React keeps the current page visible until the destination
+  // is ready instead of replacing the whole app with the root Suspense spinner.
+  const transitionToView = useCallback((nextView: typeof view) => {
+    startTransition(() => setView(nextView));
+  }, []);
+  const transitionToPage = useCallback((nextPage: string) => {
+    startTransition(() => setCurrentPage(nextPage));
+  }, []);
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
   const [pendingDiagnosticId, setPendingDiagnosticId] = useState<string | null>(null);
   const [pendingContentGeoId, setPendingContentGeoId] = useState<string | null>(null);
@@ -530,8 +539,10 @@ function App() {
     setNamingProject(false);
     if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
     setActiveClient(logo ? { ...project, logo } : project);
-    setCurrentPage("intake");
-    setView("platform");
+    startTransition(() => {
+      setCurrentPage("intake");
+      setView("platform");
+    });
     const pushResult = await pushProjectMeta(
       project as unknown as Record<string, unknown> & { id: string },
       logo,
@@ -651,7 +662,7 @@ function App() {
       }
       return prev;
     });
-    setView("platform");
+    transitionToView("platform");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, session]);
   useEffect(() => {
@@ -664,7 +675,7 @@ function App() {
       setActiveProjectId(target.id);
       await syncIntakeForProject(target.id);
       setActiveClient({ ...target, logo: clientLogos[target.id] });
-      setCurrentPage("dashboard");
+      transitionToPage("dashboard");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleProjects, clientLogos]);
@@ -978,10 +989,12 @@ function App() {
       // otherwise the guard could stay armed and swallow the next real push.
       if (targetView !== viewRef.current || targetPage !== pageRef.current || targetArticleId !== insightsArticleIdRef.current || targetAccountSection !== accountSectionRef.current) {
         skipHistoryPush.current = true;
-        setView(targetView);
-        setCurrentPage(targetPage);
-        setInsightsArticleId(targetArticleId);
-        setAccountSection(targetAccountSection);
+        startTransition(() => {
+          setView(targetView);
+          setCurrentPage(targetPage);
+          setInsightsArticleId(targetArticleId);
+          setAccountSection(targetAccountSection);
+        });
       }
       window.scrollTo(0, 0);
     };
@@ -1056,25 +1069,27 @@ function App() {
   };
 
   const goHome = () => {
-    setView("landing");
+    transitionToView("landing");
     window.scrollTo(0, 0);
   };
 
   const goToView = (v: string) => {
     if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "terms-conditions") {
-      if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
-      setView(v as any);
+      startTransition(() => {
+        if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
+        setView(v as any);
+      });
       window.scrollTo(0, 0);
     } else if (v === "landing" || v === "landing-b" || v === "landing-c") {
-      setView("landing");
+      transitionToView("landing");
       window.scrollTo(0, 0);
     } else if (v === "landing#features") {
-      setView("landing");
+      transitionToView("landing");
       setTimeout(() => { document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }, 100);
     }
   };
 
-  const enterPlatform = () => setView("platform-home");
+  const enterPlatform = () => transitionToView("platform-home");
 
   const isAuthed = !!session;
 
@@ -1174,13 +1189,13 @@ function App() {
           }}
           onSignOut={handleSignOut}
           onNeedsSetup={() => setNeedsSetup(true)}
-          onManageUsers={() => { if (session?.role === "admin") setView("users-admin"); }}
-          onManageSubAccounts={() => requireSessionThen(() => setView("sub-accounts"))}
-          onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); setView("token-usage"); } }}
+          onManageUsers={() => { if (session?.role === "admin") transitionToView("users-admin"); }}
+          onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
+          onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); transitionToView("token-usage"); } }}
           onCreateProject={beginCreateProject}
-          onContinueToProjects={() => requireSessionThen(() => setView("platform"))}
-          onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
-          onGuidance={() => setView("guidance")}
+          onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
+          onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
+          onGuidance={() => transitionToView("guidance")}
           onBackToLanding={() => goHome()}
           onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
           initialNotice={sessionExpiredNotice}
@@ -1204,13 +1219,13 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => setView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => setView("support-admin" as any)} onLeadsAdmin={() => setView("leads-admin" as any)} />;
+    return <UsersAdminPage session={session} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} />;
   }
   if ((view as string) === "leads-admin") {
     if (!session || session.role !== "admin") return null;
     return (
       <Suspense fallback={null}>
-        <LeadsAdminPage onBack={() => setView("users-admin")} />
+        <LeadsAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
   }
@@ -1218,7 +1233,7 @@ function App() {
     if (!session || session.role !== "admin") return null;
     return (
       <Suspense fallback={null}>
-        <SupportAdminPage onBack={() => setView("users-admin")} />
+        <SupportAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
   }
@@ -1226,7 +1241,7 @@ function App() {
     if (!session || session.role !== "admin") return null;
     return (
       <Suspense fallback={null}>
-        <ContactSubmissionsAdminPage onBack={() => setView("users-admin")} />
+        <ContactSubmissionsAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
   }
@@ -1247,7 +1262,7 @@ function App() {
         defaultMonthlySpendLimitGbp={tokenDefaultMonthlySpendLimitGbp}
         loading={tokenUsageLoading}
         error={tokenUsageError}
-        onBack={() => setView("platform-home")}
+        onBack={() => transitionToView("platform-home")}
         onRefresh={loadTokenUsage}
       />
     );
@@ -1272,7 +1287,7 @@ function App() {
         checkoutResult={checkoutResult}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
-        onBack={() => setView("platform-home")}
+        onBack={() => transitionToView("platform-home")}
         onAssignProjectOwner={handleAssignProjectOwner}
         onRoleChanged={handleRoleChanged}
         onWorkspacesChanged={() => {
@@ -1283,10 +1298,10 @@ function App() {
     );
   }
   if (view === "guidance") {
-    return <GuidancePage onBack={() => setView("platform-home")} />;
+    return <GuidancePage onBack={() => transitionToView("platform-home")} />;
   }
   if (view === "archived-projects") {
-    return <ArchivedProjectsPage onBack={() => setView("platform-home")} />;
+    return <ArchivedProjectsPage onBack={() => transitionToView("platform-home")} />;
   }
 
   if (view === "for-agents") {
@@ -1327,16 +1342,16 @@ function App() {
           // opening it, so a colleague's saved work shows here too.
           await syncIntakeForProject(client.id);
           setActiveClient({ ...client, logo: clientLogos[client.id] });
-          setCurrentPage("dashboard");
+          transitionToPage("dashboard");
         }}
         clientLogos={clientLogos}
         onLogoUpdate={handleLogoUpdate}
-        onBackToPlatformHome={() => setView("platform-home")}
+        onBackToPlatformHome={() => transitionToView("platform-home")}
         onCreateProject={beginCreateProject}
-        onArchivedProjects={() => requireSessionThen(() => setView("archived-projects"))}
+        onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
         onGuidance={() => {
           setInsightsFilter("Guidance");
-          setView("insights");
+          transitionToView("insights");
         }}
         onDeleteProject={handleDeleteProject}
         session={session}
@@ -1364,7 +1379,7 @@ function App() {
               setActiveProjectId(target.id);
               await syncIntakeForProject(target.id);
               setActiveClient({ ...target, logo: clientLogos[target.id] });
-              setCurrentPage("dashboard");
+              transitionToPage("dashboard");
             }
           }}
         />
@@ -1394,17 +1409,17 @@ function App() {
           </div>
         ) : undefined}
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={transitionToPage}
         activeClient={activeClient}
         onBackToClients={() => setActiveClient(null)}
         onLogoUpdate={handleLogoUpdate}
-        onOpenSavedAudit={(id) => { setPendingAuditId(id); setCurrentPage("llm-check"); }}
-        onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); setCurrentPage("diagnostic"); }}
-        onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); setCurrentPage("geo-content"); }}
-        onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); setCurrentPage("seo-audit"); }}
+        onOpenSavedAudit={(id) => { setPendingAuditId(id); transitionToPage("llm-check"); }}
+        onOpenSavedDiagnostic={(id) => { setPendingDiagnosticId(id); transitionToPage("diagnostic"); }}
+        onOpenSavedContentGeo={(id) => { setPendingContentGeoId(id); transitionToPage("geo-content"); }}
+        onOpenSavedTechGeo={(id) => { setPendingTechGeoId(id); transitionToPage("seo-audit"); }}
         onOpenGeorge={() => { setGeorgeOpen(true); setGeorgeHasUpdate(false); }}
         georgeHasUpdate={georgeHasUpdate}
-        onOpenAccount={() => setView("sub-accounts")}
+        onOpenAccount={() => transitionToView("sub-accounts")}
       />
       <GeorgeSupport
         open={georgeOpen}
@@ -1413,25 +1428,25 @@ function App() {
       />
       <main ref={mainRef} className="flex-1 overflow-y-auto pt-14 md:pt-0" style={{ background: "#1A647B" }}>
         {currentPage === "dashboard" && (
-          <DashboardPage onNavigate={setCurrentPage} activeClient={activeClient} />
+          <DashboardPage onNavigate={transitionToPage} activeClient={activeClient} />
         )}
         {currentPage === "intake" && <IntakePage accountProfile={accountProfile} role={session?.role ?? null} />}
         {currentPage === "diagnostic" && (
           <DiagnosticPage activeClient={activeClient} pendingDiagnosticId={pendingDiagnosticId} onConsumePendingDiagnostic={() => setPendingDiagnosticId(null)} />
         )}
-        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={setCurrentPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
+        {currentPage === "llm-check" && <LlmCheckPage activeClient={activeClient} onNavigate={transitionToPage} pendingAuditId={pendingAuditId} onConsumePending={() => setPendingAuditId(null)} />}
         {currentPage === "optimiser" && (
-          <OptimiserPage onNavigate={setCurrentPage} />
+          <OptimiserPage onNavigate={transitionToPage} />
         )}
         {currentPage === "seo-audit" && <SeoAuditPage activeClient={activeClient} pendingTechGeoId={pendingTechGeoId} onConsumePendingTechGeo={() => setPendingTechGeoId(null)} />}
         {currentPage === "geo-content" && <GeoContentPage activeClient={activeClient} pendingContentGeoId={pendingContentGeoId} onConsumePendingContentGeo={() => setPendingContentGeoId(null)} />}
-        {currentPage === "planner" && <PlannerPage onNavigate={setCurrentPage} />}
-        {currentPage === "creator" && <ContentCreatorPage onNavigate={setCurrentPage} />}
+        {currentPage === "planner" && <PlannerPage onNavigate={transitionToPage} />}
+        {currentPage === "creator" && <ContentCreatorPage onNavigate={transitionToPage} />}
         {currentPage === "media-research" && <MediaResearchPage />}
         {currentPage === "marketing-intel" && <MarketingIntelligencePage />}
         {currentPage === "gateway" && <ReleaseGatewayPage />}
-        {currentPage === "archive" && <ArchivePage onNavigate={setCurrentPage} />}
-        {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={setCurrentPage} />}
+        {currentPage === "archive" && <ArchivePage onNavigate={transitionToPage} />}
+        {currentPage === "measure" && <ReportPage activeClient={activeClient} onNavigate={transitionToPage} />}
         {currentPage === "media-database" && <MediaDatabasePage />}
       </main>
     </div>

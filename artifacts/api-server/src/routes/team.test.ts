@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
@@ -299,6 +299,7 @@ vi.mock("../lib/admin-events", () => ({
 // Capture invite emails instead of sending them.
 // Capture invite emails instead of sending them (hoisted so the factory sees it).
 const sentInvites = vi.hoisted(() => [] as Array<{ toEmail: string; inviteUrl: string }>);
+const inviteEmailShouldSucceed = vi.hoisted(() => ({ value: true }));
 
 // Forward-compatible notify-email mock: auto-wraps every exported async function
 // as a no-op so new functions added by future tasks never cause "X is not a
@@ -317,7 +318,7 @@ vi.mock("../lib/notify-email", async (importOriginal) => {
   }
   mock.sendTeamInviteEmail = (opts: { toEmail: string; inviteUrl: string }) => {
     sentInvites.push(opts);
-    return Promise.resolve();
+    return Promise.resolve(inviteEmailShouldSucceed.value);
   };
   return mock;
 });
@@ -418,6 +419,11 @@ beforeAll(async () => {
   });
 });
 
+beforeEach(() => {
+  inviteEmailShouldSucceed.value = true;
+  sentInvites.length = 0;
+});
+
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
@@ -426,6 +432,35 @@ afterAll(async () => {
 // Invite lifecycle
 // ---------------------------------------------------------------------------
 describe("team invitations", () => {
+  it("does not leave a live invitation when the email provider rejects delivery", async () => {
+    const { sid, company } = await seedAgency("invite-email-failure", "owner@invite-email-failure.test");
+    inviteEmailShouldSucceed.value = false;
+
+    const invite = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "member@invite-email-failure.test", role: "viewer" },
+    });
+
+    expect(invite.status).toBe(502);
+    expect(invite.json.error).toMatch(/could not be delivered/i);
+    const [row] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(
+        and(
+          eq(platformInvitationsTable.companyId, company.id),
+          eq(platformInvitationsTable.email, "member@invite-email-failure.test"),
+        ),
+      );
+    expect(row).toBeTruthy();
+    expect(row!.revokedAt).not.toBeNull();
+
+    const team = await api("/api/platform/team", { sid });
+    expect(team.status).toBe(200);
+    expect(team.json.invites).toHaveLength(0);
+    expect(team.json.seatsUsed).toBe(1);
+  });
+
   it("full lifecycle: invite → public info → accept → member session with role + project access", async () => {
     const { sid } = await seedAgency("acme-agency", "owner@acme.test");
 
@@ -816,6 +851,33 @@ describe("resend invite endpoint", () => {
     expect((await api(`/api/platform/invite/${newToken}`)).status).toBe(200);
   });
 
+  it("restores the previous token when a replacement email cannot be delivered", async () => {
+    const { sid } = await seedAgency("resend-email-failure", "owner@resend-email-failure.test");
+    const invite = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "member@resend-email-failure.test", role: "viewer" },
+    });
+    expect(invite.status).toBe(201);
+    const oldToken = invite.json.token as string;
+    const [before] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, oldToken));
+
+    inviteEmailShouldSucceed.value = false;
+    const resend = await api(`/api/platform/team/invites/${oldToken}/resend`, { sid, body: {} });
+
+    expect(resend.status).toBe(502);
+    expect(resend.json.error).toMatch(/previous invitation link is still valid/i);
+    const [restored] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, oldToken));
+    expect(restored).toBeTruthy();
+    expect(restored!.expiresAt.getTime()).toBe(before!.expiresAt.getTime());
+    expect((await api(`/api/platform/invite/${oldToken}`)).status).toBe(200);
+  });
+
   it("rejects viewer and content member roles with 403", async () => {
     const { sid } = await seedAgency("resend-authz", "owner@resend-authz.test");
 
@@ -911,6 +973,42 @@ describe("resend invite endpoint", () => {
     expect(expired.status).toBe(404);
     expect(expired.json.reason).toBe("expired");
     expect(String(expired.json.error)).toMatch(/7 days/);
+  });
+
+  it("allows legacy pending_approval workspaces to accept invites but still blocks suspended workspaces", async () => {
+    const pending = await seedAgency("invite-pending-workspace", "owner@invite-pending-workspace.test");
+    const pendingInvite = await api("/api/platform/team/invite", {
+      sid: pending.sid,
+      body: { email: "member@invite-pending-workspace.test", role: "content" },
+    });
+    expect(pendingInvite.status).toBe(201);
+    await db
+      .update(platformCompaniesTable)
+      .set({ status: "pending_approval" })
+      .where(eq(platformCompaniesTable.id, pending.company.id));
+
+    const pendingInfo = await api(`/api/platform/invite/${pendingInvite.json.token}`);
+    expect(pendingInfo.status).toBe(200);
+    const pendingAccept = await api("/api/platform/invite/accept", {
+      body: { token: pendingInvite.json.token, password: "pending-member-pass-1" },
+    });
+    expect(pendingAccept.status).toBe(200);
+    expect(pendingAccept.json.account.membershipRole).toBe("content");
+
+    const suspended = await seedAgency("invite-suspended-workspace", "owner@invite-suspended-workspace.test");
+    const suspendedInvite = await api("/api/platform/team/invite", {
+      sid: suspended.sid,
+      body: { email: "member@invite-suspended-workspace.test", role: "content" },
+    });
+    expect(suspendedInvite.status).toBe(201);
+    await db
+      .update(platformCompaniesTable)
+      .set({ status: "suspended" })
+      .where(eq(platformCompaniesTable.id, suspended.company.id));
+
+    const suspendedInfo = await api(`/api/platform/invite/${suspendedInvite.json.token}`);
+    expect(suspendedInfo.status).toBe(404);
+    expect(suspendedInfo.json.reason).toBe("inactive");
   });
 
   it("tolerates email-client token mangling (whitespace, trailing punctuation, URL-encoding)", async () => {
