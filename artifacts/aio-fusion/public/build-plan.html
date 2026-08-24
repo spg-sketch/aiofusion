@@ -346,6 +346,67 @@
   .tier-period { font-size: 11px; color: var(--g400); }
   .tier-actions { font-size: 12px; font-weight: 600; margin-top: 5px; }
 
+  /* ── Delivery update ── */
+  .delivery-update {
+    margin-top: 56px;
+    scroll-margin-top: 52px;
+  }
+  .delivery-lead {
+    background: var(--ink);
+    border-radius: 10px;
+    padding: 24px 28px;
+    color: var(--white);
+  }
+  .delivery-lead h2 {
+    font-size: 24px;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .delivery-lead p {
+    color: rgba(255,255,255,0.72);
+    font-size: 13.5px;
+    line-height: 1.6;
+    max-width: 720px;
+  }
+  .delivery-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: 20px;
+    padding: 5px 11px;
+    background: #DCFCE7;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .delivery-status::before {
+    content: "✓";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #166534;
+    color: #FFFFFF;
+    font-size: 10px;
+  }
+  .delivery-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .delivery-grid .block { height: 100%; }
+  .delivery-link {
+    color: var(--pink);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .delivery-link:hover { text-decoration: underline; }
+
   /* ── Account hierarchy tree ── */
   .hier-tree { display: flex; flex-direction: column; gap: 0; }
   .hier-node {
@@ -384,6 +445,7 @@
     .content { padding: 0 20px 60px; }
     .task-header { padding: 20px; }
     .pricing-cards, .tier-cards { grid-template-columns: 1fr; }
+    .delivery-grid { grid-template-columns: 1fr; }
     .sticky-nav { padding: 0 16px; }
     .sticky-nav a span { display: none; }
   }
@@ -400,6 +462,7 @@
 <!-- Sticky nav -->
 <nav class="sticky-nav">
   <div class="logo">AIO Fusion</div>
+  <a href="#delivery-update"><span class="nav-num" style="background:var(--green);">✓</span><span>Delivered</span></a>
   <a href="#task-381"><span class="nav-num" style="background:var(--teal);">1</span><span>#381 Staging</span></a>
   <a href="#task-382"><span class="nav-num" style="background:var(--pink);">2</span><span>#382 Login & Accounts</span></a>
   <a href="#task-383"><span class="nav-num" style="background:var(--indigo);">3</span><span>#383 Project Access</span></a>
@@ -409,16 +472,22 @@
 
 <!-- Cover -->
 <div class="cover">
-  <div class="cover-eyebrow">Confidential &nbsp;·&nbsp; August 2026 Build Plan</div>
+  <div class="cover-eyebrow">Confidential &nbsp;·&nbsp; August 2026 Build Plan &nbsp;·&nbsp; Updated 24 Aug</div>
   <div class="cover-title">AIO Fusion<br><em>August Sprint</em></div>
-  <div class="cover-sub">Full technical spec for the five tasks that take AIO Fusion from its current demo state to a live, paying, multi-tenant SaaS product. Target go-live: 1 September 2026.</div>
+  <div class="cover-sub">The original five-workstream plan, now updated with a delivery snapshot of the access, reporting, billing, project-pack and platform work completed since the plan was written. Target go-live: 1 September 2026.</div>
   <div class="cover-meta">
     <div class="cover-meta-item"><label>Prepared for</label><span>Patrick Barrett &amp; Natalie Linder</span></div>
     <div class="cover-meta-item"><label>Built by</label><span>Spencer</span></div>
     <div class="cover-meta-item"><label>Go-live target</label><span>1 September 2026</span></div>
+    <div class="cover-meta-item"><label>Progress snapshot</label><span>24 August 2026</span></div>
     <div class="cover-meta-item"><label>Environment</label><span>Staging first &nbsp;→&nbsp; Live cutover</span></div>
   </div>
   <div class="task-index">
+    <a class="task-index-item" href="#delivery-update" style="border-color:var(--green);">
+      <span class="task-index-num">✓</span>
+      <span class="task-index-title">Delivery Update - What is now built</span>
+      <span class="task-index-sub">Updated &nbsp;·&nbsp; 24 Aug</span>
+    </a>
     <a class="task-index-item" href="#task-381" style="border-color:var(--teal);">
       <span class="task-index-num">#381</span>
       <span class="task-index-title">Staging Environment Setup</span>
@@ -448,6 +517,120 @@
 </div>
 
 <div class="content">
+
+<!-- ══════════════════════════════════════════════════ DELIVERY UPDATE -->
+<section class="delivery-update" id="delivery-update">
+  <div class="delivery-lead">
+    <div class="delivery-status">Built in the current product</div>
+    <h2>Delivery update - what has been done</h2>
+    <p>This section gives Patrick a current view of the product rather than only the original sprint plan. The items below are implemented in the current codebase. Staging verification and the final live cutover remain separate checks and are listed at the bottom.</p>
+  </div>
+
+  <div class="note note-green" style="margin-top:16px;">
+    <span class="note-icon">✅</span>
+    <div><strong>Headline progress:</strong> AIO Fusion now has the core multi-account platform, server-enforced project access, Stripe subscription and add-on foundations, AI authority reporting, saved project data, account security controls, and operational safeguards needed for a paying SaaS product.</div>
+  </div>
+
+  <div class="delivery-grid" style="margin-top:16px;">
+    <div class="block">
+      <div class="block-title">Accounts, access &amp; security</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check is-done">✓</span>Three-level account structure: master, Agency/Partner, and client accounts</li>
+          <li><span class="done-check is-done">✓</span>Owner, Admin, Billing, Content/Staff, and Viewer roles with role-specific controls</li>
+          <li><span class="done-check is-done">✓</span>Server-enforced account and project isolation, including sibling-client protection</li>
+          <li><span class="done-check is-done">✓</span>Agency/Partner invites, client management, owner reassignment, and project-level access grants</li>
+          <li><span class="done-check is-done">✓</span>Google and Microsoft sign-in paths, email verification, password reset, and session versioning</li>
+          <li><span class="done-check is-done">✓</span>Master-account MFA, impersonation guardrails, audit logging, and managed-client access controls</li>
+          <li><span class="done-check is-done">✓</span>Successful sign-in tracking, device/session revocation, invite-token hardening, and account deletion safeguards</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">AI authority, content &amp; reporting</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check is-done">✓</span>Deterministic AI Visibility and Earned Media audits with measured-facts grounding</li>
+          <li><span class="done-check is-done">✓</span>Two-stage authority assessment using blind probes and Claude scoring, with fail-soft handling</li>
+          <li><span class="done-check is-done">✓</span>Real saved audit and diagnostic data wired into the Executive Summary and GEO reporting tabs</li>
+          <li><span class="done-check is-done">✓</span>Authority and activity reporting with trend data, project context, and export-safe model output</li>
+          <li><span class="done-check is-done">✓</span>Content Optimiser, Content Creator, Media Research, Website GEO, and Technical GEO AI workflows</li>
+          <li><span class="done-check is-done">✓</span>Structured LLM search queries with a 21-day audit lock and project-scoped saved results</li>
+          <li><span class="done-check is-done">✓</span>Project-scoped archive, planner, tracker, intake pre-fill, and saved-audit synchronisation</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Billing, plans &amp; additional project packs</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check is-done">✓</span>Stripe test-mode subscription checkout for annual and quarterly plans</li>
+          <li><span class="done-check is-done">✓</span>Company billing details: company name, separate billing email, key account holder email, VAT number, and UK address</li>
+          <li><span class="done-check is-done">✓</span>Stripe customer billing-detail synchronisation and test-mode VAT-safe fallback</li>
+          <li><span class="done-check is-done">✓</span>Additional project packs with Standard, Premium, and Max activity levels</li>
+          <li><span class="done-check is-done">✓</span>Project allowance enforcement, add-on assignment, tier changes, cancellations, and queued downgrades</li>
+          <li><span class="done-check is-done">✓</span>Checkout-claim protection, frequency matching, webhook idempotency, and stale-subscription protection</li>
+          <li><span class="done-check is-done">✓</span>Discount invites for beta testers, early adopters, and VIP accounts with renewal persistence</li>
+        </ul>
+        <p style="font-size:12px;color:var(--g500);margin-top:14px;">The public <a class="delivery-link" href="/pricing">Pricing page</a> now shows the packs as well as the main plans.</p>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">Platform operations &amp; product quality</div>
+      <div class="block-body">
+        <ul class="done-list">
+          <li><span class="done-check is-done">✓</span>Staging domain, SSL, environment isolation, database separation, and staging-to-live safety guard</li>
+          <li><span class="done-check is-done">✓</span>Verified database backup and restore flow with mismatch quarantine protection</li>
+          <li><span class="done-check is-done">✓</span>Public SEO pre-rendering for marketing pages, articles, metadata, canonical URLs, and crawler files</li>
+          <li><span class="done-check is-done">✓</span>Object storage support for public email assets and profile images</li>
+          <li><span class="done-check is-done">✓</span>Workspace-switch cache clearing and local data scoping to prevent cross-client leakage</li>
+          <li><span class="done-check is-done">✓</span>Wide-table scroll affordances, intake scroll handling, input override consistency, and em-dash sanitisation</li>
+          <li><span class="done-check is-done">✓</span>Automated API and frontend test suites plus root typecheck workflow</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="block" style="margin-top:16px;">
+    <div class="block-title">Additional project packs - now visible here and in Pricing</div>
+    <div class="block-body">
+      <table class="data-table">
+        <thead>
+          <tr><th>Pack</th><th>Price</th><th>Included activity</th><th>How it works</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Standard</td><td>£500/year</td><td>50 actions/month</td><td>One additional project with the standard activity allowance</td></tr>
+          <tr><td>Premium</td><td>£650/year</td><td>75 actions/month</td><td>One additional project with the premium activity allowance</td></tr>
+          <tr><td>Max</td><td>£800/year</td><td>150 actions/month</td><td>One additional project with the highest activity allowance</td></tr>
+        </tbody>
+      </table>
+      <div class="note note-blue" style="margin-top:12px;">
+        <span class="note-icon">ℹ</span>
+        <div>Each action is one piece of content created or optimised, or one marketing/media intelligence search, per month. Packs fund the additional project slot as well as its monthly activity allowance. All pricing is indicative during Beta and excludes VAT.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block" style="margin-top:16px;">
+    <div class="block-title">Still to verify before go-live</div>
+    <div class="block-body">
+      <ul class="done-list">
+        <li><span class="done-check">•</span>Run the fresh staging smoke test for email login, Google sign-in, Microsoft sign-in, and project loading</li>
+        <li><span class="done-check">•</span>Complete one clean Stripe test checkout and webhook lifecycle on staging, including a new additional-project pack</li>
+        <li><span class="done-check">•</span>Activate Stripe Tax in test mode and confirm VAT display, UK billing details, and the invoice flow</li>
+        <li><span class="done-check">•</span>Review the final staging build with Patrick and confirm the launch pricing and account-seat rules</li>
+        <li><span class="done-check">•</span>Perform the out-of-hours staging-to-live cutover, account migration, OAuth updates, and live Stripe switch</li>
+      </ul>
+      <div class="note note-gold" style="margin-top:14px;">
+        <span class="note-icon">⚠</span>
+        <div>These are release checks rather than missing product foundations. No live Stripe charges or production data changes are intended until the cutover checklist is approved.</div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- ══════════════════════════════════════════════════ #381 STAGING -->
 <section class="task-section" id="task-381">

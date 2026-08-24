@@ -27,6 +27,7 @@ import { getAccount, normUsername } from "./platform-auth";
 import { sendPaymentFailedEmail, sendSubscriptionCancelledEmail } from "./notify-email";
 import {
   composeStoredBillingAddress,
+  countryNameToIso2,
   getCompanyBillingRecord,
   splitStoredBillingAddress,
 } from "./company-billing-record";
@@ -1218,9 +1219,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
 // Stripe Tax + customer billing details
 // ---------------------------------------------------------------------------
 
-// Full billing details for syncing to the Stripe customer. billing_address is
-// free text in the app, so it maps to address line1 (Stripe recomputes tax
-// from the address the customer confirms at checkout anyway).
+// Full billing details for syncing to the Stripe customer. Structured records
+// are mapped to Stripe's address contract, including an ISO alpha-2 country.
 async function getBillingDetails(slug: string): Promise<{
   email: string | null;
   companyName: string;
@@ -1251,18 +1251,19 @@ async function getBillingDetails(slug: string): Promise<{
   const storedAddress = company.billingAddressVersion === 1
     ? splitStoredBillingAddress(company.billingAddress)
     : splitStoredBillingAddress("");
+  const stripeCountry = countryNameToIso2(storedAddress.country);
   return {
     email: company.billingEmail || company.email || null,
     companyName: company.displayName || company.slug,
     vatNumber: company.vatNumber || null,
     billingAddress: company.billingAddress || null,
-    address: storedAddress.addressLine1 && storedAddress.townCity && storedAddress.postcode && storedAddress.country
+    address: storedAddress.addressLine1 && storedAddress.townCity && storedAddress.postcode && stripeCountry
       ? {
           line1: storedAddress.addressLine1,
           ...(storedAddress.addressLine2 ? { line2: storedAddress.addressLine2 } : {}),
           city: storedAddress.townCity,
           postal_code: storedAddress.postcode,
-          country: storedAddress.country,
+          country: stripeCountry,
         }
       : null,
   };

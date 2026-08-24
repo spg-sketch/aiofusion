@@ -253,6 +253,45 @@ describe("POST /api/platform/settings/account-type", () => {
     expect(res.status).toBe(403);
   });
 
+  it("lets a fresh signup complete setup when its default role is already agency", async () => {
+    await seed("fresh-signup", "agency", false);
+    const app = makeApp({ username: "fresh-signup", role: "agency", membershipRole: "owner" });
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/setup/account-type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountType: "client" }),
+    });
+    srv.close();
+
+    expect(res.status).toBe(200);
+    const [company] = await db
+      .select()
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, "fresh-signup"))
+      .limit(1);
+    expect(company?.role).toBe("client");
+    expect(company?.setupComplete).toBe(true);
+  });
+
+  it("still rejects the setup endpoint after setup is complete", async () => {
+    await seed("configured-signup", "agency", true);
+    const app = makeApp({ username: "configured-signup", role: "agency", membershipRole: "owner" });
+    const srv = app.listen(0);
+    await new Promise<void>((r) => srv.once("listening", r));
+    const { port } = srv.address() as AddressInfo;
+    const res = await fetch(`http://localhost:${port}/api/platform/setup/account-type`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountType: "client" }),
+    });
+    srv.close();
+
+    expect(res.status).toBe(409);
+  });
+
   it("returns 400 for invalid accountType", async () => {
     await seed("acme", "agency");
     const app = makeApp({ username: "acme", role: "agency", membershipRole: null });

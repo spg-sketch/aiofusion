@@ -28,6 +28,57 @@ export type CompanyBillingRecord = CompanyBillingFields & {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PROFILE_PREFIX = "account:profile:";
+const ISO_COUNTRY_CODES = new Set(
+  ("AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ " +
+  "CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR " +
+  "GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP " +
+  "KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT " +
+  "MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW " +
+  "SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG " +
+  "UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW XK").split(" "),
+);
+
+function countryLookupKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+let countryLookup: Map<string, string> | null = null;
+
+function getCountryLookup(): Map<string, string> {
+  if (countryLookup) return countryLookup;
+  const lookup = new Map<string, string>([
+    ["uk", "GB"],
+    ["great britain", "GB"],
+    ["britain", "GB"],
+    ["united states of america", "US"],
+    ["usa", "US"],
+  ]);
+  let displayNames: Intl.DisplayNames | null = null;
+  try {
+    displayNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
+  } catch {
+    // Two-letter codes and aliases still work if this runtime lacks DisplayNames.
+  }
+  for (const code of ISO_COUNTRY_CODES) {
+    lookup.set(code.toLowerCase(), code);
+    const label = displayNames?.of(code);
+    if (label && label !== code) lookup.set(countryLookupKey(label), code);
+  }
+  countryLookup = lookup;
+  return lookup;
+}
+
+/** Convert a country name or ISO alpha-2 value to the code Stripe requires. */
+export function countryNameToIso2(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return getCountryLookup().get(countryLookupKey(value)) ?? null;
+}
 
 export function splitStoredBillingAddress(text: string | null | undefined): {
   companyName: string;
@@ -128,7 +179,7 @@ export async function getCompanyBillingRecord(slugValue: string): Promise<Compan
     && address.addressLine1
     && address.townCity
     && address.postcode
-    && address.country,
+    && countryNameToIso2(address.country),
   );
 
   return {
@@ -180,6 +231,9 @@ export function validateCompanyBillingFields(input: unknown):
   }
   if (fields.postcode.length > 32) errors.postcode = "Use 32 characters or fewer.";
   if (fields.country.length > 80) errors.country = "Use 80 characters or fewer.";
+  const countryCode = countryNameToIso2(fields.country);
+  if (fields.country && !countryCode) errors.country = "Choose a valid country.";
+  if (countryCode) fields.country = countryCode;
   if (fields.vatNumber.length > 64) errors.vatNumber = "Use 64 characters or fewer.";
 
   const billingAddress = composeStoredBillingAddress(fields);

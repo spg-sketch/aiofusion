@@ -707,6 +707,7 @@ describe("billing details", () => {
       expect(json.keyAccountHolderEmail).toBe("director@billco.com");
       expect(json.companyName).toBe("BillCo Ltd");
       expect(json.addressLine1).toBe("1 High Street");
+      expect(json.country).toBe("GB");
       expect(json.vatNumber).toBe("GB123456789");
       expect(json.complete).toBe(true);
     });

@@ -832,7 +832,7 @@ describe("billing routes", () => {
       line1: "1 High Street",
       city: "London",
       postal_code: "SW1A 1AA",
-      country: "United Kingdom",
+      country: "GB",
     });
     // The VAT number is attached separately (fail-soft), not inline on create.
     expect(created.tax_id_data).toBeUndefined();
@@ -860,7 +860,7 @@ describe("billing routes", () => {
       line1: "2 Kaiserstrasse",
       city: "Berlin",
       postal_code: "10115",
-      country: "Germany",
+      country: "DE",
     });
     expect(stripeCalls.taxIdDeletes).toContain("txi_old");
     expect(stripeCalls.taxIdCreates).toContainEqual({ type: "eu_vat", value: "DE123456789" });

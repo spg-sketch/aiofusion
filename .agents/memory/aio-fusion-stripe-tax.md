@@ -8,3 +8,6 @@ description: Durable rules for VAT/automatic tax at checkout - fallback policy, 
 - Never pass a stored VAT number inline when creating the Stripe customer - attach it separately and fail-soft, so a malformed value cannot block checkout (the customer can enter one at checkout via tax_id_collection).
 - Billing-details sync to the Stripe customer is fail-soft and serialised per account; clearing the address in the app must clear it in Stripe too (send empty, do not omit), and tax-ID reconciliation deletes stale IDs before creating the wanted one.
 - Reusing an existing customer with automatic tax requires customer_update address/name "auto" on the checkout session.
+- Stripe customer addresses require ISO alpha-2 country codes, not display names.
+  **Why:** a human-readable value such as "United Kingdom" can pass app completeness checks but Stripe rejects it; the correct outbound value is `GB` (`DE` for Germany).
+  **How to apply:** use an ISO-backed selector, normalise legacy country names at validation and Stripe boundaries, and assert the outbound customer payload contract in tests.

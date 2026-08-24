@@ -101,7 +101,9 @@ describe("settings-section deep link survives refresh (account_section param)", 
     expect(screen.queryByText("Account type")).toBeNull();
     // History-sync must have rewritten the URL to carry the section, so a
     // second refresh reproduces the same state.
-    expect(window.location.search).toContain("account_section=security");
+    await waitFor(() => {
+      expect(window.location.search).toContain("account_section=security");
+    });
   });
 
   it("landing on /?account_section=team with a disallowed role falls back to Profile", async () => {
@@ -112,6 +114,15 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await waitFor(() => {
       expect(screen.getByText("Account type")).toBeInTheDocument();
     });
+  });
+
+  it("ignores a stale needs_setup flag when the server says setup is complete", async () => {
+    await renderAppAt("/?needs_setup=1&account_section=billing");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /client accounts/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
 });
 

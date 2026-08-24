@@ -2234,7 +2234,12 @@ router.post("/platform/request-set-password", requirePlatformAuth, loginLimiter,
 router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
     const account = req.account!;
-    if (normalizeRole(account.role) !== "user") {
+    const username = normUsername(account.username);
+    const setupCompany = await getCompanyBySlug(username);
+    // New signups historically start with the default agency role before email
+    // verification marks setupComplete=false. The setup flag, not that default
+    // role, is therefore the authority on whether this one-time choice is open.
+    if (normalizeRole(account.role) !== "user" && setupCompany?.setupComplete !== false) {
       res.status(409).json({ error: "Your account type has already been selected." });
       return;
     }
@@ -2248,7 +2253,6 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
       res.status(400).json({ error: "accountType must be 'agency' or 'client'." });
       return;
     }
-    const username = normUsername(account.username);
     const transition = await transitionWorkspaceAccountType(username, accountType, true);
     if (!transition.ok) {
       res.status(transition.reason === "missing" ? 404 : 400).json({

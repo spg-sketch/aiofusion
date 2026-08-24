@@ -426,7 +426,9 @@ function App() {
       const { session: s, needsSetup: bootNeedsSetup, hasPassword: bootHasPassword, workspaces: ws, accountProfile: ap } = await bootstrapAuth();
       setSessionState(s);
       if (ws && ws.length > 0) setWorkspaces(ws);
-      if (bootNeedsSetup) setNeedsSetup(true);
+      // The server is authoritative here. A stale ?needs_setup=1 callback URL
+      // must not keep an already-configured client trapped on the setup page.
+      setNeedsSetup(bootNeedsSetup === true);
       if (bootHasPassword !== undefined) setHasPassword(bootHasPassword);
       // Only store profile when the session role is client (direct brand) or
       // agency - admins never need it and it keeps the guard simple in IntakePage.

@@ -74,6 +74,37 @@ const EMPTY_FORM: CompanyBillingForm = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ISO_COUNTRY_CODES = (
+  "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ " +
+  "CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR " +
+  "GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP " +
+  "KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT " +
+  "MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW " +
+  "SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG " +
+  "UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW XK"
+).split(" ");
+const countryDisplayNames = new Intl.DisplayNames(["en-GB"], { type: "region" });
+const COUNTRY_OPTIONS = ISO_COUNTRY_CODES
+  .map((code) => ({ code, label: countryDisplayNames.of(code) ?? code }))
+  .sort((a, b) => a.label.localeCompare(b.label, "en-GB"));
+const COUNTRY_ALIASES: Record<string, string> = {
+  uk: "GB",
+  "great britain": "GB",
+  britain: "GB",
+  "united states of america": "US",
+  usa: "US",
+};
+
+function countryKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normaliseCountryCode(value: string): string {
+  const key = countryKey(value);
+  return COUNTRY_ALIASES[key]
+    ?? COUNTRY_OPTIONS.find((option) => option.code.toLowerCase() === key || countryKey(option.label) === key)?.code
+    ?? "";
+}
 
 function validate(form: CompanyBillingForm): FieldErrors {
   const errors: FieldErrors = {};
@@ -116,7 +147,7 @@ export function BillingDetailsCard() {
             addressLine2: json.addressLine2 ?? "",
             townCity: json.townCity ?? "",
             postcode: json.postcode ?? "",
-            country: json.country ?? "",
+            country: normaliseCountryCode(json.country ?? ""),
             vatNumber: json.vatNumber ?? "",
           });
           setLegacyBillingAddress(json.legacyBillingAddress ?? "");
@@ -269,7 +300,33 @@ export function BillingDetailsCard() {
         {field("addressLine2", "Address line 2", { placeholder: "e.g. Suite 4", optional: true })}
         {field("townCity", "Town / city", { placeholder: "e.g. London" })}
         {field("postcode", "Postcode", { placeholder: "e.g. SW1A 1AA", maxLength: 32 })}
-        {field("country", "Country", { placeholder: "e.g. United Kingdom", maxLength: 80 })}
+        <div className="md:col-span-6">
+          <label htmlFor="country" className={labelClass} style={{ color: vars.g600 }}>
+            Country <span style={{ color: accent }}>*</span>
+          </label>
+          <select
+            id="country"
+            name="country"
+            value={form.country}
+            onChange={(e) => updateField("country", e.target.value)}
+            required
+            disabled={!loaded}
+            aria-invalid={!!errors.country}
+            aria-describedby={errors.country ? "country-error" : undefined}
+            className={inputClass}
+            style={{ borderColor: errors.country ? "#DC2626" : vars.g200, ["--tw-ring-color" as any]: accent }}
+          >
+            <option value="">Select a country</option>
+            {COUNTRY_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+          {errors.country && (
+            <p id="country-error" className="text-[11px] mt-1" style={{ color: "#B91C1C" }}>
+              {errors.country}
+            </p>
+          )}
+        </div>
         <div className="md:col-span-12 flex flex-wrap items-center gap-3 mt-1">
           <button
             type="submit"

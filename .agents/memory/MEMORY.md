@@ -37,7 +37,7 @@
 - [AIO Fusion team invites + membership roles](aio-fusion-team-invites.md) — 5-tier member roles ride on the session; createPlatformSession revokes per user_id NOT per slug; blockReadOnlyMembers must stay path-scoped.
 - [AIO Fusion password reset](aio-fusion-password-reset.md) — passwords live in BOTH platform_users and legacy platform_accounts (sync both); App.tsx history-sync wipes URL query params before lazy pages mount, capture email-link params in App state.
 - [AIO Fusion last sign-in semantics](aio-fusion-last-sign-in.md) — persist successful authentication timestamps in platform_meta; logout deletes sessions, and impersonation/workspace switching must never count as client sign-in.
-- [AIO Fusion login/SSO overhaul Steps 1–4](aio-fusion-login-sso-overhaul.md) — schema v2 columns, session_version fast revocation, pending_approval gate removed; PGlite DDL + cookie name `aio_sid` pitfalls; Steps 5–8 still pending.
+- [AIO Fusion login/SSO overhaul Steps 1–4](aio-fusion-login-sso-overhaul.md) — setup_complete=false controls the one-time type gate even when a role is preassigned; schema/session pitfalls.
 - [PGlite transaction limitations](pglite-transaction-limitations.md) — isNotNull(col) and getOwnedProjectIds() deadlock inside db.transaction()+FOR UPDATE; pre-compute before the transaction block.
 - [Scrambled semantic-merge test files](aio-fusion-scrambled-merge-tests.md) — if a rebase-conflict file fails tests, the incoming main version may itself be spliced/broken; rebuild from last coherent commit.
 - [Security alert email recipient](aio-fusion-security-alert-recipient.md) — resolve to earliest OWNER membership (fallback: account email), never latest-membership lookup; non-owners must not get security notices.
@@ -55,7 +55,7 @@
 - [Agency partner clients permanently managed](aio-fusion-agency-partner-clients.md) — every credential-issuance route must call isAgencyPartnerClient; UI hiding is not enforcement; /me exposes agencyManagedClient.
 - [Workspace switch cache clearing](aio-fusion-workspace-switch-caches.md) - bare localStorage keys to clear on switch (leak via sync push); intake late-profile effect; VIEW_TO_SLUG derived from PUBLIC_ROUTES + hard-fail prerender.
 - [AIO Fusion Stripe billing](aio-fusion-stripe-billing.md) — connection key is settings.secret; webhook secret in stripe._managed_webhooks; claim/release + stored-subscription-match webhook rules; tier honours project owner only.
-- [Stripe Tax / VAT at checkout](aio-fusion-stripe-tax.md) — test-mode-only taxless fallback, fail-soft VAT attach, serialised billing-details sync, owner dashboard steps in replit.md.
+- [Stripe Tax / VAT at checkout](aio-fusion-stripe-tax.md) — Stripe addresses need ISO alpha-2 countries; test-only taxless fallback, fail-soft VAT attach, serialised sync.
 - [Discount invites + admin subscriptions](aio-fusion-discount-invites.md) — meta keys, CAS single-use claim, email-bound redemption, `aio-invite-<pct>pct` coupons, end-at-renewal semantics.
 - [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.
 - [Live invitation uniqueness](live-invite-uniqueness.md) — expire/retire invitation rows before applying the state-based one-live-invite-per-email invariant.

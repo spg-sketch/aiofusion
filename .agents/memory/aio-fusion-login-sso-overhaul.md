@@ -18,6 +18,9 @@ description: Schema, API, and frontend patterns for email verification, account 
 ## Account type selection
 - `AccountTypeSelectPage` full-page gate in App.tsx when `needsSetup && session && !authLoading`.
 - Triggered by: `?needs_setup=true` URL param, `bootstrapAuth()` returning `needsSetup: true`, or `onNeedsSetup()` callback on PlatformHomePage.
+- Treat `setup_complete=false` as the authority that the one-time choice is still open, even when the workspace already has an agency/client role.
+  **Why:** signup and invitation paths can preassign a default or invited role before the verified owner confirms setup; role-based rejection traps fresh accounts on the gate.
+  **How to apply:** the server may accept setup only while the flag is explicitly false, and bootstrap must clear stale URL-derived setup state when the server reports setup complete.
 
 ## Microsoft SSO
 - State in `aio_ms_state` cookie (httpOnly, 10 min). User info from Microsoft Graph `/v1.0/me`.
