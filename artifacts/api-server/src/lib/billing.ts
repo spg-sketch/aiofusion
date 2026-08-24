@@ -219,7 +219,7 @@ export async function withBillingLock<T>(
 // A DB-backed pending-checkout record bridges that gap.
 //
 // Design:
-//  - The first request INSERTs a claim with { at, tok, sid?, url? }.
+//  - The first request INSERTs a claim with { at, tok, frequency, sid?, url? }.
 //    "at" is the claim timestamp (for TTL), "tok" is a unique token (UUID).
 //  - After the Stripe session is created, the claim is updated (finalizeCheckoutClaim)
 //    to include the session id and url. Subsequent requests can reuse this URL.
@@ -244,27 +244,39 @@ export const CHECKOUT_PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const checkoutPendingKey = (slug: string) => `checkout:pending:${normUsername(slug)}`;
 
 type CheckoutClaim = {
-  at: string;   // ISO timestamp of claim (used for TTL comparison)
-  tok: string;  // unique claim token (UUID); release is conditional on this
-  sid?: string; // Stripe Checkout Session id (set after session created)
-  url?: string; // Stripe Checkout Session url (set after session created)
+  at: string;                         // ISO timestamp of claim (used for TTL comparison)
+  tok: string;                        // unique claim token (UUID); release is conditional on this
+  frequency?: BillingFrequency;       // optional only for claims created before frequency-aware reuse
+  sid?: string;                       // Stripe Checkout Session id (set after session created)
+  url?: string;                       // Stripe Checkout Session url (set after session created)
 };
 
 // Atomically claim the checkout-in-progress slot for a billing account.
 //
 // Returns:
 //  { claimed: true,  claimToken }               - slot acquired, proceed to create session
-//  { claimed: false, existingUrl }              - live session already open; reuse this URL
+//  { claimed: false, existingUrl, ... }         - live session already open; the caller may
+//                                                 reuse it only when its frequency still matches
 //  { claimed: false, existingUrl: undefined }   - mid-claim race (another process is creating
 //                                                  the session but has not finalized yet)
 export async function claimCheckout(
   slug: string,
-): Promise<{ claimed: true; claimToken: string } | { claimed: false; existingUrl?: string }> {
+  frequency: BillingFrequency,
+): Promise<
+  | { claimed: true; claimToken: string }
+  | {
+      claimed: false;
+      existingUrl?: string;
+      existingSessionId?: string;
+      existingClaimToken?: string;
+      existingFrequency?: BillingFrequency;
+    }
+> {
   const key = checkoutPendingKey(slug);
   const claimToken = randomUUID();
   const now = new Date().toISOString();
   const stale = new Date(Date.now() - CHECKOUT_PENDING_TTL_MS).toISOString();
-  const newValue = JSON.stringify({ at: now, tok: claimToken } satisfies CheckoutClaim);
+  const newValue = JSON.stringify({ at: now, tok: claimToken, frequency } satisfies CheckoutClaim);
 
   // Atomic: INSERT wins the slot. ON CONFLICT DO UPDATE only fires when the
   // existing claim is stale AND has no Stripe session created yet (sid IS NULL).
@@ -294,7 +306,13 @@ export async function claimCheckout(
   if (existing?.value) {
     try {
       const data = JSON.parse(existing.value) as Partial<CheckoutClaim>;
-      if (data.url) return { claimed: false, existingUrl: data.url };
+      return {
+        claimed: false,
+        existingUrl: data.url,
+        existingSessionId: data.sid,
+        existingClaimToken: data.tok,
+        existingFrequency: isBillingFrequency(data.frequency) ? data.frequency : undefined,
+      };
     } catch {
       // Malformed value - treat as no URL available
     }
@@ -311,6 +329,7 @@ export async function finalizeCheckoutClaim(
   claimToken: string,
   sessionId: string,
   sessionUrl: string,
+  frequency: BillingFrequency,
 ): Promise<void> {
   const key = checkoutPendingKey(slug);
   const value = JSON.stringify({
@@ -318,6 +337,7 @@ export async function finalizeCheckoutClaim(
     tok: claimToken,
     sid: sessionId,
     url: sessionUrl,
+    frequency,
   } satisfies CheckoutClaim);
   // RETURNING is required to detect if the claim was preempted. If another
   // process TTL-preempted this claim between claimCheckout and session

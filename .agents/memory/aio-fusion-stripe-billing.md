@@ -22,6 +22,8 @@ The checkout-in-progress guard must remain live from the moment a claim is issue
 
 If finalization fails (DB write), the route must expire the Stripe session and return an error - never return the URL with an unprotected claim still in place.
 
+Checkout claims must bind every parameter that changes what the customer will buy, including billing frequency. Reuse an open Stripe URL only when those parameters match; otherwise expire the old session, conditionally release its claim, and create the newly selected checkout. For legacy claims, recover the frequency from Stripe session metadata before deciding.
+
 The completion webhook conditional UPDATE must allow: (a) first purchase (null stored sub), (b) idempotent replay (same sub), (c) re-subscription after cancellation (status = 'cancelled'). An incoming sub that matches none of these is a late duplicate and must be cancelled via the Stripe API immediately.
 
 **Why:** an architect review found that TTL preemption of a finalized claim and an unconditional completion UPDATE both created windows for double-billing; cancelled re-subscription is a legitimate flow that the duplicate guard must not block.

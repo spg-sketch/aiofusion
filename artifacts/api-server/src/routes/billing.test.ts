@@ -181,6 +181,9 @@ const stripeCalls = vi.hoisted(() => ({
   subscriptionCancels: [] as string[],
   // Records session ids that were expired via checkout.sessions.expire.
   sessionExpires: [] as string[],
+  // Per-id metadata for checkout.sessions.retrieve, used for legacy claims
+  // created before pending checkout records stored their billing frequency.
+  sessionRetrieveOverrides: {} as Record<string, { metadata?: Record<string, string> | null }>,
   // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
   rejectFinalize: false,
   // When true, the next checkout.sessions.expire call will throw (simulates a Stripe API failure).
@@ -275,6 +278,11 @@ vi.mock("../lib/stripe-client", () => ({
             stripeCalls.sessions.push(params);
             return Promise.resolve({ id: "cs_test_mock", url: "https://checkout.stripe.com/test-session" });
           },
+          retrieve: (id: string) =>
+            Promise.resolve({
+              id,
+              metadata: stripeCalls.sessionRetrieveOverrides[id]?.metadata ?? null,
+            }),
           expire: (id: string) => {
             if (stripeCalls.rejectExpire) {
               stripeCalls.rejectExpire = false;
@@ -1371,7 +1379,7 @@ describe("billing hardening", () => {
     const { sid } = await seedWorkspace("checkrace-co", "owner@checkrace.test", { accountRole: "client" });
     // Simulate another process having claimed the checkout slot but not yet created
     // the Stripe session (no url in the claim value).
-    const claimResult = await claimCheckout("checkrace-co");
+    const claimResult = await claimCheckout("checkrace-co", "annual");
     if (!claimResult.claimed) throw new Error("expected first claim to succeed");
     try {
       const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
@@ -1433,6 +1441,61 @@ describe("billing hardening", () => {
     expect(res3.json.error).toMatch(/active subscription/i);
   });
 
+  it("switching billing frequency expires the open session and creates a matching checkout", async () => {
+    const { sid } = await seedWorkspace("switch-frequency-co", "owner@switch-frequency.test", {
+      accountRole: "agency",
+    });
+
+    const annual = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+    expect(annual.status).toBe(200);
+    const sessionsBeforeSwitch = stripeCalls.sessions.length;
+    const expiresBeforeSwitch = stripeCalls.sessionExpires.length;
+
+    const quarterly = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
+    expect(quarterly.status).toBe(200);
+    expect(stripeCalls.sessionExpires.slice(expiresBeforeSwitch)).toContain("cs_test_mock");
+    expect(stripeCalls.sessions).toHaveLength(sessionsBeforeSwitch + 1);
+
+    const params = stripeCalls.sessions[stripeCalls.sessions.length - 1] as any;
+    expect(params.metadata.frequency).toBe("quarterly");
+    expect(params.line_items).toEqual([{ price: "price_mock_1", quantity: 1 }]);
+
+    const [claim] = await db
+      .select({ value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "checkout:pending:switch-frequency-co"));
+    expect(JSON.parse(claim!.value).frequency).toBe("quarterly");
+    await cleanupCheckoutClaims();
+  });
+
+  it("switching frequency replaces a legacy open session whose claim has no frequency", async () => {
+    const { sid } = await seedWorkspace("legacy-frequency-co", "owner@legacy-frequency.test", {
+      accountRole: "agency",
+    });
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:legacy-frequency-co",
+      value: JSON.stringify({
+        at: new Date().toISOString(),
+        tok: "legacy-frequency-token",
+        sid: "cs_legacy_annual",
+        url: "https://checkout.stripe.com/legacy-annual",
+      }),
+    });
+    stripeCalls.sessionRetrieveOverrides.cs_legacy_annual = {
+      metadata: { frequency: "annual" },
+    };
+    const sessionsBeforeSwitch = stripeCalls.sessions.length;
+
+    const quarterly = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
+    expect(quarterly.status).toBe(200);
+    expect(stripeCalls.sessionExpires).toContain("cs_legacy_annual");
+    expect(stripeCalls.sessions).toHaveLength(sessionsBeforeSwitch + 1);
+    expect((stripeCalls.sessions[stripeCalls.sessions.length - 1] as any).metadata.frequency).toBe("quarterly");
+
+    delete stripeCalls.sessionRetrieveOverrides.cs_legacy_annual;
+    await cleanupCheckoutClaims();
+  });
+
   it("TTL preemption: a stale claim is preempted but the old claimant's release does not remove the new claim", async () => {
     // Plant a stale claim directly (older than CHECKOUT_PENDING_TTL_MS).
     const staleToken = "stale-token-uuid-for-test";
@@ -1443,7 +1506,7 @@ describe("billing hardening", () => {
     });
 
     // New process preempts the stale claim.
-    const result = await claimCheckout("ttlrace-co");
+    const result = await claimCheckout("ttlrace-co", "annual");
     expect(result.claimed).toBe(true);
     if (!result.claimed) throw new Error("expected preemption to succeed");
     const newToken = result.claimToken;
@@ -1479,7 +1542,7 @@ describe("billing hardening", () => {
     });
 
     // Even though the claim is stale, it has a sid - it must not be preempted.
-    const result = await claimCheckout("finalized-stale-co");
+    const result = await claimCheckout("finalized-stale-co", "annual");
     expect(result.claimed).toBe(false);
     if (result.claimed) throw new Error("expected finalized claim to block preemption");
     expect(result.existingUrl).toBe("https://checkout.stripe.com/finalized-open");

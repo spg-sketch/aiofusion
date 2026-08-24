@@ -173,7 +173,49 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       const lockResult = await withBillingLock(ctx.slug, async (bs) => {
         const state = await getBillingState(bs);
         if (isEntitled(state)) return { entitled: true, billingSlug: bs };
-        const result = await claimCheckout(bs);
+        let result = await claimCheckout(bs, frequency);
+        if (
+          !result.claimed &&
+          result.existingUrl &&
+          result.existingSessionId &&
+          result.existingClaimToken
+        ) {
+          const existingSessionId = result.existingSessionId;
+          const existingClaimToken = result.existingClaimToken;
+          let existingFrequency = result.existingFrequency;
+          const stripe = await getUncachableStripeClient();
+
+          // Claims created before frequency-aware reuse do not carry this field.
+          // Read the Stripe session metadata once so an old annual session is
+          // still replaceable when the user has now selected quarterly.
+          if (!existingFrequency) {
+            const existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
+            const metadataFrequency = existingSession.metadata?.["frequency"];
+            existingFrequency = isBillingFrequency(metadataFrequency) ? metadataFrequency : undefined;
+          }
+
+          if (existingFrequency && existingFrequency !== frequency) {
+            try {
+              await stripe.checkout.sessions.expire(existingSessionId);
+              await releaseCheckout(bs, existingClaimToken);
+              result = await claimCheckout(bs, frequency);
+            } catch (err) {
+              logger.warn(
+                {
+                  err,
+                  slug: bs,
+                  sessionId: existingSessionId,
+                  existingFrequency,
+                  requestedFrequency: frequency,
+                },
+                "billing: could not replace open checkout after billing frequency changed",
+              );
+              return { entitled: false, switchFailed: true, billingSlug: bs };
+            }
+          } else if (existingFrequency && !result.existingFrequency) {
+            result = { ...result, existingFrequency };
+          }
+        }
         return { entitled: false, claimResult: result, billingSlug: bs };
       });
 
@@ -181,14 +223,30 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         res.status(409).json({ error: "This account already has an active subscription." });
         return;
       }
+      if ("switchFailed" in lockResult && lockResult.switchFailed) {
+        res.status(409).json({
+          error: "Your earlier checkout could not be replaced yet. Please wait a moment, refresh this page, and choose the billing option again.",
+        });
+        return;
+      }
       const claimResult = lockResult.claimResult!;
       if (!claimResult.claimed) {
         // Another process has an open checkout session. If it has already been
         // created, reuse its URL so the user lands on the same Stripe page
         // instead of seeing a generic error.
-        if (claimResult.existingUrl) {
+        if (claimResult.existingUrl && claimResult.existingFrequency === frequency) {
           res.json({ url: claimResult.existingUrl });
           return;
+        }
+        // Legacy claims may not carry frequency. If the Stripe metadata lookup
+        // above found the same value, reuse is safe even though the DB row is old.
+        if (claimResult.existingUrl && !claimResult.existingFrequency && claimResult.existingSessionId) {
+          const stripe = await getUncachableStripeClient();
+          const existingSession = await stripe.checkout.sessions.retrieve(claimResult.existingSessionId);
+          if (existingSession.metadata?.["frequency"] === frequency) {
+            res.json({ url: claimResult.existingUrl });
+            return;
+          }
         }
         res.status(409).json({ error: "A checkout is already in progress for this account. Please wait a moment and try again." });
         return;
@@ -221,7 +279,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       // allowing a second process to open another session while this one is still
       // open on Stripe.  finalizeCheckoutClaim throws if 0 rows were updated
       // (claim preempted between session creation and this write).
-      await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url);
+      await finalizeCheckoutClaim(billingSlug, claimToken, sessionId, url, frequency);
 
       res.json({ url });
       // Claim is now held until checkout.session.completed fires. Do NOT release here.
