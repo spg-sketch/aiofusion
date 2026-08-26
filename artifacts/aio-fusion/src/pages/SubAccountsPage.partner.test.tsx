@@ -97,8 +97,7 @@ function openClientsSection() {
 describe("agency partner client rows", () => {
   it("presents managed clients with direct project actions and no login status or credential controls", () => {
     openClientsSection();
-    expect(screen.getByRole("button", { name: /^open project$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^start project$/i })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^go to client$/i })).toHaveLength(2);
     expect(screen.queryByText(/never signed in/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /change password/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /login as client/i })).toBeNull();
@@ -123,18 +122,18 @@ describe("agency partner client rows", () => {
     expect(serverSetClientAccess).not.toHaveBeenCalled();
   });
 
-  it("Open project stashes the sole project id and enters the managed workspace", async () => {
+  it("Go to client stashes the sole project id and enters the managed workspace", async () => {
     openClientsSection();
-    fireEvent.click(screen.getByRole("button", { name: /^open project$/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[0]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     const raw = sessionStorage.getItem("aio:open-client-projects");
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw!)).toEqual({ projectId: "proj-1" });
   });
 
-  it("Start project opens the client's project hub with no target project", async () => {
+  it("Go to client opens the client's project hub when it has no project", async () => {
     openClientsSection();
-    fireEvent.click(screen.getByRole("button", { name: /^start project$/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[1]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ projectId: null });
   });
@@ -155,7 +154,7 @@ describe("agency partner client rows", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^start project$/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[1]);
 
     await vi.waitFor(() => expect(onSectionChange).toHaveBeenCalledWith("billing"));
     expect(serverImpersonate).not.toHaveBeenCalled();

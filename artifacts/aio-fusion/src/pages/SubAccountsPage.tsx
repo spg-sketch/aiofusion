@@ -1404,11 +1404,7 @@ function SubAccountsPage({
                           {checkingAllowanceFor === u.username
                             ? "Checking allowance"
                             : isAgencyPartner
-                            ? owned.length === 0
-                              ? "Start project"
-                              : owned.length === 1
-                              ? "Open project"
-                              : "View projects"
+                            ? "Go to client"
                             : u.managed
                             ? "Open account"
                             : "Login as client"}
