@@ -32,7 +32,7 @@ type SubscriptionInfo = {
   entitled: boolean;
   applicablePlan: "inhouse" | "agency";
   includedProjects: number;
-  projectAllowance: number | null;
+  projectAllowance: number;
   projectsUsed: number;
   latestInvoiceUrl?: string | null;
   portalAvailable: boolean;
@@ -178,7 +178,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
               {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included.
               {renewal ? ` Next renewal: ${renewal}.` : ""}
             </p>
-            {info.entitled && info.projectAllowance !== null && (
+            {info.entitled && (
               <p className="text-[13px] mt-1" style={{ color: vars.g500 }}>
                 Projects: <strong style={{ color: ink }}>{info.projectsUsed} of {info.projectAllowance}</strong> in use
                 {info.unassignedAddons.length > 0 && (

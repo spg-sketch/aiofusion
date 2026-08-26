@@ -14,6 +14,7 @@ import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
 import { pushProjectMeta } from "../lib/projectSync";
+import { fetchProjectAllowance } from "../lib/billingAllowance";
 import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
@@ -56,6 +57,7 @@ function SubAccountsPage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   const [tick, setTick] = useState(0);
+  const [checkingAllowanceFor, setCheckingAllowanceFor] = useState<string | null>(null);
   const refresh = () => setTick((t) => t + 1);
 
   // --- Left-hand settings navigation -------------------------------------
@@ -81,9 +83,9 @@ function SubAccountsPage({
     },
     ...(isClientManager
       ? [{
-          label: "My Client Accounts",
+          label: isAgencyPartner ? "My Clients" : "My Client Accounts",
           items: [
-            { id: "clients" as const, label: "Client accounts", icon: Building2 },
+            { id: "clients" as const, label: isAgencyPartner ? "Clients" : "Client accounts", icon: Building2 },
             { id: "archived" as const, label: "Archived clients", icon: Archive },
             { id: "assign" as const, label: "Assign projects", icon: FolderOpen },
           ],
@@ -616,13 +618,26 @@ function SubAccountsPage({
   };
 
   // Agency partner shortcut: enter the client's workspace and land on their
-  // projects (straight into the project when they only have one). The target
-  // is stashed in sessionStorage and consumed by App.tsx after the reload.
-  const handleOpenClientProjects = (username: string, ownedProjects: { id: string }[]) => {
+  // projects. A specific target opens directly; otherwise the project hub is
+  // shown so the agency can start the first project or choose between several.
+  // The target is stashed in sessionStorage and consumed by App.tsx after reload.
+  const handleOpenClientProjects = async (username: string, projectId?: string | null) => {
+    // Existing projects never consume another slot. Starting a first project
+    // must be checked while still in the agency workspace because managed
+    // client workspaces deliberately have no billing access of their own.
+    if (!projectId) {
+      setCheckingAllowanceFor(username);
+      const allowance = await fetchProjectAllowance();
+      setCheckingAllowanceFor(null);
+      if (allowance?.atLimit) {
+        selectSection("billing");
+        return;
+      }
+    }
     try {
       sessionStorage.setItem(
         "aio:open-client-projects",
-        JSON.stringify({ projectId: ownedProjects.length === 1 ? ownedProjects[0].id : null }),
+        JSON.stringify({ projectId: projectId ?? null }),
       );
     } catch { /* non-fatal - lands on the project list instead */ }
     handleEnterAccount(username);
@@ -725,14 +740,16 @@ function SubAccountsPage({
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-              {canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
+              {isAgencyPartner ? "Clients" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            {canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
+            {isAgencyPartner ? "Manage your clients" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            {canCreateSubAccounts(session.role)
+            {isAgencyPartner
+              ? "Add the clients your agency manages and open their projects directly. These clients do not need a separate AIO Fusion login."
+              : canCreateSubAccounts(session.role)
               ? "Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients."
               : "Manage your account settings, team members, and security options."}
           </p>
@@ -1178,7 +1195,7 @@ function SubAccountsPage({
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
         {section === "clients" && isClientManager && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Create a client account</h2>
+          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a client" : "Create a client account"}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
@@ -1306,7 +1323,7 @@ function SubAccountsPage({
             </div>
             <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
               {isAgencyPartner
-                ? "You manage this account on the client's behalf - there's no password to share and nothing for the client to set up. Billing stays with your agency."
+                ? "Your agency manages this client and their projects. There is no separate client login or password, and billing stays with your agency."
                 : newManaged
                 ? "No email will be sent and the client won't be able to sign in - you manage everything on their behalf."
                 : "If you add a key contact email, we'll let them know their account has been created and they can set their own password."}
@@ -1321,10 +1338,12 @@ function SubAccountsPage({
         {section === "clients" && (
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your client accounts ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
+            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your clients" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
           </div>
           {subAccounts.length === 0 ? (
-            <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>No client accounts yet. Create one above to give a client their own login.</p>
+            <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>
+              {isAgencyPartner ? "No clients yet. Add one above, then start their first project." : "No client accounts yet. Create one above to give a client their own login."}
+            </p>
           ) : (
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
               {subAccounts.map((u) => {
@@ -1362,18 +1381,37 @@ function SubAccountsPage({
                           </div>
                         </div>
                       </div>
-                      <p className="flex items-center gap-1.5 text-[11px] font-medium sm:pl-[52px]" style={{ color: vars.g500 }}>
+                      {!isAgencyPartner && <p className="flex items-center gap-1.5 text-[11px] font-medium sm:pl-[52px]" style={{ color: vars.g500 }}>
                         <Clock size={12} />
                         {u.lastSignInAt ? `Last signed in ${formatLastSignIn(u.lastSignInAt)}` : "Never signed in"}
-                      </p>
+                      </p>}
                       <div className="flex items-center gap-2 flex-wrap sm:pl-[52px]">
                         <button
-                          onClick={() => (isAgencyPartner ? handleOpenClientProjects(u.username, owned) : handleEnterAccount(u.username))}
-                          disabled={enteringUsername === u.username}
+                          onClick={() => (isAgencyPartner
+                            ? void handleOpenClientProjects(u.username, owned.length === 1 ? owned[0].id : null)
+                            : handleEnterAccount(u.username))}
+                          disabled={enteringUsername === u.username || checkingAllowanceFor === u.username}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all text-white"
                           style={{ background: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
                         >
-                          {enteringUsername === u.username ? <Loader2 size={12} className="animate-spin" /> : isAgencyPartner ? <FolderOpen size={12} /> : <LogIn size={12} />} {isAgencyPartner ? "Client projects" : u.managed ? "Open account" : "Login as client"}
+                          {enteringUsername === u.username || checkingAllowanceFor === u.username
+                            ? <Loader2 size={12} className="animate-spin" />
+                            : isAgencyPartner && owned.length === 0
+                            ? <Plus size={12} />
+                            : isAgencyPartner
+                            ? <FolderOpen size={12} />
+                            : <LogIn size={12} />}
+                          {checkingAllowanceFor === u.username
+                            ? "Checking allowance"
+                            : isAgencyPartner
+                            ? owned.length === 0
+                              ? "Start project"
+                              : owned.length === 1
+                              ? "Open project"
+                              : "View projects"
+                            : u.managed
+                            ? "Open account"
+                            : "Login as client"}
                         </button>
                         <button
                           onClick={() => {
@@ -1528,10 +1566,18 @@ function SubAccountsPage({
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {owned.map((p) => (
-                            <span key={p.id} className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full" style={{ background: accentSoft, color: accent }}>
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => isAgencyPartner && handleOpenClientProjects(u.username, p.id)}
+                              disabled={!isAgencyPartner || enteringUsername === u.username}
+                              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity disabled:cursor-default"
+                              style={{ background: accentSoft, color: accent, opacity: enteringUsername === u.username ? 0.7 : 1 }}
+                              title={isAgencyPartner ? `Open ${p.name}` : undefined}
+                            >
                               <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white" style={{ background: p.color }}>{p.initials}</span>
                               {p.name}
-                            </span>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -1563,7 +1609,7 @@ function SubAccountsPage({
           archivedSubAccounts.length === 0 ? (
             <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
               <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Archived clients</h2>
-              <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>No archived client accounts. When you archive a client, they appear here and can be restored at any time.</p>
+              <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived clients. When you archive a client, they appear here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
             </div>
           ) : (
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>

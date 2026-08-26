@@ -21,6 +21,7 @@ import {
   claimCheckout,
   releaseCheckout,
   getCheckoutErrorResponse,
+  LEGACY_PROJECT_CAP,
 } from "../lib/billing";
 import {
   PLAN_PRICES,
@@ -107,7 +108,9 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       entitled,
       applicablePlan: ctx.plan,
       includedProjects: included,
-      projectAllowance: entitled ? included + addons.length : null,
+      // Always expose the effective allowance used by the server-side project
+      // creation guard. Unsubscribed beta accounts retain the legacy cap.
+      projectAllowance: entitled ? included + addons.length : LEGACY_PROJECT_CAP,
       projectsUsed: projects.length,
       latestInvoiceUrl: latestInvoice,
       portalAvailable: stripeConfigured() && !!state?.stripeCustomerId,
@@ -197,36 +200,51 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         ) {
           const existingSessionId = result.existingSessionId;
           const existingClaimToken = result.existingClaimToken;
-          let existingFrequency = result.existingFrequency;
           const stripe = await getUncachableStripeClient();
+          let existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
+          const metadataFrequency = existingSession.metadata?.["frequency"];
+          const existingFrequency =
+            result.existingFrequency ??
+            (isBillingFrequency(metadataFrequency) ? metadataFrequency : undefined);
 
-          // Claims created before frequency-aware reuse do not carry this field.
-          // Read the Stripe session metadata once so an old annual session is
-          // still replaceable when the user has now selected quarterly.
-          if (!existingFrequency) {
-            const existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
-            const metadataFrequency = existingSession.metadata?.["frequency"];
-            existingFrequency = isBillingFrequency(metadataFrequency) ? metadataFrequency : undefined;
-          }
-
-          if (existingFrequency && existingFrequency !== frequency) {
+          // The checkout.session.expired webhook normally clears this claim.
+          // If that webhook is delayed or missed, never reuse the dead URL:
+          // release the token we just verified and start a fresh checkout.
+          if (existingSession.status === "expired") {
+            await releaseCheckout(bs, existingClaimToken);
+            result = await claimCheckout(bs, frequency);
+          } else if (existingSession.status === "complete") {
+            // Do not release a completed session before its completion webhook
+            // has applied the entitlement. Holding the claim prevents a second
+            // subscription from being opened during that short window.
+            return { entitled: false, completedCheckout: true, billingSlug: bs };
+          } else if (existingFrequency && existingFrequency !== frequency) {
             try {
               await stripe.checkout.sessions.expire(existingSessionId);
-              await releaseCheckout(bs, existingClaimToken);
-              result = await claimCheckout(bs, frequency);
             } catch (err) {
-              logger.warn(
-                {
-                  err,
-                  slug: bs,
-                  sessionId: existingSessionId,
-                  existingFrequency,
-                  requestedFrequency: frequency,
-                },
-                "billing: could not replace open checkout after billing frequency changed",
-              );
-              return { entitled: false, switchFailed: true, billingSlug: bs };
+              // Stripe may expire the session between our retrieve and expire
+              // calls. Re-read once: expired is safe to replace, complete is
+              // still protected, and any open/error state must remain locked.
+              existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
+              if (existingSession.status === "complete") {
+                return { entitled: false, completedCheckout: true, billingSlug: bs };
+              }
+              if (existingSession.status !== "expired") {
+                logger.warn(
+                  {
+                    err,
+                    slug: bs,
+                    sessionId: existingSessionId,
+                    existingFrequency,
+                    requestedFrequency: frequency,
+                  },
+                  "billing: could not replace open checkout after billing frequency changed",
+                );
+                return { entitled: false, switchFailed: true, billingSlug: bs };
+              }
             }
+            await releaseCheckout(bs, existingClaimToken);
+            result = await claimCheckout(bs, frequency);
           } else if (existingFrequency && !result.existingFrequency) {
             result = { ...result, existingFrequency };
           }
@@ -241,6 +259,12 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
       if ("switchFailed" in lockResult && lockResult.switchFailed) {
         res.status(409).json({
           error: "Your earlier checkout could not be replaced yet. Please wait a moment, refresh this page, and choose the billing option again.",
+        });
+        return;
+      }
+      if ("completedCheckout" in lockResult && lockResult.completedCheckout) {
+        res.status(409).json({
+          error: "Your earlier checkout has completed and is still being confirmed. Please refresh this page in a moment.",
         });
         return;
       }

@@ -212,17 +212,31 @@ function SidebarContent({
           </div>
         )}
       </div>
-      <div className="flex items-stretch justify-center border-b py-5" style={{ borderColor: vars.g200 }}>
-        <div className="relative group/sblogo flex-shrink-0">
+      <div className="flex items-stretch justify-center border-b px-5 py-4" style={{ borderColor: vars.g200 }}>
+        <div className="relative group/sblogo flex w-full flex-col items-center">
           {activeClient.logo ? (
-            <div className="w-14 h-14 rounded-lg overflow-hidden border-2 flex items-center justify-center" style={{ borderColor: vars.navy, background: "white" }}>
-              <img src={activeClient.logo} alt={activeClient.name} className="w-full h-full object-contain p-1" />
+            <div
+              className="flex h-20 w-full max-w-[190px] items-center justify-center overflow-hidden rounded-xl border"
+              style={{ borderColor: vars.g200, background: "white" }}
+            >
+              <img
+                src={activeClient.logo}
+                alt={activeClient.name}
+                className="h-full w-full object-contain p-2"
+              />
             </div>
           ) : (
             <div className="w-14 h-14 rounded-lg flex items-center justify-center text-[14px] font-bold text-white shadow-sm border-2" style={{ background: activeClient.color, borderColor: vars.navy }}>
               {activeClient.initials}
             </div>
           )}
+          <p
+            className="mt-2 w-full truncate text-center text-[12px] font-bold"
+            style={{ color: vars.navy }}
+            title={activeClient.name}
+          >
+            {activeClient.name}
+          </p>
         </div>
       </div>
       <div className="px-4 pt-4 pb-2 sticky top-0 z-10" style={{ background: "white" }}>

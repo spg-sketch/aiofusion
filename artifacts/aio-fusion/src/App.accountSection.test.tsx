@@ -120,7 +120,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await renderAppAt("/?needs_setup=1&account_section=billing");
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /client accounts/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /manage your clients/i })).toBeInTheDocument();
     });
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
@@ -135,9 +135,9 @@ describe("browser Back restores the previous settings section (popstate)", () =>
     });
 
     // Move to the Clients section in-page.
-    fireEvent.click(screen.getAllByRole("button", { name: /client accounts/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^clients$/i })[0]);
     await waitFor(() => {
-      expect(screen.getByText("Create a client account")).toBeInTheDocument();
+      expect(screen.getByText("Add a client")).toBeInTheDocument();
     });
 
     // Simulate the browser Back button: popstate carrying the App nav state
@@ -157,6 +157,6 @@ describe("browser Back restores the previous settings section (popstate)", () =>
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
     });
-    expect(screen.queryByText("Create a client account")).toBeNull();
+    expect(screen.queryByText("Add a client")).toBeNull();
   });
 });

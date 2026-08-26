@@ -1,6 +1,7 @@
 import { loadIntakeData, getKeyMessages, getSpokespeople, getProjectMediaCategories, getProjectDataMessages, setActiveProjectId, getActiveProjectId, getConfirmedEntity, getLlmSearchQueries, getCompetitors } from "./IntakeForm";
 import CountdownBanner from "./components/CountdownBanner";
 import { syncProjectsOnLoad, syncIntakeForProject, pushProjectMeta, deleteRemoteProject, setKnownProjectIds, assertActiveProjectConsistency } from "./lib/projectSync";
+import { fetchProjectAllowance } from "./lib/billingAllowance";
 import { stripEmDashes, normaliseAddedData } from "./lib/utils";
 import { apiBase } from "./lib/contentAi";
 import { loadSavedAudits } from "./LlmCheckPage";
@@ -20,9 +21,7 @@ import {
   serverLogout,
   serverAssignOwner,
   serverGetSessions,
-  getSubAccounts as getLocalSubAccounts,
   refreshAccountsCache,
-  canCreateSubAccounts,
   confirmPendingSso,
   bootstrapAuth,
   fetchAccountProfile,
@@ -30,7 +29,6 @@ import {
   serverGetWorkspaces,
   type SessionInfo,
 } from "./lib/auth";
-import { accountLabel } from "./lib/accountLabels";
 import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
@@ -333,7 +331,6 @@ function App() {
   // When set, the project being named was started from a client placeholder
   // card in the hub: pre-fill the client's company name and, once created,
   // assign the project to that client account.
-  const [startProjectFor, setStartProjectFor] = useState<{ username: string; name: string; website?: string } | null>(null);
   const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
 
@@ -390,12 +387,9 @@ function App() {
   // again whenever the tab regains focus, so a project a colleague created on
   // another device shows up without a manual page reload.
   const resyncProjects = useCallback(async () => {
-    // Refresh the cached accounts list in the same breath, so a client
-    // account created by a colleague on another device shows its
-    // "Start project" placeholder card without a reload. saveUsers fires
-    // "aio:accounts-changed", which bumps the pendingClientAccounts memo.
-    // Runs in parallel with the project sync (same cadence, one extra
-    // lightweight GET) and keeps the existing cache on any failure.
+    // Refresh the cached accounts list in the same breath so the managed
+    // Clients section stays current across devices. Runs in parallel with the
+    // project sync and keeps the existing cache on any failure.
     const [result] = await Promise.all([syncProjectsOnLoad(), refreshAccountsCache()]);
     if (result === "unauthorized") {
       // Server session has expired mid-use. Re-check with /api/platform/me;
@@ -472,29 +466,17 @@ function App() {
   }, [resyncProjects]);
 
   const beginCreateProject = () => requireSessionThen(() => {
-    // Pre-flight limit check for non-admin accounts: if the visible project list
-    // is already at 2 or more, surface a friendly message rather than letting
-    // the user name a project that the server will then reject.
-    if (session && session.role !== "admin" && visibleProjects.length >= 2) {
-      window.alert(
-        "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
-      );
-      return;
-    }
-    setNamingProject(true);
-  });
-
-  // Start a new project on behalf of a client sub-account (from the hub's
-  // "Start project" placeholder card). Same limit pre-check as above.
-  const beginStartProjectForClient = (client: { username: string; name: string; website?: string }) => requireSessionThen(() => {
-    if (session && session.role !== "admin" && visibleProjects.length >= 2) {
-      window.alert(
-        "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
-      );
-      return;
-    }
-    setStartProjectFor(client);
-    setNamingProject(true);
+    void (async () => {
+      if (session?.role !== "admin") {
+        const allowance = await fetchProjectAllowance();
+        if (allowance?.atLimit) {
+          setAccountSection("billing");
+          transitionToView("sub-accounts");
+          return;
+        }
+      }
+      setNamingProject(true);
+    })();
   });
 
   const handleDeleteProject = (id: string) => {
@@ -509,27 +491,7 @@ function App() {
   };
 
   const confirmCreateProject = async (name: string, logo?: string) => {
-    const assignTo = startProjectFor;
-    setStartProjectFor(null);
     const project = createStoredProject(name);
-    // Agency starting a project on a client's behalf: pre-fill the client's
-    // company name (intake field 4.1) and website into the fresh project's
-    // intake blob so the agency doesn't have to retype either. Only seed a
-    // genuinely new project (no existing intake key).
-    if (assignTo?.name?.trim() || assignTo?.website?.trim()) {
-      try {
-        const intakeKey = `aio.intake.v2::${project.id}`;
-        if (localStorage.getItem(intakeKey) === null) {
-          localStorage.setItem(
-            intakeKey,
-            JSON.stringify({
-              formData: assignTo.name?.trim() ? { "4.1": assignTo.name.trim() } : {},
-              ...(assignTo.website?.trim() ? { aiWebsite: assignTo.website.trim() } : {}),
-            }),
-          );
-        }
-      } catch { /* noop - prefill is best-effort */ }
-    }
     const afterCreate = loadStoredProjects();
     setStoredProjects(afterCreate);
     // Update the known-IDs cache BEFORE setActiveProjectId so the integrity
@@ -559,21 +521,9 @@ function App() {
       setActiveClient(prev ?? null);
       window.alert(
         pushResult.error ??
-          "You've reached the 2-project limit for Agency/Partner accounts.\n\nTo add more projects, contact info@aiofusion.ai.",
+          "You've reached your project allowance. Add another project workspace from the Billing section of your account settings.",
       );
       return;
-    }
-    // Project started from a client placeholder card: hand it to that client
-    // account (server first, mirror locally only once confirmed - same rules
-    // as handleAssignProjectOwner).
-    if (assignTo && pushResult.ok) {
-      const assignResult = await serverAssignOwner(project.id, assignTo.username);
-      if (assignResult.ok) {
-        assignProjectOwner(project.id, assignTo.username);
-        setStoredProjects(loadStoredProjects());
-      } else {
-        window.alert(`The project was created but could not be assigned to '${assignTo.username}': ${assignResult.error}\n\nYou can assign it later from Account settings > Assign projects.`);
-      }
     }
   };
   const [session, setSessionState] = useState<LocalSession | null>(() => {
@@ -679,29 +629,6 @@ function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleProjects, clientLogos]);
-
-  // Client sub-accounts that don't own a single project yet. These show in the
-  // hub as lighter "Start project" placeholder cards so creating the account
-  // and starting its first project stay one continuous flow. Recomputed from
-  // the stored project list, so a placeholder disappears as soon as the client
-  // owns at least one project.
-  // Bumped whenever the cached account list changes (saveUsers dispatches the
-  // event, e.g. after refreshAccountsCache or creating a client account), so
-  // placeholders appear as soon as a new client account is created.
-  const [accountsTick, setAccountsTick] = useState(0);
-  useEffect(() => {
-    const handler = () => setAccountsTick((t) => t + 1);
-    window.addEventListener("aio:accounts-changed", handler);
-    return () => window.removeEventListener("aio:accounts-changed", handler);
-  }, []);
-  const pendingClientAccounts = useMemo(() => {
-    if (!session || session.role === "client" || !canCreateSubAccounts(session.role)) return [];
-    const owners = new Set(storedProjects.map((p) => (p.owner || "").toLowerCase()));
-    return getLocalSubAccounts(session.username)
-      .filter((u) => u.role === "client" && !u.archived && !owners.has(u.username.toLowerCase()))
-      .map((u) => ({ username: u.username, name: accountLabel(u), website: u.website }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storedProjects, session, accountsTick]);
 
   // Poll for unseen admin replies so the George badge lights up even before
   // the user opens the support panel. Only runs when logged in (non-admin
@@ -1356,14 +1283,10 @@ function App() {
         onDeleteProject={handleDeleteProject}
         session={session}
         onGenerateFromUrl={session?.role === "admin" ? () => setShowGenerateFromUrl(true) : undefined}
-        pendingClients={pendingClientAccounts}
-        onStartProjectForClient={beginStartProjectForClient}
       />
       {namingProject && (
         <CreateProjectModal
-          initialName={startProjectFor?.name}
-          forClientName={startProjectFor?.name}
-          onCancel={() => { setNamingProject(false); setStartProjectFor(null); }}
+          onCancel={() => setNamingProject(false)}
           onCreate={confirmCreateProject}
         />
       )}

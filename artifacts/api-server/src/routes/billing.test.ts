@@ -183,6 +183,8 @@ const stripeCalls = vi.hoisted(() => ({
   subscriptionCancels: [] as string[],
   // Records session ids that were expired via checkout.sessions.expire.
   sessionExpires: [] as string[],
+  // Per-id overrides for checkout.sessions.retrieve.
+  sessionRetrieveOverrides: {} as Record<string, Partial<{ status: "open" | "complete" | "expired"; metadata: Record<string, string> }>>,
   // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
   rejectFinalize: false,
   // When true, the next checkout.sessions.expire call will throw (simulates a Stripe API failure).
@@ -285,6 +287,13 @@ vi.mock("../lib/stripe-client", () => ({
             stripeCalls.sessionExpires.push(id);
             return Promise.resolve({ id, status: "expired" });
           },
+          retrieve: (id: string) =>
+            Promise.resolve({
+              id,
+              status: "open",
+              metadata: {},
+              ...(stripeCalls.sessionRetrieveOverrides[id] ?? {}),
+            }),
         },
       },
       subscriptions: {
@@ -689,6 +698,8 @@ describe("billing routes", () => {
     expect(res.json.status).toBe("none");
     expect(res.json.applicablePlan).toBe("agency");
     expect(res.json.includedProjects).toBe(3);
+    expect(res.json.projectAllowance).toBe(2);
+    expect(res.json.projectsUsed).toBe(0);
     expect(res.json.prices.annual.yearlyTotal).toBe(500000);
     expect(res.json.prices.quarterly.perQuarter).toBe(143750);
   });
@@ -1552,6 +1563,69 @@ describe("billing hardening", () => {
     const res3 = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(res3.status).toBe(409);
     expect(res3.json.error).toMatch(/active subscription/i);
+  });
+
+  it("replaces an expired same-frequency checkout instead of reusing its dead URL", async () => {
+    const { sid } = await seedWorkspace("expired-reuse-co", "owner@expired-reuse.test", { accountRole: "client" });
+    const oldSessionId = "cs_expired_reuse";
+    const oldToken = "expired-reuse-token";
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:expired-reuse-co",
+      value: JSON.stringify({
+        at: new Date().toISOString(),
+        tok: oldToken,
+        sid: oldSessionId,
+        url: "https://checkout.stripe.com/expired-reuse",
+        frequency: "quarterly",
+      }),
+    });
+    stripeCalls.sessionRetrieveOverrides[oldSessionId] = {
+      status: "expired",
+      metadata: { frequency: "quarterly" },
+    };
+
+    try {
+      const sessionsBefore = stripeCalls.sessions.length;
+      const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "quarterly" } });
+      expect(res.status).toBe(200);
+      expect(res.json.url).toBe("https://checkout.stripe.com/test-session");
+      expect(stripeCalls.sessions).toHaveLength(sessionsBefore + 1);
+    } finally {
+      delete stripeCalls.sessionRetrieveOverrides[oldSessionId];
+      await cleanupCheckoutClaims();
+    }
+  });
+
+  it("replaces an expired checkout when the requested frequency has changed", async () => {
+    const { sid } = await seedWorkspace("expired-switch-co", "owner@expired-switch.test", { accountRole: "client" });
+    const oldSessionId = "cs_expired_switch";
+    const oldToken = "expired-switch-token";
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:expired-switch-co",
+      value: JSON.stringify({
+        at: new Date().toISOString(),
+        tok: oldToken,
+        sid: oldSessionId,
+        url: "https://checkout.stripe.com/expired-switch",
+        frequency: "quarterly",
+      }),
+    });
+    stripeCalls.sessionRetrieveOverrides[oldSessionId] = {
+      status: "expired",
+      metadata: { frequency: "quarterly" },
+    };
+
+    try {
+      const expiresBefore = stripeCalls.sessionExpires.length;
+      const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+      expect(res.status).toBe(200);
+      expect(res.json.url).toBe("https://checkout.stripe.com/test-session");
+      // It was already expired, so Stripe must not be asked to expire it again.
+      expect(stripeCalls.sessionExpires.slice(expiresBefore)).not.toContain(oldSessionId);
+    } finally {
+      delete stripeCalls.sessionRetrieveOverrides[oldSessionId];
+      await cleanupCheckoutClaims();
+    }
   });
 
   it("TTL preemption: a stale claim is preempted but the old claimant's release does not remove the new claim", async () => {

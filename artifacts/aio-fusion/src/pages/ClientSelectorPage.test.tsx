@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks - must be declared before component import
@@ -58,42 +58,13 @@ const project = {
   owner: "some-client",
 } as any;
 
-describe("ClientSelectorPage pending client placeholder cards", () => {
-  it("renders a Start project placeholder for a client account with no projects", () => {
-    const onStart = vi.fn();
+describe("ClientSelectorPage project-only hub", () => {
+  it("shows the plain empty state when the agency has no projects", () => {
     render(
-      <ClientSelectorPage
-        {...baseProps}
-        projects={[project]}
-        session={agencySession}
-        pendingClients={[{ username: "newclient", name: "New Client Ltd" }]}
-        onStartProjectForClient={onStart}
-      />,
-    );
-    expect(screen.getByText("New Client Ltd")).toBeTruthy();
-    expect(screen.getByText("Client account")).toBeTruthy();
-    fireEvent.click(screen.getByText("Start project"));
-    expect(onStart).toHaveBeenCalledWith({ username: "newclient", name: "New Client Ltd" });
-  });
-
-  it("shows placeholder cards (not the empty state) when the agency has no projects but has pending clients", () => {
-    render(
-      <ClientSelectorPage
-        {...baseProps}
-        projects={[]}
-        session={agencySession}
-        pendingClients={[{ username: "newclient", name: "New Client Ltd" }]}
-      />,
-    );
-    expect(screen.queryByText("No projects yet")).toBeNull();
-    expect(screen.getByText("Start project")).toBeTruthy();
-  });
-
-  it("shows the plain empty state when there are no projects and no pending clients", () => {
-    render(
-      <ClientSelectorPage {...baseProps} projects={[]} session={agencySession} pendingClients={[]} />,
+      <ClientSelectorPage {...baseProps} projects={[]} session={agencySession} />,
     );
     expect(screen.getByText("No projects yet")).toBeTruthy();
+    expect(screen.queryByText("Client account")).toBeNull();
   });
 
   it("shows the client's own first-project prompt when a client signs in with no projects", () => {

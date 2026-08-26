@@ -1,20 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup, configure, act } from "@testing-library/react";
 
-// Regression guard for the project-hub live accounts refresh.
+// Regression guard for keeping managed clients out of the project hub.
 //
-// resyncProjects() in App.tsx must refresh the cached accounts list
-// (refreshAccountsCache) alongside the project sync, and saveUsers must fire
-// "aio:accounts-changed" so the pendingClientAccounts memo recomputes. Together
-// these make a client account created on ANOTHER device show its
-// "Start project" placeholder card in the hub without a page reload.
+// resyncProjects() still refreshes the cached accounts list so the Clients
+// section stays current across devices. The project hub, however, must only
+// render real projects and must never turn a no-project managed client into a
+// "Client account" placeholder card.
 //
 // This test boots the full App as an agency with no sub-accounts, then flips
 // the /api/platform/accounts mock to include a new client account and fires a
 // window focus event (one of resyncProjects' live-refresh triggers). The
-// placeholder card must appear without any remount/reload. If a refactor drops
-// the accounts refresh from resyncProjects, or the aio:accounts-changed
-// re-render hook, this test fails.
+// managed client must remain absent from the hub after that refresh.
 
 configure({ asyncUtilTimeout: 5000 });
 
@@ -109,12 +106,12 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-describe("project hub live accounts refresh (new client placeholder without reload)", () => {
+describe("project hub excludes managed clients without projects", () => {
   beforeAll(async () => {
     await import("./App");
   });
 
-  it("shows the new client's Start-project placeholder card after a focus re-sync, without a reload", async () => {
+  it("refreshes the account cache without adding a managed-client placeholder card", async () => {
     window.history.replaceState({}, "", "/");
     const { default: App } = await import("./App");
     render(<App />);
@@ -130,7 +127,7 @@ describe("project hub live accounts refresh (new client placeholder without relo
         window.dispatchEvent(new PopStateEvent("popstate", { state }));
         await new Promise((r) => setTimeout(r, 50));
       });
-      // Baseline: hub renders empty - no projects and no placeholder cards yet.
+      // Baseline: hub renders empty because there are no real projects.
       expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
     }, { timeout: 15000 });
     expect(screen.queryByText("New Client Co")).not.toBeInTheDocument();
@@ -149,14 +146,15 @@ describe("project hub live accounts refresh (new client placeholder without relo
         window.dispatchEvent(new Event("focus"));
         await new Promise((r) => setTimeout(r, 100));
       });
-      // The accounts cache itself must now hold the new client (proves
-      // refreshAccountsCache ran as part of the re-sync)...
+    // The accounts cache itself must now hold the new client, proving the
+    // managed Clients section will see it without a reload.
       const cached = JSON.parse(localStorage.getItem("aio.auth.users.v3") || "[]") as { username: string }[];
       expect(cached.some((u) => u.username === "newclientco")).toBe(true);
-      // ...and the placeholder card must appear without any reload (proves the
-      // aio:accounts-changed re-render hook still bumps pendingClientAccounts).
-      expect(screen.getByText("New Client Co")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Start project/i })).toBeInTheDocument();
+      // The project hub remains project-only.
+      expect(screen.queryByText("New Client Co")).not.toBeInTheDocument();
+      expect(screen.queryByText("Client account")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Start project$/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/No projects yet/i)).toBeInTheDocument();
     }, { timeout: 15000 });
   }, 30000);
 });

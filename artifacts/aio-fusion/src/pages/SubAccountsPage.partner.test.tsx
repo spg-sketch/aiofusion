@@ -2,7 +2,7 @@
  * Agency partner client rows and create form.
  *
  * Agency (role "agency") sessions manage their clients entirely on their
- * behalf: client rows show only "Client projects" + Archive + Delete (no
+ * behalf: client rows show direct project actions + Archive + Delete (no
  * password, no access controls, no Managed badge), and the create form has
  * no password field or managed checkbox - accounts are always managed.
  */
@@ -91,14 +91,15 @@ const agencySession = { username: "acme-agency", role: "agency" as const };
 
 function openClientsSection() {
   render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
-  fireEvent.click(screen.getAllByRole("button", { name: /client accounts/i })[0]);
+  fireEvent.click(screen.getAllByRole("button", { name: /^clients$/i })[0]);
 }
 
 describe("agency partner client rows", () => {
-  it("shows only Client projects / Archive / Delete - no password or access controls", () => {
+  it("presents managed clients with direct project actions and no login status or credential controls", () => {
     openClientsSection();
-    // Both rows (managed and previously-passworded) get the same buttons.
-    expect(screen.getAllByRole("button", { name: /client projects/i }).length).toBe(2);
+    expect(screen.getByRole("button", { name: /^open project$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^start project$/i })).toBeTruthy();
+    expect(screen.queryByText(/never signed in/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /change password/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /login as client/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open account/i })).toBeNull();
@@ -122,33 +123,61 @@ describe("agency partner client rows", () => {
     expect(serverSetClientAccess).not.toHaveBeenCalled();
   });
 
-  it("Client projects stashes the sole project id and impersonates", async () => {
+  it("Open project stashes the sole project id and enters the managed workspace", async () => {
     openClientsSection();
-    const buttons = screen.getAllByRole("button", { name: /client projects/i });
-    fireEvent.click(buttons[0]); // client-one owns exactly one project
+    fireEvent.click(screen.getByRole("button", { name: /^open project$/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     const raw = sessionStorage.getItem("aio:open-client-projects");
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw!)).toEqual({ projectId: "proj-1" });
   });
 
-  it("Client projects stashes projectId null when the client has no or many projects", async () => {
+  it("Start project opens the client's project hub with no target project", async () => {
     openClientsSection();
-    const buttons = screen.getAllByRole("button", { name: /client projects/i });
-    fireEvent.click(buttons[1]); // client-two owns no projects
+    fireEvent.click(screen.getByRole("button", { name: /^start project$/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ projectId: null });
+  });
+
+  it("sends the agency to Billing instead of entering the client when its project allowance is full", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) =>
+      String(input).includes("/api/platform/billing/subscription")
+        ? new Response(JSON.stringify({ projectsUsed: 3, projectAllowance: 3 }), { status: 200 })
+        : new Response(JSON.stringify({}), { status: 404 }),
+    );
+    const onSectionChange = vi.fn();
+    render(
+      <SubAccountsPage
+        {...baseProps}
+        session={agencySession as any}
+        initialSection="clients"
+        onSectionChange={onSectionChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^start project$/i }));
+
+    await vi.waitFor(() => expect(onSectionChange).toHaveBeenCalledWith("billing"));
+    expect(serverImpersonate).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("aio:open-client-projects")).toBeNull();
+  });
+
+  it("opens a specific project directly from its project chip", async () => {
+    openClientsSection();
+    fireEvent.click(screen.getByRole("button", { name: /client one project/i }));
+    await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
+    expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ projectId: "proj-1" });
   });
 });
 
 describe("agency partner create-client form", () => {
   it("has no password field and no managed checkbox", () => {
     openClientsSection();
-    expect(screen.getByText("Create a client account")).toBeTruthy();
+    expect(screen.getByText("Add a client")).toBeTruthy();
     expect(screen.queryByText(/^password$/i)).toBeNull();
     expect(screen.queryByText(/managed account/i)).toBeNull();
     // Partner-specific footnote instead.
-    expect(screen.getByText(/there's no password to share/i)).toBeTruthy();
+    expect(screen.getByText(/no separate client login or password/i)).toBeTruthy();
   });
 
   it("always creates the client as managed", async () => {

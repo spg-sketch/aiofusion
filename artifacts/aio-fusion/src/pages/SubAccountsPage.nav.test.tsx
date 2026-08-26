@@ -66,13 +66,13 @@ describe("SubAccountsPage left-hand navigation", () => {
   it("shows both nav groups for an agency owner and defaults to Profile", () => {
     render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
     expect(screen.getByText("My Account")).toBeTruthy();
-    expect(screen.getByText("My Client Accounts")).toBeTruthy();
+    expect(screen.getByText("My Clients")).toBeTruthy();
     // Profile section is visible by default; other sections are not.
     expect(screen.getByText("Account type")).toBeTruthy();
     expect(screen.queryByTestId("security-card")).toBeNull();
     expect(screen.queryByTestId("billing-card")).toBeNull();
     expect(screen.queryByTestId("team-section")).toBeNull();
-    expect(screen.queryByText("Create a client account")).toBeNull();
+    expect(screen.queryByText("Add a client")).toBeNull();
   });
 
   it("switches sections when a nav item is clicked (one section at a time)", () => {
@@ -81,15 +81,15 @@ describe("SubAccountsPage left-hand navigation", () => {
     expect(screen.getByTestId("security-card")).toBeTruthy();
     expect(screen.queryByText("Account type")).toBeNull();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /client accounts/i })[0]);
-    expect(screen.getByText("Create a client account")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /^clients$/i })[0]);
+    expect(screen.getByText("Add a client")).toBeTruthy();
     expect(screen.queryByTestId("security-card")).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: /assign projects/i })[0]);
     expect(screen.getByText("No projects to assign yet.")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: /archived clients/i })[0]);
-    expect(screen.getByText(/No archived client accounts/)).toBeTruthy();
+    expect(screen.getByText(/No archived clients/)).toBeTruthy();
   });
 
   it("hides client sections and billing/team as appropriate for a direct client viewer member", () => {
@@ -99,7 +99,7 @@ describe("SubAccountsPage left-hand navigation", () => {
         session={{ ...clientSession, membershipRole: "viewer" } as any}
       />,
     );
-    expect(screen.queryByText("My Client Accounts")).toBeNull();
+    expect(screen.queryByText("My Clients")).toBeNull();
     expect(screen.queryByRole("button", { name: /billing details/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /team members/i })).toBeNull();
     // Security is still available.
