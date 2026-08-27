@@ -448,6 +448,35 @@
     .delivery-grid { grid-template-columns: 1fr; }
     .sticky-nav { padding: 0 16px; }
     .sticky-nav a span { display: none; }
+    .seo-snapshot .data-table thead { display: none; }
+    .seo-snapshot .data-table,
+    .seo-snapshot .data-table tbody,
+    .seo-snapshot .data-table tr,
+    .seo-snapshot .data-table td { display: block; width: 100%; }
+    .seo-snapshot .data-table tr {
+      border: 1px solid var(--g200);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: var(--white);
+    }
+    .seo-snapshot .data-table tr:last-child { margin-bottom: 0; }
+    .seo-snapshot .data-table tbody tr:nth-child(even) { background: var(--white); }
+    .seo-snapshot .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--g200);
+    }
+    .seo-snapshot .data-table td:last-child { border-bottom: 0; }
+    .seo-snapshot .data-table td::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 3px;
+      color: var(--g500);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
   }
 
   @media print {
@@ -463,6 +492,7 @@
 <nav class="sticky-nav">
   <div class="logo">AIO Fusion</div>
   <a href="#delivery-update"><span class="nav-num" style="background:var(--green);">✓</span><span>Delivered</span></a>
+  <a href="#seo-update"><span class="nav-num" style="background:var(--pink);">S</span><span>SEO Update</span></a>
   <a href="#task-381"><span class="nav-num" style="background:var(--teal);">1</span><span>#381 Staging</span></a>
   <a href="#task-382"><span class="nav-num" style="background:var(--pink);">2</span><span>#382 Login & Accounts</span></a>
   <a href="#task-383"><span class="nav-num" style="background:var(--indigo);">3</span><span>#383 Project Access</span></a>
@@ -472,14 +502,14 @@
 
 <!-- Cover -->
 <div class="cover">
-  <div class="cover-eyebrow">Confidential &nbsp;·&nbsp; August 2026 Build Plan &nbsp;·&nbsp; Updated 24 Aug</div>
+  <div class="cover-eyebrow">Confidential &nbsp;·&nbsp; August 2026 Build Plan &nbsp;·&nbsp; Updated 27 Aug</div>
   <div class="cover-title">AIO Fusion<br><em>August Sprint</em></div>
   <div class="cover-sub">The original five-workstream plan, now updated with a delivery snapshot of the access, reporting, billing, project-pack and platform work completed since the plan was written. Target go-live: 1 September 2026.</div>
   <div class="cover-meta">
     <div class="cover-meta-item"><label>Prepared for</label><span>Patrick Barrett &amp; Natalie Linder</span></div>
     <div class="cover-meta-item"><label>Built by</label><span>Spencer</span></div>
     <div class="cover-meta-item"><label>Go-live target</label><span>1 September 2026</span></div>
-    <div class="cover-meta-item"><label>Progress snapshot</label><span>24 August 2026</span></div>
+    <div class="cover-meta-item"><label>Progress snapshot</label><span>27 August 2026</span></div>
     <div class="cover-meta-item"><label>Environment</label><span>Staging first &nbsp;→&nbsp; Live cutover</span></div>
   </div>
   <div class="task-index">
@@ -487,6 +517,11 @@
       <span class="task-index-num">✓</span>
       <span class="task-index-title">Delivery Update - What is now built</span>
       <span class="task-index-sub">Updated &nbsp;·&nbsp; 24 Aug</span>
+    </a>
+    <a class="task-index-item" href="#seo-update" style="border-color:var(--pink);">
+      <span class="task-index-num">SEO</span>
+      <span class="task-index-title">Organic Search Delivery Update</span>
+      <span class="task-index-sub">Completed &nbsp;·&nbsp; 27 Aug</span>
     </a>
     <a class="task-index-item" href="#task-381" style="border-color:var(--teal);">
       <span class="task-index-num">#381</span>
@@ -629,6 +664,88 @@
         <div>These are release checks rather than missing product foundations. No live Stripe charges or production data changes are intended until the cutover checklist is approved.</div>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SEO DELIVERY UPDATE -->
+<section class="task-section" id="seo-update">
+  <div class="task-header" style="background:#9B1C4A;">
+    <div class="task-header-num">SEO</div>
+    <div class="task-header-body">
+      <div class="task-header-label">Delivery update &nbsp;·&nbsp; Completed 27 August 2026</div>
+      <div class="task-header-title">Organic Search and Crawlability Improvements</div>
+    </div>
+  </div>
+  <div class="task-body">
+
+    <div class="note note-green">
+      <span class="note-icon">✓</span>
+      <div><strong>Headline progress:</strong> AIO Fusion now has a crawlable, pre-rendered public website with route-specific search metadata, structured data, a complete sitemap, a connected Insights content cluster and substantially lighter marketing images. The work is implemented in the current build and ready for publication.</div>
+    </div>
+
+    <div class="block seo-snapshot">
+      <div class="block-title">Verified delivery snapshot</div>
+      <div class="block-body">
+        <table class="data-table">
+          <thead><tr><th>Area</th><th>Delivered result</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td data-label="Area">Public crawlability</td><td data-label="Delivered result">24 canonical routes pre-rendered as complete HTML</td><td data-label="Why it matters">Search crawlers can read page headings, copy and links without running JavaScript</td></tr>
+            <tr><td data-label="Area">Insights coverage</td><td data-label="Delivered result">13 complete articles included in the build and sitemap</td><td data-label="Why it matters">Creates a connected GEO knowledge base around real buyer questions</td></tr>
+            <tr><td data-label="Area">Search metadata</td><td data-label="Delivered result">Unique titles, descriptions, canonicals and social cards on every canonical route</td><td data-label="Why it matters">Clarifies each page's search intent and prevents conflicting URL signals</td></tr>
+            <tr><td data-label="Area">Structured data</td><td data-label="Delivered result">Organisation, website, software, collection, web page, article and breadcrumb markup where appropriate</td><td data-label="Why it matters">Gives search engines consistent machine-readable context that matches visible content</td></tr>
+            <tr><td data-label="Area">Image delivery</td><td data-label="Delivered result">Ten marketing images reduced from approximately 12 MB to approximately 620 KB</td><td data-label="Why it matters">Reduces page weight while preserving the existing image dimensions and design</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="delivery-grid">
+      <div class="block">
+        <div class="block-title">Technical and on-page work completed</div>
+        <div class="block-body">
+          <ul class="done-list">
+            <li><span class="done-check is-done">✓</span>Build-time pre-rendering now produces content-complete HTML for public pages and articles</li>
+            <li><span class="done-check is-done">✓</span>A shared route registry keeps page metadata, canonical URLs, pre-rendering and sitemap membership aligned</li>
+            <li><span class="done-check is-done">✓</span>Visible article breadcrumbs are matched by BreadcrumbList structured data</li>
+            <li><span class="done-check is-done">✓</span>Robots rules allow public pages, protect API and platform routes, and declare the sitemap</li>
+            <li><span class="done-check is-done">✓</span>GA4 measurement ID G-DTSDJVJN0Q is retained in every generated HTML page</li>
+            <li><span class="done-check is-done">✓</span>The production build fails if required metadata, article content, breadcrumbs or related links are missing</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-title">Content, relevance and measurement work completed</div>
+        <div class="block-body">
+          <ul class="done-list">
+            <li><span class="done-check is-done">✓</span>Homepage, agency, in-house and pricing pages target distinct commercial search needs</li>
+            <li><span class="done-check is-done">✓</span>The SEO-to-AIO transition playbook anchors the first GEO topic cluster</li>
+            <li><span class="done-check is-done">✓</span>Insights cards, breadcrumbs, related reading and commercial links use crawlable anchors</li>
+            <li><span class="done-check is-done">✓</span>Unsupported numerical claims were removed and product scope remains limited to ChatGPT and Claude</li>
+            <li><span class="done-check is-done">✓</span>A Search Console owner checklist and GA4 validation checklist are documented</li>
+            <li><span class="done-check is-done">✓</span>A monthly SEO reporting template and evidence-led 30, 60 and 90-day programme are ready to use</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-title">After publication - live checks and owner actions</div>
+      <div class="block-body">
+        <ol class="steps-list">
+          <li><span class="step-num" style="background:var(--pink);">1</span><div class="step-body"><span class="step-title">Verify the live crawl output</span> - confirm the homepage source contains its visible H1, canonical link and structured data, and confirm the live sitemap lists all 24 routes.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">2</span><div class="step-body"><span class="step-title">Complete Search Console setup</span> - verify the aiofusion.ai domain property, submit the sitemap and inspect the priority commercial pages and GEO pillar article.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">3</span><div class="step-body"><span class="step-title">Validate measurement</span> - confirm GA4 receives page views and successful enquiry events, then connect Search Console reporting.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">4</span><div class="step-body"><span class="step-title">Record the first production baseline</span> - capture indexed pages, impressions, clicks, organic landing-page sessions and field Core Web Vitals when real data becomes available.</div></li>
+          <li><span class="step-num" style="background:var(--pink);">5</span><div class="step-body"><span class="step-title">Prioritise from evidence</span> - use measured queries, click-through rates and successful enquiries to decide which pages or articles to improve next.</div></li>
+        </ol>
+        <div class="note note-gold" style="margin-top:14px;">
+          <span class="note-icon">ℹ</span>
+          <div><strong>Important:</strong> the SEO build is complete in the current codebase, but the improvements only reach search crawlers after the latest application is published. Search rankings, indexing, traffic and conversion gains are not being claimed before production data exists.</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
 
