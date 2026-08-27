@@ -1323,6 +1323,32 @@ router.post("/platform/invite/accept", loginLimiter, async (req: Request, res: R
       return;
     }
 
+    // Never silently replace one human user's browser session with another
+    // person's invited identity. A forwarded/reopened invite commonly lands in
+    // a browser that is still signed in, so require that session to belong to
+    // the invited email or make the user sign out first.
+    if (req.account) {
+      if (!req.account.userId) {
+        res.status(409).json({
+          error: "This browser is already signed in as a different user. Sign out, then reopen this invitation.",
+          reason: "signed_in_as_different_user",
+        });
+        return;
+      }
+      const [signedInUser] = await db
+        .select({ email: platformUsersTable.email })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, req.account.userId))
+        .limit(1);
+      if (!signedInUser?.email || signedInUser.email.trim().toLowerCase() !== invite.email.trim().toLowerCase()) {
+        res.status(409).json({
+          error: "This browser is already signed in as a different user. Sign out, then reopen this invitation.",
+          reason: "signed_in_as_different_user",
+        });
+        return;
+      }
+    }
+
     // The invitee's own entry wins; otherwise fall back to the full name the
     // inviter recorded on the invitation.
     const name = suppliedName || (invite.invitedName ?? "").trim().slice(0, 64);

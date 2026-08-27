@@ -26,9 +26,10 @@ describe("PageHead JSON-LD management", () => {
     const script = document.head.querySelector(LD_SEL);
     expect(script).not.toBeNull();
     const data = JSON.parse(script!.textContent ?? "[]");
-    // Landing has an array with Organization + WebSite
+    // Landing has Organization, WebSite and SoftwareApplication schemas.
     expect(Array.isArray(data)).toBe(true);
     expect(data.some((d: { "@type": string }) => d["@type"] === "Organization")).toBe(true);
+    expect(data.some((d: { "@type": string }) => d["@type"] === "SoftwareApplication")).toBe(true);
   });
 
   it("removes the ld+json script when navigating landing → contact (no jsonLd)", () => {
@@ -48,7 +49,9 @@ describe("PageHead JSON-LD management", () => {
     const script = document.head.querySelector(LD_SEL);
     expect(script).not.toBeNull();
     const data = JSON.parse(script!.textContent ?? "{}");
-    expect(data["@type"]).toBe("Article");
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.some((d: { "@type": string }) => d["@type"] === "Article")).toBe(true);
+    expect(data.some((d: { "@type": string }) => d["@type"] === "BreadcrumbList")).toBe(true);
   });
 
   it("removes Article schema when navigating article → pricing (pricing has WebPage schema)", () => {
@@ -57,7 +60,8 @@ describe("PageHead JSON-LD management", () => {
 
     const before = document.head.querySelector(LD_SEL);
     expect(before).not.toBeNull();
-    expect(JSON.parse(before!.textContent ?? "{}")["@type"]).toBe("Article");
+    const beforeData = JSON.parse(before!.textContent ?? "[]");
+    expect(beforeData.some((d: { "@type": string }) => d["@type"] === "Article")).toBe(true);
 
     act(() => {
       rerender(<PageHead meta={PAGE_META["pricing"]} />);
@@ -69,10 +73,9 @@ describe("PageHead JSON-LD management", () => {
     expect(after).not.toBeNull();
     const data = JSON.parse(after!.textContent ?? "{}");
     expect(data["@type"]).toBe("WebPage");
-    expect(data["@type"]).not.toBe("Article");
   });
 
-  it("removes Article schema when navigating article → insights (insights has no jsonLd)", () => {
+  it("replaces Article schema with CollectionPage schema when navigating to insights", () => {
     const articleMeta = ARTICLE_META["pr-professionals-not-threat"];
     const { rerender } = render(<PageHead meta={articleMeta} />);
     expect(document.head.querySelector(LD_SEL)).not.toBeNull();
@@ -81,6 +84,9 @@ describe("PageHead JSON-LD management", () => {
       rerender(<PageHead meta={PAGE_META["insights"]} />);
     });
 
-    expect(document.head.querySelector(LD_SEL)).toBeNull();
+    const after = document.head.querySelector(LD_SEL);
+    expect(after).not.toBeNull();
+    const data = JSON.parse(after!.textContent ?? "{}");
+    expect(data["@type"]).toBe("CollectionPage");
   });
 });

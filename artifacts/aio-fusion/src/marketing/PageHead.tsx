@@ -7,7 +7,7 @@
  * HTML template (this component never runs server-side).
  */
 import { useEffect } from "react";
-import type { PageMeta } from "./pageMeta";
+import { structuredDataFor, type PageMeta } from "./pageMeta";
 
 const OG_IMAGE = "https://aiofusion.ai/opengraph.jpg";
 
@@ -92,8 +92,9 @@ export function PageHead({ meta }: { meta: PageMeta }) {
 
     // JSON-LD: upsert when present, remove when absent so stale schema doesn't
     // linger after navigating from a page with schema to one without.
-    if (meta.jsonLd) {
-      upsertJsonLd(meta.jsonLd);
+    const structuredData = structuredDataFor(meta);
+    if (structuredData) {
+      upsertJsonLd(structuredData);
     } else {
       removeJsonLd();
     }

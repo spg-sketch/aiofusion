@@ -1,174 +1,89 @@
-# AIO Fusion — SEO Audit & Pre-render Implementation
+# AIO Fusion Technical SEO Audit
 
-**Date:** July 2025  
-**Scope:** Public marketing pages — build-time pre-rendering, head management, structural HTML fixes, sitemap, robots.txt.
+**Updated:** 27 August 2026  
+**Scope:** Public marketing pages and complete Insights articles
 
----
+For the search-intent map, Search Console setup, monthly reporting template and 30, 60 and 90-day programme, see [SEO-GROWTH-PLAN.md](./SEO-GROWTH-PLAN.md).
 
-## Baseline Findings (before this task)
+## Current implementation
 
-| Issue | Pages | Severity |
-|---|---|---|
-| `<title>AIO Fusion Demo` in index.html — "Demo" is a production title | All | **Critical** |
-| No per-page `<title>` or `<meta name="description">` | All | **Critical** |
-| No Open Graph or Twitter Card tags | All | **High** |
-| No canonical URL tags | All | **High** |
-| No JSON-LD structured data | All | **High** |
-| Crawlers receive an empty `<div id="root">` (JavaScript required) | All public | **High** |
-| `sitemap.xml` listed only `/` with no `<lastmod>` | — | **High** |
-| All nav and footer links were `<button onClick>` — not crawlable anchor elements | All | **High** |
-| No `<nav>` landmark wrapping the main navigation | All | Medium |
-| `robots.txt` allowed everything including `/api/` (unnecessary crawl waste) | — | Medium |
-| Article thumbnail images had `alt="" aria-hidden="true"` — decorative, acceptable | Insights | Low |
-
----
-
-## What Was Implemented
-
-### 1. Head management (`src/marketing/PageHead.tsx` + `src/marketing/pageMeta.ts`)
-
-- `pageMeta.ts` — central record of per-page metadata: `title`, `description`, `canonical`, OG type, JSON-LD. Covers all 11 public routes and all 6 complete insights articles.
-- `PageHead.tsx` — React component that fires a `useEffect` to imperatively set `document.title`, `<meta>` tags, `<link rel="canonical">`, OG/Twitter tags, and an `application/ld+json` script when a user navigates client-side within the SPA. Returns `null` — no DOM.
-
-Each marketing component (`LandingPage`, `AboutPage`, `ContactPage`, `ForInhousePage`, `ForAgenciesPage`, `InsightsPage`, `PricingPage`, `TrustSecurityPage`, `PrivacyPolicyPage`, `TermsConditionsPage`, `ForAgentsPage`) now renders `<PageHead>` with its own metadata.
-
-**JSON-LD placement by page type:**
-
-| Route | Schema |
+| Area | Status |
 |---|---|
-| `/` | `Organization` + `WebSite` |
-| `/about` | `Organization` with founders |
-| `/pricing` | `WebPage` |
-| `/for-inhouse`, `/for-agencies` | `Service` |
-| `/insights/<article>` | `Article` with publisher, headline, image |
-| All others | None (no JSON-LD where no genuine content fits) |
+| Public HTML | Build-time pre-rendered |
+| Canonical routes | 24 |
+| Sitemap URLs | 24 |
+| Complete Insights articles | 13 |
+| Unique titles and descriptions | Present for all canonical routes |
+| Canonical links | Present for all canonical routes |
+| Open Graph and Twitter cards | Present for all canonical routes |
+| Structured data | Organization, WebSite, SoftwareApplication, CollectionPage, WebPage, Article and BreadcrumbList where appropriate |
+| Article breadcrumbs | Visible and represented in structured data |
+| Internal links | Crawlable anchors in navigation, article listings, commercial pages and related-reading sections |
+| GA4 | Measurement ID `G-DTSDJVJN0Q` is retained in every generated HTML page |
+| Robots | Public pages allowed; API routes disallowed; sitemap declared |
+| Marketing images | WebP; below-fold tiles use native lazy loading |
 
-### 2. `index.html` defaults
+## Route coverage
 
-Replaced `<title>AIO Fusion Demo</title>` with the correct production title. Added default Open Graph, Twitter Card, and canonical tags so the SPA shell has sensible values even when no per-route HTML file is served.
+The build generates:
 
-### 3. Pre-render build step
+- 11 public pages: homepage, audience pages, pricing, Insights, company, contact and policy pages
+- 13 complete Insights articles
+- one generated sitemap containing all 24 canonical URLs
 
-**How it works:**
+Article routes are not accepted merely because a title and canonical exist. The build also checks that every generated article contains its article body, visible breadcrumb and related-reading links.
 
-1. `vite build` (existing) → `dist/public/` (client SPA + hashed assets)
-2. `vite build --config vite.ssr.config.ts` → `dist/ssr/prerender-entry.js` (Node-compatible ESM bundle)
-3. `node dist/ssr/prerender-entry.js` → per-route HTML files + `dist/public/sitemap.xml`
+## Metadata and schema
 
-**What is pre-rendered:**
+The shared metadata registry is the source of truth for browser head management and build-time HTML.
 
-| Output path | Route |
-|---|---|
-| `dist/public/index.html` | `/` (landing page replaces the SPA shell in-place) |
-| `dist/public/about/index.html` | `/about` |
-| `dist/public/contact/index.html` | `/contact` |
-| `dist/public/for-inhouse/index.html` | `/for-inhouse` |
-| `dist/public/for-agencies/index.html` | `/for-agencies` |
-| `dist/public/for-agents/index.html` | `/for-agents` |
-| `dist/public/insights/index.html` | `/insights` |
-| `dist/public/pricing/index.html` | `/pricing` |
-| `dist/public/trust-security/index.html` | `/trust-security` |
-| `dist/public/privacy-policy/index.html` | `/privacy-policy` |
-| `dist/public/terms-conditions/index.html` | `/terms-conditions` |
-| `dist/public/insights/pr-professionals-not-threat/index.html` | + 5 more articles |
+- Homepage: Organization, WebSite and SoftwareApplication
+- Agency and in-house pages: SoftwareApplication
+- Insights index: CollectionPage
+- Pricing: WebPage
+- About: Organization
+- Articles: Article and BreadcrumbList
 
-Each file contains:
-- Fully rendered component markup in `<div id="root">` (via `renderToStaticMarkup`)
-- Per-page `<title>`, `<meta name="description">`, `<link rel="canonical">`
-- Full Open Graph + Twitter Card tags with shared `opengraph.jpg`
-- JSON-LD where applicable
-- The client SPA's `<script type="module">` tag — React mounts and takes over on load
+Structured data must describe visible page content. Article titles should stay aligned across article data, the visible H1, page metadata and Article schema.
 
-**SSR obstacles handled:**
+## Content and internal linking
 
-- `window`/`document`/`localStorage` not available in Node → stub globals prepended to the SSR bundle via a Rollup `renderChunk` plugin in `vite.ssr.config.ts`
-- Image imports (`.png`, `.jpg`) not meaningful in Node → a Vite plugin replaces them with `export default ""` in the SSR build
-- `import.meta.env.BASE_URL` used in nav/logo hrefs → set to `"/"` via `define` in `vite.ssr.config.ts`
-- The App.tsx/LlmCheckPage circular import → avoided entirely; the prerender entry imports only the marketing components directly
+Commercial pages target separate reader needs:
 
-**Note on the for-agents page:** The for-agents content was previously inline JSX in App.tsx. It has been extracted to `src/marketing/ForAgentsPage.tsx` to make it importable by the prerender entry. App.tsx now imports it lazily.
+- Homepage: generative engine optimisation platform
+- Agency page: GEO software for PR agencies
+- In-house page: AI visibility software for in-house PR and marketing
+- Pricing: GEO software plans and project capacity
 
-**Static host precedence:** The production serving configuration in `artifact.toml` is `serve = "static"` with a catch-all rewrite `/* → /index.html`. Replit's static server (like all standard static hosts) serves exact file matches before applying rewrite rules — `dist/public/about/index.html` will be served for `/about` rather than falling through to the rewrite. This is a standard guarantee of static file servers and was verified locally by serving `dist/public` with a plain HTTP server. If Replit's behaviour differs from this standard, the fallback is to add explicit per-route rewrites in `artifact.toml`.
+The initial GEO content cluster uses the SEO-to-AIO transition playbook as its pillar. Insights cards are anchors with article URLs, not JavaScript-only buttons. Article pages contain visible breadcrumb links and a contextual related-reading section.
 
-**Platform authentication paths:** Authenticated platform routes (`/platform`, `/dashboard`, etc.) are not real URL paths — they are view states within the SPA, all served from the root `index.html` via the catch-all rewrite. No path-based disallow is possible or needed. The auth check is server-enforced.
+Unsupported numerical performance claims have been removed. Product copy remains limited to ChatGPT and Claude and does not claim organic-search tracking.
 
-### 4. `sitemap.xml` — build-time generated
+## Performance baseline
 
-Generated by the prerender script at `dist/public/sitemap.xml`. Contains 17 URLs:
-- 11 public pages (priority 1.0 → 0.4 by importance)
-- 6 complete insights articles (priority 0.8)
+Ten large marketing images were converted from PNG to WebP without changing their dimensions:
 
-`<lastmod>` is set to the build date (ISO format). The 6 stub articles (`earned-media`, `geo-signals`, `seo-aio`, etc.) are **excluded** — they have no article content in `articles-data.ts` and would produce blank article views.
+- Previous combined source size: approximately 12 MB
+- Current combined source size: approximately 620 KB
+- Generated hero image: approximately 23 KB
+- Generated article and Insights images: approximately 29–104 KB each
 
-### 5. `robots.txt` — updated
+The production build still contains some larger authenticated-application JavaScript chunks. They are not new in this SEO work, but future bundle work should avoid loading platform-only code on public routes where practical.
 
-Added `Disallow: /api/` for all user agents (including the explicit AI crawlers) to prevent crawl budget waste on API endpoints. All existing AI crawler allowances and `llms.txt`/`agents.md` references are preserved.
+## Production status
 
-### 6. Structural fixes — nav/footer `<button>` → `<a href>`
+At the time of this audit, `https://aiofusion.ai` still served the older client-rendered `AIO Fusion Demo` shell and a one-URL sitemap. The current 24-route SEO build must be published before the improvements become available to search crawlers.
 
-Updated `MarketingPage.tsx`, `LandingPage.tsx`, and `PricingPage.tsx`:
+After publication:
 
-- All nav link `<button onClick={() => onNavigate(v)}>` converted to `<a href="/{v}" onClick={(e) => { e.preventDefault(); onNavigate(v); }}>`. The `href` uses `import.meta.env.BASE_URL` as the prefix so it works correctly in any deployment path.
-- Footer links converted the same way.
-- `<nav aria-label="Main navigation">` landmark added to all three nav bars.
-- `<nav aria-label="Footer navigation">` landmark added to all three footers.
-- Logo button (`<button onClick={onBack}>`) converted to `<a href="/">` in `MarketingPage`.
-- Insights tiles in `LandingPage` now link directly to `${BASE_URL}insights/<slug>` for the two complete articles shown, giving crawlers real URLs instead of `#`.
+1. Confirm the homepage source contains its H1, canonical and structured data.
+2. Confirm `/sitemap.xml` contains 24 URLs.
+3. Inspect the four commercial pages and GEO pillar page in Search Console.
+4. Confirm GA4 receives page views and successful enquiry events.
+5. Record the first Search Console and Core Web Vitals baseline in `SEO-GROWTH-PLAN.md`.
 
-Visuals are unchanged — the only difference is the element type (rendered as `<a>` instead of `<button>`) and the `href` attribute.
+## Validation
 
----
+The normal production build runs the client build, SSR bundle and prerender script. It fails on missing route metadata, empty markup, missing canonical and robots tags, missing article content, missing article breadcrumbs, or missing article related links.
 
-## What Was Not Changed
-
-- The platform (authenticated) side of the app is untouched.
-- No new copy was written. The for-agents page content was moved verbatim from App.tsx.
-- The 6 stub articles remain as stubs; their content expansion is a separate task.
-- No per-page OG images were generated — all pages share `public/opengraph.jpg`.
-- Perplexity/Gemini/other LLM references were not added anywhere, consistent with the product scope (ChatGPT + Claude only).
-
----
-
-## Verification Checklist
-
-After `pnpm build` (which now runs prerender + sitemap automatically):
-
-```bash
-# Serve dist/public locally
-npx serve dist/public -p 4173
-
-# Check each route shows real HTML (not empty root div)
-curl -s http://localhost:4173/ | grep -c "<h1"           # ≥ 1
-curl -s http://localhost:4173/about | grep -c "<h1"      # ≥ 1
-curl -s http://localhost:4173/contact | grep -c "<h1"    # ≥ 1
-curl -s http://localhost:4173/pricing | grep -c "<h1"    # ≥ 1
-curl -s http://localhost:4173/insights/pr-professionals-not-threat | grep -c "<h1"  # ≥ 1
-
-# Check unique titles
-curl -s http://localhost:4173/ | grep "<title"
-curl -s http://localhost:4173/about | grep "<title"
-curl -s http://localhost:4173/insights/pr-professionals-not-threat | grep "<title"
-
-# Validate sitemap
-curl -s http://localhost:4173/sitemap.xml | grep "<loc>" | wc -l   # 17
-
-# Check robots.txt
-curl -s http://localhost:4173/robots.txt | grep "Disallow"
-```
-
-### Structured data testing
-Use Google's Rich Results Test or schema.org validator with the pre-rendered HTML files.
-
----
-
-## Open Decisions / Follow-up Recommendations
-
-1. **Stub articles** — `earned-media`, `geo-signals`, `seo-aio`, `setup-guide`, `authority-report`, `optimiser-guide`, `media-research-guide` appear in the InsightsPage list but have no content in `articles-data.ts`. They should either get content (so they can be pre-rendered and added to the sitemap) or be removed from the list.
-
-2. **Per-page OG images** — currently all pages share the same `opengraph.jpg`. Per-article social cards would improve click-through from social shares.
-
-3. **datePublished in Article JSON-LD** — the Article schema has no `datePublished` because the articles have no explicit dates in the data. Adding dates to `articles-data.ts` would make the structured data richer.
-
-4. **Hydration mode** — the prerender uses `renderToStaticMarkup` (no React hydration markers). React mounts fresh over the pre-rendered markup. For better performance, switching to `renderToString` with `hydrateRoot` on the client would eliminate the re-render on first load. This requires the client entry (`main.tsx`) to call `hydrateRoot` instead of `createRoot`. Not done here to avoid risk of hydration mismatches.
-
-5. **Platform auth paths in robots.txt** — currently not disallowed because they are SPA view states, not real URL paths. If the platform is ever moved to a subdomain or a path prefix (`/app/*`), explicit disallow rules should be added.
+Use the current project test, typecheck and production build commands before publishing. Search Console indexing, ranking and field Core Web Vitals data require verified owner access and are never inferred from local builds.

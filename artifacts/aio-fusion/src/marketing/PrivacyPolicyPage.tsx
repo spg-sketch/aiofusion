@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
   return (
     <MarketingPage title="Privacy Policy" {...props}>
       <PageHead meta={PAGE_META["privacy-policy"]} />
-      <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 6 July 2026</p>
+      <p className="text-[13px] font-light mb-8" style={{ color: vars.g400 }}>Last updated: 27 August 2026</p>
 
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: vars.g500 }}>
         This policy explains what personal data AIO Fusion Ltd collects, why, and the rights you have over it. It
@@ -38,10 +38,10 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
         <ul className="list-disc pl-5 space-y-1.5">
           <li><strong style={{ color: vars.navy }}>Account data</strong> &mdash; name, email address, and login credentials, when you or your organisation register for the platform.</li>
           <li><strong style={{ color: vars.navy }}>Project and content data</strong> &mdash; the business, campaign and content information you or your team enter into the platform (e.g. audit inputs, planner entries, generated content) so we can run audits and generate results for you.</li>
-          <li><strong style={{ color: vars.navy }}>Usage data</strong> &mdash; basic technical data such as IP address and browser type, used for security and to keep the Service running reliably.</li>
+          <li><strong style={{ color: vars.navy }}>Usage data</strong> &mdash; technical and analytics data such as IP address, browser and device type, pages visited and referring website, used for security, reliability and understanding how the Service is used.</li>
           <li><strong style={{ color: vars.navy }}>Communications</strong> &mdash; anything you send us directly, e.g. via the contact form or email, so we can respond to you.</li>
         </ul>
-        <p>We do not run third-party advertising or analytics trackers inside the platform.</p>
+        <p>We do not run advertising pixels or sell usage data. We use Google Analytics to measure use of the Service.</p>
       </Section>
 
       <Section title="3. How we use your data and our lawful basis">
@@ -50,6 +50,7 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
           <li>To provide and operate the platform you've signed up to &mdash; <em>performance of a contract</em>.</li>
           <li>To generate audits, scores, and content on your behalf, including sending relevant project content to our AI sub-processors &mdash; <em>performance of a contract</em>.</li>
           <li>To secure the Service and prevent misuse &mdash; <em>legitimate interests</em>.</li>
+          <li>To understand how the Service is used and improve it through analytics &mdash; <em>consent where required</em>, or otherwise <em>legitimate interests</em>.</li>
           <li>To respond to enquiries you send us &mdash; <em>legitimate interests</em> / <em>consent</em>, where applicable.</li>
         </ul>
       </Section>
@@ -62,6 +63,10 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
           return a result to you.
         </p>
         <p>We do not sell personal data to third parties.</p>
+        <p>
+          We use Google Analytics to measure use of the Service. Google processes technical and usage information
+          on our behalf for this purpose.
+        </p>
       </Section>
 
       <Section title="5. International transfers">
@@ -106,8 +111,8 @@ export default function PrivacyPolicyPage(props: { onLogin: () => void; onBack: 
 
       <Section title="9. Cookies">
         <p>
-          The platform uses only the essential cookies required to keep you logged in and to remember your session.
-          We do not use advertising or third-party tracking cookies.
+          The Service uses essential cookies to keep you logged in and remember your session. Google Analytics may
+          also set analytics cookies to help us understand how the Service is used. We do not use advertising cookies.
         </p>
       </Section>
 

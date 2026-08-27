@@ -36,9 +36,9 @@ export default function TrustSecurityPage(props: { onLogin: () => void; onBack: 
         Access to client projects is scoped and enforced on our servers &mdash; not just hidden in the interface &mdash; so
         one client account cannot see another's data. Administrative actions are restricted to authorised roles.
       </Item>
-      <Item icon={<ShieldCheck size={18} color={vars.accent} />} title="No third-party trackers">
-        We do not run third-party advertising or analytics scripts (no Google Analytics, no ad pixels) inside the
-        platform. A strict content security policy limits what the app is allowed to load or connect to.
+      <Item icon={<ShieldCheck size={18} color={vars.accent} />} title="No advertising trackers">
+        We do not run advertising pixels or sell usage data. We use Google Analytics to understand how the Service
+        is used and improve it. A strict content security policy limits what the app is allowed to load or connect to.
       </Item>
       <Item icon={<FileWarning size={18} color={vars.accent} />} title="Backups">
         Client project data is backed up on a regular automated schedule, with integrity checks before each backup

@@ -24,3 +24,15 @@ description: How agency team invitations, 5-tier membership roles, and per-membe
 **Why:** Resend commonly reports provider rejection in its resolved response rather than throwing. Fire-and-forget sending can therefore show "Invitation sent" and consume a seat even though the recipient never received a usable link.
 
 **How to apply:** any new invitation email path must expose delivery success to its caller and keep invitation state consistent with the link the recipient actually received.
+
+**Signed-in identity rule:** A public invitation must never silently replace a valid browser session belonging to a different person. Reject the acceptance before creating a user or consuming the token, then let the visitor explicitly sign out and retry from the same invite URL.
+
+**Why:** Invitation links are often opened from email in a browser that still carries the inviter's or another colleague's session. An implicit identity switch is confusing and makes it difficult to tell who actually joined.
+
+**How to apply:** Compare any valid session's human user email with the invitation email on the server. Same-user sessions may continue; different or legacy user-less sessions must sign out first. Keep the invite unconsumed on rejection.
+
+**Member identity wording:** A team member enters another organisation's workspace, so the organisation/account display name must be labelled "Workspace", never "Signed in as". Show the member's access role separately.
+
+**Why:** Calling the workspace name the signed-in identity makes invited members reasonably believe they have been logged in as the owner.
+
+**How to apply:** Any account card or workspace switcher must distinguish the active workspace from the human user and membership role.

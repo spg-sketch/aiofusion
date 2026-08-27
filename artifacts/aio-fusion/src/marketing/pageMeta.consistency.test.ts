@@ -9,6 +9,7 @@ import {
   PUBLIC_PAGE_DEFINITIONS,
   PUBLIC_ROUTES,
   ARTICLE_SLUGS,
+  structuredDataFor,
 } from "./pageMeta";
 
 describe("public page / prerender consistency", () => {
@@ -44,7 +45,18 @@ describe("public page / prerender consistency", () => {
       expect(meta.description.trim()).not.toBe("");
       expect(meta.articleTitle.trim()).not.toBe("");
       expect(meta.canonical).toBe(`https://aiofusion.ai/insights/${slug}`);
+      const schemas = structuredDataFor(meta);
+      expect(Array.isArray(schemas)).toBe(true);
+      expect((schemas as Array<Record<string, unknown>>).some((schema) => schema["@type"] === "Article")).toBe(true);
+      expect((schemas as Array<Record<string, unknown>>).some((schema) => schema["@type"] === "BreadcrumbList")).toBe(true);
     }
+  });
+
+  it("the homepage describes the organisation, website and software product", () => {
+    const schemas = structuredDataFor(PAGE_META.landing);
+    expect(Array.isArray(schemas)).toBe(true);
+    const types = (schemas as Array<Record<string, unknown>>).map((schema) => schema["@type"]);
+    expect(types).toEqual(expect.arrayContaining(["Organization", "WebSite", "SoftwareApplication"]));
   });
 
   it("PAGE_META has no orphan entries that never get prerendered", () => {

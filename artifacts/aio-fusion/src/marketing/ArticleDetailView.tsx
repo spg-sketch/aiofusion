@@ -58,7 +58,7 @@ function SectionBlock({ section }: { section: ArticleSection }) {
           className="text-[15px] font-semibold leading-[1.6]"
           style={{ color: vars.navy }}
         >
-          📊 {section.text}
+          {section.text}
         </p>
       </div>
     );
@@ -96,6 +96,67 @@ export default function ArticleDetailView({
   coverImg: string;
 }) {
   const cream = "#FBF6EC";
+  const base = import.meta.env.BASE_URL;
+  const relatedByArticle: Record<string, Array<{ href: string; label: string }>> = {
+    "pr-professionals-not-threat": [
+      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "../for-agencies", label: "GEO software for PR agencies" },
+    ],
+    "thought-leadership-engine-ai-visibility": [
+      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
+      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+    ],
+    "battle-b2b-ai-authority": [
+      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+      { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
+    ],
+    "agentic-media-relations": [
+      { href: "pr-professionals-not-threat", label: "Why PR professionals should not see AI as a threat" },
+      { href: "../for-agencies", label: "GEO software for PR agencies" },
+    ],
+    "ai-changing-b2b-visibility": [
+      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
+    ],
+    "earned-media": [
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
+      { href: "ai-proves-pr-drives-sales", label: "How AI can connect PR with sales visibility" },
+    ],
+    "geo-signals": [
+      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "authority-report", label: "How to read an AIO Fusion Authority Report" },
+    ],
+    "seo-aio": [
+      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
+    ],
+    "setup-guide": [
+      { href: "authority-report", label: "How to read an AIO Fusion Authority Report" },
+      { href: "../pricing", label: "Compare AIO Fusion plans" },
+    ],
+    "authority-report": [
+      { href: "geo-signals", label: "The six GEO signals every brand should track" },
+      { href: "setup-guide", label: "Set up your first AIO Fusion project" },
+    ],
+    "optimiser-guide": [
+      { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+      { href: "../for-inhouse", label: "AI visibility software for in-house teams" },
+    ],
+    "media-research-guide": [
+      { href: "earned-media", label: "Why earned media beats paid in the AI era" },
+      { href: "../for-agencies", label: "GEO software for PR agencies" },
+    ],
+    "ai-proves-pr-drives-sales": [
+      { href: "ai-changing-b2b-visibility", label: "How AI is changing B2B visibility" },
+      { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
+    ],
+  };
+  const related = relatedByArticle[article.id] ?? [];
+
+  function relatedHref(href: string): string {
+    if (href.startsWith("../")) return `${base}${href.slice(3)}`;
+    return `${base}insights/${href}`;
+  }
 
   return (
     <div
@@ -103,13 +164,22 @@ export default function ArticleDetailView({
       style={{ background: cream }}
     >
       <div className="max-w-3xl mx-auto px-4 sm:px-8 pt-8 pb-20">
-        <button
+        <nav aria-label="Breadcrumb" className="mb-6 text-[12px] font-medium" style={{ color: vars.g500 }}>
+          <a href={base} className="hover:underline">Home</a>
+          <span aria-hidden="true"> / </span>
+          <a href={`${base}insights`} className="hover:underline">Insights</a>
+          <span aria-hidden="true"> / </span>
+          <span aria-current="page">{article.title}</span>
+        </nav>
+
+        <a
+          href={`${base}insights`}
           onClick={onBack}
           className="inline-flex items-center gap-2 mb-8 text-[13px] font-semibold uppercase tracking-[0.12em] transition-opacity hover:opacity-70"
           style={{ color: vars.accent }}
         >
           <ArrowLeft size={14} /> Back to Insights
-        </button>
+        </a>
 
         <div
           className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.18em] mb-4"
@@ -131,6 +201,16 @@ export default function ArticleDetailView({
         >
           {article.excerpt}
         </p>
+
+        <div className="flex items-center gap-3 mb-8 pb-8 border-b" style={{ borderColor: vars.g200 }}>
+          <div className="w-11 h-11 rounded-full flex items-center justify-center bg-white border" style={{ borderColor: vars.g200 }}>
+            <img src={`${import.meta.env.BASE_URL}images/logo-color.png`} alt="AIO Fusion" className="w-6 h-6 object-contain" />
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>AIO Fusion Insights Team</p>
+            <p className="text-[12px] font-light" style={{ color: vars.g500 }}>PR & GEO Practitioners</p>
+          </div>
+        </div>
 
         <div
           className="w-full rounded-2xl overflow-hidden mb-10"
@@ -154,17 +234,39 @@ export default function ArticleDetailView({
           ))}
         </div>
 
+        {related.length > 0 && (
+          <aside className="mt-12 p-6 rounded-2xl bg-white" style={{ border: `1px solid ${vars.g200}` }}>
+            <h2 className="text-[20px] font-semibold mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
+              Continue exploring AI visibility
+            </h2>
+            <ul className="space-y-3">
+              {related.map((item) => (
+                <li key={item.href}>
+                  <a
+                    href={relatedHref(item.href)}
+                    className="font-semibold underline decoration-1 underline-offset-4 hover:opacity-75"
+                    style={{ color: vars.accent }}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
+
         <div
           className="mt-14 pt-8 border-t flex items-center justify-between"
           style={{ borderColor: vars.g200 }}
         >
-          <button
+          <a
+            href={`${base}insights`}
             onClick={onBack}
             className="inline-flex items-center gap-2 text-[13px] font-semibold transition-opacity hover:opacity-70"
             style={{ color: vars.accent }}
           >
             <ArrowLeft size={14} /> Back to Insights
-          </button>
+          </a>
         </div>
       </div>
     </div>

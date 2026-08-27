@@ -36,6 +36,7 @@ import {
   PUBLIC_PAGE_DEFINITIONS,
   PUBLIC_ROUTES,
   ARTICLE_SLUGS,
+  structuredDataFor,
 } from "./marketing/pageMeta";
 import type { PageMeta, ArticleMeta } from "./marketing/pageMeta";
 
@@ -93,7 +94,8 @@ function buildHeadTags(meta: PageMeta): string {
   const ogTitle = meta.ogTitle ?? meta.title;
   const ogDesc = meta.ogDescription ?? meta.description;
   const ogType = meta.ogType ?? "website";
-  const ldJson = meta.jsonLd ? JSON.stringify(meta.jsonLd) : null;
+  const structuredData = structuredDataFor(meta);
+  const ldJson = structuredData ? JSON.stringify(structuredData) : null;
 
   return `
   <title>${escHtml(meta.title)}</title>
@@ -292,6 +294,23 @@ for (const articleSlug of ARTICLE_SLUGS) {
 
   const finalHtml = injectIntoTemplate(template, bodyHtml, buildHeadTags(meta));
   assertRealPage(`insights/${articleSlug}`, finalHtml, meta);
+  const escapedArticleTitle = escHtml(meta.articleTitle);
+  if (!finalHtml.includes(escapedArticleTitle)) {
+    console.error(`  ✗  Article "${articleSlug}" is missing its unique visible title`);
+    errors++;
+  }
+  if (!finalHtml.includes("<article") && !finalHtml.includes("article-body")) {
+    console.error(`  ✗  Article "${articleSlug}" is missing its article body`);
+    errors++;
+  }
+  if (!finalHtml.includes('aria-label="Breadcrumb"')) {
+    console.error(`  ✗  Article "${articleSlug}" is missing visible breadcrumbs`);
+    errors++;
+  }
+  if (!finalHtml.includes("Continue exploring AI visibility")) {
+    console.error(`  ✗  Article "${articleSlug}" is missing related-reading links`);
+    errors++;
+  }
   writeRoute(path.join(distPublic, "insights", articleSlug, "index.html"), finalHtml);
 }
 

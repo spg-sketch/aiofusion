@@ -533,6 +533,47 @@ describe("team invitations", () => {
     expect(badWrite.status).toBe(403);
   });
 
+  it("does not let a different signed-in user consume someone else's invitation", async () => {
+    const { sid, company, user } = await seedAgency("wrong-session-agency", "spencer@wrong-session.test");
+    const invite = await api("/api/platform/team/invite", {
+      sid,
+      body: { email: "abbe@wrong-session.test", role: "content" },
+    });
+    expect(invite.status).toBe(201);
+
+    const accept = await api("/api/platform/invite/accept", {
+      sid,
+      body: { token: invite.json.token, password: "abbe-password-1" },
+    });
+    expect(accept.status).toBe(409);
+    expect(accept.json.reason).toBe("signed_in_as_different_user");
+    expect(accept.json.error).toMatch(/sign out/i);
+    expect(accept.setCookie).toBeNull();
+
+    const [inviteRow] = await db
+      .select()
+      .from(platformInvitationsTable)
+      .where(eq(platformInvitationsTable.token, invite.json.token));
+    expect(inviteRow?.usedAt).toBeNull();
+
+    const abbeUsers = await db
+      .select()
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, "abbe@wrong-session.test"));
+    expect(abbeUsers).toHaveLength(0);
+
+    const memberships = await db
+      .select()
+      .from(platformMembershipsTable)
+      .where(
+        and(
+          eq(platformMembershipsTable.companyId, company.id),
+          eq(platformMembershipsTable.userId, user.id),
+        ),
+      );
+    expect(memberships).toHaveLength(1);
+  });
+
   it("enforces the seat limit (default 3) counting members + pending invites", async () => {
     const { sid } = await seedAgency("seats-agency", "owner@seats.test");
     const a = await api("/api/platform/team/invite", { sid, body: { email: "a@seats.test", role: "viewer" } });

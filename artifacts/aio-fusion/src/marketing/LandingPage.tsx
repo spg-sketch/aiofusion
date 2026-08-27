@@ -27,10 +27,10 @@ import step2Img from "../assets/photos/photo-strategy.jpg";
 import step3Img from "../assets/photos/photo-plan.jpg";
 import step4Img from "../assets/photos/photo-optimise.jpg";
 import step5Img from "../assets/photos/photo-measure.jpg";
-import blogTile1 from "../assets/blog-tile-1.png";
-import article1Img from "../assets/article-1-pr-ai.png";
-import article2Img from "../assets/article-2-thought-leadership.png";
-import heroBgImg from "../assets/hero-bg.png";
+import blogTile1 from "../assets/blog-tile-1.webp";
+import article1Img from "../assets/article-1-pr-ai.webp";
+import article2Img from "../assets/article-2-thought-leadership.webp";
+import heroBgImg from "../assets/hero-bg.webp";
 
 const llmEngines = [
   { name: "ChatGPT", logo: null },
@@ -164,10 +164,10 @@ export default function LandingPageC({
                 <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Generative Engine Optimisation</span>
               </div>
               <h1 className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-8" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                The AI Authority Platform<br />for <span style={{ color: accent }}>PR and Marketing Professionals</span>
+                The AI Authority Platform<br />for <span style={{ color: accent }}>B2B PR & Marketing Teams</span>
               </h1>
               <p className="text-[15px] md:text-base max-w-xl leading-[1.7] font-light mb-8" style={{ color: vars.g600 }}>
-                With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you harness the power of Answer Engines.
+                Drive B2B sales and measure your brand's visibility across AI search engines. AIO Fusion is built specifically for PR agencies and in-house communications teams to track, optimise, and report on generative engine performance.
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <a
@@ -189,7 +189,7 @@ export default function LandingPageC({
           <div className="max-w-3xl">
             <span className="text-[10px] font-bold uppercase tracking-[0.28em]" style={{ color: accent }}>The Platform</span>
             <h2 className="text-4xl md:text-5xl mt-3 mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Everything you need to win AI visibility.</h2>
-            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery - the full GEO, PR and marketing content workflow in one platform.</p>
+            <p className="text-lg font-light leading-relaxed" style={{ color: vars.g600 }}>From diagnosis through to delivery, the full GEO, PR and marketing content workflow in one platform.</p>
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
@@ -249,7 +249,7 @@ export default function LandingPageC({
             ].map((s) => (
               <div key={s.n} className="rounded-2xl overflow-hidden bg-white flex flex-col transition-transform hover:-translate-y-1" style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}>
                 <div className="aspect-[16/10] overflow-hidden relative" style={{ background: s.accent }}>
-                  <img src={s.img} alt="" aria-hidden="true" className="w-full h-full object-cover" />
+                  <img src={s.img} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   <div className="absolute top-3 left-3 w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold" style={{ background: "white", color: s.accent }}>{s.n}</div>
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
@@ -330,18 +330,17 @@ export default function LandingPageC({
             {[
               { img: blogTile1, tag: "Guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO?", url: "https://simpaticopraiauthorityguide.carrd.co/", external: true, accent: vars.teal },
               { img: article1Img, tag: "Article", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: `${base}insights/pr-professionals-not-threat`, external: false, accent: accent },
-              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
+              { img: article2Img, tag: "Article", title: "Why thought leadership is the engine of AI visibility", excerpt: "AI systems draw on third-party authority signals. Thought leadership and earned media can help a brand become easier to recognise and cite.", url: `${base}insights/thought-leadership-engine-ai-visibility`, external: false, accent: vars.gold },
             ].map((a) => (
               <a
                 key={a.title}
                 href={a.url ?? "#"}
-                onClick={!a.external ? (e) => { e.preventDefault(); onNavigate("insights"); } : undefined}
                 {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className="group block bg-white rounded-2xl overflow-hidden transition-transform hover:-translate-y-1 cursor-pointer"
                 style={{ border: `1px solid ${vars.g200}`, boxShadow: "0 4px 14px -6px rgba(0,0,0,0.08)" }}
               >
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: a.accent }}>
-                  <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={a.img} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
                 <div className="p-5">
                   <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-2 px-2 py-1 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
@@ -374,7 +373,7 @@ export default function LandingPageC({
               </p>
               <div className="space-y-3 text-[14.5px] font-light leading-[1.75]" style={{ color: vars.g600 }}>
                 <p>AIO Fusion was created by experts from the PR, business marketing and tech development worlds.</p>
-                <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day - designed to help you maximise the potential of your expertise and deliver measurable results.</p>
+                <p>We've worked in agencies and we understand the pressures in-house PR and marketing professionals face every day. AIO Fusion is designed to help you maximise the potential of your expertise and deliver measurable results.</p>
               </div>
             </div>
           </div>

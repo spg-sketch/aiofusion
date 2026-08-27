@@ -5,16 +5,16 @@ import { PAGE_META } from "./pageMeta";
 
 export default function ForAgenciesPage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
-    <MarketingPage title="Integrate AIO and content marketing automation into your client service" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
+    <MarketingPage title="AIO and content marketing automation software for PR agencies" eyebrow={<><Users size={12} /> For PR Agencies</> as any} {...props}>
       <PageHead meta={PAGE_META["for-agencies"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
-        Elevate your agency capability for the AI era with tailored, measurable optimisation for each client. One platform to enhance your team and service performance helping you harness the power of answer engines.
+        Elevate your agency capability for the AI era with tailored, measurable GEO strategies for each client. Our B2B platform enhances your team and service performance helping you harness the power of generative answer engines.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
         Run every client programme on a single platform built for the AI age. Optimise every piece of content you develop from press releases to awards entries, speed up new content development, score AI authority across your programme, store all client content in one place and measure and predict the impact of your work.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(16,43,54,0.75)" }}>
-        Add AI visibility and automation to your agency fast without building your own tech stack or hiring new specialists.
+        Add AI visibility and automation to your agency fast without building your own tech stack or hiring new technical specialists.
       </p>
       <h2 className="text-[20px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for your agency</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
@@ -46,6 +46,14 @@ export default function ForAgenciesPage(props: { onLogin: () => void; onBack: ()
         <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.</p>
         <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
+      <aside className="mb-10 p-5 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.1)" }}>
+        <h2 className="text-[18px] font-semibold mb-3" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>Explore GEO for agency teams</h2>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-semibold">
+          <a href={`${import.meta.env.BASE_URL}insights/seo-aio`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Read the SEO to AIO transition playbook</a>
+          <a href={`${import.meta.env.BASE_URL}insights/geo-signals`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Understand the six GEO signals</a>
+          <a href={`${import.meta.env.BASE_URL}pricing`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Compare plans and project capacity</a>
+        </div>
+      </aside>
       <div className="flex flex-wrap gap-3">
         <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
           <Calendar size={16} /> Book a Demo

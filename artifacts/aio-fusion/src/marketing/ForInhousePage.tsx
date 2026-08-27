@@ -5,13 +5,13 @@ import { PAGE_META } from "./pageMeta";
 
 export default function ForInhousePage(props: { onLogin: () => void; onBack: () => void; onNavigate: (v: string) => void; isAuthed?: boolean }) {
   return (
-    <MarketingPage title="Where AIO meets PR and marketing" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
+    <MarketingPage title="The AI visibility and GEO software for in-house PR teams" eyebrow={<><Globe size={12} /> For In-house Teams</> as any} {...props}>
       <PageHead meta={PAGE_META["for-inhouse"]} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: "rgba(16,43,54,0.75)" }}>
-        When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion will transform the performance of your PR and marketing and put you in control.
+        When an AI looks at your industry, do they see your business? With AI now playing a key role in business visibility and purchase vetting, AIO Fusion helps you measure visibility across ChatGPT and Claude and puts you in control of your AI authority.
       </p>
       <p className="text-[16px] font-light leading-[1.8] mb-10" style={{ color: "rgba(16,43,54,0.75)" }}>
-        Make your communications work harder, build optimised plans and content fast, and measure your AI authority as it grows over time.
+        Make your communications work harder, build optimised plans and content fast, and measure your AI visibility as it grows over time without needing a separate monitoring platform.
       </p>
       <h2 className="text-[20px] font-semibold mb-5" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>What it does for you</h2>
       <div className="grid sm:grid-cols-2 gap-3 mb-10">
@@ -41,6 +41,14 @@ export default function ForInhousePage(props: { onLogin: () => void; onBack: () 
         <p className="text-[14px] font-light leading-[1.7] mb-3" style={{ color: "rgba(16,43,54,0.8)" }}>It is the first end-to-end platform designed to automatically optimise and score your earned and owned media visibility with leading AI models such as ChatGPT and Claude.</p>
         <p className="text-[14px] font-light leading-[1.7]" style={{ color: "rgba(16,43,54,0.8)" }}>We believe it will transform PR and marketing for good.</p>
       </div>
+      <aside className="mb-10 p-5 rounded-xl bg-white" style={{ border: "1px solid rgba(16,43,54,0.1)" }}>
+        <h2 className="text-[18px] font-semibold mb-3" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>Build your AI visibility knowledge</h2>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-semibold">
+          <a href={`${import.meta.env.BASE_URL}insights/geo-signals`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Learn which GEO signals to track</a>
+          <a href={`${import.meta.env.BASE_URL}insights/earned-media`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>See why earned media matters to AI</a>
+          <a href={`${import.meta.env.BASE_URL}pricing`} className="underline underline-offset-4" style={{ color: "#C8497A" }}>Compare in-house plans</a>
+        </div>
+      </aside>
       <button onClick={() => props.onNavigate("contact")} className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-lg text-[14px] font-semibold text-white transition-all hover:brightness-110" style={{ background: "#C8497A" }}>
         <Calendar size={16} /> Book a Demo
       </button>

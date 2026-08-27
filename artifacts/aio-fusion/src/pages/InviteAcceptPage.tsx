@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Loader2, Mail, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Loader2, Mail, ShieldCheck, AlertTriangle, LogOut } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type InviteInfo, serverDeclineInvite, serverGetInviteInfo, serverAcceptInvite } from "../lib/auth";
+import { type InviteInfo, serverDeclineInvite, serverGetInviteInfo, serverAcceptInvite, serverLogout } from "../lib/auth";
 import { apiBase } from "../lib/apiHelpers";
 
 const ink = "#0a1628";
@@ -22,6 +22,8 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [signedInAsDifferentUser, setSignedInAsDifferentUser] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [declined, setDeclined] = useState(false);
 
@@ -42,6 +44,7 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
+    setSignedInAsDifferentUser(false);
     if (needsPassword) {
       if (password.length < 8) { setSubmitError("Password must be at least 8 characters."); return; }
       if (password !== confirm) { setSubmitError("Passwords don't match."); return; }
@@ -50,8 +53,22 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
     void serverAcceptInvite({ token, name: name.trim() || undefined, password: needsPassword ? password : undefined }).then((r) => {
       setSubmitting(false);
       if (r.ok) onAccepted();
-      else setSubmitError(r.error ?? "Failed to accept invitation.");
+      else {
+        setSubmitError(r.error ?? "Failed to accept invitation.");
+        setSignedInAsDifferentUser(r.reason === "signed_in_as_different_user");
+      }
     });
+  };
+
+  const handleSignOutAndContinue = () => {
+    setSigningOut(true);
+    setSubmitError(null);
+    void serverLogout()
+      .then(() => window.location.reload())
+      .catch(() => {
+        setSigningOut(false);
+        setSubmitError("We could not sign out this browser. Go to AIO Fusion, sign out, then reopen this invitation.");
+      });
   };
 
   const handleDecline = () => {
@@ -141,6 +158,18 @@ export function InviteAcceptPage({ token, onAccepted }: { token: string; onAccep
                   </>
                 )}
                 {submitError && <p className="text-[12px] font-semibold" style={{ color: accent }}>{submitError}</p>}
+                {signedInAsDifferentUser && (
+                  <button
+                    type="button"
+                    onClick={handleSignOutAndContinue}
+                    disabled={signingOut}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-lg border text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:bg-gray-50 disabled:opacity-60"
+                    style={{ borderColor: vars.g300, color: ink }}
+                  >
+                    {signingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                    {signingOut ? "Signing out…" : "Sign out and continue"}
+                  </button>
+                )}
                 <button
                   type="submit" disabled={submitting}
                   className="w-full flex items-center justify-center gap-2 px-5 py-3.5 text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-90 disabled:opacity-60"

@@ -1169,9 +1169,9 @@ export async function serverAcceptInvite(data: {
   token: string;
   name?: string;
   password?: string;
-}): Promise<{ ok: boolean; session?: Session; error?: string }> {
+}): Promise<{ ok: boolean; session?: Session; error?: string; reason?: string }> {
   const { ok, json } = await postJson("/api/platform/invite/accept", data);
-  if (!ok) return { ok: false, error: json?.error ?? "Failed to accept invitation." };
+  if (!ok) return { ok: false, error: json?.error ?? "Failed to accept invitation.", reason: json?.reason };
   const session: Session = {
     username: json?.account?.username ?? "",
     role: (json?.account?.role ?? "agency") as Role,

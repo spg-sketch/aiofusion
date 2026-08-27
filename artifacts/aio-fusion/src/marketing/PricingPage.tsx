@@ -58,16 +58,16 @@ export default function PricingPage({
       cta: "Book a Demo",
       projects: "1 Premium project",
       includes: [
-        "Full standard platform - all 10 modules",
+        "Full standard platform (all 10 modules)",
         "AI Visibility Audit + GEO strategy builder",
-        "Comms Planner - plan, score and manage schedules",
+        "Comms Planner (plan, score and manage schedules)",
         "Content Optimiser and Editor",
-        "Content Creator - articles, pitches and ideation",
-        "Media Research - AI-recommended journalists",
-        "Marketing Intelligence - awards and conferences",
+        "Content Creator (articles, pitches and ideation)",
+        "Media Research (AI-recommended journalists)",
+        "Marketing Intelligence (awards and conferences)",
         "Website Content GEO and Technical GEO",
-        "Measure and Report - PR impact and AI authority",
-        "Content Library - long-term content curation",
+        "Measure and Report (PR impact and AI authority)",
+        "Content Library (long-term content curation)",
         "Email support",
       ],
     },
@@ -85,18 +85,18 @@ export default function PricingPage({
       cta: "Book a Demo",
       projects: "3 Premium projects included",
       includes: [
-        "Full standard platform - all 10 modules",
+        "Full standard platform (all 10 modules)",
         "AI Visibility Audit + GEO strategy builder",
-        "Comms Planner - plan, score and manage schedules",
+        "Comms Planner (plan, score and manage schedules)",
         "Content Optimiser and Editor",
-        "Content Creator - articles, pitches and ideation",
-        "Media Research - AI-recommended journalists",
-        "Marketing Intelligence - awards and conferences",
+        "Content Creator (articles, pitches and ideation)",
+        "Media Research (AI-recommended journalists)",
+        "Marketing Intelligence (awards and conferences)",
         "Website Content GEO and Technical GEO",
-        "Measure and Report - PR impact and AI authority",
-        "Content Library - long-term content curation",
+        "Measure and Report (PR impact and AI authority)",
+        "Content Library (long-term content curation)",
         "Multi-client architecture and agency dashboard",
-        "3 Premium projects included - each a full brand workspace",
+        "3 Premium projects included (each a full brand workspace)",
         "Client sub-accounts and reporting",
         "Priority email and chat support",
       ],
@@ -228,7 +228,13 @@ export default function PricingPage({
             Plans built for PR and marketing teams
           </h1>
           <p className="text-[15px] font-light max-w-xl mb-4 leading-relaxed" style={{ color: vars.g600 }}>
-            Annual subscriptions. No hidden costs. All prices exclude VAT.
+            Compare GEO software plans for in-house PR teams and multi-client agencies. Annual subscriptions, clear project capacity and no hidden costs. All prices exclude VAT.
+          </p>
+          <p className="text-[13px] font-light max-w-2xl leading-relaxed" style={{ color: vars.g500 }}>
+            Choosing for a team? See how AIO Fusion supports{" "}
+            <a href={`${base}for-inhouse`} className="font-semibold underline underline-offset-4" style={{ color: accent }}>in-house PR and marketing</a>
+            {" "}or{" "}
+            <a href={`${base}for-agencies`} className="font-semibold underline underline-offset-4" style={{ color: accent }}>PR agencies managing multiple clients</a>.
           </p>
         </div>
       </section>

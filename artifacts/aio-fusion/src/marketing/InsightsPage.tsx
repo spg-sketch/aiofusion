@@ -6,15 +6,15 @@ import { PAGE_META, ARTICLE_META } from "./pageMeta";
 import { vars } from "./vars";
 import ArticleDetailView from "./ArticleDetailView";
 import { NEW_ARTICLES } from "./articles-data";
-import blogTile1 from "../assets/blog-tile-1.png";
-import blogTile2 from "../assets/blog-tile-2.png";
-import blogTile3 from "../assets/blog-tile-3.png";
-import article1Img from "../assets/article-1-pr-ai.png";
-import article2Img from "../assets/article-2-thought-leadership.png";
-import article3Img from "../assets/article-3-b2b-authority.png";
-import article4Img from "../assets/article-4-agentic-media.png";
-import article5Img from "../assets/article-5-b2b-visibility.png";
-import article6Img from "../assets/article-6-pr-attribution.png";
+import blogTile1 from "../assets/blog-tile-1.webp";
+import blogTile2 from "../assets/blog-tile-2.webp";
+import blogTile3 from "../assets/blog-tile-3.webp";
+import article1Img from "../assets/article-1-pr-ai.webp";
+import article2Img from "../assets/article-2-thought-leadership.webp";
+import article3Img from "../assets/article-3-b2b-authority.webp";
+import article4Img from "../assets/article-4-agentic-media.webp";
+import article5Img from "../assets/article-5-b2b-visibility.webp";
+import article6Img from "../assets/article-6-pr-attribution.webp";
 
 const ARTICLE_IMAGES: Record<string, string> = {
   "article-1-pr-ai": article1Img,
@@ -35,11 +35,11 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
 
   const articles = [
     { id: "pr-professionals-not-threat", title: "PR professionals should not see AI as a threat", excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.", url: null, tag: "Article", img: article1Img, accent: vars.accent, external: false },
-    { id: "thought-leadership-engine-ai-visibility", title: "Why thought leadership is the engine of AI visibility", excerpt: "Earned media is what LLMs trust most - 89% of AI citations come from third-party publications, not brand websites.", url: null, tag: "Article", img: article2Img, accent: vars.coral, external: false },
-    { id: "battle-b2b-ai-authority", title: "The battle for B2B AI Authority has begun", excerpt: "94% of B2B buyers use generative AI during their purchase journey. PR is now essential, not optional.", url: null, tag: "Article", img: article3Img, accent: vars.gold, external: false },
+    { id: "thought-leadership-engine-ai-visibility", title: "Why thought leadership is the engine of AI visibility", excerpt: "AI systems draw on third-party authority signals. Thought leadership and earned media can help a brand become easier to recognise and cite.", url: null, tag: "Article", img: article2Img, accent: vars.coral, external: false },
+    { id: "battle-b2b-ai-authority", title: "The battle for B2B AI Authority has begun", excerpt: "Generative AI is becoming part of B2B research and supplier discovery. PR now has a direct role in how brands are represented.", url: null, tag: "Article", img: article3Img, accent: vars.gold, external: false },
     { id: "agentic-media-relations", title: "Why agentic media relations is coming faster than you think", excerpt: "AI agents pitching journalists. Journalists using agents to find stories. The future of PR is closer than the industry realises.", url: null, tag: "Article", img: article4Img, accent: vars.teal, external: false },
-    { id: "ai-changing-b2b-visibility", title: "AI Is Changing the Rules of B2B Visibility - Here's What Actually Matters Now", excerpt: "80–95% of citations in AI-generated answers come from earned media. The structural reordering of B2B visibility has begun.", url: null, tag: "Article", img: article5Img, accent: vars.accent, external: false },
-    { id: "ai-proves-pr-drives-sales", title: "Will AI finally prove that B2B PR drives sales through earned media awareness?", excerpt: "The attribution problem that has haunted PR for decades is about to be solved - and AI is the reason why.", url: null, tag: "Article", img: article6Img, accent: vars.coral, external: false },
+    { id: "ai-changing-b2b-visibility", title: "AI Is Changing the Rules of B2B Visibility: Here's What Actually Matters Now", excerpt: "AI-generated answers often rely on third-party sources when they describe markets and suppliers. The structure of B2B visibility is changing.", url: null, tag: "Article", img: article5Img, accent: vars.accent, external: false },
+    { id: "ai-proves-pr-drives-sales", title: "Will AI finally prove that B2B PR drives sales through earned media awareness?", excerpt: "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.", url: null, tag: "Article", img: article6Img, accent: vars.coral, external: false },
     { id: "ext-guide", title: "The B2B Marketer's Fast Guide to Winning AI Authority in 2026", excerpt: "What is AIO? And is PR really the new SEO? Cut through the hype around AI's impact on B2B marketing.", url: "https://simpaticopraiauthorityguide.carrd.co/", tag: "Guide", img: blogTile1, accent: vars.accent, external: true },
     { id: "earned-media", title: "Why earned media beats paid in the AI era", excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.", url: null, tag: "Article", img: blogTile2, accent: vars.coral, external: false },
     { id: "geo-signals", title: "The 6 GEO signal categories every brand should track", excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.", url: null, tag: "Article", img: blogTile3, accent: vars.gold, external: false },
@@ -81,9 +81,18 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
       <PageHead meta={PAGE_META.insights} />
       <p className="text-[16px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
         {isGuidance
-          ? "How-to articles and videos for using the AIO Fusion platform - set-up, Authority Reports, Optimiser, Media Research and more."
-          : "Practical thinking on AI visibility, GEO, and the future of PR and marketing. Filter to Guidance for platform how-to content."}
+          ? "How-to articles and videos for using the AIO Fusion platform: set-up, Authority Reports, Optimiser, Media Research and more."
+          : "Practical thinking on generative engine optimisation (GEO), AI visibility, and the future of B2B PR and marketing. Filter to Guidance for platform how-to content."}
       </p>
+      {!isGuidance && (
+        <p className="text-[14px] font-light leading-[1.8] mb-6" style={{ color: vars.g500 }}>
+          New to GEO? Start with our{" "}
+          <a href={`${import.meta.env.BASE_URL}insights/seo-aio`} className="font-semibold underline underline-offset-4" style={{ color: vars.accent }}>
+            SEO to AIO transition playbook
+          </a>
+          , then explore the signals, earned media and measurement articles linked from it.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2 mb-8">
         <button
           onClick={() => { setActiveTag(null); onClearFilter?.(); }}
@@ -108,14 +117,19 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
           const isInternalArticle = !a.external && !a.url && NEW_ARTICLES.some((na) => na.id === a.id);
           if (isInternalArticle) {
             return (
-              <button
+              <a
                 key={a.id}
-                onClick={() => { setOpenArticleId(a.id); window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior }); }}
+                href={`${import.meta.env.BASE_URL}insights/${a.id}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setOpenArticleId(a.id);
+                  window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+                }}
                 className="group block rounded-2xl overflow-hidden bg-white transition-all hover:shadow-xl hover:-translate-y-1 text-left w-full"
                 style={{ border: `1px solid ${vars.g200}` }}
               >
                 <div className="aspect-[16/10] overflow-hidden" style={{ background: vars.navy }}>
-                  <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <img src={a.img} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
                 <div className="p-6">
                   <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
@@ -123,7 +137,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
                   <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
                   <span className="inline-flex items-center gap-1 text-[12px] font-semibold mt-4" style={{ color: a.accent }}>Read <ArrowUpRight size={12} /></span>
                 </div>
-              </button>
+              </a>
             );
           }
           return (
@@ -135,7 +149,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
               style={{ border: `1px solid ${vars.g200}` }}
             >
               <div className="aspect-[16/10] overflow-hidden" style={{ background: vars.navy }}>
-                <img src={a.img} alt="" aria-hidden="true" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <img src={a.img} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               </div>
               <div className="p-6">
                 <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>

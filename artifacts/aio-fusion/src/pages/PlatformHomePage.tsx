@@ -14,6 +14,12 @@ import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serv
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
+
+function membershipRoleLabel(role: NonNullable<LocalSession["membershipRole"]>): string {
+  if (role === "content") return "Content Team Member";
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 function PlatformHomePage({
   onCreateProject,
   onContinueToProjects,
@@ -854,10 +860,15 @@ function PlatformHomePage({
                   <span className="inline-flex items-center mb-1.5 px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {session.role === "client" ? "Client Account" : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                   </span>
-                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
+                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Workspace</p>
                   <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
                   </h2>
+                  {session.membershipRole && (
+                    <p className="text-[12px] font-semibold mt-1" style={{ color: "rgba(255,255,255,0.78)" }}>
+                      Your access: {membershipRoleLabel(session.membershipRole)}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
