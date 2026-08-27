@@ -114,12 +114,20 @@ describe("bootstrapAuth - accountProfile server→client path", () => {
       impersonating: null,
       setupComplete: true,
       hasPassword: true,
+      sessionIdentity: {
+        userName: "Jamie Owner",
+        userEmail: "jamie@mybrand.test",
+        companyName: "My Brand Ltd",
+      },
       accountProfile: { displayName: "My Brand Ltd", website: "mybrand.com" },
     });
 
     const result = await bootstrapAuth();
 
     expect(result.session?.username).toBe("mybrand");
+    expect(result.session?.userName).toBe("Jamie Owner");
+    expect(result.session?.userEmail).toBe("jamie@mybrand.test");
+    expect(result.session?.companyName).toBe("My Brand Ltd");
     expect(result.accountProfile?.displayName).toBe("My Brand Ltd");
     expect(result.accountProfile?.website).toBe("mybrand.com");
   });

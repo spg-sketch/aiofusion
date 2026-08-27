@@ -475,6 +475,9 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   // own direct session (not impersonation, not a team-member session).
   let accountDisplayName: string | null = null;
   let accountWebsite: string | null = null;
+  let signedInUserName: string | null = null;
+  let signedInUserEmail: string | null = null;
+  let activeCompanyName: string | null = null;
   if (req.account) {
     try {
       // Prefer the session's own userId so member sessions reflect the
@@ -500,6 +503,8 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         microsoftLinked = !!(u.microsoftId);
         hasPassword = !!(u.passwordHash);
         emailVerified = u.emailVerified ?? null;
+        signedInUserName = u.name?.trim() || null;
+        signedInUserEmail = u.email?.trim() || null;
       }
       accountWebsite = acc?.website ?? null;
     } catch { /* non-fatal */ }
@@ -512,6 +517,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     try {
        const co = await getCompanyBySlug(normUsername(req.account.username));
        setupComplete = co?.setupComplete ?? null;
+       activeCompanyName = co?.displayName?.trim() || null;
        // Legacy accounts still use the old "user" role and have no stored
        // setup flag. Prompt their owner once to choose an explicit account
        // type, but never put a teammate or an impersonating admin through a
@@ -593,6 +599,13 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     emailVerified,
     setupComplete,
     hasPassword,
+    sessionIdentity: req.account
+      ? {
+          userName: signedInUserName,
+          userEmail: signedInUserEmail,
+          companyName: activeCompanyName || accountDisplayName || req.account.username,
+        }
+      : null,
     // Returned for client-side intake prefill. The client performs its own
     // role + impersonation guard before using these values.
     accountProfile: { displayName: accountDisplayName, website: accountWebsite },
@@ -4776,6 +4789,11 @@ router.post(
         return;
       }
       await setDisplayName(target, displayName);
+      const companyDisplayName = displayName.trim().slice(0, 64);
+      await db
+        .update(platformCompaniesTable)
+        .set({ displayName: companyDisplayName || target })
+        .where(eq(platformCompaniesTable.slug, target));
       if (websiteProvided) {
         await db
           .update(platformAccountsTable)

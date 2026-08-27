@@ -31,8 +31,8 @@ description: How agency team invitations, 5-tier membership roles, and per-membe
 
 **How to apply:** Compare any valid session's human user email with the invitation email on the server. Same-user sessions may continue; different or legacy user-less sessions must sign out first. Keep the invite unconsumed on rejection.
 
-**Member identity wording:** A team member enters another organisation's workspace, so the organisation/account display name must be labelled "Workspace", never "Signed in as". Show the member's access role separately.
+**Member identity wording:** Account cards must show three separate values: "Signed in as" for the authenticated human, "Company / workspace" for the active organisation, and "Access" for the membership role.
 
 **Why:** Calling the workspace name the signed-in identity makes invited members reasonably believe they have been logged in as the owner.
 
-**How to apply:** Any account card or workspace switcher must distinguish the active workspace from the human user and membership role.
+**How to apply:** Source the human from the user record (name, then email fallback), the company from the canonical company record, and access from the active membership. Do not use cached account labels as human identity.

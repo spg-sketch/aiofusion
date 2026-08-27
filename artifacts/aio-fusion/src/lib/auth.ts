@@ -50,6 +50,11 @@ export type User = {
 export type Session = {
   username: string;
   role: Role;
+  /** The authenticated human, kept separate from the active company/workspace. */
+  userName?: string | null;
+  userEmail?: string | null;
+  /** Human-readable name of the active company/workspace. */
+  companyName?: string | null;
   // Fine-grained team membership role within the workspace (owner/admin/
   // billing/content/viewer). Undefined = full access (legacy/owner session).
   membershipRole?: MembershipRole | null;
@@ -411,11 +416,45 @@ export async function serverLogin(
 }
 
 async function finishLogin(json: any): Promise<{ ok: true; session: Session; needsSetup?: boolean }> {
-  const session: Session = { username: json.account.username, role: json.account.role };
+  let session: Session = { username: json.account.username, role: json.account.role };
+  setSession(session);
+  session = await hydrateSessionIdentity(session);
   setSession(session);
   await runMigrationIfNeeded(session.role);
   await refreshAccountsCache();
   return { ok: true, session, needsSetup: json.needsSetup === true };
+}
+
+async function hydrateSessionIdentity(fallback: Session): Promise<Session> {
+  try {
+    const resp = await fetch(`${apiBase()}/api/platform/me`, { credentials: "include" });
+    if (!resp.ok) return fallback;
+    const me = (await resp.json()) as {
+      account?: (ServerAccount & {
+        membershipRole?: MembershipRole | null;
+        projectAccess?: string[] | null;
+      }) | null;
+      agencyManagedClient?: boolean;
+      sessionIdentity?: {
+        userName?: string | null;
+        userEmail?: string | null;
+        companyName?: string | null;
+      } | null;
+    };
+    if (!me.account) return fallback;
+    return {
+      username: me.account.username,
+      role: me.account.role,
+      membershipRole: me.account.membershipRole ?? null,
+      projectAccess: me.account.projectAccess ?? null,
+      userName: me.sessionIdentity?.userName ?? null,
+      userEmail: me.sessionIdentity?.userEmail ?? null,
+      companyName: me.sessionIdentity?.companyName ?? me.account.username,
+      ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
+    };
+  } catch {
+    return fallback;
+  }
 }
 export async function serverLogout(): Promise<void> {
   await postJson("/api/platform/logout");
@@ -447,6 +486,11 @@ export async function bootstrapAuth(): Promise<{
         setupComplete?: boolean | null;
         hasPassword?: boolean;
         agencyManagedClient?: boolean;
+        sessionIdentity?: {
+          userName?: string | null;
+          userEmail?: string | null;
+          companyName?: string | null;
+        } | null;
         accountProfile?: { displayName?: string | null; website?: string | null } | null;
         workspaces?: WorkspaceInfo[];
       };
@@ -460,6 +504,9 @@ export async function bootstrapAuth(): Promise<{
           role: acct.role,
           membershipRole: acct.membershipRole ?? null,
           projectAccess: acct.projectAccess ?? null,
+          userName: me.sessionIdentity?.userName ?? null,
+          userEmail: me.sessionIdentity?.userEmail ?? null,
+          companyName: me.sessionIdentity?.companyName ?? acct.username,
           ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
         };
         setSession(session);
@@ -1172,11 +1219,12 @@ export async function serverAcceptInvite(data: {
 }): Promise<{ ok: boolean; session?: Session; error?: string; reason?: string }> {
   const { ok, json } = await postJson("/api/platform/invite/accept", data);
   if (!ok) return { ok: false, error: json?.error ?? "Failed to accept invitation.", reason: json?.reason };
-  const session: Session = {
+  let session: Session = {
     username: json?.account?.username ?? "",
     role: (json?.account?.role ?? "agency") as Role,
     membershipRole: json?.account?.membershipRole ?? null,
   };
+  session = await hydrateSessionIdentity(session);
   setSession(session);
   return { ok: true, session };
 }

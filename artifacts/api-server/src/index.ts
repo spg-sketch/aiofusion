@@ -26,6 +26,7 @@ import { sendInviteReminders } from "./lib/invite-reminders";
 import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
 import { ensurePlatformSchemaV9 } from "./lib/ensure-platform-schema-v9";
 import { ensurePlatformSchemaV10 } from "./lib/ensure-platform-schema-v10";
+import { repairKnownWorkspaceNames } from "./lib/repair-known-workspace-names";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -119,6 +120,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v9 additions", ensurePlatformSchemaV9],
     ["platform schema v10 additions", ensurePlatformSchemaV10],
     ["platform_password_resets table", ensurePasswordResetsTable],
+    ["known workspace names", repairKnownWorkspaceNames],
   ];
   for (const [label, step] of steps) {
     try {

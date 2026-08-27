@@ -10,14 +10,31 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
-import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverGetDiscountInvite, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, getUsers as getLocalUsers, canCreateSubAccounts, loadLastSignIn, saveLastSignIn, markPendingSso, clearPendingSso } from "../lib/auth";
+import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serverLogin, serverLogout, serverGetSessions, serverRevokeSession, serverSelfDeleteAccount, serverSignUp, serverGetDiscountInvite, serverResendVerification, serverForgotPassword, serverResetPassword, serverChangeMyPassword, serverRequestSetPassword, canCreateSubAccounts, loadLastSignIn, saveLastSignIn, markPendingSso, clearPendingSso } from "../lib/auth";
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
-import { roleLabel, accountLabel } from "../lib/accountLabels";
+import { roleLabel } from "../lib/accountLabels";
 
 function membershipRoleLabel(role: NonNullable<LocalSession["membershipRole"]>): string {
   if (role === "content") return "Content Team Member";
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function sessionAccessLabel(session: LocalSession): string {
+  if (session.membershipRole) return membershipRoleLabel(session.membershipRole);
+  return session.role === "admin" ? "Admin" : "Owner";
+}
+
+export function getSessionIdentityLabels(session: LocalSession): {
+  signedInAs: string;
+  companyName: string;
+  access: string;
+} {
+  return {
+    signedInAs: session.userName || session.userEmail || session.username,
+    companyName: session.companyName || session.username,
+    access: sessionAccessLabel(session),
+  };
 }
 
 function PlatformHomePage({
@@ -860,15 +877,14 @@ function PlatformHomePage({
                   <span className="inline-flex items-center mb-1.5 px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {session.role === "client" ? "Client Account" : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                   </span>
-                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Workspace</p>
+                  <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
                   <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
-                    {accountLabel(getLocalUsers().find((u) => u.username.toLowerCase() === session.username.toLowerCase()) ?? { username: session.username })}
+                    {getSessionIdentityLabels(session).signedInAs}
                   </h2>
-                  {session.membershipRole && (
-                    <p className="text-[12px] font-semibold mt-1" style={{ color: "rgba(255,255,255,0.78)" }}>
-                      Your access: {membershipRoleLabel(session.membershipRole)}
-                    </p>
-                  )}
+                  <div className="mt-2 space-y-0.5 text-[12px]" style={{ color: "rgba(255,255,255,0.78)" }}>
+                    <p><span className="font-bold uppercase tracking-[0.12em]">Company / workspace:</span> {getSessionIdentityLabels(session).companyName}</p>
+                    <p><span className="font-bold uppercase tracking-[0.12em]">Access:</span> {getSessionIdentityLabels(session).access}</p>
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">

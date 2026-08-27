@@ -1329,6 +1329,7 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
       .insert(platformCompaniesTable)
       .values({
         slug: "acctprofile-brand",
+        displayName: "AcCtProfile Brand Ltd",
         role: "client",
         status: "active",
         setupComplete: true,
@@ -1338,6 +1339,7 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
       .insert(platformUsersTable)
       .values({
         email: "owner@acctprofile-brand.test",
+        name: "Profile Owner",
         passwordHash: hashPassword("pw-acctprofile-1"),
         emailVerified: true,
       })
@@ -1365,6 +1367,11 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
     expect(me.status).toBe(200);
     expect(me.json.accountProfile.displayName).toBe("AcCtProfile Brand Ltd");
     expect(me.json.accountProfile.website).toBe("https://acctprofile-brand.example");
+    expect(me.json.sessionIdentity).toEqual({
+      userName: "Profile Owner",
+      userEmail: "owner@acctprofile-brand.test",
+      companyName: "AcCtProfile Brand Ltd",
+    });
   });
 
   it("legacy client session (no userId): still returns website via platform_accounts fallback", async () => {
