@@ -13,7 +13,7 @@ import { vars } from "../marketing/vars";
 import { apiBase } from "../lib/apiHelpers";
 import { accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
-import { pushProjectMeta } from "../lib/projectSync";
+import { auditAndRecoverLocalProjects, pushProjectMeta, type ProjectReconciliationAudit } from "../lib/projectSync";
 import { fetchProjectAllowance } from "../lib/billingAllowance";
 import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
@@ -38,7 +38,7 @@ function SubAccountsPage({
 }: {
   session: LocalSession;
   onBack: () => void;
-  onAssignProjectOwner: (id: string, owner: string) => void;
+  onAssignProjectOwner: (id: string, owner: string) => Promise<{ ok: boolean; error?: string }>;
   onRoleChanged?: (newRole: Role) => void;
   /** Called after the user accepts a cross-workspace invite so the parent can refresh the workspace list. */
   onWorkspacesChanged?: () => void;
@@ -58,6 +58,11 @@ function SubAccountsPage({
   const accentSoft = "#FBE3ED";
   const [tick, setTick] = useState(0);
   const [checkingAllowanceFor, setCheckingAllowanceFor] = useState<string | null>(null);
+  const [reconciliationAudit, setReconciliationAudit] = useState<ProjectReconciliationAudit | null>(null);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [reconciliationAttempt, setReconciliationAttempt] = useState(0);
+  const [assigningProjectId, setAssigningProjectId] = useState<string | null>(null);
   const refresh = () => setTick((t) => t + 1);
 
   // --- Left-hand settings navigation -------------------------------------
@@ -98,6 +103,33 @@ function SubAccountsPage({
       ? (initialSection as SettingsSection)
       : "profile",
   );
+  useEffect(() => {
+    if (section !== "assign") return;
+    let active = true;
+    setReconciliationAudit(null);
+    setReconciliationLoading(true);
+    setReconciliationError(null);
+    void Promise.all([auditAndRecoverLocalProjects(), refreshAccountsCache()])
+      .then(([audit, accountsRefreshed]) => {
+        if (!active) return;
+        if (audit === "unauthorized") {
+          setReconciliationError("Your session has expired. Sign in again before reconciling projects.");
+        } else if (!audit) {
+          setReconciliationError("The server could not be reached. Browser-only projects have not been changed.");
+        } else if (accountsRefreshed === false) {
+          setReconciliationError("Managed client records could not be refreshed. No project ownership has been changed.");
+        } else {
+          setReconciliationAudit(audit);
+          refresh();
+        }
+      })
+      .finally(() => {
+        if (active) setReconciliationLoading(false);
+      });
+    return () => { active = false; };
+    // Audit once whenever the human opens the assignment section.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, reconciliationAttempt]);
   // Central section switcher: updates local state and reports the change to
   // the parent so it can mirror the section into the URL/history stack.
   const selectSection = (next: SettingsSection) => {
@@ -715,6 +747,32 @@ function SubAccountsPage({
     if (o === session.username.toLowerCase()) return "You";
     const match = subAccounts.find((u) => u.username.toLowerCase() === o);
     return match ? match.username : owner || "Unassigned";
+  };
+  const unrecoveredProjectIds = new Set(
+    reconciliationAudit?.localOnly.filter((item) => !item.recovered).map((item) => item.id) ?? [],
+  );
+  const reconciliationReady =
+    reconciliationAudit !== null && reconciliationError === null && !reconciliationLoading;
+
+  const handleConfirmedProjectAssignment = async (project: Client, owner: string) => {
+    const currentOwner = (project.owner || session.username).toLowerCase();
+    const targetOwner = owner.toLowerCase();
+    if (currentOwner === targetOwner) return;
+    const targetLabel = ownerLabel(owner);
+    if (!confirm(`Move '${project.name}' from ${ownerLabel(project.owner)} to ${targetLabel}? This changes which client workspace owns and opens the project.`)) {
+      refresh();
+      return;
+    }
+    setAssigningProjectId(project.id);
+    const result = await onAssignProjectOwner(project.id, owner);
+    setAssigningProjectId(null);
+    if (!result.ok) {
+      setReconciliationError(result.error || "The project could not be reassigned.");
+      refresh();
+      return;
+    }
+    setReconciliationError(null);
+    refresh();
   };
 
   return (
@@ -1684,7 +1742,46 @@ function SubAccountsPage({
         <div className="rounded-2xl overflow-hidden" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
             <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Assign projects</h2>
-            <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Hand a project to a client so it shows up in their own account. You keep access either way.</p>
+            <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>Review every active agency and client project before moving it. No project is matched to a client by name.</p>
+            <div className="mt-3 rounded-xl px-4 py-3 text-[12px]" style={{ background: vars.g100, border: `1px solid ${vars.g200}`, color: vars.g500 }}>
+              {reconciliationLoading ? (
+                <p className="flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Checking server records and this browser's cache...</p>
+              ) : reconciliationError ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold" style={{ color: accent }}>{reconciliationError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setReconciliationAttempt((attempt) => attempt + 1)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-[0.14em]"
+                    style={{ color: accent, border: `1px solid ${accent}40` }}
+                  >
+                    <RefreshCw size={11} /> Retry audit
+                  </button>
+                </div>
+              ) : reconciliationAudit ? (
+                <>
+                  <p><strong style={{ color: ink }}>{reconciliationAudit.serverProjectIds.length}</strong> active projects are safely stored on the server.</p>
+                  <p className="mt-1">
+                    <strong style={{ color: ink }}>{manageable.filter((project) => (project.owner || "").toLowerCase() === session.username.toLowerCase()).length}</strong> are agency-owned and{" "}
+                    <strong style={{ color: ink }}>{subAccounts.length}</strong> managed client records are available for review.
+                  </p>
+                  {reconciliationAudit.localOnly.length === 0 ? (
+                    <p className="mt-1">No browser-only projects were found.</p>
+                  ) : (
+                    <div className="mt-2">
+                      <p className="font-semibold" style={{ color: ink }}>Browser-only projects found:</p>
+                      <ul className="mt-1 space-y-1">
+                        {reconciliationAudit.localOnly.map((item) => (
+                          <li key={item.id}>
+                            {item.name} - {item.recovered ? "recovered to the server" : `not recovered${item.error ? `: ${item.error}` : ""}`}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </div>
           </div>
           {manageable.length === 0 ? (
             <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>No projects to assign yet.</p>
@@ -1705,11 +1802,13 @@ function SubAccountsPage({
                       value={(p.owner || "").toLowerCase() === session.username.toLowerCase() ? "__me__" : (p.owner || "")}
                       onChange={(e) => {
                         const val = e.target.value === "__me__" ? session.username : e.target.value;
-                        onAssignProjectOwner(p.id, val);
-                        refresh();
+                        void handleConfirmedProjectAssignment(p, val);
                       }}
+                      disabled={assigningProjectId === p.id || !reconciliationReady || unrecoveredProjectIds.has(p.id)}
+                      aria-label={`Owner for ${p.name}`}
                       className="px-3 py-2 rounded-lg border text-[13px] focus:outline-none focus:ring-2 bg-white"
                       style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                      title={unrecoveredProjectIds.has(p.id) ? "This browser-only project must be recovered before it can be assigned." : undefined}
                     >
                       <option value="__me__">You ({session.username})</option>
                       {subAccounts.map((u) => (

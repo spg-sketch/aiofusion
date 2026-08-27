@@ -89,7 +89,7 @@ function renderPage(users: User[]) {
     <UsersAdminPage
       session={ADMIN_SESSION}
       onBack={() => {}}
-      onAssignProjectOwner={() => {}}
+      onAssignProjectOwner={async () => ({ ok: true })}
     />,
   );
 }

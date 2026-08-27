@@ -27,7 +27,7 @@ function UsersAdminPage({
 }: {
   session: LocalSession;
   onBack: () => void;
-  onAssignProjectOwner: (id: string, owner: string) => void;
+  onAssignProjectOwner: (id: string, owner: string) => Promise<{ ok: boolean; error?: string }>;
   onProjectCreated?: () => void;
   onSupportAdmin?: () => void;
   onLeadsAdmin?: () => void;

@@ -19,7 +19,11 @@ vi.mock("../lib/projectStore", () => ({
     { id: "proj-1", name: "Client One Project", owner: "client-one" },
   ],
 }));
-vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
+const auditAndRecoverLocalProjects = vi.fn();
+vi.mock("../lib/projectSync", () => ({
+  pushProjectMeta: async () => ({}),
+  auditAndRecoverLocalProjects: () => auditAndRecoverLocalProjects(),
+}));
 vi.mock("../lib/accountLabels", () => ({ accountLabel: (u: { username: string }) => u.username }));
 
 vi.mock("./TeamSection", () => ({
@@ -68,6 +72,7 @@ beforeEach(() => {
   serverImpersonate.mockClear();
    serverSetClientAccess.mockClear();
   getSubAccounts.mockReturnValue(partnerClientRows);
+  auditAndRecoverLocalProjects.mockResolvedValue({ serverProjectIds: ["proj-1"], localOnly: [] });
   sessionStorage.clear();
 });
 
@@ -83,7 +88,7 @@ import { SubAccountsPage } from "./SubAccountsPage";
 
 const baseProps = {
   onBack: () => {},
-  onAssignProjectOwner: () => {},
+  onAssignProjectOwner: async () => ({ ok: true }),
   onSignOut: () => {},
 };
 
@@ -166,6 +171,46 @@ describe("agency partner client rows", () => {
     fireEvent.click(screen.getByRole("button", { name: /client one project/i }));
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ projectId: "proj-1" });
+  });
+
+  it("audits projects and requires confirmation before assigning one to a client", async () => {
+    const onAssignProjectOwner = vi.fn(async () => ({ ok: true as const }));
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <SubAccountsPage
+        {...baseProps}
+        session={agencySession as any}
+        initialSection="assign"
+        onAssignProjectOwner={onAssignProjectOwner}
+      />,
+    );
+    expect(await screen.findByText((_, element) =>
+      element?.tagName === "P" && element.textContent === "1 active projects are safely stored on the server.",
+    )).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /owner for client one project/i }), {
+      target: { value: "client-two" },
+    });
+
+    await vi.waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("Client One Project"));
+      expect(onAssignProjectOwner).toHaveBeenCalledWith("proj-1", "client-two");
+    });
+  });
+
+  it("keeps every owner control disabled when the audit cannot reach the server", async () => {
+    auditAndRecoverLocalProjects.mockResolvedValueOnce(null);
+    render(
+      <SubAccountsPage
+        {...baseProps}
+        session={agencySession as any}
+        initialSection="assign"
+      />,
+    );
+
+    expect(await screen.findByText(/server could not be reached/i)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /owner for client one project/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /retry audit/i })).toBeTruthy();
   });
 });
 

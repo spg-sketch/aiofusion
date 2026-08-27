@@ -361,14 +361,17 @@ function cacheAccounts(accounts: ServerAccount[]): void {
   saveUsers(users);
 }
 
-export async function refreshAccountsCache(): Promise<void> {
+export async function refreshAccountsCache(): Promise<boolean> {
   try {
     const resp = await fetch(`${apiBase()}/api/platform/accounts`, { credentials: "include" });
-    if (!resp.ok) return;
+    if (!resp.ok) return false;
     const json = (await resp.json()) as { accounts?: ServerAccount[] };
-    if (Array.isArray(json.accounts)) cacheAccounts(json.accounts);
+    if (!Array.isArray(json.accounts)) return false;
+    cacheAccounts(json.accounts);
+    return true;
   } catch {
     /* keep existing cache */
+    return false;
   }
 }
 

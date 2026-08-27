@@ -17,6 +17,7 @@ const LOGOS_KEY = "aio.clientLogos.v1";
 // Per-project timestamp of the last intake save/pull on THIS device, used to
 // decide whether the server copy or the local copy is newer.
 const INTAKE_TIMES_KEY = "aio.intake.updatedAt.v1";
+const RECOVERY_PENDING_KEY = "aio.projectRecovery.pending.v1";
 
 const ACTIVE_PROJECT_KEY = "aio.activeProjectId";
 
@@ -219,6 +220,16 @@ async function pullProjects(): Promise<{ projects: ServerProject[]; deletedIds: 
 
 export type PushProjectResult = { ok: boolean; limitReached?: boolean; error?: string };
 
+export type ProjectReconciliationAudit = {
+  serverProjectIds: string[];
+  localOnly: Array<{
+    id: string;
+    name: string;
+    recovered: boolean;
+    error?: string;
+  }>;
+};
+
 export async function pushProjectMeta(project: StoredProject, logo?: string | null): Promise<PushProjectResult> {
   try {
     const res = await fetch(`${apiBase()}/api/store/projects/upsert`, {
@@ -244,6 +255,109 @@ export async function pushProjectMeta(project: StoredProject, logo?: string | nu
   }
 }
 
+// Compare this browser's cache with the active server records and explicitly
+// recover anything that only exists here. This is used by the human-reviewed
+// assignment screen: it reports every browser-only record and whether it was
+// safely persisted before an owner can be changed.
+export async function auditAndRecoverLocalProjects(): Promise<
+  ProjectReconciliationAudit | null | "unauthorized"
+> {
+  const server = await pullProjects();
+  if (server === "unauthorized" || server === null) return server;
+
+  const activeIds = new Set(server.projects.map((project) => project.id));
+  const deletedIds = new Set(server.deletedIds);
+  const localProjects = readJson<StoredProject[]>(PROJECTS_KEY, []);
+  const localLogos = readJson<Record<string, string>>(LOGOS_KEY, {});
+  const pendingRecovery = readJson<Record<string, boolean>>(RECOVERY_PENDING_KEY, {});
+  const localOnly: ProjectReconciliationAudit["localOnly"] = [];
+
+  for (const project of localProjects) {
+    if (!project || typeof project.id !== "string") continue;
+    const alreadyOnServer = activeIds.has(project.id);
+    if (alreadyOnServer && !pendingRecovery[project.id]) continue;
+    if (deletedIds.has(project.id)) {
+      localOnly.push({
+        id: project.id,
+        name: pickName(typeof project.name === "string" ? project.name : ""),
+        recovered: false,
+        error: "this project was deleted on the server",
+      });
+      continue;
+    }
+    // Mark the record before the first recovery write. If metadata succeeds but
+    // Set-Up does not, this durable browser marker makes the next audit retry
+    // instead of mistaking the newly-created server row for a complete recovery.
+    pendingRecovery[project.id] = true;
+    writeJson(RECOVERY_PENDING_KEY, pendingRecovery);
+    const result = alreadyOnServer
+      ? { ok: true }
+      : await pushProjectMeta(project, localLogos[project.id] ?? null);
+    let intakeRecovered = true;
+    if (result.ok) {
+      ensureDefaultIntakeMigrated();
+      const cachedIntake = readJson<unknown>(intakeKey(project.id), null);
+      intakeRecovered = await pushIntake(
+        project.id,
+        cachedIntake,
+        typeof project.name === "string" ? project.name : "",
+      );
+    }
+    localOnly.push({
+      id: project.id,
+      name: pickName(typeof project.name === "string" ? project.name : ""),
+      recovered: result.ok && intakeRecovered,
+      ...(result.error
+        ? { error: result.error }
+        : !intakeRecovered
+          ? { error: "the project record was recovered, but its cached Set-Up could not be saved" }
+          : {}),
+    });
+    if (result.ok && intakeRecovered) {
+      delete pendingRecovery[project.id];
+      writeJson(RECOVERY_PENDING_KEY, pendingRecovery);
+    }
+    if (result.ok) activeIds.add(project.id);
+  }
+
+  // Hydrate the browser cache from the authoritative server snapshot before the
+  // review UI is enabled. This makes projects created on another device appear
+  // in the assignment list, while retaining newly recovered local records that
+  // were not part of the original GET response.
+  const serverById = new Map(server.projects.map((project) => [project.id, project]));
+  const merged: StoredProject[] = [];
+  const mergedLogos: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const localProject of localProjects) {
+    if (!localProject || typeof localProject.id !== "string" || deletedIds.has(localProject.id)) continue;
+    const serverProject = serverById.get(localProject.id);
+    seen.add(localProject.id);
+    if (serverProject) {
+      merged.push({
+        ...localProject,
+        ...hydrateServerProject(
+          serverProject,
+          typeof localProject.name === "string" ? localProject.name : "",
+        ),
+      });
+      const logo = serverProject.logo ?? localLogos[localProject.id];
+      if (logo) mergedLogos[localProject.id] = logo;
+    } else {
+      merged.push(localProject);
+      if (localLogos[localProject.id]) mergedLogos[localProject.id] = localLogos[localProject.id];
+    }
+  }
+  for (const serverProject of server.projects) {
+    if (seen.has(serverProject.id) || deletedIds.has(serverProject.id)) continue;
+    merged.push(hydrateServerProject(serverProject));
+    if (serverProject.logo) mergedLogos[serverProject.id] = serverProject.logo;
+  }
+  writeJson(PROJECTS_KEY, merged);
+  writeJson(LOGOS_KEY, mergedLogos);
+
+  return { serverProjectIds: [...activeIds], localOnly };
+}
+
 export async function deleteRemoteProject(id: string): Promise<void> {
   try {
     await fetch(`${apiBase()}/api/store/projects/delete`, {
@@ -266,7 +380,7 @@ function intakeHasConfirmedEntity(intake: unknown): boolean {
   return ce != null && typeof ce === "object";
 }
 
-async function pushIntake(id: string, intake: unknown, name?: string): Promise<void> {
+async function pushIntake(id: string, intake: unknown, name?: string): Promise<boolean> {
   // Never push a blank Set-Up up: it must not be able to overwrite a populated
   // copy held on the server (the server guards this too, but we avoid even
   // sending it). A new project with no answers yet simply has nothing to save.
@@ -274,16 +388,17 @@ async function pushIntake(id: string, intake: unknown, name?: string): Promise<v
   // of the Set-Up is sparse, so the choice persists cross-device. The server
   // merges just that key onto the existing intake, so this can never wipe
   // populated answers.
-  if (intakeIsEmpty(intake) && !intakeHasConfirmedEntity(intake)) return;
+  if (intakeIsEmpty(intake) && !intakeHasConfirmedEntity(intake)) return true;
   try {
-    await fetch(`${apiBase()}/api/store/projects/intake`, {
+    const response = await fetch(`${apiBase()}/api/store/projects/intake`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ id, intake, name: name ?? "" }),
     });
+    return response.ok;
   } catch {
-    /* noop */
+    return false;
   }
 }
 

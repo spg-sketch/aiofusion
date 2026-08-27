@@ -177,3 +177,16 @@ regenerate the declarations: `pnpm --filter @workspace/db exec tsc -b`.
 ## Owner column is authoritative on sync
 GET /api/store/projects returns the `owner` column; client hydration (projectSync hydrateServerProject) must overwrite the stale `data.owner` blob value with it (reassignment updates the column only). Legacy NULL column keeps the blob owner.
 **Why:** without this, a project handed to a client account stays invisible to that client cross-device (visibleProjects filters on owner).
+
+## Human-reviewed ownership reconciliation
+Project ownership reconciliation must finish an authoritative server project pull
+and managed-account refresh before enabling transfers. Browser-only projects must
+persist both metadata and cached Set-Up; partial recovery stays durably pending in
+that browser and is retried on later audits. Never infer a target owner from names.
+**Why:** a stale browser can omit projects or managed clients created elsewhere,
+and metadata can save while Set-Up fails. Treating either state as reconciled can
+move an incomplete project or present a misleading review list.
+**How to apply:** keep transfer controls disabled after any audit/account-refresh
+failure; hydrate the review list from server rows; require explicit project and
+target selection plus confirmation; retain pending recovery until every cached
+piece saves.

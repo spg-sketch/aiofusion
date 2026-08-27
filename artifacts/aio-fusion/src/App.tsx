@@ -662,23 +662,20 @@ function App() {
     };
   }, [session]);
 
-  const handleAssignProjectOwner = (id: string, owner: string) => {
+  const handleAssignProjectOwner = async (id: string, owner: string): Promise<{ ok: boolean; error?: string }> => {
     // Persist server-side first (the upsert push deliberately never changes
     // owner). Only mirror the change locally once the server confirms it, so a
     // denied or failed reassignment never leaves the UI showing a move that did
     // not actually happen. On failure, resync from the server and surface why.
-    void (async () => {
-      const result = await serverAssignOwner(id, owner);
-      if (!result.ok) {
-        await refreshAccountsCache();
-        setStoredProjects(loadStoredProjects());
-        window.alert(result.error);
-        return;
-      }
-      assignProjectOwner(id, owner);
-      setStoredProjects(loadStoredProjects());
-      await refreshAccountsCache();
-    })();
+    const result = await serverAssignOwner(id, owner);
+    if (!result.ok) {
+      await resyncProjects();
+      return result;
+    }
+    assignProjectOwner(id, owner);
+    setStoredProjects(loadStoredProjects());
+    await refreshAccountsCache();
+    return { ok: true };
   };
 
   useEffect(() => { removeDemoSeedData(); }, []);

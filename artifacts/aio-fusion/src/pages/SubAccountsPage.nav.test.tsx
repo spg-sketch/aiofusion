@@ -7,7 +7,10 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 vi.mock("../lib/apiHelpers", () => ({ apiBase: () => "" }));
 vi.mock("../lib/projectStore", () => ({ loadStoredProjects: () => [] }));
-vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
+vi.mock("../lib/projectSync", () => ({
+  pushProjectMeta: async () => ({}),
+  auditAndRecoverLocalProjects: async () => ({ serverProjectIds: [], localOnly: [] }),
+}));
 vi.mock("../lib/accountLabels", () => ({ accountLabel: (u: string) => u }));
 
 vi.mock("./TeamSection", () => ({
@@ -55,7 +58,7 @@ import { SubAccountsPage } from "./SubAccountsPage";
 
 const baseProps = {
   onBack: () => {},
-  onAssignProjectOwner: () => {},
+  onAssignProjectOwner: async () => ({ ok: true }),
   onSignOut: () => {},
 };
 

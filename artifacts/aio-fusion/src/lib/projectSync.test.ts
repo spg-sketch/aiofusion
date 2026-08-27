@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { syncIntakeForProject, ensureDefaultIntakeMigrated, assertActiveProjectConsistency, setKnownProjectIds, assertActiveProjectConsistencyFromCache } from "./projectSync";
+import { syncIntakeForProject, ensureDefaultIntakeMigrated, assertActiveProjectConsistency, setKnownProjectIds, assertActiveProjectConsistencyFromCache, auditAndRecoverLocalProjects } from "./projectSync";
 
 // A fully populated Set-Up blob (a real project's answers).
 const FULL = {
@@ -133,6 +133,143 @@ describe("syncProjectsOnLoad - owner column is authoritative", () => {
     const result = await syncProjectsOnLoad();
     const projects = (result as { projects: Array<{ id: string; owner?: string }> }).projects;
     expect(projects.find((p) => p.id === "p2")?.owner).toBe("agency");
+  });
+});
+
+describe("auditAndRecoverLocalProjects", () => {
+  it("reports server-backed projects and recovers a browser-only project", async () => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([
+      { id: "server-1", name: "Shared", owner: "agency" },
+      { id: "local-1", name: "Cached only", owner: "agency" },
+    ]));
+    localStorage.setItem("aio.intake.v2::local-1", JSON.stringify(FULL));
+    const postedBodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, opts?: { method?: string; body?: string }) => {
+      const method = (opts?.method || "GET").toUpperCase();
+      if (method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            projects: [{ id: "server-1", name: "Shared", data: {}, logo: null, owner: "agency", updatedAt: null }],
+            deletedIds: [],
+          }),
+        } as Response;
+      }
+      postedBodies.push(JSON.parse(opts!.body!));
+      return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+    }));
+
+    const audit = await auditAndRecoverLocalProjects();
+
+    expect(audit).toEqual({
+      serverProjectIds: ["server-1", "local-1"],
+      localOnly: [{ id: "local-1", name: "Cached only", recovered: true }],
+    });
+    expect(postedBodies).toEqual([
+      expect.objectContaining({ id: "local-1", name: "Cached only" }),
+      expect.objectContaining({ id: "local-1", name: "Cached only", intake: FULL }),
+    ]);
+  });
+
+  it("clearly reports a cached project that was deleted on the server without reviving it", async () => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([
+      { id: "deleted-1", name: "Old cached copy", owner: "agency" },
+    ]));
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ projects: [], deletedIds: ["deleted-1"] }),
+    }) as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const audit = await auditAndRecoverLocalProjects();
+
+    expect(audit).toEqual({
+      serverProjectIds: [],
+      localOnly: [{
+        id: "deleted-1",
+        name: "Old cached copy",
+        recovered: false,
+        error: "this project was deleted on the server",
+      }],
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("retries cached Set-Up recovery on the next audit after metadata alone was saved", async () => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([
+      { id: "local-2", name: "Needs retry", owner: "agency" },
+    ]));
+    localStorage.setItem("aio.intake.v2::local-2", JSON.stringify(FULL));
+    let serverHasProject = false;
+    let intakeAttempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, opts?: { method?: string }) => {
+      const method = (opts?.method || "GET").toUpperCase();
+      const path = String(url);
+      if (method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            projects: serverHasProject
+              ? [{ id: "local-2", name: "Needs retry", data: {}, logo: null, owner: "agency", updatedAt: null }]
+              : [],
+            deletedIds: [],
+          }),
+        } as Response;
+      }
+      if (path.endsWith("/store/projects/upsert")) {
+        serverHasProject = true;
+        return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+      }
+      intakeAttempts += 1;
+      return {
+        ok: intakeAttempts > 1,
+        status: intakeAttempts > 1 ? 200 : 503,
+        json: async () => ({}),
+      } as Response;
+    }));
+
+    const first = await auditAndRecoverLocalProjects();
+    expect(first).toMatchObject({
+      localOnly: [{ id: "local-2", recovered: false }],
+    });
+
+    const second = await auditAndRecoverLocalProjects();
+    expect(second).toMatchObject({
+      localOnly: [{ id: "local-2", recovered: true }],
+    });
+    expect(intakeAttempts).toBe(2);
+  });
+
+  it("hydrates a server-only project into the reviewed browser list", async () => {
+    localStorage.setItem("aio.projects.v1", JSON.stringify([
+      { id: "local-known", name: "Known", owner: "agency" },
+    ]));
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        projects: [
+          { id: "local-known", name: "Known", data: { id: "local-known", name: "Known" }, logo: null, owner: "agency", updatedAt: null },
+          { id: "remote-new", name: "From another device", data: { id: "remote-new", name: "From another device" }, logo: null, owner: "client1", updatedAt: null },
+        ],
+        deletedIds: [],
+      }),
+    }) as Response));
+
+    const audit = await auditAndRecoverLocalProjects();
+    const stored = JSON.parse(localStorage.getItem("aio.projects.v1")!) as Array<{
+      id: string;
+      owner?: string;
+    }>;
+
+    expect(audit).toMatchObject({ serverProjectIds: ["local-known", "remote-new"] });
+    expect(stored).toEqual([
+      expect.objectContaining({ id: "local-known", owner: "agency" }),
+      expect.objectContaining({ id: "remote-new", owner: "client1" }),
+    ]);
   });
 });
 
