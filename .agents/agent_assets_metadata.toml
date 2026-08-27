@@ -191,3 +191,10 @@ id = "dwoujI6kjL0YIklb9djA9"
 uri = "file://artifacts/aio-fusion-promo/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+
+[[outputs]]
+id = "K1bhyo6p84awaduvZ3YKe"
+uri = "file://artifacts/aio-fusion/PATRICK-COMBINED-GROWTH-ACTION-PLAN.md"
+type = "text"
+title = "Patrick's Combined Growth Action Plan"
+description = "A combined SEO, demo-readiness and evidence-led product-priority programme based on the 49-question demo bank and Task 158 baseline."
