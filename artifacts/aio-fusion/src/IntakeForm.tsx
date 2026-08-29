@@ -83,6 +83,9 @@ type FieldDef = {
   shortPlaceholder?: string;
   longPlaceholder?: string;
   wordLimit?: number;
+  // For line-based list answers rendered in a textarea. Existing saved data
+  // above the limit remains editable so users can reduce it safely.
+  itemLimit?: number;
   // dual-list copy overrides (default wording is "message"). itemLabel is the
   // singular noun used in the entry header and Remove button; addLabel is the
   // full Add-button text. singleField renders only the long box (one box per
@@ -116,6 +119,11 @@ type SectionDef = {
   intro: string;
   fields: FieldDef[];
   track: Track;
+};
+
+type MissingRequiredField = {
+  section: SectionDef;
+  field: FieldDef;
 };
 
 // Escape user/content text for safe insertion into a print document.
@@ -270,6 +278,7 @@ const isOptimisableField = (f: FieldDef): boolean =>
   OPTIMISABLE_FIELD_TYPES.has(f.type) && !OPTIMISE_EXCLUDED_IDS.has(f.id);
 
 const wordCount = (s: string) => (s.trim() === "" ? 0 : s.trim().split(/\s+/).length);
+const lineItemCount = (s: string) => s.split(/\r?\n/).filter((line) => line.trim().length > 0).length;
 
 // PR Set-Up sections 1–3 + AIO Set-Up sections 4–7. Field IDs are renumbered
 // to match the user-visible section numbers so LLMs can reference them
@@ -554,7 +563,7 @@ const sections: SectionDef[] = [
       {
         id: "5.1",
         label: "How do most customers first find and decide on you?",
-        hint: "Select all the paths that apply to your customers. If it is genuinely split, you can tick more than one, and use \"A mix\" to explain below.",
+        hint: "Select every path that applies. If there is no single typical route, choose \"A mixture of these\" and explain it below.",
         type: "checkbox",
         optional: true,
         options: [
@@ -564,10 +573,10 @@ const sections: SectionDef[] = [
           "Local-led: maps and local search in our area are how they find us",
           "Direct marketing",
           "Direct email prospecting",
-          "A mix: describe below",
+          "A mixture of these: describe below",
         ],
       },
-      { id: "5.1b", label: "If a mix, describe:", type: "textarea", dependsOn: { field: "5.1", includes: ["A mix: describe below"] } },
+      { id: "5.1b", label: "Describe the mixture of routes your customers take", type: "textarea", dependsOn: { field: "5.1", includes: ["A mixture of these: describe below"] } },
       {
         id: "5.2",
         label: "How do your best customers typically find you?",
@@ -577,12 +586,14 @@ const sections: SectionDef[] = [
       {
         id: "5.3",
         label: "Decision speed",
+        hint: "Select every timescale that applies. Choose \"Varies\" if the buying cycle depends on the service, customer or project.",
         type: "checkbox",
         optional: true,
         options: [
           "Quick / transactional (minutes to hours)",
           "Considered (days to weeks, research-heavy)",
           "Complex / enterprise (months, multiple stakeholders)",
+          "Varies by service, customer or project",
         ],
       },
       { id: "h-vis", label: "Content & Visibility Signals", type: "heading" },
@@ -606,9 +617,10 @@ const sections: SectionDef[] = [
       },
       {
         id: "5.6",
-        label: "Top customer questions before buying (up to 10)",
-        hint: "These become the backbone of your AEO FAQ and answer-first content strategy.",
+        label: "Top 10 priority customer questions before buying",
+        hint: "Enter one question per line, up to 10. Reuse the most important questions from Section 2.1. These become the backbone of your AEO FAQ and answer-first content strategy.",
         type: "textarea",
+        itemLimit: 10,
       },
       {
         id: "5.7",
@@ -623,16 +635,16 @@ const sections: SectionDef[] = [
     track: "web",
     number: 6,
     title: "Schema Markup & Technical Signals",
-    subtitle: "Organization schema, robots.txt, AI crawlers and structured data",
+    subtitle: "Schema.org Organization data, robots.txt, AI crawlers and structured data",
     icon: ShieldCheck,
     intro:
-      "Schema markup translates your content into machine-readable data that AI systems process directly. Without it, AI models infer - which means inconsistency, omission and sometimes error.",
+      "This section records the facts and website settings needed for structured data and crawler guidance. The explanation in this box is for reference; answer the numbered questions below.",
     fields: [
-      { id: "h-os", label: "Organization Schema", type: "heading" },
+      { id: "h-os", label: "Schema.org Organization Data", type: "heading" },
       {
         id: "6.1",
-        label: "Registered business name, company number and registered address",
-        hint: "Required for Organization schema. Must match Companies House or equivalent registry.",
+        label: "Registered business name, registration number and registered address",
+        hint: "Use Companies House or the equivalent registry in your country. If your organisation has no registration number or registered address, say that and provide the official details you do use.",
         type: "textarea",
       },
       { id: "6.2", label: "Website URL, primary phone and email", type: "textarea" },
@@ -652,7 +664,7 @@ const sections: SectionDef[] = [
       {
         id: "6.5",
         label: "AI crawler access via robots.txt",
-        hint: "Key AI crawlers: GPTBot, ClaudeBot. Please ask your website developer for more guidance.",
+        hint: "This asks what your current website's robots.txt file allows. Check yourdomain.com/robots.txt or ask your website developer. If you do not know, choose \"No, we have not checked\".",
         type: "checkbox",
         options: [
           "Yes, all are allowed",
@@ -665,14 +677,14 @@ const sections: SectionDef[] = [
       {
         id: "6.6",
         label: "Areas of the website you would not want AI crawlers to access",
-        hint: "e.g. client portals, pricing pages, staging environments. Please ask your website developer for more guidance.",
+        hint: "For example: client portals, private account areas or staging environments. Describe what should stay private; your website developer can translate this into the appropriate robots.txt rules.",
         type: "textarea",
       },
-      { id: "h-pt", label: "Page Tag Audit", type: "heading" },
+      { id: "h-pt", label: "Page Heading Review", type: "heading" },
       {
         id: "6.7",
-        label: "Most important website pages and their current H1 tags",
-        hint: "H1–H3 tags are primary signals for AI content parsing.",
+        label: "Most important website pages and their current H1 headings",
+        hint: "Review and edit any pre-filled content. List each page URL or name with its main H1 heading. If you cannot identify the H1, ask your website developer. H1–H3 headings help search and AI systems understand page structure.",
         type: "textarea",
       },
     ],
@@ -758,6 +770,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
           const v = fd[k];
           if (typeof v === "string") fd[k] = normaliseAddedData(stripEmDashes(v));
           else if (Array.isArray(v)) fd[k] = v.map((x) => (typeof x === "string" ? normaliseAddedData(stripEmDashes(x)) : x));
+        }
+        // Keep the renamed Section 5 mixture option backwards-compatible with
+        // saved intakes created before the clearer wording was introduced.
+        if (Array.isArray(fd["5.1"])) {
+          fd["5.1"] = fd["5.1"].map((option: string) =>
+            option === "A mix: describe below" ? "A mixture of these: describe below" : option,
+          );
         }
         return fd;
       }
@@ -962,6 +981,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   const [autoFillNotice, setAutoFillNotice] = useState("");
   const [pickerTarget, setPickerTarget] = useState<null | "business" | "audience">(null);
   const [categorySearch, setCategorySearch] = useState("");
+  const [fieldLimitErrors, setFieldLimitErrors] = useState<Record<string, string>>({});
+  const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
+  const [pendingJump, setPendingJump] = useState<{
+    track: Track;
+    sectionIndex: number;
+    fieldId: string;
+  } | null>(null);
   const [acceptedAt, setAcceptedAt] = useState<string | null>(() => {
     try { const raw = localStorage.getItem(currentIntakeKey()); if (raw) return JSON.parse(raw).acceptedAt || null; } catch { /* noop */ }
     return null;
@@ -1018,6 +1044,25 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
     if (!didMountSection.current) { didMountSection.current = true; return; }
     scrollToTop();
   }, [activeSection]);
+
+  useEffect(() => {
+    if (!pendingJump || track !== pendingJump.track) return;
+    if (activeSection !== pendingJump.sectionIndex) {
+      setActiveSection(pendingJump.sectionIndex);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`intake-field-${pendingJump.fieldId}`);
+      if (target) {
+        target.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        target.focus({ preventScroll: true });
+        setHighlightedFieldId(pendingJump.fieldId);
+        window.setTimeout(() => setHighlightedFieldId(null), 2500);
+      }
+      setPendingJump(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSection, pendingJump, track]);
 
   const updateField = (fieldId: string, value: string) => {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
@@ -1230,26 +1275,39 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
 
   const markComplete = (idx: number, scroll = true) => { setCompleted((prev) => new Set(prev).add(idx)); if (scroll) scrollToTop(); };
 
+  const hasFieldAnswer = (f: FieldDef): boolean => {
+    if (f.id === "1.8") return spokespeople.length > 0;
+    if (f.id === "2.6") return products.length > 0;
+    if (f.id === "1.6") return llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0;
+    if (f.id === "2.7") return productQueries.length > 0;
+    if (f.id === "1.9") return businessCategories.length > 0;
+    if (f.id === "1.10") return audienceCategories.length > 0;
+    if (f.type === "dual") {
+      const v = duals[f.id];
+      return !!(v && (v.short || v.long));
+    }
+    if (f.type === "dual-list") {
+      const v = dualLists[f.id];
+      return !!(v && v.length > 0 && v.some((item) => item.short || item.long));
+    }
+    if (f.type === "string-list") {
+      const v = stringLists[f.id];
+      return !!(v && v.length > 0 && v.some((item) => item.trim()));
+    }
+    const value = formData[f.id];
+    if (f.itemLimit && typeof value === "string" && lineItemCount(value) > f.itemLimit) {
+      return false;
+    }
+    return Array.isArray(value)
+      ? value.length > 0
+      : typeof value === "string" && value.trim().length > 0;
+  };
+
   const sectionHasData = (idx: number): boolean => {
     return visibleSections[idx].fields.some((f) => {
       if (f.type === "heading") return false;
       if (!fieldApplies(f, formData)) return false;
-      if (f.id === "1.8") return spokespeople.length > 0;
-      if (f.id === "2.6") return products.length > 0;
-      if (f.id === "2.7") return productQueries.length > 0;
-      if (f.id === "1.9") return businessCategories.length > 0;
-      if (f.id === "1.10") return audienceCategories.length > 0;
-      if (f.type === "dual") {
-        const v = duals[f.id]; return !!(v && (v.short || v.long));
-      }
-      if (f.type === "dual-list") {
-        const v = dualLists[f.id]; return !!(v && v.length && v.some((it) => it.short || it.long));
-      }
-      if (f.type === "string-list") {
-        const v = stringLists[f.id]; return !!(v && v.length > 0 && v.some((s) => s.trim()));
-      }
-      const val = formData[f.id];
-      return Array.isArray(val) ? val.length > 0 : !!(val && val.trim().length > 0);
+      return hasFieldAnswer(f);
     });
   };
 
@@ -1265,26 +1323,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
           if (f.optional) return;
           if (!fieldApplies(f, formData)) return;
           total += 1;
-          if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
-          if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
-          if (f.id === "1.6") { if (llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0) filled += 1; return; }
-          if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
-          if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
-          if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
-          if (f.type === "dual") {
-            const v = duals[f.id]; if (v && (v.short || v.long)) filled += 1; return;
-          }
-          if (f.type === "dual-list") {
-            const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
-          }
-          if (f.type === "string-list") {
-            const v = stringLists[f.id]; if (v && v.length > 0 && v.some((s) => s.trim())) filled += 1; return;
-          }
-          if (f.type === "checkbox") {
-            const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
-          }
-          const v = formData[f.id];
-          if (typeof v === "string" && v.trim().length > 0) filled += 1;
+          if (hasFieldAnswer(f)) filled += 1;
         });
       });
       return total ? Math.round((filled / total) * 100) : 0;
@@ -1302,29 +1341,27 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         if (f.optional) return;
         if (!fieldApplies(f, formData)) return;
         total += 1;
-        if (f.id === "1.6") { if (llmQueries.discovery.length > 0 || llmQueries.shortlist.length > 0 || llmQueries.comparison.length > 0) filled += 1; return; }
-        if (f.id === "1.8") { if (spokespeople.length > 0) filled += 1; return; }
-        if (f.id === "2.6") { if (products.length > 0) filled += 1; return; }
-        if (f.id === "2.7") { if (productQueries.length > 0) filled += 1; return; }
-        if (f.id === "1.9") { if (businessCategories.length > 0) filled += 1; return; }
-        if (f.id === "1.10") { if (audienceCategories.length > 0) filled += 1; return; }
-        if (f.type === "dual") {
-          const v = duals[f.id]; if (v && (v.short || v.long)) filled += 1; return;
-        }
-        if (f.type === "dual-list") {
-          const v = dualLists[f.id]; if (v && v.length > 0 && v.some((m) => m.short || m.long)) filled += 1; return;
-        }
-        if (f.type === "string-list") {
-          const v = stringLists[f.id]; if (v && v.length > 0 && v.some((s) => s.trim())) filled += 1; return;
-        }
-        if (f.type === "checkbox") {
-          const v = formData[f.id]; if (Array.isArray(v) && v.length > 0) filled += 1; return;
-        }
-        const v = formData[f.id];
-        if (typeof v === "string" && v.trim().length > 0) filled += 1;
+        if (hasFieldAnswer(f)) filled += 1;
       });
     });
     return { total, filled, pct: total ? Math.round((filled / total) * 100) : 0 };
+  }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories]);
+
+  const missingRequiredByTrack = useMemo<Record<Track, MissingRequiredField[]>>(() => {
+    const missing: Record<Track, MissingRequiredField[]> = { pr: [], web: [] };
+    sections.forEach((sectionDef) => {
+      sectionDef.fields.forEach((field) => {
+        if (
+          field.type !== "heading" &&
+          !field.optional &&
+          fieldApplies(field, formData) &&
+          !hasFieldAnswer(field)
+        ) {
+          missing[sectionDef.track].push({ section: sectionDef, field });
+        }
+      });
+    });
+    return missing;
   }, [formData, duals, dualLists, spokespeople, products, productQueries, llmQueries, stringLists, businessCategories, audienceCategories]);
 
   const filteredCategories = TRADE_MEDIA_CATEGORIES.filter((c) =>
@@ -1332,6 +1369,13 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   );
 
   const section = visibleSections[activeSection] || visibleSections[0];
+
+  const jumpToMissingField = ({ section: targetSection, field }: MissingRequiredField) => {
+    const sectionIndex = sections.filter((candidate) => candidate.track === targetSection.track)
+      .findIndex((candidate) => candidate.id === targetSection.id);
+    setPendingJump({ track: targetSection.track, sectionIndex, fieldId: field.id });
+    setTrack(targetSection.track);
+  };
 
   const statusBadge = (() => {
     if (intakeStatus === "Accepted") return { bg: vars.navy, color: "#8FA9D6", label: "Accepted" };
@@ -1490,6 +1534,19 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
   };
 
   const acceptProjectData = () => {
+    const customerQuestionLimit = sections
+      .flatMap((sectionDef) => sectionDef.fields)
+      .find((field) => field.id === "5.6")?.itemLimit ?? 10;
+    if (lineItemCount((formData["5.6"] as string) || "") > customerQuestionLimit) {
+      setFieldLimitErrors((prev) => ({
+        ...prev,
+        "5.6": `Reduce this to ${customerQuestionLimit} questions before signing off.`,
+      }));
+      const sectionFive = sections.find((sectionDef) => sectionDef.number === 5);
+      const fieldFiveSix = sectionFive?.fields.find((field) => field.id === "5.6");
+      if (sectionFive && fieldFiveSix) jumpToMissingField({ section: sectionFive, field: fieldFiveSix });
+      return;
+    }
     const stamp = new Date().toISOString();
     setIntakeStatus("Accepted");
     setAcceptedAt(stamp);
@@ -1514,7 +1571,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
       });
       localStorage.setItem(PROJECT_DATA_ARCHIVE_KEY, JSON.stringify(arr.slice(0, 50)));
     } catch { /* noop */ }
-    alert("Project Data accepted and saved to the dedicated Project Data archive. The signed-off brief is now available to Comms Planner, Content Optimiser, Content Creator, Media Research, Marketing Intelligence, Website GEO Content and Website Technical GEO.");
+    scrollToTop();
   };
 
   // Open a branded print/"Save as PDF" window with the given body HTML. Title
@@ -1704,8 +1761,10 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
           <li>Work through each section, answering in plain language. The hint under each question explains what a good answer looks like, with examples.</li>
           <li>For repeatable items, use the "Add" buttons to create as many entries as you need. Some lists have a sensible cap: spokespeople up to 10, additional messages up to 6, and products or services and product or service areas up to 5 each. When you reach a limit the "Add" button greys out, but you can always remove an entry to make room.</li>
           <li>Where you see "Ask AI to complete this", add your company website at the top of the form first, then let the tool draft an answer from your site for you to review and edit. The website is used only as a reference, so the draft reflects your real business rather than generic text. Always read and adjust the draft before relying on it.</li>
-          <li>Use "Mark section complete" when you are happy with a section. This updates your progress bar. You can re-open and edit a completed section at any time.</li>
+          <li>The progress bars update automatically as you complete required answers. Open the "answers remaining" list under either progress bar to see what is missing and jump directly to it.</li>
+          <li>Use "Mark section complete" when you are ready to move on. It does not lock the section, and you can re-open and edit it at any time.</li>
           <li>Use "Save for later" at any point. Your answers are stored against this project, so you can close the form and carry on later, including from another device when you are signed in.</li>
+          <li>Use "Accept &amp; Sign Off" to save a dated snapshot to the Project Data archive. You can continue editing afterwards and sign off again to create an updated snapshot.</li>
         </ol>
       </div>
       <div class="sec">
@@ -1801,12 +1860,12 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               className="text-[11px] font-bold uppercase tracking-[0.16em] px-3 py-1.5 rounded-full"
               style={{ background: statusBadge.bg, color: statusBadge.color }}
             >
-              {statusBadge.label} - Project Data
+              {statusBadge.label} - Project Set-Up
             </span>
           </div>
         </div>
         <p className="text-[13px] sm:text-[14px] font-light mt-3 mb-6" style={{ color: "rgba(255,255,255,0.85)" }}>
-          This is where you capture the business information, messaging and content that will inform your PR, content marketing and AI authority strategy. It becomes your core Project Data, used to improve your PR and marketing output as well as your own website. Complete both the PR Set-Up and AIO Set-Up sections to build it.
+          Capture the business information, messaging and content that informs your PR, content marketing and AI authority strategy. Your answers become the core Project Data used across AIO Fusion. Complete both the PR Set-Up and AIO Set-Up tracks to build it.
         </p>
 
         {/* AI assist (test) - website-powered drafting for the first two questions */}
@@ -1923,6 +1982,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               { key: "pr" as Track, primary: "PR Set-Up", subtitle: "Business Messaging (Sections 1–3)", label: "PR Set-Up Progress", pct: trackProgress.pr },
               { key: "web" as Track, primary: "AIO Set-Up", subtitle: "Business Profile (Sections 4–7)", label: "AIO Set-Up Progress", pct: trackProgress.web },
             ]).map((t) => {
+              const missing = missingRequiredByTrack[t.key];
               return (
                 <div key={t.key} className="flex-1 flex flex-col gap-3">
                   <button
@@ -1954,11 +2014,85 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       <div className="h-full rounded-full transition-all duration-500" style={{ width: `${t.pct}%`, background: "linear-gradient(90deg, #C8497A 0%, #E07856 100%)" }} />
                     </div>
                   </div>
+                  {missing.length === 0 ? (
+                    <div className="flex items-center gap-2 text-[11px] font-semibold" style={{ color: "#15803D" }}>
+                      <CheckCircle2 size={14} />
+                      All required answers complete
+                    </div>
+                  ) : (
+                    <details
+                      className="rounded-xl border px-3 py-2"
+                      style={{ borderColor: "rgba(16,43,54,0.14)", background: "rgba(255,255,255,0.65)" }}
+                      open={t.pct > 0}
+                    >
+                      <summary className="cursor-pointer text-[11px] font-bold" style={{ color: "#102B36" }}>
+                        {missing.length} required {missing.length === 1 ? "answer" : "answers"} remaining
+                      </summary>
+                      <div className="mt-2 max-h-48 overflow-y-auto space-y-1 pr-1">
+                        {missing.map((item) => (
+                          <button
+                            type="button"
+                            key={`${item.section.id}-${item.field.id}`}
+                            onClick={() => jumpToMissingField(item)}
+                            className="w-full text-left rounded-lg px-2.5 py-2 text-[11px] leading-snug transition-colors hover:bg-[#FBE3ED] focus:outline-none focus:ring-2 focus:ring-[#C8497A]"
+                            style={{ color: "#334155" }}
+                          >
+                            <span className="font-bold" style={{ color: "#C8497A" }}>Section {item.section.number}</span>
+                            {" · "}
+                            {item.field.label}
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
+
+        {acceptedAt && intakeStatus === "Accepted" && (
+          <div
+            className="rounded-2xl border-2 p-4 sm:p-5 flex items-start gap-3"
+            style={{ background: "#F0FDF4", borderColor: "rgba(21,128,61,0.3)" }}
+            role="status"
+            aria-live="polite"
+          >
+            <CheckCircle2 size={20} color="#15803D" className="mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
+                Project Set-Up signed off on {new Date(acceptedAt).toLocaleDateString()}.
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed" style={{ color: "#334155" }}>
+                A snapshot has been saved to the Project Data archive. You can continue editing this Set-Up and sign off again whenever you need to save an updated version.
+              </p>
+              {allTrackProgress.filled < allTrackProgress.total ? (
+                <div className="mt-3">
+                  <p className="text-[12px] font-semibold" style={{ color: "#9A3412" }}>
+                    {allTrackProgress.total - allTrackProgress.filled} required {allTrackProgress.total - allTrackProgress.filled === 1 ? "answer is" : "answers are"} still incomplete.
+                  </p>
+                  {(() => {
+                    const firstMissing = missingRequiredByTrack.pr[0] || missingRequiredByTrack.web[0];
+                    return firstMissing ? (
+                      <button
+                        type="button"
+                        onClick={() => jumpToMissingField(firstMissing)}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C8497A]"
+                        style={{ background: "#C8497A" }}
+                      >
+                        Go to first missing answer <ArrowRight size={12} />
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              ) : (
+                <p className="mt-2 text-[12px] font-semibold" style={{ color: "#15803D" }}>
+                  All required answers are complete.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-6">
@@ -2004,7 +2138,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
 
             <div className="px-8 py-6" style={{ background: "#ffffff" }}>
               {section.id === "earned-media" ? (
-                <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
+                <div className="rounded-xl p-4 mb-8" style={{ background: "white", borderStyle: "solid", borderTopColor: "rgba(200,73,122,0.2)", borderRightColor: "rgba(200,73,122,0.2)", borderBottomColor: "rgba(200,73,122,0.2)", borderLeftColor: "#C8497A", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 3 }}>
                   <p className="text-[13px] font-light leading-relaxed mb-3" style={{ color: "#102B36" }}>{section.intro}</p>
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="w-1 h-3.5 rounded-full flex-shrink-0" style={{ background: "#C8497A" }} />
@@ -2015,7 +2149,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   </p>
                 </div>
               ) : section.track === "pr" ? (
-                <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
+                <div className="rounded-xl p-4 mb-8" style={{ background: "white", borderStyle: "solid", borderTopColor: "rgba(200,73,122,0.2)", borderRightColor: "rgba(200,73,122,0.2)", borderBottomColor: "rgba(200,73,122,0.2)", borderLeftColor: "#C8497A", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 3 }}>
                   <p className="text-[13px] font-light leading-relaxed mb-3" style={{ color: "#102B36" }}>{section.intro}</p>
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="w-1 h-3.5 rounded-full flex-shrink-0" style={{ background: "#C8497A" }} />
@@ -2026,7 +2160,11 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   </p>
                 </div>
               ) : (
-                <div className="rounded-xl p-4 mb-8" style={{ background: "white", border: "1px solid rgba(200,73,122,0.2)", borderLeft: "3px solid #C8497A" }}>
+                <div className="rounded-xl p-4 mb-8" style={{ background: "#FBF1F0", borderStyle: "solid", borderTopColor: "rgba(200,73,122,0.28)", borderRightColor: "rgba(200,73,122,0.28)", borderBottomColor: "rgba(200,73,122,0.28)", borderLeftColor: "#C8497A", borderTopWidth: 1, borderRightWidth: 1, borderBottomWidth: 1, borderLeftWidth: 3 }}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Info size={14} color="#C8497A" aria-hidden="true" />
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "#C8497A" }}>About this section</p>
+                  </div>
                   <p className="text-[13px] font-light leading-relaxed" style={{ color: "#102B36" }}>{section.intro}</p>
                 </div>
               )}
@@ -2053,7 +2191,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   if (field.id === "1.8") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-3 mb-2">
                           {spokespeople.map((sp, i) => (
                             <div key={i} className="rounded-xl border p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", borderLeft: "3px solid #C8497A" }}>
@@ -2140,7 +2278,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const openPicker = () => { setCategorySearch(""); setPickerTarget(target); };
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="rounded-xl border p-3 mb-2" style={{ borderColor: vars.g200, background: "white" }}>
                           {selected.length === 0 ? (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>
@@ -2193,7 +2331,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const dualColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "#C8497A" }}>(a) ≤6-word summary</p>
@@ -2237,7 +2375,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const emptyText = field.itemLabel ? `No ${nounPlural} yet.` : "No additional messages yet.";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-3 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>{emptyText}</p>
@@ -2299,7 +2437,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                       setStringLists((prev) => ({ ...prev, [field.id]: [...(prev[field.id] || []), ""] }));
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={fieldHasContent(field.id)} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={fieldHasContent(field.id)} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-2 mb-2">
                           {list.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No entries yet. Add one below.</p>
@@ -2334,7 +2472,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   if (field.id === "2.6") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-3 mb-2">
                           {products.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No products or services yet.</p>
@@ -2393,7 +2531,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   if (field.id === "2.7") {
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-3 mb-2">
                           {productQueries.length === 0 && (
                             <p className="text-[12px] font-light italic" style={{ color: vars.g400 }}>No product or service areas yet.</p>
@@ -2453,7 +2591,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const legacyText = typeof formData[field.id] === "string" ? (formData[field.id] as string).trim() : "";
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={hasQueries} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={false} hasContent={hasQueries} optimised={false} optimising={false} onOptimise={() => {}} onReject={() => {}} highlighted={highlightedFieldId === field.id} />
 
                         <div className="mb-4 flex flex-col gap-2">
                           <button
@@ -2542,7 +2680,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                     const selected = (formData[field.id] as string[]) || [];
                     return (
                       <div key={field.id}>
-                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                        <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                         <div className="space-y-2 rounded-xl border-2 p-4" style={{ borderColor: "rgba(16,43,54,0.15)", background: "white" }}>
                           {field.options.map((opt) => {
                             const isOn = selected.includes(opt);
@@ -2573,18 +2711,63 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   }
 
                   const baseColor = isOptimisedField(field.id) ? "#DC2626" : "#102B36";
+                  const textValue = (formData[field.id] as string) || "";
+                  const itemCount = field.itemLimit ? lineItemCount(textValue) : 0;
+                  const itemLimitExceeded = !!field.itemLimit && itemCount > field.itemLimit;
+                  const itemLimitMessage = fieldLimitErrors[field.id] || (itemLimitExceeded
+                    ? `Reduce this to ${field.itemLimit} questions before saving.`
+                    : "");
                   return (
                     <div key={field.id}>
-                      <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} />
+                      <FieldLabel id={displayId} label={field.label} hint={field.hint} website={aiWebsite} companyName={(formData["4.1"] as string) || ""} optimisable={(OPTIMISED_FIELD_IDS as readonly string[]).includes(field.id)} hasContent={fieldHasContent(field.id)} optimised={isOptimisedField(field.id)} optimising={optimisingField === field.id} onOptimise={() => optimiseField(field.id)} onReject={() => rejectField(field.id)} highlighted={highlightedFieldId === field.id} />
                       {field.type === "textarea" ? (
                         <>
                           <textarea
-                            value={(formData[field.id] as string) || ""}
-                            onChange={(e) => updateField(field.id, e.target.value)}
+                            value={textValue}
+                            onKeyDown={(e) => {
+                              if (field.itemLimit && e.key === "Enter" && itemCount >= field.itemLimit) {
+                                e.preventDefault();
+                                setFieldLimitErrors((prev) => ({
+                                  ...prev,
+                                  [field.id]: `You can add up to ${field.itemLimit} questions. Remove or edit an existing question to continue.`,
+                                }));
+                              }
+                            }}
+                            onChange={(e) => {
+                              const nextValue = e.target.value;
+                              if (field.itemLimit) {
+                                const nextCount = lineItemCount(nextValue);
+                                const currentCount = lineItemCount(textValue);
+                                if (
+                                  fieldLimitErrors[field.id] &&
+                                  currentCount >= field.itemLimit &&
+                                  nextValue.length > textValue.length
+                                ) {
+                                  return;
+                                }
+                                if (nextCount > field.itemLimit && nextCount > currentCount) {
+                                  setFieldLimitErrors((prev) => ({
+                                    ...prev,
+                                    [field.id]: `You can add up to ${field.itemLimit} questions. The extra question was not added.`,
+                                  }));
+                                  return;
+                                }
+                                setFieldLimitErrors((prev) => {
+                                  if (!prev[field.id]) return prev;
+                                  const next = { ...prev };
+                                  delete next[field.id];
+                                  return next;
+                                });
+                              }
+                              updateField(field.id, nextValue);
+                            }}
                             rows={4}
                             className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A] resize-y"
-                            style={{ borderColor: field.wordLimit && wordCount((formData[field.id] as string) || "") > field.wordLimit ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
+                            style={{ borderColor: (field.wordLimit && wordCount(textValue) > field.wordLimit) || itemLimitMessage ? "#DC2626" : "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                             placeholder="Type your answer here..."
+                            aria-label={field.label}
+                            aria-invalid={itemLimitMessage ? "true" : undefined}
+                            aria-describedby={field.itemLimit ? `intake-field-limit-${field.id}` : undefined}
                           />
                           {field.wordLimit && (() => {
                             const wc = wordCount((formData[field.id] as string) || "");
@@ -2595,6 +2778,17 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                               </p>
                             );
                           })()}
+                          {field.itemLimit && (
+                            <div
+                              id={`intake-field-limit-${field.id}`}
+                              className="mt-1 flex items-start justify-between gap-3 text-[11px] font-semibold"
+                              style={{ color: itemLimitMessage ? "#DC2626" : "rgba(16,43,54,0.52)" }}
+                              aria-live="polite"
+                            >
+                              <span>{itemLimitMessage || (itemCount === field.itemLimit ? "Limit reached. Remove or edit a question before adding another." : "Enter one question per line.")}</span>
+                              <span className="whitespace-nowrap">{itemCount} of {field.itemLimit}</span>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <input
@@ -2604,6 +2798,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                           className="w-full px-4 py-3 rounded-xl border-2 text-[14px] font-light outline-none transition-colors focus:border-[#C8497A]"
                           style={{ borderColor: "rgba(16,43,54,0.15)", background: "white", color: baseColor }}
                           placeholder="Type your answer here..."
+                          aria-label={field.label}
                         />
                       )}
                       {field.id === "1.1" && <AiAssistButton fieldId="1.1" />}
@@ -2613,7 +2808,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
               </div>
             </div>
 
-            {/* Project Data Actions - page footer */}
+            {/* Project Set-Up actions - page footer */}
             <div className="px-4 sm:px-8 py-4 border-t no-print" style={{ borderColor: vars.g100, background: "#FBF9F6" }}>
               <div className="flex flex-wrap items-center gap-3">
                 {optimiseError && (
@@ -2638,7 +2833,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   onClick={acceptProjectData}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.1em] text-white transition-all duration-300 whitespace-nowrap hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
                   style={{ background: vars.green }}
-                  title="Sign off the Project Data and save it to the Project Data archive"
+                  title="Sign off this Project Set-Up and save a snapshot to the Project Data archive"
                 >
                   <FileCheck2 size={13} /> Accept &amp; Sign Off
                 </button>
@@ -2654,7 +2849,7 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
                   onClick={() => {
                     if (window.confirm("Create a new project? You will lose all the data you have entered here and start again from scratch. This cannot be undone.")) {
                       setFormData({}); setDuals({}); setDualLists({}); setSpokespeople([]); setProducts([]); setProductQueries([]); setBusinessCategories([]); setAudienceCategories([]);
-                      setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>());
+                      setIntakeStatus("Draft"); setAcceptedAt(null); setPreOptimiseSnapshot(null); setOptimisedFields(new Set<string>()); setFieldLimitErrors({});
                       setCompleted(new Set()); setActiveSection(0); setTrack("pr");
                     }
                   }}
@@ -2798,19 +2993,11 @@ export default function IntakePage({ accountProfile, role }: IntakeAccountProps 
         );
       })()}
 
-      {acceptedAt && intakeStatus === "Accepted" && (
-        <div className="mt-6 rounded-xl border p-4 flex items-start gap-3" style={{ background: "rgba(61,155,107,0.06)", borderColor: "rgba(61,155,107,0.25)" }}>
-          <CheckCircle2 size={18} color={vars.green} className="mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-[13px] font-semibold" style={{ color: "#ffffff" }}>Project Data signed off on {new Date(acceptedAt).toLocaleDateString()}.</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function FieldLabel({ id, label, hint, website = "", companyName = "", optimisable = false, hasContent = false, optimised = false, optimising = false, onOptimise, onReject }: { id: string; label: string; hint?: string; website?: string; companyName?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; optimising?: boolean; onOptimise?: () => void; onReject?: () => void }) {
+function FieldLabel({ id, label, hint, website = "", companyName = "", optimisable = false, hasContent = false, optimised = false, optimising = false, onOptimise, onReject, highlighted = false }: { id: string; label: string; hint?: string; website?: string; companyName?: string; optimisable?: boolean; hasContent?: boolean; optimised?: boolean; optimising?: boolean; onOptimise?: () => void; onReject?: () => void; highlighted?: boolean }) {
   const [copied, setCopied] = useState(false);
   // Build a ready-to-paste prompt for an external AI assistant, with the
   // company name and website built in so the draft reflects the real business.
@@ -2848,7 +3035,15 @@ function FieldLabel({ id, label, hint, website = "", companyName = "", optimisab
     } catch { done(); }
   };
   return (
-    <div className="mb-2.5 rounded-xl px-4 py-3" style={{ background: "#FBF1F0" }}>
+    <div
+      id={`intake-field-${id}`}
+      tabIndex={-1}
+      className="mb-2.5 rounded-xl px-4 py-3 focus:outline-none transition-all duration-300"
+      style={{
+        background: highlighted ? "#FFF7FB" : "#FBF1F0",
+        boxShadow: highlighted ? "0 0 0 4px rgba(200,73,122,0.45)" : undefined,
+      }}
+    >
       <label className="flex items-baseline gap-2.5 text-[15px] font-bold leading-snug" style={{ color: "#102B36", fontFamily: "'Alice', Georgia, serif" }}>
         {id.match(/^\d/) && (
           <span className="inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: "#FBE3ED", color: "#C8497A", fontFamily: "Inter, sans-serif" }}>{id}</span>
@@ -2885,6 +3080,14 @@ function FieldLabel({ id, label, hint, website = "", companyName = "", optimisab
           >
             <Sparkles size={12} className={optimising ? "animate-pulse" : ""} /> {optimising ? "Optimising this copy..." : "Optimise this copy"}
           </button>
+        )}
+        {highlighted && (
+          <span
+            className="ml-auto inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "#C8497A", color: "white", fontFamily: "Inter, sans-serif" }}
+          >
+            Complete this answer
+          </span>
         )}
       </label>
       {hint && <p className="text-[12px] font-light leading-relaxed mt-1.5 pl-0.5" style={{ color: "#374151" }}>{hint}</p>}

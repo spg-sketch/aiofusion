@@ -15,15 +15,15 @@ the field id to the optimise-excluded set on BOTH frontend (OPTIMISE_EXCLUDED_ID
 and backend (OPTIMISE_FIELDS in api-server ai-assist.ts) or it shows a broken
 Optimise control.
 
-## Gotcha 1: three completion counters, different indentation
-Completion is computed in THREE places that each special-case structured ids
-(1.8/1.9/1.10): `sectionHasData`, `trackProgress`, and `allTrackProgress`.
-trackProgress is nested one extra level (10-space indent) vs allTrackProgress
-(8-space). A `replace_all` on the `if (f.id === "1.8")` line will silently
-update only one of them. Always verify all three got the new id, and add it
-to each useMemo dependency array.
-**Why:** allTrackProgress gates "Optimise Project Messages"; missing the id
-there means structured entries never count toward full-form completion.
+## Gotcha 1: completion has three consumers but one answer rule
+Section content status, per-track progress, whole-form progress and missing-answer
+guidance must all call the same answer predicate. Do not reintroduce separate
+structured-field branches in individual counters.
+**Why:** duplicated rules previously let one progress view disagree with another,
+and any missing-answer list built separately could direct users to fields that a
+progress bar already considered complete.
+**How to apply:** when adding a field type or validation rule, extend the shared
+answer predicate and verify every completion consumer still delegates to it.
 
 ## Gotcha 2: legacy-text migration can resurrect cleared data
 If you migrate an old free-text answer into the new array, only fall back to
@@ -71,3 +71,18 @@ bare or a dead site stalls every Optimise. Site text is untrusted: wrap it in
 delimiters and tell the model to ignore instructions inside it.
 **Why:** rewrites should stay grounded in the real business without blocking on
 slow sites or being hijacked by scraped page content.
+
+## Gotcha 3: line limits need real keyboard-event tests
+A textarea maximum based on non-empty line counting cannot rely on `onChange`
+alone. A trailing newline does not increase that count, and a controlled React
+rerender after rejecting the next character can move the caret so later typing
+merges the rejected entry into the final allowed line.
+
+**Why:** a direct test that replaces the textarea with eleven lines passed while
+the real Enter-then-type browser interaction still corrupted the tenth entry and
+cleared the error.
+
+**How to apply:** intercept Enter once the maximum count is reached, keep additions
+locked after the rejected attempt until the user removes or edits content, expose
+the error inline with `aria-invalid`, and cover the exact real-key sequence in a
+browser test.
