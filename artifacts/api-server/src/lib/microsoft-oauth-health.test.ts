@@ -13,7 +13,7 @@ vi.mock("./logger", () => ({
 }));
 
 vi.mock("./notify-email", () => ({
-  getAppBaseUrl: () => "https://www.aiofusion.ai",
+  getAppBaseUrl: () => "https://aiofusion.ai",
 }));
 
 import { checkMicrosoftOAuthCredentials } from "./microsoft-oauth-health";

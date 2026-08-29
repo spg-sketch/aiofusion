@@ -9,5 +9,9 @@ export default defineConfig({
     // beforeEach/afterEach setup in the same scenarios.
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Completion validation runs tests alongside workspace typechecking.
+    // Cap forked workers so PGlite-heavy suites do not lose an IPC child under
+    // concurrent load before any tests execute.
+    maxWorkers: 4,
   },
 });

@@ -9,3 +9,9 @@ description: Lessons from wiring staging.aiofusion.ai to the aio-fusion-staging 
 - Staging deployment is password-protected (replshield 307 redirect is expected, not an error).
 - Environments (user asked to remember, CORRECTED): **THIS repl = `aio-fusion-staging`**, a copy of the live app; publishes ONLY to https://staging.aiofusion.ai (password protected, own DB). **Production = separate repl "AIO Fusion from Simpatico"**, owns aiofusion.ai + www. Never assume this repl is production.
 - User's key shared links (asked to remember): Roadmap = https://www.aiofusion.ai/roadmap.html ; Tasks/build plan = https://www.aiofusion.ai/build-plan.html (served from aio-fusion `public/`).
+
+Deployment identity values must not be committed in `.replit` because the same source is promoted between the staging and production Repls.
+
+**Why:** Replit's non-secret production environment operation persists values into `.replit`; a staging canonical there can travel with source and poison or block the live deployment.
+
+**How to apply:** Keep `DEPLOYMENT_ENV` and `CANONICAL_DOMAIN` outside source control, set them separately for each deployment, and require the deployed API to fail startup when either is missing or mismatched.

@@ -27,6 +27,7 @@ import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
 import { ensurePlatformSchemaV9 } from "./lib/ensure-platform-schema-v9";
 import { ensurePlatformSchemaV10 } from "./lib/ensure-platform-schema-v10";
 import { repairKnownWorkspaceNames } from "./lib/repair-known-workspace-names";
+import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -45,6 +46,11 @@ const deploymentEnv = (
   process.env["NODE_ENV"] ??
   ""
 ).toLowerCase().trim();
+
+// Reject cross-environment canonical domains before accepting any traffic.
+// This protects generated email links and OAuth callbacks even when deployment
+// secrets have accidentally been copied between production and staging.
+assertCanonicalDomainIsSafeForDeployment();
 
 if (deploymentEnv === "staging") {
   const dbUrl = process.env["DATABASE_URL"] ?? "";

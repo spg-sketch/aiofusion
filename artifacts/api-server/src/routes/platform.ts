@@ -2,6 +2,13 @@ import crypto from "crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import {
+  getDeployedAppOrigin,
+  isStagingDeployment,
+  normalizeCanonicalDomain,
+  PRODUCTION_CANONICAL_HOST,
+  STAGING_CANONICAL_HOST,
+} from "../lib/app-url";
+import {
   db,
   platformAccountsTable,
   platformCompaniesTable,
@@ -2602,33 +2609,25 @@ async function handleSsoInvite(
 }
 
 // Returns the canonical host for this deployment.
-// CANONICAL_DOMAIN (e.g. "www.aiofusion.ai") takes highest priority so the
+// CANONICAL_DOMAIN (e.g. "aiofusion.ai") takes highest priority so the
 // OAuth callback URL and session cookie domain are always on the domain users
 // actually browse to. Falls back to REPLIT_DOMAINS, then the request host.
 function getCanonicalHost(req: Request): string {
-  let canonical = process.env.CANONICAL_DOMAIN?.trim();
-  // Staging safety guard: a staging deployment must never use the production
-  // canonical domain (this happens when secrets are copied from the live
-  // deployment). Ignore any CANONICAL_DOMAIN that doesn't look like a staging
-  // host so OAuth callbacks/redirects stay on the staging domain.
-  const isStaging = (process.env.DEPLOYMENT_ENV ?? process.env.NODE_ENV) === "staging";
-  if (isStaging && canonical && !canonical.includes("staging")) {
-    logger.warn({ canonical }, "Ignoring non-staging CANONICAL_DOMAIN on staging deployment");
-    canonical = undefined;
-  }
+  // Never derive staging OAuth URLs from copied secrets, preview domains, or
+  // request headers: all callbacks must remain in the isolated environment.
+  if (isStagingDeployment()) return STAGING_CANONICAL_HOST;
+
+  const canonical = normalizeCanonicalDomain(process.env.CANONICAL_DOMAIN);
   if (canonical) return canonical;
   const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
-    const first = replitDomains.split(",")[0]!.trim();
+    const first = normalizeCanonicalDomain(replitDomains.split(",")[0]);
     if (first) return first;
   }
-  // On staging, never trust request headers for the OAuth canonical host - 
-  // fall through to the fixed staging domain instead.
-  if (isStaging) return "staging.aiofusion.ai";
   const host = req.get("x-forwarded-host") || req.get("host") || "";
   const hostname = host.split(":")[0];
   if (hostname) return hostname;
-  return "www.aiofusion.ai";
+  return PRODUCTION_CANONICAL_HOST;
 }
 
 function getGoogleCallbackUrl(req: Request): string {
@@ -2636,6 +2635,8 @@ function getGoogleCallbackUrl(req: Request): string {
 }
 
 function getFrontendOrigin(req: Request): string {
+  const deployedOrigin = getDeployedAppOrigin();
+  if (deployedOrigin) return deployedOrigin;
   if (process.env.NODE_ENV !== "production") {
     const host = req.get("x-forwarded-host") || req.get("host") || "";
     const hostname = host.split(":")[0];

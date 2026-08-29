@@ -19,11 +19,32 @@ const ALERT_RECIPIENTS = [
   "spg@bluhalo.com",
 ];
 
-const LOGO_URL = "https://aiofusion.ai/images/logo-color.png";
-const SITE_URL = "https://aiofusion.ai";
 const RASPBERRY = "#C8497A";
 const NAVY = "#102B36";
 const CREAM = "#FBF6EC";
+const PRODUCTION_SITE_URL = "https://aiofusion.ai";
+const STAGING_SITE_URL = "https://staging.aiofusion.ai";
+
+function normaliseSiteUrl(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    if (
+      !url.hostname ||
+      url.port ||
+      url.username ||
+      url.password ||
+      (url.protocol !== "https:" && url.protocol !== "http:")
+    ) {
+      return null;
+    }
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    return `https://${hostname === "www.aiofusion.ai" ? "aiofusion.ai" : hostname}`;
+  } catch {
+    return null;
+  }
+}
 
 export interface NotifyOptions {
   /** Short label printed in the console warning if delivery fails. */
@@ -32,6 +53,26 @@ export interface NotifyOptions {
   subject?: string;
   /** Header label shown inside the email card (e.g. "Backup Success"). */
   emailLabel?: string;
+}
+
+export function resolveNotificationSiteUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const canonical = normaliseSiteUrl(env.CANONICAL_DOMAIN);
+  const deploymentEnv = env.DEPLOYMENT_ENV?.trim().toLowerCase();
+  const replitDomains = (env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map((domain) => normaliseSiteUrl(domain))
+    .filter((domain): domain is string => Boolean(domain));
+
+  if (deploymentEnv === "staging") {
+    // Staging operational links are pinned to the approved custom origin.
+    return STAGING_SITE_URL;
+  }
+  if (deploymentEnv === "production") return PRODUCTION_SITE_URL;
+  if (canonical) return canonical;
+  if (replitDomains.length > 0) return replitDomains[0]!;
+  return PRODUCTION_SITE_URL;
 }
 
 function getClient(): Resend | null {
@@ -54,6 +95,8 @@ function escHtml(s: string): string {
 }
 
 function buildHtml(label: string, bodyText: string): string {
+  const siteUrl = resolveNotificationSiteUrl();
+  const logoUrl = siteUrl ? `${siteUrl}/images/logo-color.png` : null;
   const escapedLines = bodyText
     .split("\n")
     .map((l) => escHtml(l))
@@ -75,9 +118,7 @@ function buildHtml(label: string, bodyText: string): string {
         <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;">
           <tr>
             <td style="padding-bottom:24px;text-align:center;">
-              <a href="${SITE_URL}">
-                <img src="${LOGO_URL}" alt="AIO Fusion" width="160" style="height:auto;max-width:160px;" />
-              </a>
+              ${siteUrl && logoUrl ? `<a href="${siteUrl}"><img src="${logoUrl}" alt="AIO Fusion" width="160" style="height:auto;max-width:160px;" /></a>` : `<strong style="font-family:Georgia,serif;color:${NAVY};">AIO Fusion</strong>`}
             </td>
           </tr>
         </table>
@@ -97,14 +138,14 @@ function buildHtml(label: string, bodyText: string): string {
                         color:${NAVY};line-height:1.8;white-space:pre-wrap;">
                 ${escapedLines}
               </p>
-              <p style="margin:28px 0 0 0;text-align:center;">
-                <a href="${SITE_URL}"
+              ${siteUrl ? `<p style="margin:28px 0 0 0;text-align:center;">
+                <a href="${siteUrl}"
                    style="display:inline-block;background:${RASPBERRY};color:#ffffff;
                           font-family:Inter,Arial,sans-serif;font-size:15px;font-weight:600;
                           text-decoration:none;padding:14px 32px;border-radius:8px;">
                   Open Admin Panel
                 </a>
-              </p>
+              </p>` : ""}
             </td>
           </tr>
         </table>
@@ -113,8 +154,7 @@ function buildHtml(label: string, bodyText: string): string {
           <tr>
             <td style="text-align:center;font-family:Inter,Arial,sans-serif;
                        font-size:12px;color:#64748B;line-height:1.8;">
-              <a href="${SITE_URL}" style="color:#64748B;text-decoration:none;">${SITE_URL}</a>
-              &nbsp;|&nbsp;
+              ${siteUrl ? `<a href="${siteUrl}" style="color:#64748B;text-decoration:none;">${siteUrl}</a>&nbsp;|&nbsp;` : ""}
               <a href="mailto:info@aiofusion.ai" style="color:#64748B;text-decoration:none;">info@aiofusion.ai</a><br />
               &copy; AIO Fusion. All rights reserved.<br />
               <span style="font-size:11px;color:#94a3b8;">

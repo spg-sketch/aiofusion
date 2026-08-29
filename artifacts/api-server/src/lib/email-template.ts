@@ -27,7 +27,7 @@ export interface EmailTemplateOpts {
   footerNote?: string;
 }
 
-const LEGACY_LOGO_URL = "https://www.aiofusion.ai/images/logo-color.png";
+const LEGACY_LOGO_URL = "https://aiofusion.ai/images/logo-color.png";
 
 /**
  * EMAIL_LOGO_URL is the durable App Storage/CDN URL once its runtime grant has

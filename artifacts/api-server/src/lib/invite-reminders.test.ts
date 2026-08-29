@@ -75,7 +75,7 @@ vi.mock("@workspace/db", async () => {
 const mockSendInviteReminderEmail = vi.fn().mockResolvedValue(true);
 vi.mock("./notify-email", () => ({
   sendInviteReminderEmail: (...args: unknown[]) => mockSendInviteReminderEmail(...args),
-  getAppBaseUrl: () => "https://www.aiofusion.ai",
+  getAppBaseUrl: () => "https://aiofusion.ai",
 }));
 
 // Mock platform-auth helpers used by invite-reminders
