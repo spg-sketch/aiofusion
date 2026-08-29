@@ -17,6 +17,7 @@ import { auditAndRecoverLocalProjects, pushProjectMeta, type ProjectReconciliati
 import { fetchProjectAllowance } from "../lib/billingAllowance";
 import type { Client } from "../lib/projectTypes";
 import { TeamSection } from "./TeamSection";
+import type { AcceptedInvitation } from "../components/InvitationResult";
 import { AccountSecurityCard } from "../components/AccountSecurityCard";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
 import { SubscriptionCard } from "../components/SubscriptionCard";
@@ -30,6 +31,7 @@ function SubAccountsPage({
   onAssignProjectOwner,
   onRoleChanged,
   onWorkspacesChanged,
+  onInvitationAccepted,
   onSignOut,
   initialSection,
   checkoutResult,
@@ -42,6 +44,8 @@ function SubAccountsPage({
   onRoleChanged?: (newRole: Role) => void;
   /** Called after the user accepts a cross-workspace invite so the parent can refresh the workspace list. */
   onWorkspacesChanged?: () => void;
+  /** Mirrors an accepted invite into the global invitation banner. */
+  onInvitationAccepted?: (invite: AcceptedInvitation) => void;
   /** Signs the user out (used after account deletion and by the sign-out button). */
   onSignOut?: () => void;
   /** Deep-link target (e.g. from an email link ?account_section=security). Falls back to profile if not allowed. */
@@ -1248,7 +1252,7 @@ function SubAccountsPage({
 
         {/* TEAM MEMBERS (invite colleagues with roles + project access) */}
         {section === "team" && canSeeTeam && (
-          <TeamSection onWorkspacesChanged={onWorkspacesChanged} />
+          <TeamSection onWorkspacesChanged={onWorkspacesChanged} onInvitationAccepted={onInvitationAccepted} />
         )}
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}

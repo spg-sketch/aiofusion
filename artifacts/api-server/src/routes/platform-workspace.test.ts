@@ -271,6 +271,7 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, createPlatformSession, PLATFORM_COOKIE } from "../lib/platform-auth";
+import { consumeInvite } from "../lib/team-invites";
 import { resolvePlatformAccount } from "../middleware/platform-auth";
 import platformRouter from "./platform";
 
@@ -471,14 +472,15 @@ describe("GET /platform/my-invites", () => {
     expect(listed.json.invites).toEqual([]);
   });
 
-  it("returns empty array for legacy session without userId", async () => {
+  it("asks legacy sessions to refresh instead of hiding invitations", async () => {
     await db.insert(platformAccountsTable).values({
       username: "legacy-inv", passwordHash: hashPassword("pw1"), role: "agency", status: "active",
     });
     const legacySid = await createPlatformSession("legacy-inv", null, null, null);
     const res = await api("/api/platform/my-invites", { sid: legacySid });
-    expect(res.status).toBe(200);
-    expect(res.json.invites).toEqual([]);
+    expect(res.status).toBe(409);
+    expect(res.json.reason).toBe("session_refresh_required");
+    expect(res.json.error).toMatch(/sign out.*sign in/i);
   });
 
   it("requires auth", async () => {
@@ -488,9 +490,62 @@ describe("GET /platform/my-invites", () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /platform/my-invites/:token/decline
+// ---------------------------------------------------------------------------
+describe("POST /platform/my-invites/:token/decline", () => {
+  it("accepts normalized email case and whitespace", async () => {
+    const { sid } = await seedAgency("decline-normal-a", "  Decline.Normal@Test.Local ");
+    const { company: targetCo } = await seedAgency("decline-normal-b", "decline-normal-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "decline-normal-b", "decline.normal@test.local");
+
+    const res = await api(`/api/platform/my-invites/${token}/decline`, { sid, body: {} });
+    expect(res.status).toBe(200);
+    const [invite] = await db.select().from(platformInvitationsTable).where(eq(platformInvitationsTable.token, token));
+    expect(invite?.declinedAt).toBeTruthy();
+  });
+
+  it("rejects a genuinely different email with a stable reason", async () => {
+    const { sid } = await seedAgency("decline-mismatch-a", "decline-mismatch-a@test.local");
+    const { company: targetCo } = await seedAgency("decline-mismatch-b", "decline-mismatch-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "decline-mismatch-b", "other@test.local");
+
+    const res = await api(`/api/platform/my-invites/${token}/decline`, { sid, body: {} });
+    expect(res.status).toBe(403);
+    expect(res.json.reason).toBe("email_mismatch");
+  });
+
+  it("asks legacy sessions to refresh before declining", async () => {
+    await db.insert(platformAccountsTable).values({
+      username: "legacy-decline", passwordHash: hashPassword("pw1"), role: "agency", status: "active",
+    });
+    const sid = await createPlatformSession("legacy-decline", null, null, null);
+    const res = await api("/api/platform/my-invites/any-token/decline", { sid, body: {} });
+    expect(res.status).toBe(409);
+    expect(res.json.reason).toBe("session_refresh_required");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /platform/my-invites/:token/accept
 // ---------------------------------------------------------------------------
 describe("POST /platform/my-invites/:token/accept", () => {
+  it("lists and accepts an invite when email case and whitespace differ", async () => {
+    const { sid, user } = await seedAgency("normal-email-a", "  Normal.Email@Test.Local ");
+    const { company: targetCo } = await seedAgency("normal-email-b", "normal-email-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "normal-email-b", "normal.email@test.local", "content");
+
+    const listed = await api("/api/platform/my-invites", { sid });
+    expect(listed.status).toBe(200);
+    expect(listed.json.invites.map((invite: any) => invite.token)).toContain(token);
+
+    const accepted = await api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} });
+    expect(accepted.status).toBe(200);
+    expect(accepted.json.role).toBe("content");
+    const [membership] = await db.select().from(platformMembershipsTable)
+      .where(and(eq(platformMembershipsTable.userId, user.id), eq(platformMembershipsTable.companyId, targetCo.id)));
+    expect(membership?.role).toBe("content");
+  });
+
   it("adds membership without issuing a new session", async () => {
     const { sid, user } = await seedAgency("accept-a", "accept-a@test.local");
     const { company: targetCo } = await seedAgency("accept-b", "accept-b-owner@test.local");
@@ -521,6 +576,7 @@ describe("POST /platform/my-invites/:token/accept", () => {
 
     const res = await api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} });
     expect(res.status).toBe(403);
+    expect(res.json.reason).toBe("email_mismatch");
   });
 
   it("rejects an already-used token", async () => {
@@ -533,15 +589,95 @@ describe("POST /platform/my-invites/:token/accept", () => {
     // Second attempt must fail.
     const res = await api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} });
     expect(res.status).toBe(404);
+    expect(res.json.reason).toBe("used");
   });
 
-  it("rejects a legacy session without userId", async () => {
+  it("asks a legacy session to refresh before acceptance", async () => {
     await db.insert(platformAccountsTable).values({
       username: "legacy-accept", passwordHash: hashPassword("pw1"), role: "agency", status: "active",
     });
     const legacySid = await createPlatformSession("legacy-accept", null, null, null);
     const res = await api("/api/platform/my-invites/any-token/accept", { sid: legacySid, body: {} });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(409);
+    expect(res.json.reason).toBe("session_refresh_required");
+  });
+
+  it("returns specific invalid reasons for unusable invitations", async () => {
+    const { sid } = await seedAgency("invalid-a", "invalid-a@test.local");
+    const { company: targetCo } = await seedAgency("invalid-b", "invalid-b-owner@test.local");
+    const cases: Array<{ reason: string; token: string }> = [];
+
+    cases.push({ reason: "unknown", token: "not-a-real-token" });
+    const expired = await seedInvite(targetCo.id, "invalid-b", "invalid-a@test.local", "viewer", -1);
+    cases.push({ reason: "expired", token: expired });
+    const declined = await seedInvite(targetCo.id, "invalid-b", "invalid-a@test.local");
+    await db.update(platformInvitationsTable).set({ declinedAt: new Date() }).where(eq(platformInvitationsTable.token, declined));
+    cases.push({ reason: "declined", token: declined });
+    const revoked = await seedInvite(targetCo.id, "invalid-b", "invalid-a@test.local");
+    await db.update(platformInvitationsTable).set({ revokedAt: new Date() }).where(eq(platformInvitationsTable.token, revoked));
+    cases.push({ reason: "revoked", token: revoked });
+    const { company: replacementCo } = await seedAgency("invalid-c", "invalid-c-owner@test.local");
+    const replaced = await seedInvite(replacementCo.id, "invalid-c", "invalid-a@test.local");
+    await db.update(platformInvitationsTable).set({ revokedAt: new Date() }).where(eq(platformInvitationsTable.token, replaced));
+    await seedInvite(replacementCo.id, "invalid-c", "invalid-a@test.local");
+    cases.push({ reason: "replaced", token: replaced });
+
+    for (const testCase of cases) {
+      const res = await api(`/api/platform/my-invites/${testCase.token}/accept`, { sid, body: {} });
+      expect(res.status).toBe(404);
+      expect(res.json.reason).toBe(testCase.reason);
+      expect(res.json.error).toBeTruthy();
+    }
+  });
+
+  it("returns inactive when the invited workspace is suspended", async () => {
+    const { sid } = await seedAgency("inactive-a", "inactive-a@test.local");
+    const { company: targetCo } = await seedAgency("inactive-b", "inactive-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "inactive-b", "inactive-a@test.local");
+    await db.update(platformCompaniesTable).set({ status: "suspended" }).where(eq(platformCompaniesTable.id, targetCo.id));
+
+    const res = await api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} });
+    expect(res.status).toBe(404);
+    expect(res.json.reason).toBe("inactive");
+  });
+
+  it("retains an existing member's role and access while retiring a stale invite", async () => {
+    const { sid, user } = await seedAgency("preserve-a", "preserve-a@test.local");
+    const { company: targetCo } = await seedAgency("preserve-b", "preserve-b-owner@test.local");
+    await db.insert(platformMembershipsTable).values({
+      userId: user.id, companyId: targetCo.id, companySlug: "preserve-b",
+      role: "admin", projectAccess: "project-1", position: "Director",
+    });
+    const token = await seedInvite(targetCo.id, "preserve-b", "preserve-a@test.local", "viewer");
+
+    const res = await api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} });
+    expect(res.status).toBe(200);
+    expect(res.json.role).toBe("admin");
+    const [membership] = await db.select().from(platformMembershipsTable)
+      .where(and(eq(platformMembershipsTable.userId, user.id), eq(platformMembershipsTable.companyId, targetCo.id)));
+    expect(membership).toMatchObject({ role: "admin", projectAccess: "project-1", position: "Director" });
+  });
+
+  it("allows only one concurrent accept claim and reports the lost race as used", async () => {
+    const { sid } = await seedAgency("race-a", "race-a@test.local");
+    const { company: targetCo } = await seedAgency("race-b", "race-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "race-b", "race-a@test.local");
+    const responses = await Promise.all([
+      api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} }),
+      api(`/api/platform/my-invites/${token}/accept`, { sid, body: {} }),
+    ]);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+    expect(responses.find((response) => response.status !== 200)?.json.reason).toBe("used");
+  });
+
+  it("rolls back the invite claim when membership creation fails", async () => {
+    const { company: targetCo } = await seedAgency("rollback-b", "rollback-b-owner@test.local");
+    const token = await seedInvite(targetCo.id, "rollback-b", "rollback-member@test.local");
+    const [invite] = await db.select().from(platformInvitationsTable).where(eq(platformInvitationsTable.token, token));
+
+    await expect(consumeInvite(invite!, "00000000-0000-0000-0000-000000000000")).rejects.toThrow();
+    const [after] = await db.select().from(platformInvitationsTable).where(eq(platformInvitationsTable.token, token));
+    expect(after?.usedAt).toBeNull();
   });
 });
 

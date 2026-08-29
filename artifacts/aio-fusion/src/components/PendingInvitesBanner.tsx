@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2, Loader2, X } from "lucide-react";
-import { type MembershipRole, type PendingMyInvite, serverAcceptMyInvite, serverDeclineMyInvite, serverSwitchWorkspace } from "../lib/auth";
+import { type InviteFailureReason, type MembershipRole, type PendingMyInvite, serverAcceptMyInvite, serverDeclineMyInvite, serverSwitchWorkspace } from "../lib/auth";
+import { type AcceptedInvitation, InvitationResultNotice, isTerminalInvitationFailure } from "./InvitationResult";
 
 const ROLE_LABELS: Record<MembershipRole, string> = {
   owner: "Owner",
@@ -12,7 +13,11 @@ const ROLE_LABELS: Record<MembershipRole, string> = {
 
 interface Props {
   invites: PendingMyInvite[];
-  onInviteAccepted: () => void; // ask parent to refresh invite list + workspaces
+  loading: boolean;
+  loadError: string | null;
+  onRetry: () => void;
+  acceptedInvites?: AcceptedInvitation[];
+  onInviteAccepted: (invite?: AcceptedInvitation) => void; // ask parent to refresh invite list + workspaces
   onDismiss: () => void;
 }
 
@@ -21,12 +26,15 @@ interface AcceptState {
   accepted: boolean;
   companyId?: string;
   companyName?: string;
+  invitation?: PendingMyInvite;
   error?: string;
+  reason?: InviteFailureReason;
 }
 
-export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: Props) {
+export function PendingInvitesBanner({ invites, loading, loadError, onRetry, acceptedInvites = [], onInviteAccepted, onDismiss }: Props) {
   const [acceptState, setAcceptState] = useState<Record<string, AcceptState>>({});
   const [switching, setSwitching] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [declining, setDeclining] = useState<string | null>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
 
@@ -47,29 +55,42 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
     };
   }, [invites]);
 
-  const handleAccept = async (token: string) => {
+  const handleAccept = async (invitation: PendingMyInvite) => {
+    const token = invitation.token;
     setAcceptState((s) => ({ ...s, [token]: { loading: true, accepted: false } }));
     const result = await serverAcceptMyInvite(token);
     if (result.ok) {
       setAcceptState((s) => ({
         ...s,
-        [token]: { loading: false, accepted: true, companyId: result.companyId, companyName: result.companyName },
+        [token]: {
+          loading: false,
+          accepted: true,
+          companyId: result.companyId,
+          companyName: result.companyName ?? invitation.companyName ?? invitation.companySlug,
+          invitation,
+        },
       }));
-      onInviteAccepted();
+      onInviteAccepted(result.companyId ? {
+        token,
+        companyId: result.companyId,
+        companyName: result.companyName ?? invitation.companyName ?? invitation.companySlug,
+      } : undefined);
     } else {
       setAcceptState((s) => ({
         ...s,
-        [token]: { loading: false, accepted: false, error: result.error },
+        [token]: { loading: false, accepted: false, error: result.error, reason: result.reason },
       }));
     }
   };
 
   const handleSwitch = async (companyId: string) => {
     setSwitching(companyId);
-    await serverSwitchWorkspace(companyId);
+    setSwitchError(null);
+    const result = await serverSwitchWorkspace(companyId);
     // serverSwitchWorkspace reloads the page on success; setSwitching(null) is
     // only reached if the call returns an error.
     setSwitching(null);
+    if (!result.ok) setSwitchError(result.error ?? "Failed to switch workspace.");
   };
 
   const handleDecline = async (token: string) => {
@@ -81,10 +102,19 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
     else setAcceptState((s) => ({ ...s, [token]: { loading: false, accepted: false, error: result.error } }));
   };
 
-  if (invites.length === 0) return null;
+  if (
+    !loading &&
+    !loadError &&
+    invites.length === 0 &&
+    acceptedInvites.length === 0 &&
+    Object.keys(acceptState).every((token) => !acceptState[token]?.accepted)
+  ) return null;
 
   const pending = invites.filter((i) => !acceptState[i.token]?.accepted);
-  const accepted = invites.filter((i) => acceptState[i.token]?.accepted);
+  const accepted = [
+    ...acceptedInvites.map((result) => ({ ...result, invitation: { token: result.token } as PendingMyInvite })),
+    ...Object.values(acceptState).filter((state) => state.accepted && state.invitation),
+  ].filter((state, index, all) => all.findIndex((other) => other.invitation?.token === state.invitation?.token) === index);
 
   return (
     <div
@@ -100,7 +130,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
             <span className="text-[13px] font-semibold" style={{ color: "#92400E" }}>
               {pending.length > 0
                 ? `You have ${pending.length} pending team invitation${pending.length === 1 ? "" : "s"}`
-                : "Invitations accepted"}
+                : loading ? "Loading team invitations" : loadError ? "Could not load team invitations" : "Invitations accepted"}
             </span>
           </div>
           <button
@@ -112,6 +142,13 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
           </button>
         </div>
 
+        {loading && <div className="flex items-center gap-2 pl-5 text-[12px]" style={{ color: "#78350F" }} data-testid="status-invites-loading"><Loader2 size={12} className="animate-spin" /> Loading invitations...</div>}
+        {loadError && (
+          <div className="flex flex-wrap items-center gap-2 pl-5" role="alert" data-testid="status-invites-load-error">
+            <span className="text-[12px] font-semibold" style={{ color: "#B91C1C" }}>{loadError}</span>
+            <button onClick={onRetry} data-testid="button-retry-invites" className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.1em]" style={{ background: "#92400E", color: "#FFFBEB" }}>Retry</button>
+          </div>
+        )}
         {/* Pending invites */}
         {pending.map((inv) => {
           const st = acceptState[inv.token];
@@ -122,14 +159,11 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
                 {" - "}
                 {ROLE_LABELS[inv.role] ?? inv.role}
               </span>
-              {st?.error && (
-                <span className="text-[11px] font-semibold" style={{ color: "#B91C1C" }}>
-                  {st.error}
-                </span>
-              )}
+              <InvitationResultNotice failure={st?.error || st?.reason ? st : undefined} />
               <button
-                onClick={() => void handleAccept(inv.token)}
-                disabled={st?.loading}
+                onClick={() => void handleAccept(inv)}
+                disabled={st?.loading || isTerminalInvitationFailure(st?.reason) || st?.reason === "session_refresh_required" || st?.reason === "email_mismatch"}
+                data-testid={`button-accept-invite-${inv.token}`}
                 className="flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:brightness-105 disabled:opacity-50"
                 style={{ background: "#92400E", color: "#FFFBEB" }}
               >
@@ -139,6 +173,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
               <button
                 onClick={() => void handleDecline(inv.token)}
                 disabled={st?.loading || declining === inv.token}
+                data-testid={`button-decline-invite-${inv.token}`}
                 className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] disabled:opacity-50"
                 style={{ color: "#92400E" }}
               >
@@ -149,8 +184,8 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
         })}
 
         {/* Accepted invites - offer to switch */}
-        {accepted.map((inv) => {
-          const st = acceptState[inv.token]!;
+        {accepted.map((st) => {
+          const inv = st.invitation!;
           const isSwitching = switching === st.companyId;
           return (
             <div key={inv.token} className="flex flex-wrap items-center gap-2 pl-5">
@@ -162,6 +197,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
                 <button
                   onClick={() => void handleSwitch(st.companyId!)}
                   disabled={isSwitching}
+                  data-testid={`button-switch-workspace-${st.companyId}`}
                   className="flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:brightness-105 disabled:opacity-50"
                   style={{ background: "#166534", color: "#F0FDF4" }}
                 >
@@ -172,6 +208,7 @@ export function PendingInvitesBanner({ invites, onInviteAccepted, onDismiss }: P
             </div>
           );
         })}
+        {switchError && <p className="pl-5 text-[11px] font-semibold" role="alert" data-testid="status-switch-error" style={{ color: "#B91C1C" }}>{switchError}</p>}
       </div>
     </div>
   );

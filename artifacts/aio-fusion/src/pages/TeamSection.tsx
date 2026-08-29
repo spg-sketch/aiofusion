@@ -5,7 +5,7 @@ import {
   type MembershipRole,
   type TeamOverview,
   type TeamRoleViolation,
-  type PendingMyInvite,
+  type InviteFailureReason, type PendingMyInvite,
   serverGetTeam,
   serverGetTeamViolations,
   serverFixTeamViolations,
@@ -19,6 +19,7 @@ import {
   serverDeclineMyInvite,
   serverSwitchWorkspace,
 } from "../lib/auth";
+import { type AcceptedInvitation, InvitationResultNotice, isTerminalInvitationFailure } from "../components/InvitationResult";
 import { loadStoredProjects } from "../lib/projectStore";
 import { apiBase } from "../lib/apiHelpers";
 
@@ -39,7 +40,7 @@ const roleLabel = (r: MembershipRole) =>
 // Team management card: invite colleagues by email with a role and
 // (optionally) restricted project access. Rendered inside SubAccountsPage for
 // Agency/Partner owners and admins.
-export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () => void } = {}) {
+export function TeamSection({ onWorkspacesChanged, onInvitationAccepted }: { onWorkspacesChanged?: () => void; onInvitationAccepted?: (invite: AcceptedInvitation) => void } = {}) {
   const [team, setTeam] = useState<TeamOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -60,9 +61,12 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
 
   // Invites addressed to the current user's own email (they are the invitee).
   const [myInvites, setMyInvites] = useState<PendingMyInvite[]>([]);
+  const [myInvitesLoading, setMyInvitesLoading] = useState(true);
+  const [myInvitesLoadError, setMyInvitesLoadError] = useState<string | null>(null);
   const [myInvitesBusy, setMyInvitesBusy] = useState<string | null>(null);
   const [myInvitesAccepted, setMyInvitesAccepted] = useState<Record<string, { companyName: string; companyId: string }>>({});
   const [myInviteError, setMyInviteError] = useState<string | null>(null);
+  const [myInviteFailures, setMyInviteFailures] = useState<Record<string, { error?: string; reason?: InviteFailureReason }>>({});
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [decliningInvite, setDecliningInvite] = useState<string | null>(null);
 
@@ -117,8 +121,16 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
 
   // Load invites addressed to the current user's own email.
   const reloadMyInvites = () => {
+    setMyInvitesLoading(true);
+    setMyInvitesLoadError(null);
     void serverGetMyInvites().then((r) => {
-      if (r.ok && r.invites) setMyInvites(r.invites);
+      setMyInvitesLoading(false);
+      if (r.ok) {
+        setMyInvites(r.invites ?? []);
+      } else {
+        setMyInvites([]);
+        setMyInvitesLoadError(r.error ?? "Failed to load invitations.");
+      }
     });
   };
   useEffect(reloadMyInvites, []);
@@ -136,16 +148,23 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       reloadMyInvites();
       // Notify parent so the workspace switcher updates immediately.
       onWorkspacesChanged?.();
+      onInvitationAccepted?.({
+        token,
+        companyId: result.companyId,
+        companyName: result.companyName ?? result.companySlug ?? "",
+      });
     } else {
-      setMyInviteError(result.error ?? "Failed to accept invitation.");
+      setMyInviteFailures((prev) => ({ ...prev, [token]: { error: result.error, reason: result.reason } }));
     }
   };
 
   const handleSwitchWorkspace = async (companyId: string) => {
     setSwitchingId(companyId);
-    await serverSwitchWorkspace(companyId);
+    setMyInviteError(null);
+    const result = await serverSwitchWorkspace(companyId);
     // serverSwitchWorkspace reloads on success; setSwitchingId(null) only reached on error.
     setSwitchingId(null);
+    if (!result.ok) setMyInviteError(result.error ?? "Failed to switch workspace.");
   };
 
   const handleDeclineMyInvite = async (token: string) => {
@@ -261,7 +280,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
 
   // Workspace invitations - shown regardless of team-load state so users always
   // see pending cross-workspace invites even when the team members API fails.
-  const invitationsBlock = (myInvites.length > 0 || Object.keys(myInvitesAccepted).length > 0) ? (
+  const invitationsBlock = (myInvitesLoading || myInvitesLoadError || myInvites.length > 0 || Object.keys(myInvitesAccepted).length > 0) ? (
     <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
       <div className="flex items-center gap-2 mb-3">
         <Building2 size={13} color={accent} />
@@ -272,11 +291,20 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
       <p className="text-[12px] font-light mb-3 leading-relaxed" style={{ color: vars.g600 }}>
         You've been invited to join these workspaces.
       </p>
+      {myInvitesLoading && <p className="mb-3 flex items-center gap-2 text-[12px]" data-testid="status-invites-loading" style={{ color: vars.g600 }}><Loader2 size={12} className="animate-spin" /> Loading invitations...</p>}
+      {myInvitesLoadError && (
+        <div className="mb-3 flex items-center gap-2" role="alert" data-testid="status-invites-load-error">
+          <p className="text-[12px] font-semibold" style={{ color: accent }}>{myInvitesLoadError}</p>
+          <button onClick={reloadMyInvites} data-testid="button-retry-invites" className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.1em]" style={{ background: ink, color: "#fff" }}>Retry</button>
+        </div>
+      )}
       {myInviteError && (
         <p className="mb-3 text-[12px] font-semibold" style={{ color: accent }}>{myInviteError}</p>
       )}
       <div className="space-y-2">
-        {myInvites.filter((i) => !myInvitesAccepted[i.token]).map((i) => (
+        {myInvites.filter((i) => !myInvitesAccepted[i.token]).map((i) => {
+          const failure = myInviteFailures[i.token];
+          return (
           <div
             key={i.token}
             className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
@@ -289,9 +317,11 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
                 {roleLabel(i.role)} · expires {new Date(i.expiresAt).toLocaleDateString()}
               </p>
             </div>
+            <InvitationResultNotice failure={failure?.error || failure?.reason ? failure : undefined} />
             <button
               onClick={() => void handleAcceptMyInvite(i.token)}
-              disabled={myInvitesBusy === i.token}
+              disabled={myInvitesBusy === i.token || isTerminalInvitationFailure(failure?.reason) || failure?.reason === "session_refresh_required" || failure?.reason === "email_mismatch"}
+              data-testid={`button-accept-invite-${i.token}`}
               className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:opacity-90 disabled:opacity-50"
               style={{ background: ink, color: "#fff" }}
             >
@@ -301,13 +331,14 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
             <button
               onClick={() => void handleDeclineMyInvite(i.token)}
               disabled={myInvitesBusy === i.token || decliningInvite === i.token}
+              data-testid={`button-decline-invite-${i.token}`}
               className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] disabled:opacity-50"
               style={{ color: "#92400E" }}
             >
               {decliningInvite === i.token ? "Declining…" : "Decline"}
             </button>
           </div>
-        ))}
+        );})}
         {Object.entries(myInvitesAccepted).map(([token, info]) => (
           <div
             key={token}
@@ -321,6 +352,7 @@ export function TeamSection({ onWorkspacesChanged }: { onWorkspacesChanged?: () 
             <button
               onClick={() => void handleSwitchWorkspace(info.companyId)}
               disabled={switchingId === info.companyId}
+              data-testid={`button-switch-workspace-${info.companyId}`}
               className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em] transition-all hover:opacity-90 disabled:opacity-50"
               style={{ background: "#166534", color: "#F0FDF4" }}
             >

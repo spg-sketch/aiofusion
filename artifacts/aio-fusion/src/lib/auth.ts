@@ -1377,21 +1377,39 @@ export type PendingMyInvite = {
   createdAt: string;
 };
 
-export async function serverAcceptMyInvite(token: string): Promise<{
+export type InviteInvalidReason =
+  | "unknown"
+  | "used"
+  | "declined"
+  | "revoked"
+  | "replaced"
+  | "expired"
+  | "inactive";
+
+export type InviteFailureReason = InviteInvalidReason | "session_refresh_required" | "email_mismatch";
+
+export type MyInviteAcceptResult = {
   ok: boolean;
   companyId?: string;
   companySlug?: string;
   companyName?: string;
   role?: MembershipRole;
   error?: string;
-}> {
+  reason?: InviteFailureReason;
+};
+
+export async function serverAcceptMyInvite(token: string): Promise<MyInviteAcceptResult> {
   try {
     const resp = await fetch(
       `${apiBase()}/api/platform/my-invites/${encodeURIComponent(token)}/accept`,
       { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include" },
     );
     const json = await resp.json().catch(() => ({}));
-    if (!resp.ok) return { ok: false, error: json?.error ?? "Failed to accept invitation." };
+    if (!resp.ok) return {
+      ok: false,
+      error: json?.error ?? "Failed to accept invitation.",
+      reason: typeof json?.reason === "string" ? json.reason as InviteFailureReason : undefined,
+    };
     return {
       ok: true,
       companyId: json?.companyId,
@@ -1493,10 +1511,10 @@ export async function serverSwitchWorkspace(companyId: string): Promise<{
     // Project-scoped keys (intake/audits keyed by globally-unique project id)
     // are safe - the new workspace simply won't list the old projects.
     clearWorkspaceScopedCaches();
-    // New session cookie is now set. Reload so every hook and store reinitialises
-    // against the new workspace's data. The fresh /platform/me call inside
-    // bootstrapAuth will pick up the new session automatically.
-    window.location.reload();
+    // New session cookie is now set. Reload into the authenticated platform
+    // entry point, rather than the public root landing route. App consumes this
+    // flag and selects platform-home while bootstrapAuth reads the new cookie.
+    window.location.assign(`${import.meta.env.BASE_URL}?aio_switched_workspace=1`);
     return { ok: true };
   } catch {
     return { ok: false, error: "Network error." };

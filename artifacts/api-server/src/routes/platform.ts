@@ -3648,15 +3648,21 @@ router.post(
 // --- Pending invites for the signed-in user ----------------------------------
 
 // GET /platform/my-invites - list pending invites addressed to the signed-in
-// user's email. Only works for new-auth sessions that carry a userId. Legacy
-// sessions (no userId) return an empty list.
+// user's email.
+const SESSION_REFRESH_REQUIRED = "session_refresh_required";
+const SESSION_REFRESH_REQUIRED_MESSAGE =
+  "Your session needs to be refreshed before invitations can be loaded. Please sign out, then sign in again.";
+
 router.get(
   "/platform/my-invites",
   requirePlatformAuth,
   async (req: Request, res: Response) => {
     const userId = req.account?.userId;
     if (!userId) {
-      res.json({ invites: [] });
+      res.status(409).json({
+        error: SESSION_REFRESH_REQUIRED_MESSAGE,
+        reason: SESSION_REFRESH_REQUIRED,
+      });
       return;
     }
     try {
@@ -3665,8 +3671,12 @@ router.get(
         .from(platformUsersTable)
         .where(eq(platformUsersTable.id, userId))
         .limit(1);
-      if (!userRow?.email) {
-        res.json({ invites: [] });
+      const normalizedEmail = userRow?.email?.trim().toLowerCase();
+      if (!normalizedEmail) {
+        res.status(409).json({
+          error: SESSION_REFRESH_REQUIRED_MESSAGE,
+          reason: SESSION_REFRESH_REQUIRED,
+        });
         return;
       }
       const rows = await db
@@ -3686,7 +3696,7 @@ router.get(
         )
         .where(
           and(
-            eq(platformInvitationsTable.email, userRow.email),
+            sql`lower(trim(${platformInvitationsTable.email})) = ${normalizedEmail}`,
             isNull(platformInvitationsTable.usedAt),
             isNull(platformInvitationsTable.revokedAt),
             isNull(platformInvitationsTable.declinedAt),
@@ -3740,7 +3750,7 @@ router.get(
 // signed-in user. Adds the membership without issuing a new session (the
 // caller stays logged in to their current workspace). The client should offer
 // a "Switch to workspace" button separately after success.
-// Guards: userId required, email must match invite email exactly.
+// Guards: userId required, email must match the normalized invited email.
 router.post(
   "/platform/my-invites/:token/accept",
   requirePlatformAuth,
@@ -3748,32 +3758,57 @@ router.post(
   async (req: Request, res: Response) => {
     const userId = req.account?.userId;
     if (!userId) {
-      res.status(403).json({ error: "Legacy sessions cannot accept invitations. Please sign in again." });
+      res.status(409).json({
+        error: SESSION_REFRESH_REQUIRED_MESSAGE,
+        reason: SESSION_REFRESH_REQUIRED,
+      });
       return;
     }
     try {
       const token = String(req.params.token || "").trim();
-      const invite = await getValidInvite(token);
-      if (!invite) {
-        await getInviteInvalidReason(token); // logs the specific failure reason
-        res.status(404).json({ error: "This invitation is invalid, expired, or has already been used." });
-        return;
-      }
-      // Email-bound: the signed-in user's email must match the invited email.
       const [userRow] = await db
         .select({ email: platformUsersTable.email })
         .from(platformUsersTable)
         .where(eq(platformUsersTable.id, userId))
         .limit(1);
-      if (!userRow?.email || userRow.email !== invite.email) {
-        res.status(403).json({ error: "This invitation is for a different email address." });
+      const normalizedEmail = userRow?.email?.trim().toLowerCase();
+      if (!normalizedEmail) {
+        res.status(409).json({
+          error: SESSION_REFRESH_REQUIRED_MESSAGE,
+          reason: SESSION_REFRESH_REQUIRED,
+        });
+        return;
+      }
+      const invite = await getValidInvite(token);
+      if (!invite) {
+        const reason = await getInviteInvalidReason(token);
+        res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
+        return;
+      }
+      // Email-bound: the signed-in user's email must match the invited email.
+      if (normalizedEmail !== invite.email.trim().toLowerCase()) {
+        res.status(403).json({
+          error: "This invitation is for a different email address.",
+          reason: "email_mismatch",
+        });
         return;
       }
       const ok = await consumeInvite(invite, userId);
       if (!ok) {
-        res.status(409).json({ error: "This invitation has already been used." });
+        const reason = await getInviteInvalidReason(token);
+        res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
         return;
       }
+      const [membership] = await db
+        .select({ role: platformMembershipsTable.role })
+        .from(platformMembershipsTable)
+        .where(
+          and(
+            eq(platformMembershipsTable.userId, userId),
+            eq(platformMembershipsTable.companyId, invite.companyId),
+          ),
+        )
+        .limit(1);
       const [company] = await db
         .select({
           displayName: platformCompaniesTable.displayName,
@@ -3795,7 +3830,7 @@ router.post(
         companyId: invite.companyId,
         companySlug: company?.slug ?? invite.companySlug,
         companyName: company?.displayName || company?.slug || invite.companySlug,
-        role: normalizeMembershipRole(invite.role),
+        role: normalizeMembershipRole(membership?.role ?? invite.role),
       });
     } catch (err) {
       logger.error({ err }, "my-invites: failed to accept");
@@ -3814,24 +3849,38 @@ router.post(
   async (req: Request, res: Response) => {
     const userId = req.account?.userId;
     if (!userId) {
-      res.status(403).json({ error: "Legacy sessions cannot decline invitations. Please use the link in the invitation email." });
+      res.status(409).json({
+        error: SESSION_REFRESH_REQUIRED_MESSAGE,
+        reason: SESSION_REFRESH_REQUIRED,
+      });
       return;
     }
     try {
       const token = String(req.params.token || "").trim();
+      const [userRow] = await db
+        .select({ email: platformUsersTable.email })
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, userId))
+        .limit(1);
+      const normalizedEmail = userRow?.email?.trim().toLowerCase();
+      if (!normalizedEmail) {
+        res.status(409).json({
+          error: SESSION_REFRESH_REQUIRED_MESSAGE,
+          reason: SESSION_REFRESH_REQUIRED,
+        });
+        return;
+      }
       const invite = await getValidInvite(token);
       if (!invite) {
         const reason = await getInviteInvalidReason(token);
         res.status(404).json({ error: INVITE_INVALID_MESSAGES[reason], reason });
         return;
       }
-      const [userRow] = await db
-        .select({ email: platformUsersTable.email })
-        .from(platformUsersTable)
-        .where(eq(platformUsersTable.id, userId))
-        .limit(1);
-      if (!userRow?.email || userRow.email !== invite.email) {
-        res.status(403).json({ error: "This invitation is for a different email address." });
+      if (normalizedEmail !== invite.email.trim().toLowerCase()) {
+        res.status(403).json({
+          error: "This invitation is for a different email address.",
+          reason: "email_mismatch",
+        });
         return;
       }
       const declined = await db

@@ -273,7 +273,7 @@ export async function getValidInvite(rawToken: string): Promise<PlatformInvitati
     .where(eq(platformInvitationsTable.token, token))
     .limit(1);
   if (!row) return null;
-  if (row.usedAt || row.revokedAt || row.declinedAt || row.expiresAt < new Date()) return null;
+  if (row.usedAt || row.revokedAt || row.declinedAt || row.expiresAt <= new Date()) return null;
   // The company must still exist and must not be suspended. Legacy
   // `pending_approval` workspaces are treated as active everywhere else in the
   // authentication system, so invitation acceptance must follow the same rule.
@@ -335,7 +335,7 @@ export async function getInviteInvalidReason(rawToken: string): Promise<InviteIn
       .where(
         and(
           eq(platformInvitationsTable.companyId, row.companyId),
-          eq(platformInvitationsTable.email, row.email),
+          sql`lower(trim(${platformInvitationsTable.email})) = lower(trim(${row.email}))`,
           isNull(platformInvitationsTable.usedAt),
           isNull(platformInvitationsTable.revokedAt),
           isNull(platformInvitationsTable.declinedAt),
@@ -344,7 +344,7 @@ export async function getInviteInvalidReason(rawToken: string): Promise<InviteIn
       )
       .limit(1);
     reason = newer ? "replaced" : "revoked";
-  } else if (row.expiresAt < new Date()) {
+  } else if (row.expiresAt <= new Date()) {
     reason = "expired";
   } else {
     reason = "inactive";
@@ -383,49 +383,65 @@ export async function consumeInvite(
   invite: PlatformInvitationRow,
   userId: string,
 ): Promise<boolean> {
-  // Atomic single-use claim: only the request that flips used_at from NULL wins.
-  const claimed = await db
-    .update(platformInvitationsTable)
-    .set({ usedAt: new Date() })
-    .where(
-      and(
-        eq(platformInvitationsTable.token, invite.token),
-        isNull(platformInvitationsTable.usedAt),
-        isNull(platformInvitationsTable.revokedAt),
-        isNull(platformInvitationsTable.declinedAt),
-      ),
-    )
-    .returning({ token: platformInvitationsTable.token });
-  if (claimed.length === 0) return false;
+  return db.transaction(async (tx) => {
+    // Serialize acceptance against workspace suspension/deletion. PostgreSQL
+    // and PGlite both accept this lock clause; on PGlite it remains useful for
+    // keeping the complete operation within one transaction.
+    const [company] = await tx
+      .select({ id: platformCompaniesTable.id, status: platformCompaniesTable.status })
+      .from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.id, invite.companyId))
+      .for("update")
+      .limit(1);
+    if (!company || company.status === "suspended") return false;
 
-  const role = normalizeMembershipRole(invite.role);
-  await db
-    .insert(platformMembershipsTable)
-    .values({
-      userId,
-      companyId: invite.companyId,
-      companySlug: invite.companySlug,
-      role,
-      projectAccess: invite.projectAccess ?? null,
-      position: invite.position ?? null,
-    })
-    .onConflictDoUpdate({
-      target: [platformMembershipsTable.userId, platformMembershipsTable.companyId],
-      set: { role, projectAccess: invite.projectAccess ?? null, position: invite.position ?? null },
-    });
+    // Atomic single-use claim: only the request that flips used_at from NULL
+    // wins. Check expiry here as well as at lookup time because the invite can
+    // expire while a request is resolving its user or waiting for the database.
+    const claimed = await tx
+      .update(platformInvitationsTable)
+      .set({ usedAt: new Date() })
+      .where(
+        and(
+          eq(platformInvitationsTable.token, invite.token),
+          isNull(platformInvitationsTable.usedAt),
+          isNull(platformInvitationsTable.revokedAt),
+          isNull(platformInvitationsTable.declinedAt),
+          gt(platformInvitationsTable.expiresAt, new Date()),
+        ),
+      )
+      .returning({ token: platformInvitationsTable.token });
+    if (claimed.length === 0) return false;
 
-  // Invited users have proven control of the invited email address by opening
-  // the single-use link, so mark them verified (only upgrades false → true).
-  try {
-    await db
+    const role = normalizeMembershipRole(invite.role);
+    await tx
+      .insert(platformMembershipsTable)
+      .values({
+        userId,
+        companyId: invite.companyId,
+        companySlug: invite.companySlug,
+        role,
+        projectAccess: invite.projectAccess ?? null,
+        position: invite.position ?? null,
+      })
+      // A stale invite must not change an existing member's access. This is
+      // also safe for the public and SSO invitation flows that share this
+      // helper.
+      .onConflictDoNothing({
+        target: [platformMembershipsTable.userId, platformMembershipsTable.companyId],
+      });
+
+    // Invited users have proven control of the invited email address by opening
+    // the single-use link, so mark them verified (only upgrades false → true).
+    // This intentionally stays in the transaction: a database failure must
+    // roll back the claim rather than leaving a consumed, unusable invite.
+    await tx
       .update(platformUsersTable)
       .set({ emailVerified: true })
       .where(eq(platformUsersTable.id, userId));
-  } catch (err) {
-    logger.warn({ err }, "consumeInvite: failed to mark email verified (non-fatal)");
-  }
 
-  return true;
+    return true;
+  });
 }
 
 export type DbOrTx = typeof db | any;

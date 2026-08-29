@@ -30,6 +30,7 @@ import {
   type SessionInfo,
 } from "./lib/auth";
 import { PendingInvitesBanner } from "./components/PendingInvitesBanner";
+import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
 import { getImpersonationState } from "./lib/auth";
@@ -555,6 +556,15 @@ function App() {
   const [agencyImpersonatedBy, setAgencyImpersonatedBy] = useState<string | null>(null);
   // Pending team invites addressed to the signed-in user's email.
   const [pendingInvites, setPendingInvites] = useState<PendingMyInvite[]>([]);
+  const [pendingInvitesLoading, setPendingInvitesLoading] = useState(false);
+  const [pendingInvitesError, setPendingInvitesError] = useState<string | null>(null);
+  // Keeps confirmations rendered when the successful refresh removes their invite.
+  const [acceptedInvites, setAcceptedInvites] = useState<AcceptedInvitation[]>([]);
+  const inviteRequestGeneration = useRef(0);
+  const inviteRequestUsername = useRef<string | null>(null);
+  // Update during render so an old request cannot land in the gap before the
+  // identity-change effect runs after commit.
+  inviteRequestUsername.current = session?.username ?? null;
   // True when the user has dismissed the invite banner for this page session.
   const [inviteBannerDismissed, setInviteBannerDismissed] = useState(false);
 
@@ -713,12 +723,48 @@ function App() {
   // Fetch pending invites for the signed-in user. Re-runs when the session
   // username changes (login / workspace switch). Uses the username as the dep
   // rather than the full session object to avoid unnecessary re-fetches.
-  useEffect(() => {
-    if (!session?.username) { setPendingInvites([]); return; }
+  const reloadPendingInvites = useCallback(() => {
+    const username = session?.username ?? null;
+    const generation = ++inviteRequestGeneration.current;
+    if (!username) {
+      setPendingInvites([]);
+      setPendingInvitesError(null);
+      setPendingInvitesLoading(false);
+      return;
+    }
+    setPendingInvitesLoading(true);
+    setPendingInvitesError(null);
     void serverGetMyInvites().then((r) => {
-      if (r.ok && r.invites) setPendingInvites(r.invites);
+      // Cookies can change before an old request settles. Never apply a reply
+      // unless it is still the newest request for the same signed-in identity.
+      if (generation !== inviteRequestGeneration.current || username !== inviteRequestUsername.current) return;
+      setPendingInvitesLoading(false);
+      if (r.ok) setPendingInvites(r.invites ?? []);
+      else {
+        setPendingInvites([]);
+        setPendingInvitesError(r.error ?? "Failed to load invitations.");
+      }
     });
   }, [session?.username]);
+  useEffect(() => {
+    // Invalidate all in-flight responses and immediately remove data that
+    // belonged to the prior identity before loading this identity's invites.
+    inviteRequestGeneration.current += 1;
+    setPendingInvites([]);
+    setPendingInvitesError(null);
+    setAcceptedInvites([]);
+    reloadPendingInvites();
+  }, [reloadPendingInvites, session?.username]);
+  const handleInvitationAccepted = useCallback((invite?: AcceptedInvitation) => {
+    if (invite) {
+      setAcceptedInvites((previous) => [...previous.filter((item) => item.token !== invite.token), invite]);
+      // Avoid exposing a stale Accept action while the authoritative refresh is
+      // in flight.
+      setPendingInvites((previous) => previous.filter((item) => item.token !== invite.token));
+    }
+    reloadPendingInvites();
+    void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
+  }, [reloadPendingInvites]);
 
   // Shown on the login form when the admin stash cookie expires mid view-as
   // session and the user is redirected back to sign in.
@@ -795,7 +841,8 @@ function App() {
       params.has("reset_token") ||
       params.has("discount_invite") ||
       params.has("aio_exit_impersonation") ||
-      params.has("aio_switched_master")
+      params.has("aio_switched_master") ||
+      params.has("aio_switched_workspace")
     ) {
       setView("platform-home");
     }
@@ -1064,6 +1111,22 @@ function App() {
     );
   }
 
+  // Kept above authenticated route returns so every authenticated destination
+  // can opt into the same global invite surface.
+  const showInviteBanner = !authLoading && !!session && !inviteBannerDismissed &&
+    (pendingInvitesLoading || !!pendingInvitesError || pendingInvites.length > 0 || acceptedInvites.length > 0);
+  const inviteBannerNode = showInviteBanner ? (
+    <PendingInvitesBanner
+      invites={pendingInvites}
+      loading={pendingInvitesLoading}
+      loadError={pendingInvitesError}
+      onRetry={reloadPendingInvites}
+      acceptedInvites={acceptedInvites}
+      onInviteAccepted={handleInvitationAccepted}
+      onDismiss={() => setInviteBannerDismissed(true)}
+    />
+  ) : null;
+
   if (view === "landing") {
     return <LandingPageC onLogin={enterPlatform} onNavigate={goToView} isAuthed={isAuthed} />;
   }
@@ -1097,37 +1160,40 @@ function App() {
   if (view === "platform-home") {
     return (
       <>
-        <PlatformHomePage
-          backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
-          session={session}
-          oauthRedirectParams={oauthRedirectParams}
-          onOauthParamsConsumed={() => setOauthRedirectParams(null)}
-          onLoginSuccess={(s) => {
-            setSessionExpiredNotice(undefined);
-            setGeorgeAnonOpen(false);
-            setSessionState(s);
-            // Refresh accountProfile so an in-session login (password / SSO /
-            // MFA) gets the same prefill as a page-load bootstrapAuth call.
-            void fetchAccountProfile().then((ap) => setAccountProfile(ap));
-            void initContentStore().then(() => resyncProjects());
-          }}
-          onSignOut={handleSignOut}
-          onNeedsSetup={() => setNeedsSetup(true)}
-          onManageUsers={() => { if (session?.role === "admin") transitionToView("users-admin"); }}
-          onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
-          onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); transitionToView("token-usage"); } }}
-          onCreateProject={beginCreateProject}
-          onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
-          onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
-          onGuidance={() => transitionToView("guidance")}
-          onBackToLanding={() => goHome()}
-          onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
-          initialNotice={sessionExpiredNotice}
-          resetToken={passwordResetToken}
-          isWelcomeLink={isWelcomeLink}
-          hasPassword={hasPassword}
-          discountInviteToken={discountInviteToken}
-        />
+        {inviteBannerNode}
+        <div data-testid="platform-home-banner-offset" style={{ marginTop: "var(--banner-h, 0px)" }}>
+          <PlatformHomePage
+            backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
+            session={session}
+            oauthRedirectParams={oauthRedirectParams}
+            onOauthParamsConsumed={() => setOauthRedirectParams(null)}
+            onLoginSuccess={(s) => {
+              setSessionExpiredNotice(undefined);
+              setGeorgeAnonOpen(false);
+              setSessionState(s);
+              // Refresh accountProfile so an in-session login (password / SSO /
+              // MFA) gets the same prefill as a page-load bootstrapAuth call.
+              void fetchAccountProfile().then((ap) => setAccountProfile(ap));
+              void initContentStore().then(() => resyncProjects());
+            }}
+            onSignOut={handleSignOut}
+            onNeedsSetup={() => setNeedsSetup(true)}
+            onManageUsers={() => { if (session?.role === "admin") transitionToView("users-admin"); }}
+            onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
+            onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); transitionToView("token-usage"); } }}
+            onCreateProject={beginCreateProject}
+            onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
+            onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
+            onGuidance={() => transitionToView("guidance")}
+            onBackToLanding={() => goHome()}
+            onOpenGeorge={!session ? () => setGeorgeAnonOpen(true) : undefined}
+            initialNotice={sessionExpiredNotice}
+            resetToken={passwordResetToken}
+            isWelcomeLink={isWelcomeLink}
+            hasPassword={hasPassword}
+            discountInviteToken={discountInviteToken}
+          />
+        </div>
         {!session && (
           <GeorgeSupport
             open={georgeAnonOpen}
@@ -1217,6 +1283,7 @@ function App() {
         onWorkspacesChanged={() => {
           void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
         }}
+        onInvitationAccepted={handleInvitationAccepted}
         onSignOut={handleSignOut}
       />
     );
@@ -1236,22 +1303,10 @@ function App() {
     );
   }
 
-  // Whether the invite banner should be shown in the current render.
-  const showInviteBanner = !authLoading && !!session && pendingInvites.length > 0 && !inviteBannerDismissed;
-
   if (!activeClient) {
     return (
       <>
-      {showInviteBanner && (
-        <PendingInvitesBanner
-          invites={pendingInvites}
-          onInviteAccepted={() => {
-            void serverGetMyInvites().then((r) => { if (r.ok && r.invites) setPendingInvites(r.invites); });
-            void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
-          }}
-          onDismiss={() => setInviteBannerDismissed(true)}
-        />
-      )}
+       {inviteBannerNode}
       <ClientSelectorPage
         projects={visibleProjects}
         workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
@@ -1310,16 +1365,7 @@ function App() {
 
   return (
     <>
-    {showInviteBanner && (
-      <PendingInvitesBanner
-        invites={pendingInvites}
-        onInviteAccepted={() => {
-          void serverGetMyInvites().then((r) => { if (r.ok && r.invites) setPendingInvites(r.invites); });
-          void serverGetWorkspaces().then((ws: WorkspaceInfo[]) => { if (ws.length > 0) setWorkspaces(ws); });
-        }}
-        onDismiss={() => setInviteBannerDismissed(true)}
-      />
-    )}
+    {inviteBannerNode}
     <div className="flex w-full font-['Inter',sans-serif]" style={{ background: "#f8fafc", marginTop: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}>
       <Sidebar
         workspaceSwitcher={(workspaces.length > 1 || agencyImpersonatedBy) ? (
