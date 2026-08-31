@@ -1323,7 +1323,7 @@ function App() {
     return (
       <>
         {inviteBannerNode}
-        <div data-testid="platform-home-banner-offset" style={{ marginTop: "var(--banner-h, 0px)" }}>
+        <div data-testid="platform-home-banner-offset" className="min-w-0 max-w-full overflow-x-hidden" style={{ marginTop: "var(--banner-h, 0px)" }}>
           <PlatformHomePage
             backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} light /> : undefined}
             session={session}

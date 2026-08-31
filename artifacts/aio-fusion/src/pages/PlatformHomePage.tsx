@@ -323,24 +323,24 @@ function PlatformHomePage({
   const accent = "#C8497A";
   const accentSoft = "#FBE3ED";
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "white", color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
-        <button onClick={onBackToLanding} className="flex items-center gap-3.5">
-          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
+    <div data-testid="platform-home" className="min-h-screen min-w-0 max-w-full overflow-x-hidden font-['Inter',sans-serif]" style={{ background: "white", color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex flex-wrap items-center justify-between gap-3 sm:gap-6" style={{ background: "#1A647B", borderBottom: `1px solid rgba(255,255,255,0.15)` }}>
+        <button onClick={onBackToLanding} className="flex min-w-0 items-center gap-3.5">
+          <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-14 sm:h-30 w-auto max-w-full" />
         </button>
-        <div className="flex items-center gap-4 sm:gap-6">
+        <div data-testid="platform-home-navigation" className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-3 sm:flex-none sm:gap-6">
           {backToAgency}
           <button
             onClick={onBackToLanding}
-            className="flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
+            className="flex shrink-0 items-center gap-2 px-4 sm:px-7 py-3 sm:py-3.5 text-[12px] sm:text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 rounded-xl"
             style={{ background: accent, color: "white" }}
           >
-            <ArrowLeft size={16} /> Back to website
+            <ArrowLeft size={16} /> <span className="sm:hidden">Website</span><span className="hidden sm:inline">Back to website</span>
           </button>
         </div>
       </header>
 
-      <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-7xl mx-auto">
+      <div className="min-w-0 max-w-7xl mx-auto px-4 sm:px-10 py-10 sm:py-14">
         <div className="mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accent }}>
             <Sparkles size={12} color="white" />
@@ -349,7 +349,7 @@ function PlatformHomePage({
           <h1 className="text-4xl sm:text-5xl lg:text-6xl leading-[1.05] tracking-tight" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
             Welcome to <span style={{ color: accent }}>AIO Fusion</span><span className="text-2xl sm:text-3xl lg:text-4xl font-light ml-2 align-baseline" style={{ color: vars.g500 }}>(beta)</span>
           </h1>
-          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] whitespace-nowrap" style={{ color: vars.g600 }}>
+          <p className="text-[16px] sm:text-[18px] font-light mt-4 leading-[1.7] sm:whitespace-nowrap" style={{ color: vars.g600 }}>
             {session
               ? "Manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."
               : "Sign in to manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."}
@@ -869,37 +869,37 @@ function PlatformHomePage({
         ) : (
           <div className="rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 transition-all" style={{ background: "#1A647B", boxShadow: "0 12px 32px -12px rgba(26,100,123,0.35)" }}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
+              <div data-testid="platform-home-account-identity" className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.2)", color: "white" }}>
                   <User size={24} />
                 </div>
-                <div>
-                  <span className="inline-flex items-center mb-1.5 px-5 py-2 rounded-md text-[20px] font-bold uppercase tracking-[0.16em]" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
+                <div className="min-w-0 flex-1">
+                  <span className="inline-flex max-w-full items-center mb-1.5 px-3 sm:px-5 py-2 rounded-md text-[15px] sm:text-[20px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em] break-words" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
                     {session.role === "client" ? "Client Account" : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                   </span>
                   <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
-                  <h2 className="text-[22px] font-bold leading-tight mt-0.5" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
+                  <h2 className="text-[22px] font-bold leading-tight mt-0.5 break-words" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>
                     {getSessionIdentityLabels(session).signedInAs}
                   </h2>
-                  <div className="mt-2 space-y-0.5 text-[12px]" style={{ color: "rgba(255,255,255,0.78)" }}>
+                  <div className="mt-2 space-y-0.5 text-[12px] break-words" style={{ color: "rgba(255,255,255,0.78)" }}>
                     <p><span className="font-bold uppercase tracking-[0.12em]">Company / workspace:</span> {getSessionIdentityLabels(session).companyName}</p>
                     <p><span className="font-bold uppercase tracking-[0.12em]">Access:</span> {getSessionIdentityLabels(session).access}</p>
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+              <div data-testid="platform-home-project-controls" className="grid w-full grid-cols-1 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                 {session.role === "admin" ? (
                   <>
                     <button
                       onClick={onManageUsers}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                      className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                       style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
                       <Users size={15} /> Manage Accounts
                     </button>
                     <button
                       onClick={onTokenUsage}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                      className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                       style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
                       Token Usage
@@ -908,7 +908,7 @@ function PlatformHomePage({
                 ) : (
                   <button
                     onClick={onManageSubAccounts}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                    className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
                     style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                   >
                     {canCreateSubAccounts(session.role) ? <><Users size={15} /> My Account</> : <><User size={15} /> Account Settings</>}
@@ -916,7 +916,7 @@ function PlatformHomePage({
                 )}
                 <button
                   onClick={onContinueToProjects}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
+                  className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-md hover:brightness-110"
                   style={{ background: accent }}
                 >
                   Project Hub <ArrowRight size={15} />
