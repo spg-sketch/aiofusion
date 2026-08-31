@@ -90,6 +90,7 @@ const ITEM_ICONS: Record<string, typeof BarChart3> = {
 function SidebarContent({
   currentPage,
   onNavigate,
+  onPreloadNavigate,
   activeClient,
   onBackToClients,
   onItemClick,
@@ -107,6 +108,7 @@ function SidebarContent({
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
+  onPreloadNavigate?: (p: string) => void;
   activeClient: Client;
   onBackToClients: () => void;
   onItemClick?: () => void;
@@ -279,6 +281,8 @@ function SidebarContent({
         >
           <button
             onClick={() => { onNavigate("dashboard"); onItemClick?.(); }}
+            onMouseEnter={() => onPreloadNavigate?.("dashboard")}
+            onFocus={() => onPreloadNavigate?.("dashboard")}
             className={`group flex items-center gap-3 w-full rounded-2xl px-3 py-3 text-[14px] font-bold transition-all ${
               currentPage === "dashboard" ? "" : "hover:bg-white/25"
             }`}
@@ -325,6 +329,8 @@ function SidebarContent({
                   )}
                   <button
                     onClick={() => { if (!isLocked) { onNavigate(item.id); onItemClick?.(); } }}
+                    onMouseEnter={() => { if (!isLocked) onPreloadNavigate?.(item.id); }}
+                    onFocus={() => { if (!isLocked) onPreloadNavigate?.(item.id); }}
                     disabled={isLocked}
                     aria-disabled={isLocked}
                     title={isLocked ? `${item.label} is coming in V2` : undefined}
@@ -507,6 +513,7 @@ function SidebarContent({
 export function Sidebar({
   currentPage,
   onNavigate,
+  onPreloadNavigate,
   activeClient,
   onBackToClients,
   onLogoUpdate,
@@ -521,6 +528,7 @@ export function Sidebar({
 }: {
   currentPage: string;
   onNavigate: (p: string) => void;
+  onPreloadNavigate?: (p: string) => void;
   activeClient: Client;
   onBackToClients: () => void;
   onLogoUpdate?: (clientId: string, dataUrl: string) => void;
@@ -588,7 +596,7 @@ export function Sidebar({
         <div className="md:hidden fixed inset-0 z-40" style={{ paddingTop: "calc(3.5rem + var(--banner-h, 0px))" }} onClick={() => setMobileOpen(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-[280px] h-full flex flex-col" style={{ background: "white" }} onClick={(e) => e.stopPropagation()}>
-            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
+            <SidebarContent currentPage={currentPage} onNavigate={onNavigate} onPreloadNavigate={onPreloadNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onItemClick={() => setMobileOpen(false)} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
           </div>
         </div>
       )}
@@ -597,7 +605,7 @@ export function Sidebar({
         className="hidden md:flex flex-col border-r flex-shrink-0 sticky relative"
         style={{ width: `${width}px`, borderColor: vars.g200, background: "white", top: "var(--banner-h, 0px)", height: "calc(100vh - var(--banner-h, 0px))" }}
       >
-        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
+        <SidebarContent currentPage={currentPage} onNavigate={onNavigate} onPreloadNavigate={onPreloadNavigate} activeClient={activeClient} onBackToClients={onBackToClients} onLogoUpdate={onLogoUpdate} onOpenSavedAudit={onOpenSavedAudit} onOpenSavedDiagnostic={onOpenSavedDiagnostic} onOpenSavedContentGeo={onOpenSavedContentGeo} onOpenSavedTechGeo={onOpenSavedTechGeo} onOpenGeorge={onOpenGeorge} georgeHasUpdate={georgeHasUpdate} workspaceSwitcher={workspaceSwitcher} onOpenAccount={onOpenAccount} />
         {/* Drag handle */}
         <div
           onMouseDown={onDragHandleMouseDown}

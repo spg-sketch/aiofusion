@@ -141,19 +141,86 @@ import { GenerateFromUrlModal } from "./components/GenerateFromUrlModal";
 import { Sidebar } from "./components/Sidebar";
 import { GeorgeSupport } from "./components/GeorgeSupport";
 import ClientSelectorPage from "./pages/ClientSelectorPage";
+import { RouteLoading } from "./components/RouteLoading";
+import { preloadRoute, scheduleIdlePreloads, type RoutePreloader } from "./lib/routePreloading";
+
+const routePreloadingEnabled = import.meta.env.MODE !== "test";
+
+function warmRoute(load: RoutePreloader | undefined): void {
+  if (routePreloadingEnabled) preloadRoute(load);
+}
 
 // ---------------------------------------------------------------------------
 // Route-level lazy chunks - each page is only downloaded when first visited.
 // ---------------------------------------------------------------------------
+const loadIntakePage = () => import("./IntakeForm");
+const loadReportPage = () => import("./ReportPage");
+const loadSeoAuditPage = () => import("./SeoAuditPage");
+const loadLlmCheckPage = () => import("./LlmCheckPage");
+const loadLandingPage = () => import("./marketing/LandingPage");
+const loadPricingPage = () => import("./marketing/PricingPage");
+const loadForInhousePage = () => import("./marketing/ForInhousePage");
+const loadForAgenciesPage = () => import("./marketing/ForAgenciesPage");
+const loadInsightsPage = () => import("./marketing/InsightsPage");
+const loadAboutPage = () => import("./marketing/AboutPage");
+const loadContactPage = () => import("./marketing/ContactPage");
+const loadTrustSecurityPage = () => import("./marketing/TrustSecurityPage");
+const loadPrivacyPolicyPage = () => import("./marketing/PrivacyPolicyPage");
+const loadTermsConditionsPage = () => import("./marketing/TermsConditionsPage");
+const loadForAgentsPage = () => import("./marketing/ForAgentsPage");
+const loadDashboardPage = () =>
+  import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }));
+const loadDiagnosticPage = () =>
+  import("./pages/DiagnosticPage").then((m) => ({ default: m.DiagnosticPage }));
+const loadOptimiserPage = () =>
+  import("./pages/OptimiserPage").then((m) => ({ default: m.OptimiserPage }));
+const loadPlannerPage = () =>
+  import("./pages/PlannerPage").then((m) => ({ default: m.PlannerPage }));
+const loadReleaseGatewayPage = () =>
+  import("./pages/ReleaseGatewayPage").then((m) => ({ default: m.ReleaseGatewayPage }));
+const loadArchivePage = () =>
+  import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage }));
+const loadGeoContentPage = () =>
+  import("./pages/GeoContentPage").then((m) => ({ default: m.GeoContentPage }));
+const loadContentCreatorPage = () =>
+  import("./pages/ContentCreatorPage").then((m) => ({ default: m.ContentCreatorPage }));
+const loadMediaResearchPage = () =>
+  import("./pages/MediaResearchPage").then((m) => ({ default: m.MediaResearchPage }));
+const loadMarketingIntelligencePage = () =>
+  import("./pages/MarketingIntelligencePage").then((m) => ({ default: m.MarketingIntelligencePage }));
+const loadPlatformHomePage = () =>
+  import("./pages/PlatformHomePage").then((m) => ({ default: m.PlatformHomePage }));
+const UsersAdminPage = lazy(() =>
+  import("./pages/UsersAdminPage").then((m) => ({ default: m.UsersAdminPage }))
+);
+const ContactSubmissionsAdminPage = lazy(() =>
+  import("./pages/ContactSubmissionsAdminPage").then((m) => ({ default: m.ContactSubmissionsAdminPage }))
+);
+const loadSubAccountsPage = () =>
+  import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }));
+
+const InviteAcceptPage = lazy(() =>
+  import("./pages/InviteAcceptPage").then((m) => ({ default: m.InviteAcceptPage }))
+);
+const loadGuidancePage = () =>
+  import("./pages/GuidancePage").then((m) => ({ default: m.GuidancePage }));
+const loadArchivedProjectsPage = () =>
+  import("./pages/ArchivedProjectsPage").then((m) => ({ default: m.ArchivedProjectsPage }));
+const loadMediaDatabasePage = () =>
+  import("./pages/MediaDatabasePage").then((m) => ({ default: m.MediaDatabasePage }));
+const SupportAdminPage = lazy(() =>
+  import("./pages/SupportAdminPage").then((m) => ({ default: m.SupportAdminPage }))
+);
+const LeadsAdminPage = lazy(() =>
+  import("./pages/LeadsAdminPage").then((m) => ({ default: m.LeadsAdminPage }))
+);
+
 const IntakePage = lazy(() => import("./IntakeForm"));
 const ReportPage = lazy(() => import("./ReportPage"));
-const PressReleasePage = lazy(() => import("./PressReleasePage"));
 const SeoAuditPage = lazy(() => import("./SeoAuditPage"));
 const LlmCheckPage = lazy(() => import("./LlmCheckPage"));
-
 const LandingPageC = lazy(() => import("./marketing/LandingPage"));
 const PricingPage = lazy(() => import("./marketing/PricingPage"));
-const MarketingPage = lazy(() => import("./marketing/MarketingPage"));
 const ForInhousePage = lazy(() => import("./marketing/ForInhousePage"));
 const ForAgenciesPage = lazy(() => import("./marketing/ForAgenciesPage"));
 const InsightsPage = lazy(() => import("./marketing/InsightsPage"));
@@ -162,7 +229,6 @@ const ContactPage = lazy(() => import("./marketing/ContactPage"));
 const TrustSecurityPage = lazy(() => import("./marketing/TrustSecurityPage"));
 const PrivacyPolicyPage = lazy(() => import("./marketing/PrivacyPolicyPage"));
 const TermsConditionsPage = lazy(() => import("./marketing/TermsConditionsPage"));
-
 const ForAgentsPage = lazy(() => import("./marketing/ForAgentsPage"));
 const DashboardPage = lazy(() =>
   import("./pages/DashboardPage").then((m) => ({ default: m.DashboardPage }))
@@ -185,9 +251,6 @@ const ArchivePage = lazy(() =>
 const GeoContentPage = lazy(() =>
   import("./pages/GeoContentPage").then((m) => ({ default: m.GeoContentPage }))
 );
-const PlaceholderPage = lazy(() =>
-  import("./pages/PlaceholderPage").then((m) => ({ default: m.PlaceholderPage }))
-);
 const ContentCreatorPage = lazy(() =>
   import("./pages/ContentCreatorPage").then((m) => ({ default: m.ContentCreatorPage }))
 );
@@ -200,18 +263,8 @@ const MarketingIntelligencePage = lazy(() =>
 const PlatformHomePage = lazy(() =>
   import("./pages/PlatformHomePage").then((m) => ({ default: m.PlatformHomePage }))
 );
-const UsersAdminPage = lazy(() =>
-  import("./pages/UsersAdminPage").then((m) => ({ default: m.UsersAdminPage }))
-);
-const ContactSubmissionsAdminPage = lazy(() =>
-  import("./pages/ContactSubmissionsAdminPage").then((m) => ({ default: m.ContactSubmissionsAdminPage }))
-);
 const SubAccountsPage = lazy(() =>
   import("./pages/SubAccountsPage").then((m) => ({ default: m.SubAccountsPage }))
-);
-
-const InviteAcceptPage = lazy(() =>
-  import("./pages/InviteAcceptPage").then((m) => ({ default: m.InviteAcceptPage }))
 );
 const GuidancePage = lazy(() =>
   import("./pages/GuidancePage").then((m) => ({ default: m.GuidancePage }))
@@ -222,12 +275,60 @@ const ArchivedProjectsPage = lazy(() =>
 const MediaDatabasePage = lazy(() =>
   import("./pages/MediaDatabasePage").then((m) => ({ default: m.MediaDatabasePage }))
 );
-const SupportAdminPage = lazy(() =>
-  import("./pages/SupportAdminPage").then((m) => ({ default: m.SupportAdminPage }))
-);
-const LeadsAdminPage = lazy(() =>
-  import("./pages/LeadsAdminPage").then((m) => ({ default: m.LeadsAdminPage }))
-);
+
+const VIEW_PRELOADERS: Record<string, RoutePreloader> = {
+  landing: loadLandingPage,
+  "platform-home": loadPlatformHomePage,
+  "for-inhouse": loadForInhousePage,
+  "for-agencies": loadForAgenciesPage,
+  "for-agents": loadForAgentsPage,
+  insights: loadInsightsPage,
+  about: loadAboutPage,
+  contact: loadContactPage,
+  pricing: loadPricingPage,
+  "trust-security": loadTrustSecurityPage,
+  "privacy-policy": loadPrivacyPolicyPage,
+  "terms-conditions": loadTermsConditionsPage,
+  "sub-accounts": loadSubAccountsPage,
+  guidance: loadGuidancePage,
+  "archived-projects": loadArchivedProjectsPage,
+};
+
+const PAGE_PRELOADERS: Record<string, RoutePreloader> = {
+  dashboard: loadDashboardPage,
+  intake: loadIntakePage,
+  diagnostic: loadDiagnosticPage,
+  "llm-check": loadLlmCheckPage,
+  optimiser: loadOptimiserPage,
+  "seo-audit": loadSeoAuditPage,
+  "geo-content": loadGeoContentPage,
+  planner: loadPlannerPage,
+  creator: loadContentCreatorPage,
+  "media-research": loadMediaResearchPage,
+  "marketing-intel": loadMarketingIntelligencePage,
+  gateway: loadReleaseGatewayPage,
+  archive: loadArchivePage,
+  measure: loadReportPage,
+  "media-database": loadMediaDatabasePage,
+};
+
+const PUBLIC_IDLE_PRELOADS: Record<string, RoutePreloader[]> = {
+  landing: [loadPricingPage, loadForInhousePage, loadForAgenciesPage],
+  pricing: [loadLandingPage, loadForInhousePage],
+  insights: [loadLandingPage, loadAboutPage],
+  default: [loadLandingPage, loadPricingPage],
+};
+
+const PROJECT_IDLE_PRELOADS: Record<string, RoutePreloader[]> = {
+  dashboard: [loadIntakePage, loadLlmCheckPage],
+  intake: [loadDashboardPage, loadLlmCheckPage],
+  "llm-check": [loadDiagnosticPage, loadDashboardPage],
+  diagnostic: [loadLlmCheckPage, loadOptimiserPage],
+  planner: [loadContentCreatorPage, loadArchivePage],
+  creator: [loadOptimiserPage, loadArchivePage],
+  optimiser: [loadContentCreatorPage, loadArchivePage],
+  default: [loadDashboardPage],
+};
 
 // Sample/demo agencies have been removed. The Project Hub now shows only real,
 // user-created projects loaded from localStorage.
@@ -304,9 +405,11 @@ function App() {
   // transition so React keeps the current page visible until the destination
   // is ready instead of replacing the whole app with the root Suspense spinner.
   const transitionToView = useCallback((nextView: typeof view) => {
+    warmRoute(VIEW_PRELOADERS[nextView]);
     startTransition(() => setView(nextView));
   }, []);
   const transitionToPage = useCallback((nextPage: string) => {
+    warmRoute(PAGE_PRELOADERS[nextPage]);
     startTransition(() => setCurrentPage(nextPage));
   }, []);
   const [pendingAuditId, setPendingAuditId] = useState<string | null>(null);
@@ -334,6 +437,60 @@ function App() {
   // assign the project to that client account.
   const [showGenerateFromUrl, setShowGenerateFromUrl] = useState(false);
   const [storedProjects, setStoredProjects] = useState<Client[]>([]);
+
+  // Warm only the small set of destinations that are likely from the current
+  // context. Each chunk is queued separately during idle time, preserving route
+  // splitting and yielding between downloads.
+  useEffect(() => {
+    if (!routePreloadingEnabled) return;
+    if (view === "platform-home") {
+      return scheduleIdlePreloads([
+        loadDashboardPage,
+        loadSubAccountsPage,
+        loadGuidancePage,
+        loadArchivedProjectsPage,
+      ]);
+    }
+    if (view === "platform") {
+      return scheduleIdlePreloads(
+        PROJECT_IDLE_PRELOADS[currentPage] ?? PROJECT_IDLE_PRELOADS.default,
+      );
+    }
+    return scheduleIdlePreloads(
+      PUBLIC_IDLE_PRELOADS[view] ?? PUBLIC_IDLE_PRELOADS.default,
+    );
+  }, [view, currentPage]);
+
+  // Marketing navigation is mostly ordinary same-origin links. Event
+  // delegation provides hover/focus warming without coupling every marketing
+  // component to the route loader.
+  useEffect(() => {
+    if (!routePreloadingEnabled) return;
+    const warmLinkedRoute = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor) return;
+      let url: URL;
+      try {
+        url = new URL(anchor.href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      const base = appBase().replace(/\/+$/, "");
+      let path = url.pathname;
+      if (base && (path === base || path.startsWith(`${base}/`))) path = path.slice(base.length);
+      const slug = path.replace(/^\/+/, "").split("/")[0].toLowerCase();
+      warmRoute(VIEW_PRELOADERS[SLUG_TO_VIEW[slug] ?? (slug ? "" : "landing")]);
+    };
+    document.addEventListener("pointerover", warmLinkedRoute, { capture: true, passive: true });
+    document.addEventListener("focusin", warmLinkedRoute, true);
+    return () => {
+      document.removeEventListener("pointerover", warmLinkedRoute, true);
+      document.removeEventListener("focusin", warmLinkedRoute, true);
+    };
+  }, []);
 
   const [tokenUsageRows, setTokenUsageRows] = useState<TokenUsageRow[] | null>(null);
   const [tokenDailyRows, setTokenDailyRows] = useState<TokenDailyRow[] | null>(null);
@@ -502,6 +659,7 @@ function App() {
     setNamingProject(false);
     if (logo) setClientLogos((prev) => ({ ...prev, [project.id]: logo }));
     setActiveClient(logo ? { ...project, logo } : project);
+    warmRoute(loadIntakePage);
     startTransition(() => {
       setCurrentPage("intake");
       setView("platform");
@@ -844,7 +1002,8 @@ function App() {
       params.has("aio_switched_master") ||
       params.has("aio_switched_workspace")
     ) {
-      setView("platform-home");
+      warmRoute(loadPlatformHomePage);
+      startTransition(() => setView("platform-home"));
     }
     if (params.has("needs_setup")) {
       setNeedsSetup(true);
@@ -859,13 +1018,15 @@ function App() {
       // SubAccountsPage via the captured accountSection state). If the user
       // is not signed in yet, the sub-accounts guard sends them to the login
       // page and accountSectionPending re-navigates after sign-in.
-      setView("platform-home");
+      warmRoute(loadPlatformHomePage);
+      startTransition(() => setView("platform-home"));
     }
     if (params.has("aio_session_expired")) {
       setSessionExpiredNotice(
         "Your admin session expired while in view-as mode. Please sign in again.",
       );
-      setView("platform-home");
+      warmRoute(loadPlatformHomePage);
+      startTransition(() => setView("platform-home"));
     }
   }, []);
 
@@ -984,7 +1145,7 @@ function App() {
     // account_section param is a leftover from the page the shortcut was
     // clicked on, not a deep link to follow.
     if (suppressAccountSectionNav.current) return;
-    setView("sub-accounts");
+    transitionToView("sub-accounts");
   }, [accountSection, authLoading, session]);
 
   // Access guard for the admin-only users page. Done in an effect (not during
@@ -997,15 +1158,15 @@ function App() {
     if (authLoading) return;
     if (view === "users-admin" && (!session || session.role !== "admin")) {
       replaceNextNav.current = true;
-      setView("platform-home");
+      transitionToView("platform-home");
     }
     // The client-accounts page needs a signed-in account, but is open to any
     // role (admins manage everyone via the User Management page instead).
     if (view === "sub-accounts" && !session) {
       replaceNextNav.current = true;
-      setView("platform-home");
+      transitionToView("platform-home");
     }
-  }, [view, session, authLoading]);
+  }, [view, session, authLoading, transitionToView]);
 
   // Persist project logos whenever they change so they survive a refresh.
   useEffect(() => { saveClientLogos(clientLogos); }, [clientLogos]);
@@ -1025,7 +1186,7 @@ function App() {
     // confirmed by the server and may not be null for much longer.
     if (authLoading) return;
     if (!session) {
-      setView("platform-home");
+      transitionToView("platform-home");
       window.scrollTo(0, 0);
       return;
     }
@@ -1046,6 +1207,7 @@ function App() {
 
   const goToView = (v: string) => {
     if (v === "for-inhouse" || v === "insights" || v === "about" || v === "contact" || v === "for-agents" || v === "for-agencies" || v === "pricing" || v === "trust-security" || v === "privacy-policy" || v === "terms-conditions") {
+      warmRoute(VIEW_PRELOADERS[v]);
       startTransition(() => {
         if (v === "insights") { setInsightsFilter(null); setInsightsArticleId(null); }
         setView(v as any);
@@ -1069,7 +1231,7 @@ function App() {
   // page reloads into the workspace dashboard (no account-type selection).
   if (inviteToken) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <InviteAcceptPage
           token={inviteToken}
           onAccepted={() => {
@@ -1087,7 +1249,7 @@ function App() {
   // so their billing members fall through to the normal read-only app instead.
   if (session?.membershipRole === "billing" && !session.agencyManagedClient && !authLoading) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <BillingOnlyPage workspace={session.username} onSignOut={handleSignOut} />
       </Suspense>
     );
@@ -1214,7 +1376,7 @@ function App() {
   if ((view as string) === "leads-admin") {
     if (!session || session.role !== "admin") return null;
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <LeadsAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
@@ -1222,7 +1384,7 @@ function App() {
   if ((view as string) === "support-admin") {
     if (!session || session.role !== "admin") return null;
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <SupportAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
@@ -1230,7 +1392,7 @@ function App() {
   if ((view as string) === "contact-admin") {
     if (!session || session.role !== "admin") return null;
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <ContactSubmissionsAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
     );
@@ -1297,7 +1459,7 @@ function App() {
 
   if (view === "for-agents") {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoading fullScreen />}>
         <ForAgentsPage onLogin={enterPlatform} onBack={goHome} onNavigate={goToView} isAuthed={isAuthed} />
       </Suspense>
     );
@@ -1376,6 +1538,7 @@ function App() {
         ) : undefined}
         currentPage={currentPage}
         onNavigate={transitionToPage}
+        onPreloadNavigate={routePreloadingEnabled ? (page) => warmRoute(PAGE_PRELOADERS[page]) : undefined}
         activeClient={activeClient}
         onBackToClients={() => setActiveClient(null)}
         onLogoUpdate={handleLogoUpdate}

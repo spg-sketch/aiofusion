@@ -11,3 +11,9 @@ Rendering the whole `App` (not just a page) in jsdom works, but needs:
 
 **Why:** the redirect-param regression tests (oauth_status/verify_status/reset_token) render App end-to-end to lock in the capture-before-history-sync ordering.
 **How to apply:** copy the beforeEach in `src/App.redirect-params.test.tsx` for any future App-level test. After remount with a clean URL, App lands on the landing view — don't assert sign-in text; assert absence of the stale panel.
+
+**Rule:** Background route work in App-level tests must not bypass mocked page boundaries.
+
+**Why:** Asynchronous page warming can make a test render a real component instead of its intended mock, and shared control labels can let that test pass accidentally.
+
+**How to apply:** Disable nonessential background imports in App-level tests and include at least one mock-only sentinel assertion.
