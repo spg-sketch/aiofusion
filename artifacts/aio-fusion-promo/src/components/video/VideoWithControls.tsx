@@ -208,8 +208,26 @@ export default function VideoWithControls() {
 
   const barVisible = !collapsed || hovering || tapPinned;
 
-  // Export path: no props, preserves recording markers
-  if (!isIframed) return <VideoTemplate />;
+  // The direct public experience must not begin with audible audio. Keep the
+  // unmute action outside the video template so it is available before audio
+  // starts and remains keyboard accessible.
+  if (!isIframed) {
+    return (
+      <div className="relative w-full h-screen">
+        <VideoTemplate muted={muted} />
+        <button
+          type="button"
+          onClick={() => setMuted((current) => !current)}
+          className="absolute bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-black/65 px-4 py-3 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/80 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black"
+          aria-label={muted ? "Play promo with sound" : "Mute promo audio"}
+          aria-pressed={!muted}
+        >
+          {muted ? <VolumeX className="h-5 w-5" aria-hidden="true" /> : <Volume2 className="h-5 w-5" aria-hidden="true" />}
+          {muted ? "Play with sound" : "Mute"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-screen">

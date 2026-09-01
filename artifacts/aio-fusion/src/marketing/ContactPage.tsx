@@ -12,15 +12,16 @@ const CREAM_DEEP = "#e2e8f0";
 
 interface FieldProps {
   label: string;
+  id: string;
   required?: boolean;
   children: React.ReactNode;
   hint?: string;
 }
 
-function Field({ label, required, children, hint }: FieldProps) {
+function Field({ label, id, required, children, hint }: FieldProps) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[13px] font-semibold" style={{ color: NAVY }}>
+      <label htmlFor={id} className="text-[13px] font-semibold" style={{ color: NAVY }}>
         {label}
         {required && <span style={{ color: RASPBERRY }}> *</span>}
       </label>
@@ -69,7 +70,11 @@ function BookDemoForm() {
 
   if (status === "success") {
     return (
-      <div className="flex flex-col items-center gap-4 py-12 text-center">
+      <div
+        className="flex flex-col items-center gap-4 py-12 text-center"
+        role="status"
+        aria-live="polite"
+      >
         <div className="w-16 h-16 rounded-full flex items-center justify-center"
              style={{ background: "rgba(200,73,122,0.1)" }}>
           <CheckCircle size={32} color={RASPBERRY} />
@@ -87,8 +92,9 @@ function BookDemoForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="Your name" required>
+        <Field label="Your name" id="book-demo-name" required>
           <input
+            id="book-demo-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -98,8 +104,9 @@ function BookDemoForm() {
             style={inputStyle}
           />
         </Field>
-        <Field label="Work email" required>
+        <Field label="Work email" id="book-demo-email" required>
           <input
+            id="book-demo-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -110,8 +117,9 @@ function BookDemoForm() {
           />
         </Field>
       </div>
-      <Field label="Company" required>
+      <Field label="Company" id="book-demo-company" required>
         <input
+          id="book-demo-company"
           type="text"
           value={company}
           onChange={(e) => setCompany(e.target.value)}
@@ -121,8 +129,14 @@ function BookDemoForm() {
           style={inputStyle}
         />
       </Field>
-      <Field label="What are you hoping to achieve?" required hint="Tell us about your goals so we can tailor the demo.">
+      <Field
+        label="What are you hoping to achieve?"
+        id="book-demo-goal"
+        required
+        hint="Tell us about your goals so we can tailor the demo."
+      >
         <textarea
+          id="book-demo-goal"
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           placeholder="e.g. Improve AI visibility for our clients, track brand mentions in LLM outputs…"
@@ -133,7 +147,9 @@ function BookDemoForm() {
         />
       </Field>
       {status === "error" && (
-        <div className="flex items-start gap-2 p-3 rounded-xl text-[13px]"
+        <div
+          className="flex items-start gap-2 p-3 rounded-xl text-[13px]"
+          role="alert"
              style={{ background: "rgba(239,68,68,0.08)", color: "#b91c1c" }}>
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
           {errorMsg}
@@ -189,7 +205,11 @@ function EnquiryForm() {
 
   if (status === "success") {
     return (
-      <div className="flex flex-col items-center gap-4 py-12 text-center">
+      <div
+        className="flex flex-col items-center gap-4 py-12 text-center"
+        role="status"
+        aria-live="polite"
+      >
         <div className="w-16 h-16 rounded-full flex items-center justify-center"
              style={{ background: "rgba(200,73,122,0.1)" }}>
           <CheckCircle size={32} color={RASPBERRY} />
@@ -211,8 +231,9 @@ function EnquiryForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="Your name" required>
+        <Field label="Your name" id="enquiry-name" required>
           <input
+            id="enquiry-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -222,8 +243,9 @@ function EnquiryForm() {
             style={inputStyle}
           />
         </Field>
-        <Field label="Work email" required>
+        <Field label="Work email" id="enquiry-email" required>
           <input
+            id="enquiry-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -234,8 +256,9 @@ function EnquiryForm() {
           />
         </Field>
       </div>
-      <Field label="Company" hint="Optional">
+      <Field label="Company" id="enquiry-company" hint="Optional">
         <input
+          id="enquiry-company"
           type="text"
           value={company}
           onChange={(e) => setCompany(e.target.value)}
@@ -244,8 +267,9 @@ function EnquiryForm() {
           style={inputStyle}
         />
       </Field>
-      <Field label="Subject" required>
+      <Field label="Subject" id="enquiry-subject" required>
         <input
+          id="enquiry-subject"
           type="text"
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
@@ -255,8 +279,9 @@ function EnquiryForm() {
           style={inputStyle}
         />
       </Field>
-      <Field label="Message" required>
+      <Field label="Message" id="enquiry-message" required>
         <textarea
+          id="enquiry-message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Tell us more…"
@@ -267,7 +292,9 @@ function EnquiryForm() {
         />
       </Field>
       {status === "error" && (
-        <div className="flex items-start gap-2 p-3 rounded-xl text-[13px]"
+        <div
+          className="flex items-start gap-2 p-3 rounded-xl text-[13px]"
+          role="alert"
              style={{ background: "rgba(239,68,68,0.08)", color: "#b91c1c" }}>
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
           {errorMsg}

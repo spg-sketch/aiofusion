@@ -70,7 +70,7 @@ const AUDIO_SEEK_EPSILON_SEC = 0.18;
 export default function VideoTemplate({
   durations = SCENE_DURATIONS,
   loop = true,
-  muted = false,
+  muted = true,
   onSceneChange,
 }: {
   durations?: Record<string, number>;
