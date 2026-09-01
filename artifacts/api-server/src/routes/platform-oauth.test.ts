@@ -333,6 +333,8 @@ function makeGoogleStub(opts: {
   email?: string;
   googleId?: string;
   name?: string;
+  picture?: string;
+  avatarBytes?: Uint8Array;
   /** If true, track whether the token endpoint was ever called. */
   trackTokenCalls?: { called: boolean };
 }) {
@@ -343,6 +345,8 @@ function makeGoogleStub(opts: {
     email = "user@example.com",
     googleId = "google-id-123",
     name = "Test User",
+    picture,
+    avatarBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43]),
     trackTokenCalls,
   } = opts;
 
@@ -360,8 +364,14 @@ function makeGoogleStub(opts: {
       });
     }
     if (u.includes("googleapis.com/oauth2/v2/userinfo")) {
-      return new Response(JSON.stringify({ id: googleId, email, name }), {
+      return new Response(JSON.stringify({ id: googleId, email, name, picture }), {
         status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    if (u.includes("googleusercontent.com")) {
+      return new Response(avatarBytes, {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
       });
     }
     return realFetch(url, init);
@@ -604,6 +614,8 @@ describe("Google POST callback - code redemption", () => {
     await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, USERNAME));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "user:image:%"));
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, `account:image:avatar:${USERNAME}`));
   });
 
   /** POST the code+state to the callback, mimicking the interstitial auto-submit. */
@@ -683,6 +695,68 @@ describe("Google POST callback - code redemption", () => {
     expect(postRes.headers.get("location")).toContain("oauth_status=ok");
     const cookies = parseCookies(postRes.headers);
     expect(cookies["aio_sid"]).toBeTruthy();
+  });
+
+  it("imports the Google picture as a user avatar without touching the workspace logo", async () => {
+    vi.stubGlobal("fetch", makeGoogleStub({
+      email: EMAIL,
+      picture: "https://lh3.googleusercontent.com/a/google-avatar",
+    }));
+    const postRes = await postCallback("valid_code_with_picture", STATE);
+    expect(postRes.status).toBe(302);
+
+    const [user] = await db
+      .select({ id: platformUsersTable.id })
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, EMAIL))
+      .limit(1);
+    expect(user?.id).toBeTruthy();
+    const [avatar] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `user:image:avatar:${user!.id}`))
+      .limit(1);
+    expect(avatar?.value).toMatch(/^data:image\/jpeg;base64,/);
+    const [logo] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:image:logo:${USERNAME}`))
+      .limit(1);
+    expect(logo).toBeUndefined();
+  });
+
+  it("migrates an existing owner avatar instead of replacing it with the Google picture", async () => {
+    const legacyAvatar = `data:image/png;base64,${Buffer.from(new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ])).toString("base64")}`;
+    await db.insert(platformMetaTable).values({
+      key: `account:image:avatar:${USERNAME}`,
+      value: legacyAvatar,
+    });
+    vi.stubGlobal("fetch", makeGoogleStub({
+      email: EMAIL,
+      picture: "https://lh3.googleusercontent.com/a/google-avatar",
+    }));
+    const postRes = await postCallback("valid_code_with_legacy_avatar", STATE);
+    expect(postRes.status).toBe(302);
+
+    const [user] = await db
+      .select({ id: platformUsersTable.id })
+      .from(platformUsersTable)
+      .where(eq(platformUsersTable.email, EMAIL))
+      .limit(1);
+    const [avatar] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `user:image:avatar:${user!.id}`))
+      .limit(1);
+    expect(avatar?.value).toBe(legacyAvatar);
+    const [legacy] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:image:avatar:${USERNAME}`))
+      .limit(1);
+    expect(legacy).toBeUndefined();
   });
 });
 

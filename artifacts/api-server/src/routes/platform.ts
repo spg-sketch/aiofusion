@@ -79,6 +79,7 @@ import {
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { cspHeaderWithScriptNonce } from "../middleware/csp";
+import { fetchGoogleAvatarDataUrl } from "../lib/google-avatar";
 import {
   getMfaState,
   getMfaEnabledSet,
@@ -2860,23 +2861,31 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=userinfo_failed`);
       return;
     }
-    const userInfo = await userInfoRes.json() as { email?: string; name?: string; given_name?: string };
+    const userInfo = await userInfoRes.json() as { email?: string; name?: string; given_name?: string; id?: string; picture?: string };
     if (!userInfo.email) {
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
     }
-    const googleId = (userInfo as { id?: string }).id ?? "";
+    const googleId = userInfo.id ?? "";
 
     // --- Google account link flow (logged-in user linking their account) ----
     // linkUsername arrives via the aio_oauth_link cookie which survives the
     // GET interstitial unchanged and is cleared above.
     if (linkUsername) {
       const linkAccount = await getAccount(linkUsername);
-      if (!linkAccount || !linkAccount.email) {
+      if (
+        !linkAccount
+        || !req.account?.userId
+        || normUsername(req.account.username) !== normUsername(linkUsername)
+      ) {
         res.redirect(`${origin}/?link_google=error`);
         return;
       }
-      const linkUser = await getUserByEmail(linkAccount.email);
+      const [linkUser] = await db
+        .select()
+        .from(platformUsersTable)
+        .where(eq(platformUsersTable.id, req.account.userId))
+        .limit(1);
       if (!linkUser) {
         res.redirect(`${origin}/?link_google=error`);
         return;
@@ -2893,6 +2902,12 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         }
         await linkGoogleId(linkUser.id, googleId);
       }
+      await maybeImportGoogleAvatar(
+        linkUser.id,
+        linkAccount.username,
+        req.account.membershipRole == null || req.account.membershipRole === "owner",
+        userInfo.picture,
+      );
       res.redirect(`${origin}/?link_google=ok`);
       return;
     }
@@ -2956,6 +2971,14 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
             // Non-fatal.
             userId = existingUser.id;
           }
+          if (userId) {
+            await maybeImportGoogleAvatar(
+              userId,
+              account.username,
+              membership.role === "owner",
+              userInfo.picture,
+            );
+          }
           await finishOauthLoginOrChallenge(req, res, origin, {
             username: account.username,
             role: account.role,
@@ -3000,6 +3023,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       } catch {
         // Non-fatal.
       }
+      if (userId) await maybeImportGoogleAvatar(userId, existing.username, true, userInfo.picture);
       await finishOauthLoginOrChallenge(req, res, origin, {
         username: existing.username,
         role: existing.role,
@@ -3062,6 +3086,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     if (newActiveCompanyId) {
       try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
     }
+    if (newUserId) await maybeImportGoogleAvatar(newUserId, username, false, userInfo.picture);
     void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: displayName, username, method: "google" });
     // Discount invite: redeem any discount token that was carried across the
     // OAuth round-trip in the discount-invite cookie. Fail-soft - a redemption
@@ -5916,9 +5941,89 @@ const IMAGE_KINDS = ["avatar", "logo"] as const;
 type ImageKind = (typeof IMAGE_KINDS)[number];
 const profileImageKey = (kind: ImageKind, username: string) =>
   `account:image:${kind}:${normUsername(username)}`;
+const personalAvatarKey = (userId: string) => `user:image:avatar:${userId}`;
+const googleAvatarOptOutKey = (userId: string) => `user:image:google-opt-out:${userId}`;
+const personalAvatarLockKey = (userId: string) => `personal-avatar:${userId}`;
 // ~600KB of base64 ≈ 450KB image - plenty for a resized avatar/logo.
 const MAX_IMAGE_DATA_URL_LENGTH = 800_000;
 const DATA_URL_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+async function maybeImportGoogleAvatar(
+  userId: string,
+  username: string,
+  canMigrateLegacy: boolean,
+  picture?: string,
+): Promise<void> {
+  if (!picture) return;
+  try {
+    const avatarKey = personalAvatarKey(userId);
+    const legacyKey = canMigrateLegacy ? profileImageKey("avatar", username) : null;
+    const candidateKeys = [
+      avatarKey,
+      googleAvatarOptOutKey(userId),
+      ...(legacyKey ? [legacyKey] : []),
+    ];
+    const currentRows = await db
+      .select({ key: platformMetaTable.key, value: platformMetaTable.value })
+      .from(platformMetaTable)
+      .where(inArray(platformMetaTable.key, candidateKeys));
+    if (currentRows.some((row) => row.key === avatarKey || row.key === googleAvatarOptOutKey(userId))) {
+      return;
+    }
+    const legacyAvatar = legacyKey
+      ? currentRows.find((row) => row.key === legacyKey && DATA_URL_RE.test(row.value))
+      : undefined;
+    if (legacyAvatar) {
+      await db.transaction(async (tx) => {
+        if (process.env.NODE_ENV !== "test") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${personalAvatarLockKey(userId)}))`);
+        }
+        const lockedRows = await tx
+          .select({ key: platformMetaTable.key })
+          .from(platformMetaTable)
+          .where(inArray(platformMetaTable.key, [avatarKey, googleAvatarOptOutKey(userId)]));
+        if (lockedRows.length > 0) return;
+        await tx
+          .insert(platformMetaTable)
+          .values({ key: avatarKey, value: legacyAvatar.value })
+          .onConflictDoNothing({ target: platformMetaTable.key });
+        await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, legacyAvatar.key));
+      });
+      return;
+    }
+    const dataUrl = await fetchGoogleAvatarDataUrl(picture);
+    if (!dataUrl || dataUrl.length > MAX_IMAGE_DATA_URL_LENGTH) return;
+    await db.transaction(async (tx) => {
+      if (process.env.NODE_ENV !== "test") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${personalAvatarLockKey(userId)}))`);
+      }
+      const existingRows = await tx
+        .select({ key: platformMetaTable.key, value: platformMetaTable.value })
+        .from(platformMetaTable)
+        .where(inArray(platformMetaTable.key, candidateKeys));
+      if (existingRows.some((row) => row.key === avatarKey || row.key === googleAvatarOptOutKey(userId))) {
+        return;
+      }
+      const lockedLegacyAvatar = legacyKey
+        ? existingRows.find((row) => row.key === legacyKey && DATA_URL_RE.test(row.value))
+        : undefined;
+      if (lockedLegacyAvatar) {
+        await tx
+          .insert(platformMetaTable)
+          .values({ key: avatarKey, value: lockedLegacyAvatar.value })
+          .onConflictDoNothing({ target: platformMetaTable.key });
+        await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, lockedLegacyAvatar.key));
+        return;
+      }
+      await tx
+        .insert(platformMetaTable)
+        .values({ key: avatarKey, value: dataUrl })
+        .onConflictDoNothing({ target: platformMetaTable.key });
+    });
+  } catch (error) {
+    logger.warn({ err: error, userId }, "Google profile photo import failed");
+  }
+}
 
 router.post("/platform/profile/image", requirePlatformAuth, async (req: Request, res: Response) => {
   try {
@@ -5935,11 +6040,25 @@ router.post("/platform/profile/image", requirePlatformAuth, async (req: Request,
       res.status(400).json({ error: "Image is too large - please use a smaller photo" });
       return;
     }
-    const key = profileImageKey(kind as ImageKind, req.account!.username);
-    await db
-      .insert(platformMetaTable)
-      .values({ key, value: dataUrl })
-      .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: dataUrl } });
+    const imageKind = kind as ImageKind;
+    if (imageKind === "avatar" && req.account!.userId) {
+      const userId = req.account!.userId;
+      await db.transaction(async (tx) => {
+        if (process.env.NODE_ENV !== "test") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${personalAvatarLockKey(userId)}))`);
+        }
+        await tx
+          .insert(platformMetaTable)
+          .values({ key: personalAvatarKey(userId), value: dataUrl })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: dataUrl } });
+      });
+    } else {
+      const key = profileImageKey(imageKind, req.account!.username);
+      await db
+        .insert(platformMetaTable)
+        .values({ key, value: dataUrl })
+        .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: dataUrl } });
+    }
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to save image" });
@@ -5953,9 +6072,40 @@ router.delete("/platform/profile/image/:kind", requirePlatformAuth, async (req: 
       res.status(400).json({ error: "Invalid image kind" });
       return;
     }
-    await db
-      .delete(platformMetaTable)
-      .where(eq(platformMetaTable.key, profileImageKey(kind as ImageKind, req.account!.username)));
+    if (kind === "avatar" && req.account!.userId) {
+      const userId = req.account!.userId;
+      const ownedWorkspaces = await db
+        .select({ slug: platformCompaniesTable.slug })
+        .from(platformMembershipsTable)
+        .innerJoin(platformCompaniesTable, eq(platformMembershipsTable.companyId, platformCompaniesTable.id))
+        .where(and(
+          eq(platformMembershipsTable.userId, userId),
+          eq(platformMembershipsTable.role, "owner"),
+        ));
+      const legacyKeys = Array.from(new Set([
+        profileImageKey("avatar", req.account!.username),
+        ...ownedWorkspaces.map(({ slug }) => profileImageKey("avatar", slug)),
+      ]));
+      await db.transaction(async (tx) => {
+        if (process.env.NODE_ENV !== "test") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${personalAvatarLockKey(userId)}))`);
+        }
+        await tx
+          .delete(platformMetaTable)
+          .where(inArray(platformMetaTable.key, [
+            personalAvatarKey(userId),
+            ...legacyKeys,
+          ]));
+        await tx
+          .insert(platformMetaTable)
+          .values({ key: googleAvatarOptOutKey(userId), value: "true" })
+          .onConflictDoUpdate({ target: platformMetaTable.key, set: { value: "true" } });
+      });
+    } else {
+      await db
+        .delete(platformMetaTable)
+        .where(eq(platformMetaTable.key, profileImageKey(kind as ImageKind, req.account!.username)));
+    }
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Failed to remove image" });
@@ -5969,11 +6119,20 @@ router.get("/platform/profile/image/:kind", requirePlatformAuth, async (req: Req
       res.status(400).json({ error: "Invalid image kind" });
       return;
     }
-    const [row] = await db
+    const imageKind = kind as ImageKind;
+    const keys = imageKind === "avatar" && req.account!.userId
+      ? [
+          personalAvatarKey(req.account!.userId),
+          ...(req.account!.membershipRole == null || req.account!.membershipRole === "owner"
+            ? [profileImageKey("avatar", req.account!.username)]
+            : []),
+        ]
+      : [profileImageKey(imageKind, req.account!.username)];
+    const rows = await db
       .select()
       .from(platformMetaTable)
-      .where(eq(platformMetaTable.key, profileImageKey(kind as ImageKind, req.account!.username)))
-      .limit(1);
+      .where(inArray(platformMetaTable.key, keys));
+    const row = rows.find((candidate) => candidate.key === keys[0]) ?? rows[0];
     if (!row?.value || !DATA_URL_RE.test(row.value)) {
       res.status(404).json({ error: "No image" });
       return;
