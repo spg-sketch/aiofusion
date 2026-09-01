@@ -105,6 +105,7 @@ function buildHeadTags(meta: PageMeta): string {
   <meta property="og:title" content="${escAttr(ogTitle)}" />
   <meta property="og:description" content="${escAttr(ogDesc)}" />
   <meta property="og:type" content="${escAttr(ogType)}" />
+  <meta property="og:locale" content="en_GB" />
   <meta property="og:url" content="${escAttr(meta.canonical)}" />
   <meta property="og:image" content="${escAttr(OG_IMAGE)}" />
   <meta property="og:site_name" content="AIO Fusion" />

@@ -80,6 +80,7 @@ export function PageHead({ meta }: { meta: PageMeta }) {
     upsertMeta('meta[property="og:title"]', "property", "og:title", ogTitle);
     upsertMeta('meta[property="og:description"]', "property", "og:description", ogDesc);
     upsertMeta('meta[property="og:type"]', "property", "og:type", ogType);
+    upsertMeta('meta[property="og:locale"]', "property", "og:locale", "en_GB");
     upsertMeta('meta[property="og:url"]', "property", "og:url", meta.canonical);
     upsertMeta('meta[property="og:image"]', "property", "og:image", OG_IMAGE);
     upsertMeta('meta[property="og:site_name"]', "property", "og:site_name", "AIO Fusion");
