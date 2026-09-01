@@ -236,16 +236,16 @@ function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta
 // Render every canonical public route. Never skip a definition because of
 // missing metadata or a missing component: both are fatal SEO regressions.
 for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
-  const meta: PageMeta = PAGE_META[view];
+  const meta: ArticleMeta = ARTICLE_META[articleSlug];
   if (!meta) {
-    console.error(`  ✗  No page metadata for "${view}"`);
+    console.error(`  ✗  No article metadata for "${articleSlug}"`);
     errors++;
     continue;
   }
 
-  const el = buildElement(view === "landing" ? "" : view);
+  const el = buildElement("insights", articleSlug);
   if (!el) {
-    console.error(`  ✗  No component for public route "${view}"`);
+    console.error(`  ✗  No component for article "${articleSlug}"`);
     errors++;
     continue;
   }
@@ -254,7 +254,7 @@ for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
   try {
     bodyHtml = renderToStaticMarkup(el);
   } catch (err) {
-    console.error(`  ✗  Error rendering public route "${view}":`, err);
+    console.error(`  ✗  Error rendering article "${articleSlug}":`, err);
     errors++;
     continue;
   }

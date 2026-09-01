@@ -60,3 +60,4 @@
 - [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.
 - [Live invitation uniqueness](live-invite-uniqueness.md) — expire/retire invitation rows before applying the state-based one-live-invite-per-email invariant.
 - [Media CSV import safety](aio-fusion-media-csv-import.md) — customer uploads stay active-account scoped, including admin; preview and commit must share dedupe planning, with commit serialized per account.
+- [pnpm audit override ranges](pnpm-audit-override-ranges.md) — broad lower-bound replacements can resolve to a different vulnerable major; pin legacy-major fixes exactly and re-scan the lockfile.
