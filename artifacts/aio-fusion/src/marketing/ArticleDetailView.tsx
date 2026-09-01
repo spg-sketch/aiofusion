@@ -2,6 +2,15 @@ import { ArrowLeft, BookOpen } from "lucide-react";
 import { vars } from "./vars";
 import type { Article, ArticleSection } from "./articles-data";
 
+function formatArticleDate(date: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
 function SectionBlock({ section }: { section: ArticleSection }) {
   if (section.type === "heading") {
     return (
@@ -209,6 +218,13 @@ export default function ArticleDetailView({
           <div>
             <p className="text-[14px] font-semibold" style={{ color: vars.navy }}>AIO Fusion Insights Team</p>
             <p className="text-[12px] font-light" style={{ color: vars.g500 }}>PR & GEO Practitioners</p>
+            <p className="text-[12px] font-light mt-1" style={{ color: vars.g500 }}>
+              Published{" "}
+              <time dateTime={article.datePublished}>{formatArticleDate(article.datePublished)}</time>
+              {" · "}
+              Updated{" "}
+              <time dateTime={article.dateModified}>{formatArticleDate(article.dateModified)}</time>
+            </p>
           </div>
         </div>
 

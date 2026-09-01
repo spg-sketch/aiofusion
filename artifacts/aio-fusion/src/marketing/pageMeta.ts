@@ -8,6 +8,8 @@ export interface PageMeta {
   ogTitle?: string;
   ogDescription?: string;
   ogType?: string;
+  datePublished?: string;
+  dateModified?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
@@ -18,7 +20,12 @@ export function structuredDataFor(meta: PageMeta): Record<string, unknown> | Arr
   if (!meta.jsonLd) return undefined;
   if (meta.ogType !== "article") return meta.jsonLd;
 
-  const articleSchema = Array.isArray(meta.jsonLd) ? meta.jsonLd : [meta.jsonLd];
+  const articleSchema = (Array.isArray(meta.jsonLd) ? meta.jsonLd : [meta.jsonLd]).map((schema) => ({
+    ...schema,
+    datePublished: meta.datePublished,
+    dateModified: meta.dateModified,
+  }));
+  const articleMeta = meta as ArticleMeta;
   return [
     ...articleSchema,
     {
@@ -40,7 +47,7 @@ export function structuredDataFor(meta: PageMeta): Record<string, unknown> | Arr
         {
           "@type": "ListItem",
           position: 3,
-          name: "Article",
+          name: articleMeta.articleTitle,
           item: meta.canonical,
         },
       ],
@@ -242,6 +249,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "Why AI will elevate the role of PR and marketing professionals, not replace them.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -270,6 +279,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "AI systems draw on third-party authority signals. Learn why thought leadership and earned media can help a brand become easier to recognise and cite.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -297,6 +308,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "Generative AI is becoming part of B2B research and supplier discovery. Learn why PR now shapes how brands are represented.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -325,6 +338,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "AI agents pitching journalists. Journalists using agents to find stories. The future of PR is closer than the industry realises.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -353,6 +368,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "AI-generated answers often rely on third-party sources when describing markets and suppliers. Learn what matters for B2B visibility now.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -383,6 +400,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -411,6 +430,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "How AI engines weigh third-party validation when deciding which brands to recommend.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -439,6 +460,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "A practical breakdown of the criteria AI models use to rank, surface and cite content.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -467,6 +490,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "How to evolve your existing SEO programme into one that captures AI visibility.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -495,6 +520,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -523,6 +550,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "How the six GEO signal categories are scored, what each band means, and where to focus first.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -550,6 +579,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "How to review every edit the platform suggests, accept or reject changes, and export the final draft.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",
@@ -579,6 +610,8 @@ export const ARTICLE_META: Record<string, ArticleMeta> = {
     ogType: "article",
     excerpt:
       "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Article",

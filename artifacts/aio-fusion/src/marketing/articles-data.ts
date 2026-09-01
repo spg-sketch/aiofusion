@@ -9,6 +9,8 @@ export interface Article {
   title: string;
   tag: string;
   excerpt: string;
+  datePublished: string;
+  dateModified: string;
   imgSrc: string;
   sections: ArticleSection[];
 }
@@ -19,6 +21,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "PR professionals should not see AI as a threat",
     tag: "Article",
     excerpt: "Why AI will elevate the role of PR and marketing professionals, not replace them.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-1-pr-ai",
     sections: [
       {
@@ -100,6 +104,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Why thought leadership is the engine of AI visibility",
     tag: "Article",
     excerpt: "AI systems draw on third-party authority signals. Thought leadership and earned media can help a brand become easier to recognise and cite.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-2-thought-leadership",
     sections: [
       {
@@ -187,6 +193,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "The battle for B2B AI Authority has begun",
     tag: "Article",
     excerpt: "Generative AI is becoming part of B2B research and supplier discovery. PR now has a direct role in how brands are represented.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-3-b2b-authority",
     sections: [
       {
@@ -275,6 +283,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Why agentic media relations is coming faster than you think",
     tag: "Article",
     excerpt: "AI agents pitching journalists. Journalists using agents to find stories. The future of PR is closer than the industry realises.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-4-agentic-media",
     sections: [
       {
@@ -354,6 +364,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "AI Is Changing the Rules of B2B Visibility: Here's What Actually Matters Now",
     tag: "Article",
     excerpt: "AI-generated answers often rely on third-party sources when they describe markets and suppliers. The structure of B2B visibility is changing.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-5-b2b-visibility",
     sections: [
       {
@@ -442,6 +454,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Why earned media beats paid in the AI era",
     tag: "Article",
     excerpt: "How AI engines weigh third-party validation when deciding which brands to recommend.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-1-pr-ai",
     sections: [
       {
@@ -524,6 +538,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "The 6 GEO signal categories every brand should track",
     tag: "Article",
     excerpt: "A practical breakdown of the criteria AI models use to rank, surface and cite content.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-2-thought-leadership",
     sections: [
       {
@@ -622,6 +638,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "From SEO to AIO: a transition playbook for marketing teams",
     tag: "Playbook",
     excerpt: "How to evolve your existing SEO programme into one that captures AI visibility.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-3-b2b-authority",
     sections: [
       {
@@ -719,6 +737,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "How to set up your first project in AIO Fusion",
     tag: "Guidance",
     excerpt: "Walk-through of Project Set-Up: company basics, spokespeople, key messages, audiences and content cadence.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-4-agentic-media",
     sections: [
       {
@@ -797,6 +817,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Running an Authority Report and reading the results",
     tag: "Guidance",
     excerpt: "How the six GEO signal categories are scored, what each band means, and where to focus first.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-5-b2b-visibility",
     sections: [
       {
@@ -871,6 +893,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Using the Optimiser with tracked changes",
     tag: "Guidance",
     excerpt: "How to review every edit the platform suggests, accept or reject changes, and export the final draft.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-6-pr-attribution",
     sections: [
       {
@@ -941,6 +965,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Building a Media Research list that journalists will actually open",
     tag: "Guidance",
     excerpt: "How the platform verifies beat contacts, what the V/P/U flags mean, and how to use the methodology tab.",
+    datePublished: "2026-08-05",
+    dateModified: "2026-08-07",
     imgSrc: "article-1-pr-ai",
     sections: [
       {
@@ -1015,6 +1041,8 @@ export const NEW_ARTICLES: Article[] = [
     title: "Will AI finally prove that B2B PR drives sales through earned media awareness?",
     tag: "Article",
     excerpt: "The attribution problem that has haunted PR for decades is about to be solved, and AI is the reason why.",
+    datePublished: "2026-07-15",
+    dateModified: "2026-08-07",
     imgSrc: "article-6-pr-attribution",
     sections: [
       {

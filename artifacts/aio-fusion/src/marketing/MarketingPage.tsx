@@ -27,6 +27,7 @@ export default function MarketingPage({
   onBack,
   onNavigate,
   isAuthed,
+  showTitle = true,
 }: {
   title: string;
   eyebrow?: React.ReactNode;
@@ -36,6 +37,7 @@ export default function MarketingPage({
   onNavigate: (v: string) => void;
   dark?: boolean;
   isAuthed?: boolean;
+  showTitle?: boolean;
 }) {
   const cream = "#FBF6EC";
   const ink = "#102B36";
@@ -92,12 +94,14 @@ export default function MarketingPage({
               {eyebrow}
             </div>
           )}
-          <h1
-            className="text-4xl md:text-5xl mb-0 leading-[1.1]"
-            style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
-          >
-            {title}
-          </h1>
+          {showTitle && (
+            <h1
+              className="text-4xl md:text-5xl mb-0 leading-[1.1]"
+              style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}
+            >
+              {title}
+            </h1>
+          )}
         </div>
       </section>
 

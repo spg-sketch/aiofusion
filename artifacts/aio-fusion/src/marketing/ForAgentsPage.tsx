@@ -148,12 +148,12 @@ export default function ForAgentsPage(props: {
         </div>
       </div>
 
-      <p
+      <h2
         className="text-[11px] font-semibold uppercase tracking-[0.2em] mb-4"
         style={{ color: vars.g400 }}
       >
         The full toolset available in the platform
-      </p>
+      </h2>
       <div className="grid sm:grid-cols-2 gap-4 mb-10">
         {TOOLS.map((item) => (
           <div
@@ -168,12 +168,12 @@ export default function ForAgentsPage(props: {
               <Check size={11} color={vars.accent} />
             </div>
             <div>
-              <p
+              <h3
                 className="text-[14px] font-semibold mb-1"
                 style={{ color: vars.navy }}
               >
                 {item.title}
-              </p>
+              </h3>
               <p
                 className="text-[13px] font-light leading-relaxed"
                 style={{ color: vars.g500 }}

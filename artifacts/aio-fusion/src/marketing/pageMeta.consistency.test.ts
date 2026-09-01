@@ -3,6 +3,7 @@
 // every PublicView; these runtime checks keep route slugs and article metadata
 // complete as well.
 import { describe, it, expect } from "vitest";
+import { NEW_ARTICLES } from "./articles-data";
 import {
   PAGE_META,
   ARTICLE_META,
@@ -45,10 +46,28 @@ describe("public page / prerender consistency", () => {
       expect(meta.description.trim()).not.toBe("");
       expect(meta.articleTitle.trim()).not.toBe("");
       expect(meta.canonical).toBe(`https://aiofusion.ai/insights/${slug}`);
+      const article = NEW_ARTICLES.find((candidate) => candidate.id === slug);
+      expect(article, `article content missing for "${slug}"`).toBeTruthy();
+      expect(meta.datePublished).toBe(article?.datePublished);
+      expect(meta.dateModified).toBe(article?.dateModified);
+      expect(meta.datePublished).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(meta.dateModified).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(Date.parse(meta.dateModified ?? "")).toBeGreaterThanOrEqual(
+        Date.parse(meta.datePublished ?? ""),
+      );
       const schemas = structuredDataFor(meta);
       expect(Array.isArray(schemas)).toBe(true);
-      expect((schemas as Array<Record<string, unknown>>).some((schema) => schema["@type"] === "Article")).toBe(true);
-      expect((schemas as Array<Record<string, unknown>>).some((schema) => schema["@type"] === "BreadcrumbList")).toBe(true);
+      const articleSchema = (schemas as Array<Record<string, unknown>>).find(
+        (schema) => schema["@type"] === "Article",
+      );
+      expect(articleSchema?.datePublished).toBe(meta.datePublished);
+      expect(articleSchema?.dateModified).toBe(meta.dateModified);
+      const breadcrumbSchema = (schemas as Array<Record<string, unknown>>).find(
+        (schema) => schema["@type"] === "BreadcrumbList",
+      );
+      expect(breadcrumbSchema).toBeTruthy();
+      const crumbs = breadcrumbSchema?.itemListElement as Array<Record<string, unknown>>;
+      expect(crumbs.at(-1)?.name).toBe(meta.articleTitle);
     }
   });
 

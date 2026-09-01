@@ -62,7 +62,8 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
       const articleMeta = ARTICLE_META[openArticleId];
       return (
         <MarketingPage
-          title=""
+          title={articleMeta?.articleTitle ?? articleData.title}
+          showTitle={false}
           {...marketingProps}
         >
           {articleMeta && <PageHead meta={articleMeta} />}
@@ -133,7 +134,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
                 </div>
                 <div className="p-6">
                   <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
-                  <h3 className="text-[18px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                  <h2 className="text-[18px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h2>
                   <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
                   <span className="inline-flex items-center gap-1 text-[12px] font-semibold mt-4" style={{ color: a.accent }}>Read <ArrowUpRight size={12} /></span>
                 </div>
@@ -153,7 +154,7 @@ export default function InsightsPage(props: { onLogin: () => void; onBack: () =>
               </div>
               <div className="p-6">
                 <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] mb-3 px-2 py-0.5 rounded" style={{ background: `${a.accent}18`, color: a.accent }}>{a.tag}</span>
-                <h3 className="text-[18px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h3>
+                <h2 className="text-[18px] font-semibold mb-2 leading-snug" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>{a.title}</h2>
                 <p className="text-[13px] font-light leading-[1.7]" style={{ color: vars.g500 }}>{a.excerpt}</p>
                 <span className="inline-flex items-center gap-1 text-[12px] font-semibold mt-4" style={{ color: a.accent }}>Read <ArrowUpRight size={12} /></span>
               </div>
