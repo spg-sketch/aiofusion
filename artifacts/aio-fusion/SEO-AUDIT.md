@@ -77,7 +77,7 @@ At the time of this audit, `https://aiofusion.ai` still served the older client-
 After publication:
 
 1. Confirm the homepage source contains its H1, canonical and structured data.
-2. Confirm `/sitemap.xml` contains 25 URLs, including `/aio-fusion-promo/`.
+2. Confirm `/sitemap.xml` contains 24 canonical public URLs.
 3. Inspect the four commercial pages and GEO pillar page in Search Console.
 4. Confirm GA4 receives page views and successful enquiry events.
 5. Record the first Search Console and Core Web Vitals baseline in `SEO-GROWTH-PLAN.md`.

@@ -8,7 +8,6 @@ description: How public marketing pages get static pre-rendered HTML, sitemap, a
 - Uses `renderToStaticMarkup`; React mounts fresh over the markup (no hydrateRoot). Switching to hydration risks mismatch — deliberate choice.
 - Only the 6 insights articles with bodies in `articles-data.ts` are pre-rendered/sitemapped; 6 more are stubs listed in InsightsPage with no content — adding bodies auto-includes them.
 - Production static artifacts deliberately have no wildcard rewrite. Pre-rendered route files must be served directly, while unknown paths must remain 404s instead of soft-404ing to the homepage.
-- The promo subpath owns crawlable fallback HTML, robots.txt and sitemap.xml, and its canonical URL must also appear in the host-root generated sitemap. JavaScript replaces the fallback with the video.
 - **Why:** crawlers previously got an empty SPA shell; this keeps SSG without a framework migration.
 - **How to apply:** when adding public pages/articles, update pageMeta.ts and confirm the prerender route list picks them up; keep robots.txt `Disallow: /api/` and AI-crawler allowances intact.
 

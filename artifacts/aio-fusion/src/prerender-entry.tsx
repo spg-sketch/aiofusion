@@ -172,13 +172,6 @@ function buildSitemap(lastmod: string): string {
     );
   }
 
-  // The promo is a separately built artifact mounted on the same public host.
-  // Its subpath robots.txt is useful when requested directly, but only the
-  // host-root sitemap reliably exposes it to standard crawler discovery.
-  urls.push(
-    `  <url>\n    <loc>${BASE}/aio-fusion-promo/</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>0.7</priority>\n  </url>`,
-  );
-
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
 }
 
@@ -320,7 +313,7 @@ for (const articleSlug of ARTICLE_SLUGS) {
 // Write sitemap.xml
 const sitemapPath = path.join(distPublic, "sitemap.xml");
 fs.writeFileSync(sitemapPath, buildSitemap(lastmod), "utf-8");
-console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + ARTICLE_SLUGS.length + 1} URLs, lastmod ${lastmod})`);
+console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + ARTICLE_SLUGS.length} URLs, lastmod ${lastmod})`);
 
 // Summary
 if (errors > 0) {
