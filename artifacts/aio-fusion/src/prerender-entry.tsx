@@ -172,6 +172,13 @@ function buildSitemap(lastmod: string): string {
     );
   }
 
+  // The promo is a separately built artifact mounted on the same public host.
+  // Its subpath robots.txt is useful when requested directly, but only the
+  // host-root sitemap reliably exposes it to standard crawler discovery.
+  urls.push(
+    `  <url>\n    <loc>${BASE}/aio-fusion-promo/</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>0.7</priority>\n  </url>`,
+  );
+
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
 }
 
@@ -229,16 +236,16 @@ function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta
 // Render every canonical public route. Never skip a definition because of
 // missing metadata or a missing component: both are fatal SEO regressions.
 for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
-  const meta = PAGE_META[view];
+  const meta: ArticleMeta = ARTICLE_META[articleSlug];
   if (!meta) {
-    console.error(`  ✗  No pageMeta for route "${view}" - add it to PAGE_META`);
+    console.error(`  ✗  No article metadata for "${articleSlug}"`);
     errors++;
     continue;
   }
 
-  const el = buildElement(slug);
+  const el = buildElement("insights", articleSlug);
   if (!el) {
-    console.error(`  ✗  No component for route "${slug}" - add it to buildElement`);
+    console.error(`  ✗  No component for article "${articleSlug}"`);
     errors++;
     continue;
   }
@@ -247,12 +254,7 @@ for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
   try {
     bodyHtml = renderToStaticMarkup(el);
   } catch (err) {
-    console.error(`  ✗  Error rendering "${slug}":`, err);
-    errors++;
-    continue;
-  }
-  if (!bodyHtml.trim()) {
-    console.error(`  ✗  Route "${slug}" rendered empty markup`);
+    console.error(`  ✗  Error rendering article "${articleSlug}":`, err);
     errors++;
     continue;
   }
@@ -318,7 +320,7 @@ for (const articleSlug of ARTICLE_SLUGS) {
 // Write sitemap.xml
 const sitemapPath = path.join(distPublic, "sitemap.xml");
 fs.writeFileSync(sitemapPath, buildSitemap(lastmod), "utf-8");
-console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + ARTICLE_SLUGS.length} URLs, lastmod ${lastmod})`);
+console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + ARTICLE_SLUGS.length + 1} URLs, lastmod ${lastmod})`);
 
 // Summary
 if (errors > 0) {

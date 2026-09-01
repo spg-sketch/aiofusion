@@ -18,9 +18,6 @@ build = [ "pnpm", "--filter", "@workspace/aio-fusion-promo", "run", "build" ]
 serve = "static"
 publicDir = "artifacts/aio-fusion-promo/dist/public"
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
 
 [services.env]
 PORT = "24362"

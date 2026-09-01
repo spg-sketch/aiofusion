@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aiofusion.ai/aio-fusion-promo/sitemap.xml

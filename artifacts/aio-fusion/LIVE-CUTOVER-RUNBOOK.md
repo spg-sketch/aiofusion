@@ -102,7 +102,7 @@ Complete each item in the correct environment. Values, secrets and tokens must n
 
 - Confirm `https://aiofusion.ai` is the only canonical production origin and its TLS certificate is valid.
 - Confirm `https://www.aiofusion.ai/*` permanently redirects with HTTP 301 or 308 to the equivalent apex path. Do not accept a duplicate HTTP 200.
-- Confirm `https://aiofusion.ai/sitemap.xml` contains all 24 approved canonical URLs.
+- Confirm `https://aiofusion.ai/sitemap.xml` contains all 25 approved canonical URLs, including the promo page.
 - Confirm `https://aiofusion.ai/robots.txt` references the apex sitemap and disallows `/api/`.
 - Confirm representative public routes serve pre-rendered HTML to a crawler user agent.
 - Confirm `/api/healthz` succeeds, private app responses expose no account data without authentication, and unknown/private-looking paths do not leak content.
