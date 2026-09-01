@@ -100,6 +100,15 @@ export function SearchableOutletPicker({
 // ---------------------------------------------------------------------------
 type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
 type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string; outletName?: string; outletCategory?: string };
+type ImportPreview = {
+  validRows: number;
+  importableRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+  outletCount: number;
+  errors: Array<{ row: number; message: string }>;
+  sample: Array<{ sourceRow: number; firstName: string; lastName: string; role: string; outletName: string; email: string }>;
+};
 
 function MediaDatabasePage() {
   const [activeTab, setActiveTab] = useState<"outlets" | "contacts">("outlets");
@@ -125,6 +134,14 @@ function MediaDatabasePage() {
   const [deletingContactId, setDeletingContactId] = useState<number | null>(null);
 
   const [showCatPicker, setShowCatPicker] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+  const [importCsv, setImportCsv] = useState("");
+  const [importCategory, setImportCategory] = useState("");
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importError, setImportError] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ outletsCreated: number; contactsCreated: number; duplicatesSkipped: number } | null>(null);
   const projectCategories = getProjectMediaCategories();
 
   const loadData = async () => {
@@ -150,6 +167,64 @@ function MediaDatabasePage() {
   };
 
   useEffect(() => { void loadData(); }, []);
+
+  const resetImport = () => {
+    setImportFileName("");
+    setImportCsv("");
+    setImportCategory("");
+    setImportPreview(null);
+    setImportError("");
+    setImportResult(null);
+  };
+
+  const openImport = () => {
+    resetImport();
+    setShowImportModal(true);
+  };
+
+  const previewImport = async (csv: string, fileName: string) => {
+    setImportBusy(true);
+    setImportError("");
+    setImportPreview(null);
+    setImportResult(null);
+    try {
+      const resp = await fetch(`${apiBase()}/api/store/media-db/import`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv, category: importCategory, commit: false }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Could not read this CSV.");
+      setImportCsv(csv);
+      setImportFileName(fileName);
+      setImportPreview(data.preview);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Could not read this CSV.");
+    }
+    setImportBusy(false);
+  };
+
+  const importContacts = async () => {
+    if (!importCsv || importBusy) return;
+    setImportBusy(true);
+    setImportError("");
+    try {
+      const resp = await fetch(`${apiBase()}/api/store/media-db/import`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: importCsv, category: importCategory, commit: true }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Could not import these contacts.");
+      setImportResult(data.result);
+      await loadData();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Could not import these contacts.");
+    }
+    setImportBusy(false);
+  };
 
   // Outlets
   const filteredOutlets = outlets.filter((o) => {
@@ -349,6 +424,9 @@ function MediaDatabasePage() {
             <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <Plus size={14} /> Add contact
             </button>
+            <button onClick={openImport} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border bg-white" style={{ borderColor: vars.gold, color: vars.navy }}>
+              <Upload size={14} /> Import CSV
+            </button>
             {filteredContacts.length > 0 && (
               <div className="flex items-center gap-1">
                 <button onClick={() => void exportContacts("xlsx")} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold border" style={{ borderColor: vars.g200, color: vars.navy }}><Download size={13} /> Excel</button>
@@ -406,6 +484,111 @@ function MediaDatabasePage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setShowImportModal(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
+              <div>
+                <h2 className="text-[17px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Import media contacts</h2>
+                <p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Review the CSV before anything is added. Existing contacts are not overwritten.</p>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
+            </div>
+            <div className="p-6 space-y-5">
+              {!importResult && (
+                <>
+                  <label className="block rounded-xl border-2 border-dashed p-6 text-center cursor-pointer" style={{ borderColor: vars.g200, background: vars.g50 }}>
+                    <Upload size={24} className="mx-auto mb-2" color={vars.accent} />
+                    <span className="block text-[13px] font-semibold" style={{ color: vars.navy }}>{importFileName || "Choose a CSV file"}</span>
+                    <span className="block text-[11px] mt-1" style={{ color: vars.g500 }}>Up to 2 MB and 5,000 rows</span>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          setImportError("CSV files must be 2 MB or smaller.");
+                          return;
+                        }
+                        void file.text().then((csv) => previewImport(csv, file.name));
+                      }}
+                    />
+                  </label>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }}>Category for imported outlets</label>
+                    <select value={importCategory} onChange={(e) => setImportCategory(e.target.value)} className="w-full px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
+                      <option value="">No category</option>
+                      {allCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                    </select>
+                    <p className="text-[11px] mt-1" style={{ color: vars.g400 }}>This is only applied to newly created outlets.</p>
+                  </div>
+                </>
+              )}
+
+              {importBusy && <div className="flex items-center gap-2 text-[13px]" style={{ color: vars.g500 }}><Loader2 size={16} className="animate-spin" /> Checking your file...</div>}
+              {importError && <div className="rounded-lg px-4 py-3 text-[12px] flex gap-2" style={{ background: "rgba(180,50,50,0.08)", color: vars.red }}><AlertTriangle size={15} className="shrink-0" />{importError}</div>}
+
+              {importPreview && !importResult && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      ["Valid contacts", importPreview.validRows],
+                      ["Outlets found", importPreview.outletCount],
+                      ["Already in database", importPreview.duplicateRows],
+                      ["Rows needing attention", importPreview.invalidRows],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-xl border p-3" style={{ borderColor: vars.g200 }}>
+                        <p className="text-[20px] font-semibold" style={{ color: vars.navy }}>{value}</p>
+                        <p className="text-[11px]" style={{ color: vars.g500 }}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {importPreview.sample.length > 0 && (
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: vars.g200 }}>
+                      <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wide" style={{ background: vars.g50, color: vars.g500 }}>Preview</div>
+                      {importPreview.sample.map((row) => (
+                        <div key={row.sourceRow} className="px-4 py-2 border-t grid grid-cols-[1fr_1fr] gap-3 text-[12px]" style={{ borderColor: vars.g100 }}>
+                          <span style={{ color: vars.navy }}>{`${row.firstName} ${row.lastName}`.trim() || row.email}</span>
+                          <span style={{ color: vars.g500 }}>{row.outletName}{row.role ? ` · ${row.role}` : ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {importPreview.errors.length > 0 && (
+                    <details className="rounded-xl border px-4 py-3" style={{ borderColor: vars.g200 }}>
+                      <summary className="text-[12px] font-semibold cursor-pointer" style={{ color: vars.navy }}>Review skipped rows</summary>
+                      <div className="mt-2 space-y-1">
+                        {importPreview.errors.map((error) => <p key={`${error.row}-${error.message}`} className="text-[11px]" style={{ color: vars.g500 }}>Row {error.row}: {error.message}</p>)}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {importResult && (
+                <div className="rounded-xl p-5 text-center" style={{ background: "rgba(31,116,143,0.08)" }}>
+                  <CheckCircle2 size={30} className="mx-auto mb-2" color={vars.accent} />
+                  <p className="text-[16px] font-semibold" style={{ color: vars.navy }}>Import complete</p>
+                  <p className="text-[12px] mt-2" style={{ color: vars.g500 }}>
+                    Added {importResult.contactsCreated} contacts and {importResult.outletsCreated} outlets. Skipped {importResult.duplicatesSkipped} duplicates.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2" style={{ borderColor: vars.g200 }}>
+              <button onClick={() => setShowImportModal(false)} className="px-4 py-2 rounded-lg text-[13px] font-semibold border" style={{ borderColor: vars.g200, color: vars.g500 }}>{importResult ? "Close" : "Cancel"}</button>
+              {importPreview && !importResult && (
+                <button onClick={() => void importContacts()} disabled={importBusy || importPreview.importableRows === 0} className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent, opacity: importBusy || importPreview.importableRows === 0 ? 0.5 : 1 }}>
+                  {importBusy ? "Importing..." : `Import ${importPreview.importableRows} contacts`}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

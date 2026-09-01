@@ -1,10 +1,16 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, mediaCategoriesTable, mediaOutletsTable, mediaContactsTable } from "@workspace/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { memberProjectGate } from "../lib/member-guards";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import { TRADE_MEDIA_CATEGORIES } from "../lib/trade-media-categories";
+import {
+  buildMediaContactNotes,
+  mediaOutletKey,
+  parseMediaImportCsv,
+  planMediaImport,
+} from "../lib/media-csv-import";
 
 const router: IRouter = Router();
 
@@ -55,6 +61,163 @@ router.get(
       });
     } catch {
       res.status(500).json({ error: "Failed to load categories" });
+    }
+  },
+);
+
+router.post(
+  "/store/media-db/import",
+  requirePlatformAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const { csv, category, commit } = req.body ?? {};
+    if (typeof csv !== "string" || !csv.trim()) {
+      res.status(400).json({ error: "Choose a CSV file to import." });
+      return;
+    }
+    if (category !== undefined && typeof category !== "string") {
+      res.status(400).json({ error: "Category must be text." });
+      return;
+    }
+
+    try {
+      const parsed = parseMediaImportCsv(csv);
+      const accountId = normUsername(req.account!.username);
+      const loadExisting = async () => {
+        const [existingOutlets, existingContacts] = await Promise.all([
+          db
+            .select({
+              id: mediaOutletsTable.id,
+              name: mediaOutletsTable.name,
+              website: mediaOutletsTable.website,
+            })
+            .from(mediaOutletsTable)
+            .where(and(
+              isNull(mediaOutletsTable.deletedAt),
+              or(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.accountId)),
+            )),
+          db
+            .select({
+              outletId: mediaContactsTable.outletId,
+              firstName: mediaContactsTable.firstName,
+              lastName: mediaContactsTable.lastName,
+              email: mediaContactsTable.email,
+            })
+            .from(mediaContactsTable)
+            .where(and(
+              isNull(mediaContactsTable.deletedAt),
+              or(eq(mediaContactsTable.accountId, accountId), isNull(mediaContactsTable.accountId)),
+            )),
+        ]);
+        return { existingOutlets, existingContacts };
+      };
+      const existing = await loadExisting();
+      const initialPlan = planMediaImport(parsed.rows, existing.existingOutlets, existing.existingContacts);
+      const preview = {
+        validRows: parsed.rows.length,
+        importableRows: initialPlan.importRows.length,
+        duplicateRows: initialPlan.duplicatesSkipped,
+        invalidRows: parsed.errors.length,
+        outletCount: initialPlan.outletCount,
+        newOutletCount: initialPlan.newOutletCount,
+        headers: parsed.headers,
+        errors: parsed.errors.slice(0, 50),
+        sample: initialPlan.importRows.slice(0, 8).map(({ row }) => row),
+      };
+      if (commit !== true) {
+        res.json({ ok: true, preview });
+        return;
+      }
+      if (initialPlan.importRows.length === 0) {
+        res.status(400).json({ error: "The CSV does not contain any new contacts to import.", preview });
+        return;
+      }
+
+      // Imports are always private to the active account, including admin imports.
+      // This avoids accidentally publishing a customer's uploaded list globally.
+      const selectedCategory = typeof category === "string" ? category.trim() : "";
+      const result = await db.transaction(async (tx) => {
+        // Serialize import commits for this account. The schema intentionally
+        // allows manual duplicates, so a transaction-scoped advisory lock is
+        // safer than adding broad uniqueness constraints.
+        if (process.env.NODE_ENV !== "test") {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`media-import:${accountId}`}))`);
+        }
+        const existingOutlets = await tx
+          .select({
+            id: mediaOutletsTable.id,
+            name: mediaOutletsTable.name,
+            website: mediaOutletsTable.website,
+          })
+          .from(mediaOutletsTable)
+          .where(and(
+            isNull(mediaOutletsTable.deletedAt),
+            or(eq(mediaOutletsTable.accountId, accountId), isNull(mediaOutletsTable.accountId)),
+          ));
+        const existingContacts = await tx
+          .select({
+            outletId: mediaContactsTable.outletId,
+            firstName: mediaContactsTable.firstName,
+            lastName: mediaContactsTable.lastName,
+            email: mediaContactsTable.email,
+          })
+          .from(mediaContactsTable)
+          .where(and(
+            isNull(mediaContactsTable.deletedAt),
+            or(eq(mediaContactsTable.accountId, accountId), isNull(mediaContactsTable.accountId)),
+          ));
+
+        const commitPlan = planMediaImport(parsed.rows, existingOutlets, existingContacts);
+        const outletIdByRef = new Map(existingOutlets.map((outlet) => [`existing:${outlet.id}`, outlet.id]));
+        let outletsCreated = 0;
+        let contactsCreated = 0;
+
+        for (const { row, outletRef } of commitPlan.importRows) {
+          let outletId = outletIdByRef.get(outletRef);
+          if (!outletId) {
+            const [created] = await tx.insert(mediaOutletsTable).values({
+              name: row.outletName,
+              category: selectedCategory,
+              website: row.website,
+              description: row.description,
+              country: row.country,
+              reachBand: row.reachBand,
+              accountId,
+            }).returning({ id: mediaOutletsTable.id });
+            outletId = created.id;
+            outletIdByRef.set(outletRef, outletId);
+            outletsCreated += 1;
+          }
+
+          await tx.insert(mediaContactsTable).values({
+            outletId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            role: row.role,
+            email: row.email,
+            phone: "",
+            notes: buildMediaContactNotes(row),
+            accountId,
+          });
+          contactsCreated += 1;
+        }
+        return {
+          outletsCreated,
+          contactsCreated,
+          duplicatesSkipped: commitPlan.duplicatesSkipped,
+        };
+      });
+
+      req.log.info({
+        accountId,
+        validRows: parsed.rows.length,
+        invalidRows: parsed.errors.length,
+        ...result,
+      }, "Media database CSV import completed");
+      res.json({ ok: true, preview, result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to import CSV.";
+      req.log.warn({ err: error }, "Media database CSV import rejected");
+      res.status(400).json({ error: message });
     }
   },
 );

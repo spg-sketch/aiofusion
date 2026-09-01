@@ -752,6 +752,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /store/media-db/contacts",
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
+  "POST /store/media-db/import",
 
   // ── contact forms (contact.ts) - public, no auth required ────────────────
   "POST /contact/book-demo",
