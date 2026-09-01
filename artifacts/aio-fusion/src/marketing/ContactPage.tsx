@@ -395,9 +395,8 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
           </div>
           <ArrowUpRight size={18} color={vars.accent} />
         </a>
-        <a
-          href="#"
-          className="flex items-center gap-4 p-5 rounded-2xl border bg-white transition-all hover:shadow-md"
+        <div
+          className="flex items-center gap-4 p-5 rounded-2xl border bg-white"
           style={{ borderColor: vars.g200 }}
         >
           <div className="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -411,8 +410,7 @@ export default function ContactPage(props: { onLogin: () => void; onBack: () => 
               <span className="text-[12px] font-light italic" style={{ color: vars.g400 }}>(coming soon)</span>
             </p>
           </div>
-          <ArrowUpRight size={18} color={vars.accent} />
-        </a>
+        </div>
       </div>
     </MarketingPage>
   );

@@ -80,14 +80,20 @@ export function Scene6() {
           animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="inline-block bg-white/[0.06] border border-white/[0.14] rounded-xl px-[3vw] py-[1.4vh]">
+          <a
+            href="https://aiofusion.ai/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Visit AIO Fusion"
+            className="inline-block bg-white/[0.06] border border-white/[0.14] rounded-xl px-[3vw] py-[1.4vh] transition-colors hover:bg-white/[0.12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[rgb(var(--color-coral))]"
+          >
             <span
               className="font-body font-semibold tracking-wide text-white"
               style={{ fontSize: "clamp(1.1rem, 2.2vw, 2.8rem)" }}
             >
               aiofusion.ai
             </span>
-          </div>
+          </a>
         </motion.div>
       </div>
     </div>
