@@ -84,7 +84,7 @@ function SubAccountsPage({
     {
       label: "My Account",
       items: [
-        { id: "profile" as const, label: "Profile", icon: User },
+        { id: "profile" as const, label: "Profile & workspace", icon: User },
         ...(onSignOut ? [{ id: "security" as const, label: "Sign-in & security", icon: ShieldCheck }] : []),
         ...(canSeeBilling ? [{ id: "billing" as const, label: "Billing details", icon: FileText }] : []),
         ...(canSeeTeam ? [{ id: "team" as const, label: "Team members", icon: Users }] : []),
@@ -997,9 +997,12 @@ function SubAccountsPage({
           )}
         </div>
 
-        {/* MY ACCOUNT */}
+        {/* SIGNED-IN PROFILE AND ACTIVE WORKSPACE */}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-2" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>My account</h2>
+          <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your profile</h2>
+          <p className="text-[13px] leading-[1.6] mb-4" style={{ color: vars.g500 }}>
+            This is the person currently signed in to AIO Fusion.
+          </p>
           {(googleLinked === false || microsoftLinked === false) && (
             <p className="text-[13.5px] leading-[1.65] mb-4" style={{ color: vars.g600 }}>
               Linking is optional - if you would like to link your account to an existing Google or Microsoft account, please select below.
@@ -1035,20 +1038,12 @@ function SubAccountsPage({
                 />
               </label>
               <div>
-                <p className="text-[14px] font-bold" style={{ color: ink }}>{session.username}</p>
+                <p className="text-[14px] font-bold" style={{ color: ink }}>{session.userName?.trim() || session.userEmail?.trim() || session.username}</p>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role === "agency" ? "Agency Partner Account" : session.role === "client" ? "Client Account" : session.role}</span>
-                  {accountWebsite && (
-                    <a
-                      href={accountWebsite}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:underline"
-                      style={{ color: vars.g500 }}
-                    >
-                      <Globe size={11} /> {accountWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                    </a>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: "#E6F4EA", color: "#1B7A3E" }}>
+                    <CheckCircle2 size={10} /> Signed in
+                  </span>
+                  {session.userEmail && <span className="text-[12px] font-medium" style={{ color: vars.g500 }}>{session.userEmail}</span>}
                 </div>
                 {avatarUrl && (
                   <button
@@ -1106,7 +1101,7 @@ function SubAccountsPage({
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{switchToMasterError}</p>
           )}
 
-          {/* BRAND / AGENCY LOGO */}
+          {/* ACTIVE WORKSPACE */}
           <div className="mt-5 pt-5 flex flex-col sm:flex-row sm:items-center gap-4" style={{ borderTop: `1px solid ${vars.g200}` }}>
             <div className="flex items-center gap-3 flex-1">
               <label
@@ -1136,10 +1131,25 @@ function SubAccountsPage({
                   }}
                 />
               </label>
-              <div>
-                <p className="text-[13px] font-bold" style={{ color: ink }}>Brand / agency logo</p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Active workspace</p>
+                <p className="text-[14px] font-bold truncate" style={{ color: ink }}>{session.companyName?.trim() || session.username}</p>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role === "agency" ? "Agency Partner" : session.role === "client" ? "Client Workspace" : session.role}</span>
+                  {accountWebsite && (
+                    <a
+                      href={accountWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:underline"
+                      style={{ color: vars.g500 }}
+                    >
+                      <Globe size={11} /> {accountWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                </div>
                 <p className="text-[12px] font-light" style={{ color: vars.g500 }}>
-                  {logoUrl ? "Click the logo to change or resize it." : "Click the box to upload your company or brand logo (PNG, JPEG or WebP)."}
+                  {logoUrl ? "This is the workspace logo, not your personal photo. Click it to change or resize it." : "Add a company or brand logo for this workspace (PNG, JPEG or WebP)."}
                 </p>
               </div>
             </div>
