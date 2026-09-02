@@ -174,6 +174,8 @@ const stripeCalls = vi.hoisted(() => ({
   // Per-id overrides for customers.retrieve; keyed by customer id.
   // If not set for a given id the mock returns a bare customer with null fields.
   customerRetrieveOverrides: {} as Record<string, Partial<{ name: string; email: string; address: { line1: string }; deleted: boolean }>>,
+  // Per-id errors for customers.retrieve.
+  customerRetrieveErrors: {} as Record<string, Error & { code?: string }>,
   taxIds: [] as Array<{ id: string; type: string; value: string }>,
   taxIdCreates: [] as any[],
   taxIdDeletes: [] as string[],
@@ -240,6 +242,8 @@ vi.mock("../lib/stripe-client", () => ({
           return Promise.resolve({ id });
         },
         retrieve: (id: string) => {
+          const error = stripeCalls.customerRetrieveErrors[id];
+          if (error) return Promise.reject(error);
           const override = stripeCalls.customerRetrieveOverrides[id] ?? {};
           return Promise.resolve({
             id,
@@ -950,6 +954,30 @@ describe("billing routes", () => {
     const created = stripeCalls.customerCreates[stripeCalls.customerCreates.length - 1];
     // VAT is attached separately (fail-soft), never inline on create.
     expect(created.tax_id_data).toBeUndefined();
+  });
+
+  it("replaces a missing sandbox customer before the first live checkout", async () => {
+    const { sid } = await seedWorkspace("stale-customer-co", "owner@stale-customer.test", { accountRole: "client" });
+    const staleCustomerId = "cus_old_sandbox";
+    await db
+      .update(platformCompaniesTable)
+      .set({ stripeCustomerId: staleCustomerId })
+      .where(eq(platformCompaniesTable.slug, "stale-customer-co"));
+    stripeCalls.customerRetrieveErrors[staleCustomerId] = Object.assign(
+      new Error(`No such customer: '${staleCustomerId}'`),
+      { code: "resource_missing" },
+    );
+
+    try {
+      const createsBefore = stripeCalls.customerCreates.length;
+      const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+      expect(res.status).toBe(200);
+      expect(stripeCalls.customerCreates).toHaveLength(createsBefore + 1);
+      expect((await getBillingState("stale-customer-co"))?.stripeCustomerId).toBe("cus_mock_1");
+    } finally {
+      delete stripeCalls.customerRetrieveErrors[staleCustomerId];
+      await db.execute(sql`DELETE FROM platform_meta WHERE key = 'checkout:pending:stale-customer-co'`);
+    }
   });
 
   it("clearing the billing address clears it on the Stripe customer too", async () => {

@@ -1611,9 +1611,31 @@ export async function createCheckoutSession(opts: {
 async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<string> {
   const state = await getBillingState(slug);
   if (state?.stripeCustomerId) {
-    // Keep the customer's invoice details fresh before checkout.
-    await syncStripeBillingDetails(slug);
-    return state.stripeCustomerId;
+    try {
+      const customer = await stripe.customers.retrieve(state.stripeCustomerId);
+      if (!customer.deleted) {
+        // Keep the customer's invoice details fresh before checkout.
+        await syncStripeBillingDetails(slug);
+        return state.stripeCustomerId;
+      }
+      if (isEntitled(state)) {
+        throw new Error("Stored Stripe customer was deleted for an entitled account");
+      }
+    } catch (err) {
+      const code =
+        typeof err === "object" && err !== null && "code" in err
+          ? (err as { code?: unknown }).code
+          : undefined;
+      // A customer created in the Replit sandbox does not exist in the live
+      // Stripe account. It is safe to replace only before any subscription is
+      // active; entitled accounts must be repaired manually to avoid detaching
+      // a real subscription from its customer.
+      if (code !== "resource_missing" || isEntitled(state)) throw err;
+      logger.info(
+        { slug, customerId: state.stripeCustomerId },
+        "billing: replacing stale Stripe customer before first live checkout",
+      );
+    }
   }
   const details = await getBillingDetails(slug);
   const customer = await stripe.customers.create({

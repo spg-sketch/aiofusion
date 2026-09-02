@@ -30,6 +30,8 @@ During the one-time sandbox-to-live Stripe transition, a finalized claim can sti
 
 **Why:** installing Replit Integrated Payments on the live account changes the deployment from sandbox to live credentials, but the durable checkout claim survives in PostgreSQL and otherwise blocks the first live checkout.
 
+The same transition can leave a sandbox customer ID in the billing record. Before checkout, verify the stored customer exists under the connected Stripe account; if it is missing and the account has no active entitlement, replace it with a customer in the current account. Never auto-replace the customer for an entitled account because that could detach a real subscription.
+
 The completion webhook conditional UPDATE must allow: (a) first purchase (null stored sub), (b) idempotent replay (same sub), (c) re-subscription after cancellation (status = 'cancelled'). An incoming sub that matches none of these is a late duplicate and must be cancelled via the Stripe API immediately.
 
 **Why:** an architect review found that TTL preemption of a finalized claim and an unconditional completion UPDATE both created windows for double-billing; cancelled re-subscription is a legitimate flow that the duplicate guard must not block.
