@@ -21,6 +21,7 @@ import {
   claimCheckout,
   releaseCheckout,
   getCheckoutErrorResponse,
+  isLiveStripeMode,
   LEGACY_PROJECT_CAP,
 } from "../lib/billing";
 import {
@@ -38,6 +39,15 @@ import { logger } from "../lib/logger";
 import { getCompanyBillingRecord } from "../lib/company-billing-record";
 
 const router: IRouter = Router();
+
+function isMissingStripeResource(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "resource_missing"
+  );
+}
 
 function sendCheckoutError(res: Response, err: unknown): void {
   const known = getCheckoutErrorResponse(err);
@@ -200,53 +210,85 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         ) {
           const existingSessionId = result.existingSessionId;
           const existingClaimToken = result.existingClaimToken;
+          const existingUrl = result.existingUrl;
+          const storedExistingFrequency = result.existingFrequency;
           const stripe = await getUncachableStripeClient();
-          let existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
-          const metadataFrequency = existingSession.metadata?.["frequency"];
-          const existingFrequency =
-            result.existingFrequency ??
-            (isBillingFrequency(metadataFrequency) ? metadataFrequency : undefined);
-
-          // The checkout.session.expired webhook normally clears this claim.
-          // If that webhook is delayed or missed, never reuse the dead URL:
-          // release the token we just verified and start a fresh checkout.
-          if (existingSession.status === "expired") {
-            await releaseCheckout(bs, existingClaimToken);
-            result = await claimCheckout(bs, frequency);
-          } else if (existingSession.status === "complete") {
-            // Do not release a completed session before its completion webhook
-            // has applied the entitlement. Holding the claim prevents a second
-            // subscription from being opened during that short window.
-            return { entitled: false, completedCheckout: true, billingSlug: bs };
-          } else if (existingFrequency && existingFrequency !== frequency) {
-            try {
-              await stripe.checkout.sessions.expire(existingSessionId);
-            } catch (err) {
-              // Stripe may expire the session between our retrieve and expire
-              // calls. Re-read once: expired is safe to replace, complete is
-              // still protected, and any open/error state must remain locked.
-              existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
-              if (existingSession.status === "complete") {
-                return { entitled: false, completedCheckout: true, billingSlug: bs };
-              }
-              if (existingSession.status !== "expired") {
-                logger.warn(
-                  {
-                    err,
-                    slug: bs,
-                    sessionId: existingSessionId,
-                    existingFrequency,
-                    requestedFrequency: frequency,
-                  },
-                  "billing: could not replace open checkout after billing frequency changed",
-                );
-                return { entitled: false, switchFailed: true, billingSlug: bs };
-              }
+          let existingSession;
+          try {
+            existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
+          } catch (err) {
+            // A sandbox checkout cannot be retrieved with the newly connected
+            // live key. It can never take a real payment, so retire only that
+            // specific test-mode claim and let the live checkout proceed.
+            if (
+              existingSessionId.startsWith("cs_test_") &&
+              isMissingStripeResource(err) &&
+              (await isLiveStripeMode())
+            ) {
+              logger.info(
+                { slug: bs, sessionId: existingSessionId },
+                "billing: replacing sandbox checkout claim after switching to live Stripe",
+              );
+              await releaseCheckout(bs, existingClaimToken);
+              result = await claimCheckout(bs, frequency);
+            } else {
+              throw err;
             }
-            await releaseCheckout(bs, existingClaimToken);
-            result = await claimCheckout(bs, frequency);
-          } else if (existingFrequency && !result.existingFrequency) {
-            result = { ...result, existingFrequency };
+          }
+
+          if (existingSession) {
+            const metadataFrequency = existingSession.metadata?.["frequency"];
+            const existingFrequency =
+              storedExistingFrequency ??
+              (isBillingFrequency(metadataFrequency) ? metadataFrequency : undefined);
+
+            // The checkout.session.expired webhook normally clears this claim.
+            // If that webhook is delayed or missed, never reuse the dead URL:
+            // release the token we just verified and start a fresh checkout.
+            if (existingSession.status === "expired") {
+              await releaseCheckout(bs, existingClaimToken);
+              result = await claimCheckout(bs, frequency);
+            } else if (existingSession.status === "complete") {
+              // Do not release a completed session before its completion webhook
+              // has applied the entitlement. Holding the claim prevents a second
+              // subscription from being opened during that short window.
+              return { entitled: false, completedCheckout: true, billingSlug: bs };
+            } else if (existingFrequency && existingFrequency !== frequency) {
+              try {
+                await stripe.checkout.sessions.expire(existingSessionId);
+              } catch (err) {
+                // Stripe may expire the session between our retrieve and expire
+                // calls. Re-read once: expired is safe to replace, complete is
+                // still protected, and any open/error state must remain locked.
+                existingSession = await stripe.checkout.sessions.retrieve(existingSessionId);
+                if (existingSession.status === "complete") {
+                  return { entitled: false, completedCheckout: true, billingSlug: bs };
+                }
+                if (existingSession.status !== "expired") {
+                  logger.warn(
+                    {
+                      err,
+                      slug: bs,
+                      sessionId: existingSessionId,
+                      existingFrequency,
+                      requestedFrequency: frequency,
+                    },
+                    "billing: could not replace open checkout after billing frequency changed",
+                  );
+                  return { entitled: false, switchFailed: true, billingSlug: bs };
+                }
+              }
+              await releaseCheckout(bs, existingClaimToken);
+              result = await claimCheckout(bs, frequency);
+            } else if (existingFrequency && !storedExistingFrequency) {
+              result = {
+                claimed: false,
+                existingUrl,
+                existingSessionId,
+                existingClaimToken,
+                existingFrequency,
+              };
+            }
           }
         }
         return { entitled: false, claimResult: result, billingSlug: bs };

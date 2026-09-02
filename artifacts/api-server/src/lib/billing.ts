@@ -1488,7 +1488,7 @@ export async function warnIfTaxDeactivated(stripe: Stripe): Promise<void> {
 // True when the connected Stripe key is a live key. Checked FRESH on every
 // call (no caching): credentials can be swapped from test to live without a
 // restart, and a stale "test" answer would permit a taxless live checkout.
-async function isLiveStripeMode(): Promise<boolean> {
+export async function isLiveStripeMode(): Promise<boolean> {
   try {
     const { getStripeCredentials } = await import("./stripe-client");
     const { secretKey } = await getStripeCredentials();

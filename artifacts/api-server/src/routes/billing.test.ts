@@ -185,6 +185,8 @@ const stripeCalls = vi.hoisted(() => ({
   sessionExpires: [] as string[],
   // Per-id overrides for checkout.sessions.retrieve.
   sessionRetrieveOverrides: {} as Record<string, Partial<{ status: "open" | "complete" | "expired"; metadata: Record<string, string> }>>,
+  // Per-id errors for checkout.sessions.retrieve.
+  sessionRetrieveErrors: {} as Record<string, Error & { code?: string }>,
   // When true, the next finalizeCheckoutClaim call will throw (simulates DB write failure or 0-row preemption).
   rejectFinalize: false,
   // When true, the next checkout.sessions.expire call will throw (simulates a Stripe API failure).
@@ -287,13 +289,16 @@ vi.mock("../lib/stripe-client", () => ({
             stripeCalls.sessionExpires.push(id);
             return Promise.resolve({ id, status: "expired" });
           },
-          retrieve: (id: string) =>
-            Promise.resolve({
+          retrieve: (id: string) => {
+            const error = stripeCalls.sessionRetrieveErrors[id];
+            if (error) return Promise.reject(error);
+            return Promise.resolve({
               id,
               status: "open",
               metadata: {},
               ...(stripeCalls.sessionRetrieveOverrides[id] ?? {}),
-            }),
+            });
+          },
         },
       },
       subscriptions: {
@@ -1624,6 +1629,39 @@ describe("billing hardening", () => {
       expect(stripeCalls.sessionExpires.slice(expiresBefore)).not.toContain(oldSessionId);
     } finally {
       delete stripeCalls.sessionRetrieveOverrides[oldSessionId];
+      await cleanupCheckoutClaims();
+    }
+  });
+
+  it("replaces a missing sandbox checkout claim after Stripe switches to live mode", async () => {
+    const { sid } = await seedWorkspace("sandbox-to-live-co", "owner@sandbox-to-live.test", { accountRole: "client" });
+    const oldSessionId = "cs_test_old_sandbox";
+    const oldToken = "sandbox-to-live-token";
+    await db.insert(platformMetaTable).values({
+      key: "checkout:pending:sandbox-to-live-co",
+      value: JSON.stringify({
+        at: new Date().toISOString(),
+        tok: oldToken,
+        sid: oldSessionId,
+        url: "https://checkout.stripe.com/old-sandbox",
+        frequency: "annual",
+      }),
+    });
+    stripeCalls.sessionRetrieveErrors[oldSessionId] = Object.assign(
+      new Error(`No such checkout.session: ${oldSessionId}`),
+      { code: "resource_missing" },
+    );
+    stripeCalls.secretKey = "sk_live_x";
+
+    try {
+      const sessionsBefore = stripeCalls.sessions.length;
+      const res = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
+      expect(res.status).toBe(200);
+      expect(res.json.url).toBe("https://checkout.stripe.com/test-session");
+      expect(stripeCalls.sessions).toHaveLength(sessionsBefore + 1);
+    } finally {
+      stripeCalls.secretKey = "sk_test_x";
+      delete stripeCalls.sessionRetrieveErrors[oldSessionId];
       await cleanupCheckoutClaims();
     }
   });

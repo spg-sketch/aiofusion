@@ -26,6 +26,10 @@ Checkout claims must bind every parameter that changes what the customer will bu
 
 Before reusing any finalized claim, retrieve the Stripe session and check its status. An expired session is dead even if its expiry webhook was missed: conditionally release that claim and create a fresh checkout. A completed session stays locked until fulfilment applies, preventing a duplicate subscription while its webhook is pending.
 
+During the one-time sandbox-to-live Stripe transition, a finalized claim can still reference a `cs_test_` session that the new live key cannot retrieve. Release and replace it only when all three facts agree: test-session prefix, live credentials, and Stripe `resource_missing`. Never generalise this to missing live sessions because an old live session may still be chargeable under another account.
+
+**Why:** installing Replit Integrated Payments on the live account changes the deployment from sandbox to live credentials, but the durable checkout claim survives in PostgreSQL and otherwise blocks the first live checkout.
+
 The completion webhook conditional UPDATE must allow: (a) first purchase (null stored sub), (b) idempotent replay (same sub), (c) re-subscription after cancellation (status = 'cancelled'). An incoming sub that matches none of these is a late duplicate and must be cancelled via the Stripe API immediately.
 
 **Why:** an architect review found that TTL preemption of a finalized claim and an unconditional completion UPDATE both created windows for double-billing; cancelled re-subscription is a legitimate flow that the duplicate guard must not block.
