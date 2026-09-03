@@ -103,3 +103,309 @@ export const LogoutMobileSessionResponse = zod.object({
 })
 
 
+/**
+ * @summary List published Insights stories
+ */
+export const ListPublishedInsightsResponseItem = zod.object({
+  "id": zod.string(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverImageUrl": zod.string().nullable(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullable(),
+  "seoDescription": zod.string().nullable(),
+  "focusKeyphrase": zod.string().nullable(),
+  "canonicalUrl": zod.string().nullable(),
+  "status": zod.string(),
+  "createdAt": zod.date().optional(),
+  "updatedAt": zod.date().optional(),
+  "publishedAt": zod.date().nullish()
+})
+export const ListPublishedInsightsResponse = zod.array(ListPublishedInsightsResponseItem)
+
+
+/**
+ * @summary Get a published Insights story by slug
+ */
+export const GetPublishedInsightParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const GetPublishedInsightResponse = zod.object({
+  "id": zod.string(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverImageUrl": zod.string().nullable(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullable(),
+  "seoDescription": zod.string().nullable(),
+  "focusKeyphrase": zod.string().nullable(),
+  "canonicalUrl": zod.string().nullable(),
+  "status": zod.string(),
+  "createdAt": zod.date().optional(),
+  "updatedAt": zod.date().optional(),
+  "publishedAt": zod.date().nullish()
+})
+
+
+/**
+ * @summary List all Insights stories for editors
+ */
+export const ListAdminInsightsResponseItem = zod.object({
+  "id": zod.string(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverImageUrl": zod.string().nullable(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullable(),
+  "seoDescription": zod.string().nullable(),
+  "focusKeyphrase": zod.string().nullable(),
+  "canonicalUrl": zod.string().nullable(),
+  "status": zod.string(),
+  "createdAt": zod.date().optional(),
+  "updatedAt": zod.date().optional(),
+  "publishedAt": zod.date().nullish()
+})
+export const ListAdminInsightsResponse = zod.array(ListAdminInsightsResponseItem)
+
+
+/**
+ * @summary Create an Insights story
+ */
+
+
+
+
+export const CreateAdminInsightBody = zod.object({
+  "slug": zod.string().min(1),
+  "title": zod.string().min(1),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverMediaId": zod.string().nullish(),
+  "coverImageUrl": zod.string().nullish(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullish(),
+  "seoDescription": zod.string().nullish(),
+  "focusKeyphrase": zod.string().nullish(),
+  "canonicalUrl": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published'])
+})
+
+export const CreateAdminInsightResponse = zod.object({
+  "id": zod.string(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverImageUrl": zod.string().nullable(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullable(),
+  "seoDescription": zod.string().nullable(),
+  "focusKeyphrase": zod.string().nullable(),
+  "canonicalUrl": zod.string().nullable(),
+  "status": zod.string(),
+  "createdAt": zod.date().optional(),
+  "updatedAt": zod.date().optional(),
+  "publishedAt": zod.date().nullish()
+})
+
+
+/**
+ * @summary Update an Insights story
+ */
+export const UpdateAdminInsightParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+
+export const UpdateAdminInsightBody = zod.object({
+  "slug": zod.string().min(1),
+  "title": zod.string().min(1),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverMediaId": zod.string().nullish(),
+  "coverImageUrl": zod.string().nullish(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullish(),
+  "seoDescription": zod.string().nullish(),
+  "focusKeyphrase": zod.string().nullish(),
+  "canonicalUrl": zod.string().nullish(),
+  "status": zod.enum(['draft', 'published'])
+})
+
+export const UpdateAdminInsightResponse = zod.object({
+  "id": zod.string(),
+  "slug": zod.string(),
+  "title": zod.string(),
+  "excerpt": zod.string(),
+  "tag": zod.string(),
+  "externalUrl": zod.string().nullish(),
+  "datePublished": zod.string().nullish(),
+  "dateModified": zod.string().nullish(),
+  "body": zod.array(zod.object({
+  "type": zod.string(),
+  "text": zod.string().optional(),
+  "items": zod.array(zod.string()).optional(),
+  "mediaId": zod.string().optional(),
+  "altText": zod.string().optional(),
+  "caption": zod.string().optional()
+})),
+  "coverImageUrl": zod.string().nullable(),
+  "coverImageAlt": zod.string(),
+  "seoTitle": zod.string().nullable(),
+  "seoDescription": zod.string().nullable(),
+  "focusKeyphrase": zod.string().nullable(),
+  "canonicalUrl": zod.string().nullable(),
+  "status": zod.string(),
+  "createdAt": zod.date().optional(),
+  "updatedAt": zod.date().optional(),
+  "publishedAt": zod.date().nullish()
+})
+
+
+/**
+ * @summary Delete an Insights story
+ */
+export const DeleteAdminInsightParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteAdminInsightResponse = zod.void()
+
+
+/**
+ * @summary List media library images
+ */
+export const ListAdminInsightMediaResponseItem = zod.object({
+  "id": zod.string(),
+  "fileName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.string(),
+  "objectPath": zod.string().nullish(),
+  "publicUrl": zod.string(),
+  "altText": zod.string(),
+  "createdAt": zod.date()
+})
+export const ListAdminInsightMediaResponse = zod.array(ListAdminInsightMediaResponseItem)
+
+
+/**
+ * @summary Save uploaded image metadata
+ */
+export const CreateAdminInsightMediaBody = zod.object({
+  "id": zod.string(),
+  "fileName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.string(),
+  "objectPath": zod.string().nullish(),
+  "publicUrl": zod.string(),
+  "altText": zod.string()
+})
+
+export const CreateAdminInsightMediaResponse = zod.object({
+  "id": zod.string(),
+  "fileName": zod.string(),
+  "contentType": zod.string(),
+  "sizeBytes": zod.string(),
+  "objectPath": zod.string().nullish(),
+  "publicUrl": zod.string(),
+  "altText": zod.string(),
+  "createdAt": zod.date()
+})
+
+
+/**
+ * @summary Request a direct image upload URL
+ */
+
+
+
+
+
+export const RequestInsightUploadUrlBody = zod.object({
+  "name": zod.string().min(1),
+  "size": zod.number().int().min(1),
+  "contentType": zod.string().min(1)
+})
+
+export const RequestInsightUploadUrlResponse = zod.object({
+  "uploadURL": zod.string().url(),
+  "objectPath": zod.string()
+})
+
+

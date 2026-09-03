@@ -24,6 +24,7 @@ function UsersAdminPage({
   onProjectCreated,
   onSupportAdmin,
   onLeadsAdmin,
+  onInsightsAdmin,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -31,6 +32,7 @@ function UsersAdminPage({
   onProjectCreated?: () => void;
   onSupportAdmin?: () => void;
   onLeadsAdmin?: () => void;
+  onInsightsAdmin?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -1207,6 +1209,15 @@ function UsersAdminPage({
           <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
         <div className="flex items-center gap-3">
+          {onInsightsAdmin && (
+            <button
+              onClick={onInsightsAdmin}
+              className="flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.12em] rounded-xl border transition-all hover:brightness-95"
+              style={{ borderColor: vars.g200, color: ink, background: "white" }}
+            >
+              <FileText size={14} /> Insights
+            </button>
+          )}
           {onLeadsAdmin && (
             <button
               onClick={onLeadsAdmin}

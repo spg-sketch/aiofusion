@@ -214,6 +214,9 @@ const SupportAdminPage = lazy(() =>
 const LeadsAdminPage = lazy(() =>
   import("./pages/LeadsAdminPage").then((m) => ({ default: m.LeadsAdminPage }))
 );
+const InsightsAdminPage = lazy(() =>
+  import("./pages/InsightsAdminPage").then((m) => ({ default: m.InsightsAdminPage }))
+);
 
 const IntakePage = lazy(() => import("./IntakeForm"));
 const ReportPage = lazy(() => import("./ReportPage"));
@@ -398,7 +401,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => publicViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => publicViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
@@ -1371,7 +1374,11 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} />;
+    return <UsersAdminPage session={session} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
+  }
+  if (view === "insights-admin") {
+    if (!session || session.role !== "admin") return null;
+    return <InsightsAdminPage onBack={() => transitionToView("users-admin")} />;
   }
   if ((view as string) === "leads-admin") {
     if (!session || session.role !== "admin") return null;

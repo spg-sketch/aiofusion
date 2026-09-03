@@ -775,6 +775,19 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   // Read-only and independently protected by platform admin authentication.
   "GET /admin/audit-outcomes",
 
+  // ── Insights editorial CMS + media storage (insights.ts) ────────────────
+  // Public reads or independently protected by platform admin authentication.
+  "GET /insights",
+  "GET /insights/:slug",
+  "GET /admin/insights",
+  "POST /admin/insights",
+  "PATCH /admin/insights/:id",
+  "DELETE /admin/insights/:id",
+  "GET /admin/insights/media",
+  "POST /admin/insights/media/metadata",
+  "POST /storage/uploads/request-url",
+  "GET /storage/objects/*path",
+
   // ── llm-check audit lock ──────────────────────────────────────────────────
   // Intentionally ungated: read-only lock-status check so the UI can disable
   // the Run button before the user has committed to a full AI action.

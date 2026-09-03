@@ -1,7 +1,11 @@
 export interface ArticleSection {
-  type: "heading" | "subheading" | "paragraph" | "pullquote" | "stat" | "list";
+  type: "heading" | "subheading" | "paragraph" | "pullquote" | "stat" | "list" | "image";
   text?: string;
   items?: string[];
+  mediaId?: string;
+  url?: string | null;
+  altText?: string;
+  caption?: string;
 }
 
 export interface Article {

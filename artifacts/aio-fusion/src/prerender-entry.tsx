@@ -39,6 +39,8 @@ import {
   structuredDataFor,
 } from "./marketing/pageMeta";
 import type { PageMeta, ArticleMeta } from "./marketing/pageMeta";
+import type { PublicInsight } from "./marketing/InsightsPage";
+import { serializeJsonLdForHtml } from "./marketing/safeJsonLd";
 
 // ---------------------------------------------------------------------------
 // No-op handlers passed to all marketing components
@@ -95,7 +97,7 @@ function buildHeadTags(meta: PageMeta): string {
   const ogDesc = meta.ogDescription ?? meta.description;
   const ogType = meta.ogType ?? "website";
   const structuredData = structuredDataFor(meta);
-  const ldJson = structuredData ? JSON.stringify(structuredData) : null;
+  const ldJson = structuredData ? serializeJsonLdForHtml(structuredData) : null;
 
   return `
   <title>${escHtml(meta.title)}</title>
@@ -155,8 +157,9 @@ function injectIntoTemplate(
 // ---------------------------------------------------------------------------
 // Sitemap generation
 // ---------------------------------------------------------------------------
-function buildSitemap(lastmod: string): string {
-  const BASE = "https://aiofusion.ai";
+function buildSitemap(lastmod: string, articleSlugs: string[]): string {
+  const configuredDomain = process.env.CANONICAL_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const BASE = configuredDomain ? `https://${configuredDomain}` : "https://aiofusion.ai";
   const urls: string[] = [];
 
   for (const { slug, priority } of PUBLIC_ROUTES) {
@@ -166,7 +169,7 @@ function buildSitemap(lastmod: string): string {
     );
   }
 
-  for (const articleSlug of ARTICLE_SLUGS) {
+  for (const articleSlug of articleSlugs) {
     urls.push(
       `  <url>\n    <loc>${BASE}/insights/${articleSlug}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>0.8</priority>\n  </url>`,
     );
@@ -188,6 +191,27 @@ if (!fs.existsSync(templatePath)) {
 
 const template = fs.readFileSync(templatePath, "utf-8");
 const lastmod = new Date().toISOString().slice(0, 10);
+
+let publishedInsights: PublicInsight[] = [];
+const configuredDomain = process.env.CANONICAL_DOMAIN?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+if (configuredDomain) {
+  try {
+    const response = await fetch(`https://${configuredDomain}/api/insights`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (response.ok) {
+      publishedInsights = await response.json() as PublicInsight[];
+      globalThis.__AIO_PRERENDER_INSIGHTS__ = publishedInsights;
+      console.log(`  ✓  Loaded ${publishedInsights.length} published Insights stories`);
+    }
+  } catch {
+    console.warn("  !  Published Insights API unavailable; using the checked-in SEO snapshot");
+  }
+}
+
+const articleSlugs = publishedInsights.length
+  ? publishedInsights.filter((article) => !article.externalUrl && article.body.length > 0).map((article) => article.slug)
+  : ARTICLE_SLUGS;
 
 let ok = 0;
 let errors = 0;
@@ -264,8 +288,30 @@ for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
 }
 
 // Render each complete article
-for (const articleSlug of ARTICLE_SLUGS) {
-  const meta: ArticleMeta = ARTICLE_META[articleSlug];
+for (const articleSlug of articleSlugs) {
+  const published = publishedInsights.find((article) => article.slug === articleSlug);
+  const meta: ArticleMeta | undefined = published ? {
+    articleTitle: published.title,
+    excerpt: published.excerpt,
+    title: published.seoTitle || published.title,
+    description: published.seoDescription || published.excerpt,
+    canonical: published.canonicalUrl || `https://${configuredDomain || "aiofusion.ai"}/insights/${published.slug}`,
+    ogTitle: published.title,
+    ogDescription: published.excerpt,
+    ogType: "article",
+    datePublished: published.datePublished || undefined,
+    dateModified: published.dateModified || published.datePublished || undefined,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: published.title,
+      description: published.excerpt,
+      image: published.coverImageUrl || undefined,
+      mainEntityOfPage: published.canonicalUrl || undefined,
+      author: { "@type": "Organization", name: "AIO Fusion" },
+      publisher: { "@type": "Organization", name: "AIO Fusion" },
+    },
+  } : ARTICLE_META[articleSlug];
   if (!meta) {
     console.error(`  ✗  No article metadata for "${articleSlug}"`);
     errors++;
@@ -312,8 +358,8 @@ for (const articleSlug of ARTICLE_SLUGS) {
 
 // Write sitemap.xml
 const sitemapPath = path.join(distPublic, "sitemap.xml");
-fs.writeFileSync(sitemapPath, buildSitemap(lastmod), "utf-8");
-console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + ARTICLE_SLUGS.length} URLs, lastmod ${lastmod})`);
+fs.writeFileSync(sitemapPath, buildSitemap(lastmod, articleSlugs), "utf-8");
+console.log(`  ✓  /sitemap.xml  (${PUBLIC_ROUTES.length + articleSlugs.length} URLs, lastmod ${lastmod})`);
 
 // Summary
 if (errors > 0) {

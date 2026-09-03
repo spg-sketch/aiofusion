@@ -12,6 +12,10 @@ tags:
     description: Health operations
   - name: Auth
     description: Browser and mobile authentication endpoints.
+  - name: Insights
+    description: Public Insights content and authenticated editorial management.
+  - name: Storage
+    description: Direct image uploads for the Insights media library.
 paths:
   /healthz:
     get:
@@ -142,6 +146,180 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LogoutSuccess'
+  /insights:
+    get:
+      tags: [Insights]
+      operationId: listPublishedInsights
+      summary: List published Insights stories
+      responses:
+        '200':
+          description: Published Insights stories.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InsightArticle'
+  /insights/{slug}:
+    get:
+      tags: [Insights]
+      operationId: getPublishedInsight
+      summary: Get a published Insights story by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Published story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightArticle'
+        '404':
+          description: Story not found or not published.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/insights:
+    get:
+      tags: [Insights]
+      operationId: listAdminInsights
+      summary: List all Insights stories for editors
+      responses:
+        '200':
+          description: All editorial stories.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InsightArticle'
+    post:
+      tags: [Insights]
+      operationId: createAdminInsight
+      summary: Create an Insights story
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightArticleInput'
+      responses:
+        '201':
+          description: Story created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightArticle'
+        '400':
+          description: Invalid story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /admin/insights/{id}:
+    patch:
+      tags: [Insights]
+      operationId: updateAdminInsight
+      summary: Update an Insights story
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightArticleInput'
+      responses:
+        '200':
+          description: Story updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightArticle'
+        '400':
+          description: Invalid story.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Story not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      tags: [Insights]
+      operationId: deleteAdminInsight
+      summary: Delete an Insights story
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Story deleted.
+  /admin/insights/media:
+    get:
+      tags: [Insights]
+      operationId: listAdminInsightMedia
+      summary: List media library images
+      responses:
+        '200':
+          description: Media library.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InsightMedia'
+  /admin/insights/media/metadata:
+    post:
+      tags: [Insights]
+      operationId: createAdminInsightMedia
+      summary: Save uploaded image metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightMediaInput'
+      responses:
+        '201':
+          description: Media saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightMedia'
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestInsightUploadUrl
+      summary: Request a direct image upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -234,3 +412,107 @@ components:
       properties:
         error:
           type: string
+    InsightBlock:
+      type: object
+      additionalProperties: true
+      required: [type]
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+        mediaId:
+          type: string
+        altText:
+          type: string
+        caption:
+          type: string
+    InsightArticle:
+      type: object
+      required: [id, slug, title, excerpt, tag, body, status, coverImageUrl, coverImageAlt, seoTitle, seoDescription, focusKeyphrase, canonicalUrl]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        title: { type: string }
+        excerpt: { type: string }
+        tag: { type: string }
+        externalUrl: { type: [string, 'null'] }
+        datePublished: { type: [string, 'null'] }
+        dateModified: { type: [string, 'null'] }
+        body:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightBlock'
+        coverImageUrl: { type: [string, 'null'] }
+        coverImageAlt: { type: string }
+        seoTitle: { type: [string, 'null'] }
+        seoDescription: { type: [string, 'null'] }
+        focusKeyphrase: { type: [string, 'null'] }
+        canonicalUrl: { type: [string, 'null'] }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt: { type: [string, 'null'], format: date-time }
+    InsightArticleInput:
+      type: object
+      required: [slug, title, excerpt, tag, body, status, coverImageAlt]
+      properties:
+        slug: { type: string, minLength: 1 }
+        title: { type: string, minLength: 1 }
+        excerpt: { type: string }
+        tag: { type: string }
+        externalUrl: { type: [string, 'null'] }
+        datePublished: { type: [string, 'null'] }
+        dateModified: { type: [string, 'null'] }
+        body:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsightBlock'
+        coverMediaId: { type: [string, 'null'] }
+        coverImageUrl: { type: [string, 'null'] }
+        coverImageAlt: { type: string }
+        seoTitle: { type: [string, 'null'] }
+        seoDescription: { type: [string, 'null'] }
+        focusKeyphrase: { type: [string, 'null'] }
+        canonicalUrl: { type: [string, 'null'] }
+        status: { type: string, enum: [draft, published] }
+    InsightMedia:
+      type: object
+      required: [id, fileName, contentType, sizeBytes, publicUrl, altText, createdAt]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: string }
+        objectPath: { type: [string, 'null'] }
+        publicUrl: { type: string }
+        altText: { type: string }
+        createdAt: { type: string, format: date-time }
+    InsightMediaInput:
+      type: object
+      required: [id, fileName, contentType, sizeBytes, publicUrl, altText]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        contentType: { type: string }
+        sizeBytes: { type: string }
+        objectPath: { type: [string, 'null'] }
+        publicUrl: { type: string }
+        altText: { type: string }
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1 }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string, format: uri }
+        objectPath: { type: string }

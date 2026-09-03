@@ -18,11 +18,13 @@ import adminRouter from "./admin";
 import contactRouter from "./contact";
 import supportRouter from "./support";
 import publicAssetsRouter from "./public-assets";
+import insightsRouter from "./insights";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(publicAssetsRouter);
+router.use(insightsRouter);
 router.use(authRouter);
 router.use(platformRouter);
 router.use(billingRouter);

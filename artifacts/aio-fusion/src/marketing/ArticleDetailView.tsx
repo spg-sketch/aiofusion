@@ -3,15 +3,37 @@ import { vars } from "./vars";
 import type { Article, ArticleSection } from "./articles-data";
 
 function formatArticleDate(date: string): string {
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? new Date(`${date}T00:00:00Z`)
+    : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
+  }).format(parsed);
 }
 
 function SectionBlock({ section }: { section: ArticleSection }) {
+  if (section.type === "image" && section.url) {
+    return (
+      <figure className="my-9">
+        <img
+          src={section.url}
+          alt={section.altText ?? ""}
+          className="w-full rounded-2xl object-cover"
+          loading="lazy"
+          decoding="async"
+        />
+        {section.caption && (
+          <figcaption className="mt-2 text-center text-[12px]" style={{ color: vars.g500 }}>
+            {section.caption}
+          </figcaption>
+        )}
+      </figure>
+    );
+  }
   if (section.type === "heading") {
     return (
       <h2
@@ -69,6 +91,11 @@ function SectionBlock({ section }: { section: ArticleSection }) {
         >
           {section.text}
         </p>
+        {section.caption && (
+          <p className="mt-2 text-[13px] font-light leading-[1.6]" style={{ color: vars.g600 }}>
+            {section.caption}
+          </p>
+        )}
       </div>
     );
   }
@@ -99,10 +126,12 @@ export default function ArticleDetailView({
   article,
   onBack,
   coverImg,
+  coverAlt = "",
 }: {
   article: Article;
   onBack: () => void;
   coverImg: string;
+  coverAlt?: string;
 }) {
   const cream = "#FBF6EC";
   const base = import.meta.env.BASE_URL;
@@ -160,7 +189,10 @@ export default function ArticleDetailView({
       { href: "thought-leadership-engine-ai-visibility", label: "Why thought leadership drives AI visibility" },
     ],
   };
-  const related = relatedByArticle[article.id] ?? [];
+  const related = relatedByArticle[article.id] ?? [
+    { href: "seo-aio", label: "From SEO to AIO: a transition playbook" },
+    { href: "../insights", label: "Browse all AIO Fusion Insights" },
+  ];
 
   function relatedHref(href: string): string {
     if (href.startsWith("../")) return `${base}${href.slice(3)}`;
@@ -238,8 +270,8 @@ export default function ArticleDetailView({
         >
           <img
             src={coverImg}
-            alt=""
-            aria-hidden="true"
+            alt={coverAlt}
+            aria-hidden={coverAlt ? undefined : "true"}
             className="w-full h-full object-cover"
           />
         </div>
@@ -250,8 +282,7 @@ export default function ArticleDetailView({
           ))}
         </div>
 
-        {related.length > 0 && (
-          <aside className="mt-12 p-6 rounded-2xl bg-white" style={{ border: `1px solid ${vars.g200}` }}>
+        <aside className="mt-12 p-6 rounded-2xl bg-white" style={{ border: `1px solid ${vars.g200}` }}>
             <h2 className="text-[20px] font-semibold mb-4" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>
               Continue exploring AI visibility
             </h2>
@@ -268,8 +299,7 @@ export default function ArticleDetailView({
                 </li>
               ))}
             </ul>
-          </aside>
-        )}
+        </aside>
 
         <div
           className="mt-14 pt-8 border-t flex items-center justify-between"

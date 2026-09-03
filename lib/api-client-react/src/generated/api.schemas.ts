@@ -53,6 +53,122 @@ export interface ErrorEnvelope {
   error: string;
 }
 
+export interface InsightBlock {
+  type: string;
+  text?: string;
+  items?: string[];
+  mediaId?: string;
+  altText?: string;
+  caption?: string;
+  [key: string]: unknown;
+ }
+
+export interface InsightArticle {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  tag: string;
+  /** @nullable */
+  externalUrl?: string | null;
+  /** @nullable */
+  datePublished?: string | null;
+  /** @nullable */
+  dateModified?: string | null;
+  body: InsightBlock[];
+  /** @nullable */
+  coverImageUrl: string | null;
+  coverImageAlt: string;
+  /** @nullable */
+  seoTitle: string | null;
+  /** @nullable */
+  seoDescription: string | null;
+  /** @nullable */
+  focusKeyphrase: string | null;
+  /** @nullable */
+  canonicalUrl: string | null;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  /** @nullable */
+  publishedAt?: string | null;
+}
+
+export type InsightArticleInputStatus = typeof InsightArticleInputStatus[keyof typeof InsightArticleInputStatus];
+
+
+export const InsightArticleInputStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface InsightArticleInput {
+  /** @minLength 1 */
+  slug: string;
+  /** @minLength 1 */
+  title: string;
+  excerpt: string;
+  tag: string;
+  /** @nullable */
+  externalUrl?: string | null;
+  /** @nullable */
+  datePublished?: string | null;
+  /** @nullable */
+  dateModified?: string | null;
+  body: InsightBlock[];
+  /** @nullable */
+  coverMediaId?: string | null;
+  /** @nullable */
+  coverImageUrl?: string | null;
+  coverImageAlt: string;
+  /** @nullable */
+  seoTitle?: string | null;
+  /** @nullable */
+  seoDescription?: string | null;
+  /** @nullable */
+  focusKeyphrase?: string | null;
+  /** @nullable */
+  canonicalUrl?: string | null;
+  status: InsightArticleInputStatus;
+}
+
+export interface InsightMedia {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: string;
+  /** @nullable */
+  objectPath?: string | null;
+  publicUrl: string;
+  altText: string;
+  createdAt: string;
+}
+
+export interface InsightMediaInput {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: string;
+  /** @nullable */
+  objectPath?: string | null;
+  publicUrl: string;
+  altText: string;
+}
+
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+}
+
 /**
  * Opaque session token — `Bearer <sid>`.
  */

@@ -25,9 +25,15 @@ import type {
   ErrorEnvelope,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
+  InsightArticle,
+  InsightArticleInput,
+  InsightMedia,
+  InsightMediaInput,
   LogoutSuccess,
   MobileTokenExchangeRequest,
-  MobileTokenExchangeSuccess
+  MobileTokenExchangeSuccess,
+  UploadUrlRequest,
+  UploadUrlResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -609,5 +615,708 @@ export const useLogoutMobileSession = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogoutMobileSessionMutationOptions(options));
+    }
+
+export const getListPublishedInsightsUrl = () => {
+
+
+
+
+  return `/api/insights`
+}
+
+/**
+ * @summary List published Insights stories
+ */
+export const listPublishedInsights = async ( options?: Parameters<typeof customFetch>[1]): Promise<InsightArticle[]> => {
+
+  return customFetch<InsightArticle[]>(getListPublishedInsightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPublishedInsightsQueryKey = () => {
+    return [
+    `/api/insights`
+    ] as const;
+    }
+
+
+export const getListPublishedInsightsQueryOptions = <TData = Awaited<ReturnType<typeof listPublishedInsights>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublishedInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPublishedInsightsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPublishedInsights>>> = ({ signal }) => listPublishedInsights({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPublishedInsights>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPublishedInsightsQueryResult = NonNullable<Awaited<ReturnType<typeof listPublishedInsights>>>
+export type ListPublishedInsightsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List published Insights stories
+ */
+
+export function useListPublishedInsights<TData = Awaited<ReturnType<typeof listPublishedInsights>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPublishedInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPublishedInsightsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublishedInsightUrl = (slug: string,) => {
+
+
+
+
+  return `/api/insights/${slug}`
+}
+
+/**
+ * @summary Get a published Insights story by slug
+ */
+export const getPublishedInsight = async (slug: string, options?: Parameters<typeof customFetch>[1]): Promise<InsightArticle> => {
+
+  return customFetch<InsightArticle>(getGetPublishedInsightUrl(slug),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublishedInsightQueryKey = (slug: string,) => {
+    return [
+    `/api/insights/${slug}`
+    ] as const;
+    }
+
+
+export const getGetPublishedInsightQueryOptions = <TData = Awaited<ReturnType<typeof getPublishedInsight>>, TError = ErrorType<ErrorEnvelope>>(slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublishedInsight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublishedInsightQueryKey(slug);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublishedInsight>>> = ({ signal }) => getPublishedInsight(slug, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slug !== null && slug !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublishedInsight>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublishedInsightQueryResult = NonNullable<Awaited<ReturnType<typeof getPublishedInsight>>>
+export type GetPublishedInsightQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * @summary Get a published Insights story by slug
+ */
+
+export function useGetPublishedInsight<TData = Awaited<ReturnType<typeof getPublishedInsight>>, TError = ErrorType<ErrorEnvelope>>(
+ slug: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublishedInsight>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublishedInsightQueryOptions(slug,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminInsightsUrl = () => {
+
+
+
+
+  return `/api/admin/insights`
+}
+
+/**
+ * @summary List all Insights stories for editors
+ */
+export const listAdminInsights = async ( options?: Parameters<typeof customFetch>[1]): Promise<InsightArticle[]> => {
+
+  return customFetch<InsightArticle[]>(getListAdminInsightsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminInsightsQueryKey = () => {
+    return [
+    `/api/admin/insights`
+    ] as const;
+    }
+
+
+export const getListAdminInsightsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminInsights>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminInsightsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminInsights>>> = ({ signal }) => listAdminInsights({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminInsights>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminInsightsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminInsights>>>
+export type ListAdminInsightsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all Insights stories for editors
+ */
+
+export function useListAdminInsights<TData = Awaited<ReturnType<typeof listAdminInsights>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminInsights>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminInsightsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAdminInsightUrl = () => {
+
+
+
+
+  return `/api/admin/insights`
+}
+
+/**
+ * @summary Create an Insights story
+ */
+export const createAdminInsight = async (insightArticleInput: InsightArticleInput, options?: Parameters<typeof customFetch>[1]): Promise<InsightArticle> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<InsightArticle>(getCreateAdminInsightUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(insightArticleInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAdminInsightMutationKey = () => ['createAdminInsight'] as const;
+
+export const getCreateAdminInsightMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminInsight>>, TError,CreateAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAdminInsight>>, TError,CreateAdminInsightMutationVariables, TContext> => {
+
+const mutationKey = getCreateAdminInsightMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAdminInsight>>, CreateAdminInsightMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAdminInsight(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAdminInsightMutationResult = NonNullable<Awaited<ReturnType<typeof createAdminInsight>>>
+    export type CreateAdminInsightMutationBody = BodyType<InsightArticleInput>
+    export type CreateAdminInsightMutationError = ErrorType<ErrorEnvelope>
+    export type CreateAdminInsightMutationVariables = {data: BodyType<InsightArticleInput>}
+
+    /**
+ * @summary Create an Insights story
+ */
+export const useCreateAdminInsight = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminInsight>>, TError,CreateAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAdminInsight>>,
+        TError,
+        CreateAdminInsightMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAdminInsightMutationOptions(options));
+    }
+
+export const getUpdateAdminInsightUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/insights/${id}`
+}
+
+/**
+ * @summary Update an Insights story
+ */
+export const updateAdminInsight = async (id: string,
+    insightArticleInput: InsightArticleInput, options?: Parameters<typeof customFetch>[1]): Promise<InsightArticle> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<InsightArticle>(getUpdateAdminInsightUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(insightArticleInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminInsightMutationKey = () => ['updateAdminInsight'] as const;
+
+export const getUpdateAdminInsightMutationOptions = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminInsight>>, TError,UpdateAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminInsight>>, TError,UpdateAdminInsightMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAdminInsightMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminInsight>>, UpdateAdminInsightMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAdminInsight(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminInsightMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminInsight>>>
+    export type UpdateAdminInsightMutationBody = BodyType<InsightArticleInput>
+    export type UpdateAdminInsightMutationError = ErrorType<ErrorEnvelope>
+    export type UpdateAdminInsightMutationVariables = {id: string;data: BodyType<InsightArticleInput>}
+
+    /**
+ * @summary Update an Insights story
+ */
+export const useUpdateAdminInsight = <TError = ErrorType<ErrorEnvelope>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminInsight>>, TError,UpdateAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminInsight>>,
+        TError,
+        UpdateAdminInsightMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAdminInsightMutationOptions(options));
+    }
+
+export const getDeleteAdminInsightUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/insights/${id}`
+}
+
+/**
+ * @summary Delete an Insights story
+ */
+export const deleteAdminInsight = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAdminInsightUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminInsightMutationKey = () => ['deleteAdminInsight'] as const;
+
+export const getDeleteAdminInsightMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsight>>, TError,DeleteAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsight>>, TError,DeleteAdminInsightMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAdminInsightMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminInsight>>, DeleteAdminInsightMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAdminInsight(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminInsightMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminInsight>>>
+
+    export type DeleteAdminInsightMutationError = ErrorType<unknown>
+    export type DeleteAdminInsightMutationVariables = {id: string}
+
+    /**
+ * @summary Delete an Insights story
+ */
+export const useDeleteAdminInsight = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminInsight>>, TError,DeleteAdminInsightMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminInsight>>,
+        TError,
+        DeleteAdminInsightMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAdminInsightMutationOptions(options));
+    }
+
+export const getListAdminInsightMediaUrl = () => {
+
+
+
+
+  return `/api/admin/insights/media`
+}
+
+/**
+ * @summary List media library images
+ */
+export const listAdminInsightMedia = async ( options?: Parameters<typeof customFetch>[1]): Promise<InsightMedia[]> => {
+
+  return customFetch<InsightMedia[]>(getListAdminInsightMediaUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminInsightMediaQueryKey = () => {
+    return [
+    `/api/admin/insights/media`
+    ] as const;
+    }
+
+
+export const getListAdminInsightMediaQueryOptions = <TData = Awaited<ReturnType<typeof listAdminInsightMedia>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminInsightMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminInsightMediaQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminInsightMedia>>> = ({ signal }) => listAdminInsightMedia({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminInsightMedia>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminInsightMediaQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminInsightMedia>>>
+export type ListAdminInsightMediaQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List media library images
+ */
+
+export function useListAdminInsightMedia<TData = Awaited<ReturnType<typeof listAdminInsightMedia>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminInsightMedia>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminInsightMediaQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAdminInsightMediaUrl = () => {
+
+
+
+
+  return `/api/admin/insights/media/metadata`
+}
+
+/**
+ * @summary Save uploaded image metadata
+ */
+export const createAdminInsightMedia = async (insightMediaInput: InsightMediaInput, options?: Parameters<typeof customFetch>[1]): Promise<InsightMedia> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<InsightMedia>(getCreateAdminInsightMediaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(insightMediaInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAdminInsightMediaMutationKey = () => ['createAdminInsightMedia'] as const;
+
+export const getCreateAdminInsightMediaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminInsightMedia>>, TError,CreateAdminInsightMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAdminInsightMedia>>, TError,CreateAdminInsightMediaMutationVariables, TContext> => {
+
+const mutationKey = getCreateAdminInsightMediaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAdminInsightMedia>>, CreateAdminInsightMediaMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAdminInsightMedia(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAdminInsightMediaMutationResult = NonNullable<Awaited<ReturnType<typeof createAdminInsightMedia>>>
+    export type CreateAdminInsightMediaMutationBody = BodyType<InsightMediaInput>
+    export type CreateAdminInsightMediaMutationError = ErrorType<unknown>
+    export type CreateAdminInsightMediaMutationVariables = {data: BodyType<InsightMediaInput>}
+
+    /**
+ * @summary Save uploaded image metadata
+ */
+export const useCreateAdminInsightMedia = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminInsightMedia>>, TError,CreateAdminInsightMediaMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAdminInsightMedia>>,
+        TError,
+        CreateAdminInsightMediaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAdminInsightMediaMutationOptions(options));
+    }
+
+export const getRequestInsightUploadUrlUrl = () => {
+
+
+
+
+  return `/api/storage/uploads/request-url`
+}
+
+/**
+ * @summary Request a direct image upload URL
+ */
+export const requestInsightUploadUrl = async (uploadUrlRequest: UploadUrlRequest, options?: Parameters<typeof customFetch>[1]): Promise<UploadUrlResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<UploadUrlResponse>(getRequestInsightUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(uploadUrlRequest)
+  }
+);}
+
+
+
+
+
+export const getRequestInsightUploadUrlMutationKey = () => ['requestInsightUploadUrl'] as const;
+
+export const getRequestInsightUploadUrlMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestInsightUploadUrl>>, TError,RequestInsightUploadUrlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestInsightUploadUrl>>, TError,RequestInsightUploadUrlMutationVariables, TContext> => {
+
+const mutationKey = getRequestInsightUploadUrlMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestInsightUploadUrl>>, RequestInsightUploadUrlMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestInsightUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestInsightUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestInsightUploadUrl>>>
+    export type RequestInsightUploadUrlMutationBody = BodyType<UploadUrlRequest>
+    export type RequestInsightUploadUrlMutationError = ErrorType<unknown>
+    export type RequestInsightUploadUrlMutationVariables = {data: BodyType<UploadUrlRequest>}
+
+    /**
+ * @summary Request a direct image upload URL
+ */
+export const useRequestInsightUploadUrl = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestInsightUploadUrl>>, TError,RequestInsightUploadUrlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestInsightUploadUrl>>,
+        TError,
+        RequestInsightUploadUrlMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRequestInsightUploadUrlMutationOptions(options));
     }
 
