@@ -69,6 +69,7 @@ RESEND_FROM = "AIO Fusion Alerts <info@aiofusion.ai>"
 PLATFORM_AUTO_APPROVE_ADMIN_EMAILS = "spg@bluhalo.com"
 CANONICAL_DOMAIN = "staging.aiofusion.ai"
 DEPLOYMENT_ENV = "staging"
+PRODUCTION_DB_IDENTIFIERS = "postgresql://neondb_owner:npg_wKxOHs3BrbI0@ep-soft-wave-a57kzjbb.us-east-2.aws.neon.tech/neondb?sslmode=require"
 
 [nix]
 channel = "stable-25_05"
