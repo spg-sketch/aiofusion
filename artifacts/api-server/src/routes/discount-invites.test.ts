@@ -134,7 +134,10 @@ vi.mock("../lib/stripe-client", () => ({
         search: () => Promise.resolve({ data: [{ id: "prod_mock" }] }),
         create: () => Promise.resolve({ id: "prod_mock_created" }),
       },
-      customers: { create: () => Promise.resolve({ id: "cus_mock_1" }) },
+      customers: {
+        create: () => Promise.resolve({ id: "cus_mock_1" }),
+        retrieve: (id: string) => Promise.resolve({ id, deleted: false }),
+      },
       checkout: {
         sessions: {
           create: (params: any) => {

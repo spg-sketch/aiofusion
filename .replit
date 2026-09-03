@@ -67,8 +67,8 @@ RESEND_FROM = "AIO Fusion Alerts <info@aiofusion.ai>"
 
 [userenv.production]
 PLATFORM_AUTO_APPROVE_ADMIN_EMAILS = "spg@bluhalo.com"
-CANONICAL_DOMAIN = "aiofusion.ai"
-DEPLOYMENT_ENV = "production"
+CANONICAL_DOMAIN = "staging.aiofusion.ai"
+DEPLOYMENT_ENV = "staging"
 
 [nix]
 channel = "stable-25_05"
