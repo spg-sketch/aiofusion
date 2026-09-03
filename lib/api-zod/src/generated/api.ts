@@ -28,7 +28,7 @@ export const GetCurrentAuthUserHeader = zod.object({
 export const GetCurrentAuthUserResponse = zod.object({
   "user": zod.union([zod.object({
   "id": zod.string(),
-  "email": zod.email().nullable(),
+  "email": zod.string().email().nullable(),
   "firstName": zod.string().nullable(),
   "lastName": zod.string().nullable(),
   "profileImageUrl": zod.string().nullable()
@@ -52,7 +52,7 @@ export const BeginBrowserLoginResponse = zod.void()
 export const HandleBrowserLoginCallbackQueryParams = zod.object({
   "code": zod.coerce.string().optional(),
   "state": zod.coerce.string().optional(),
-  "iss": zod.url().optional()
+  "iss": zod.coerce.string().url().optional()
 })
 
 export const HandleBrowserLoginCallbackResponse = zod.void()
@@ -81,7 +81,7 @@ export const LogoutBrowserSessionResponse = zod.void()
 export const ExchangeMobileAuthorizationCodeBody = zod.object({
   "code": zod.string().min(1),
   "code_verifier": zod.string().min(1),
-  "redirect_uri": zod.url().min(1),
+  "redirect_uri": zod.string().url().min(1),
   "state": zod.string().min(1),
   "nonce": zod.string().min(1).optional()
 })

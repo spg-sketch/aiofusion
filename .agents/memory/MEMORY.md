@@ -61,3 +61,4 @@
 - [Live invitation uniqueness](live-invite-uniqueness.md) — expire/retire invitation rows before applying the state-based one-live-invite-per-email invariant.
 - [Media CSV import safety](aio-fusion-media-csv-import.md) — customer uploads stay active-account scoped, including admin; preview and commit must share dedupe planning, with commit serialized per account.
 - [pnpm audit override ranges](pnpm-audit-override-ranges.md) — broad lower-bound replacements can resolve to a different vulnerable major; pin legacy-major fixes exactly and re-scan the lockfile.
+- [Orval and Zod compatibility](orval-zod-compatibility.md) — pin Orval output to Zod 3 while the workspace catalog uses Zod 3; auto-detection can emit Zod 4 calls that crash API startup.
