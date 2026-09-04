@@ -34,6 +34,7 @@ import type { AcceptedInvitation } from "./components/InvitationResult";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { BackToAgencyLink } from "./components/BackToAgencyLink";
 import { getImpersonationState } from "./lib/auth";
+import { isInsightsAdminPath } from "./lib/adminRoute";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
 import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
@@ -392,7 +393,13 @@ function publicViewFromLocation(): PublicView | null {
   return SLUG_TO_VIEW[slugFromLocation()] ?? null;
 }
 
+function directViewFromLocation(): PublicView | "insights-admin" | null {
+  if (isInsightsAdminPath(window.location.pathname, appBase())) return "insights-admin";
+  return publicViewFromLocation();
+}
+
 function viewToUrl(v: string, insightsArticleId?: string | null): string {
+  if (v === "insights-admin") return appBase() + "admin";
   if (v === "insights" && insightsArticleId) {
     return appBase() + "insights/" + insightsArticleId;
   }
@@ -401,7 +408,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => publicViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => directViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
@@ -1111,7 +1118,7 @@ function App() {
       // Prefer the navigation state we pushed; fall back to deriving a public
       // page from the URL (e.g. a directly typed /about or a forward nav).
       const targetView = (
-        s && s.__aioNav && s.view ? s.view : (publicViewFromLocation() ?? "landing")
+        s && s.__aioNav && s.view ? s.view : (directViewFromLocation() ?? "landing")
       ) as typeof view;
       const targetPage = s && s.__aioNav && s.currentPage ? s.currentPage : pageRef.current;
       const targetArticleId = s && s.__aioNav
@@ -1159,7 +1166,7 @@ function App() {
   // user is logged out.
   useEffect(() => {
     if (authLoading) return;
-    if (view === "users-admin" && (!session || session.role !== "admin")) {
+    if ((view === "users-admin" || view === "insights-admin") && (!session || session.role !== "admin")) {
       replaceNextNav.current = true;
       transitionToView("platform-home");
     }
@@ -1378,7 +1385,7 @@ function App() {
   }
   if (view === "insights-admin") {
     if (!session || session.role !== "admin") return null;
-    return <InsightsAdminPage onBack={() => transitionToView("users-admin")} />;
+    return <InsightsAdminPage onBack={() => transitionToView("platform-home")} />;
   }
   if ((view as string) === "leads-admin") {
     if (!session || session.role !== "admin") return null;
