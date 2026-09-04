@@ -17,12 +17,15 @@ import {
   listBillingProjects,
   changeAddonTier,
   isEntitled,
+  hasPaidSubscription,
   withBillingLock,
   claimCheckout,
   releaseCheckout,
   getCheckoutErrorResponse,
   isLiveStripeMode,
-  LEGACY_PROJECT_CAP,
+  getBetaTrialSummary,
+  startBetaTrial,
+  BETA_TRIAL_PROJECT_CAP,
 } from "../lib/billing";
 import {
   PLAN_PRICES,
@@ -102,6 +105,7 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
     const state = await getBillingState(ctx.slug);
     const prices = PLAN_PRICES[ctx.plan];
     const entitled = isEntitled(state);
+    const trial = getBetaTrialSummary(state);
     const [addons, projects, latestInvoice, companyRecord] = await Promise.all([
       getProjectAddons(ctx.slug),
       listBillingProjects(ctx.slug),
@@ -116,11 +120,18 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
       frequency: state?.frequency ?? null,
       currentPeriodEnd: state?.currentPeriodEnd ?? null,
       entitled,
+      trial: {
+        ...trial,
+        startedAt: trial.startedAt?.toISOString() ?? null,
+        endsAt: trial.endsAt?.toISOString() ?? null,
+      },
       applicablePlan: ctx.plan,
       includedProjects: included,
       // Always expose the effective allowance used by the server-side project
       // creation guard. Unsubscribed beta accounts retain the legacy cap.
-      projectAllowance: entitled ? included + addons.length : LEGACY_PROJECT_CAP,
+      projectAllowance: trial.status === "active"
+        ? BETA_TRIAL_PROJECT_CAP
+        : entitled ? included + addons.length : 0,
       projectsUsed: projects.length,
       latestInvoiceUrl: latestInvoice,
       portalAvailable: stripeConfigured() && !!state?.stripeCustomerId,
@@ -157,6 +168,34 @@ router.get("/platform/billing/subscription", requirePlatformAuth, async (req, re
   } catch (err) {
     logger.error({ err }, "billing: failed to load subscription state");
     res.status(500).json({ error: "Could not load subscription details." });
+  }
+});
+
+router.post("/platform/billing/trial", requirePlatformAuth, async (req, res) => {
+  try {
+    const membershipRole = req.account?.membershipRole;
+    if (membershipRole && membershipRole !== "owner" && membershipRole !== "billing") {
+      res.status(403).json({ error: "Only the account owner or billing contact can start the beta trial." });
+      return;
+    }
+    const ctx = await resolveBillingContext(req, res);
+    if (!ctx) return;
+    const state = await startBetaTrial(ctx.slug, ctx.plan);
+    if (!state) {
+      res.status(409).json({ error: "This account is not eligible for a new beta trial." });
+      return;
+    }
+    const trial = getBetaTrialSummary(state);
+    res.status(201).json({
+      trial: {
+        ...trial,
+        startedAt: trial.startedAt?.toISOString() ?? null,
+        endsAt: trial.endsAt?.toISOString() ?? null,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "billing: failed to start beta trial");
+    res.status(500).json({ error: "Could not start the beta trial. Please try again." });
   }
 });
 
@@ -200,7 +239,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
     try {
       const lockResult = await withBillingLock(ctx.slug, async (bs) => {
         const state = await getBillingState(bs);
-        if (isEntitled(state)) return { entitled: true, billingSlug: bs };
+        if (hasPaidSubscription(state)) return { entitled: true, billingSlug: bs };
         let result = await claimCheckout(bs, frequency);
         if (
           !result.claimed &&
@@ -456,7 +495,7 @@ router.post("/platform/billing/project-checkout", requirePlatformAuth, async (re
       return;
     }
     const state = await getBillingState(ctx.slug);
-    if (!isEntitled(state)) {
+    if (!hasPaidSubscription(state)) {
       res.status(409).json({ error: "You need an active subscription before adding projects." });
       return;
     }

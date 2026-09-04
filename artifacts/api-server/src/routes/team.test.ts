@@ -393,7 +393,7 @@ async function seedAgency(slug: string, email: string) {
   });
   const [company] = await db
     .insert(platformCompaniesTable)
-    .values({ slug, role: "agency", status: "active", displayName: `${slug} Ltd`, setupComplete: true })
+    .values({ slug, role: "agency", status: "active", displayName: `${slug} Ltd`, setupComplete: true, freeAccess: true })
     .returning();
   const [user] = await db
     .insert(platformUsersTable)

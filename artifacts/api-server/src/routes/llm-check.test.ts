@@ -86,6 +86,13 @@ vi.mock("../middleware/concurrency-guard", () => ({
   llmCheckConcurrencyGuard: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
+// These focused route tests mock the database down to the audit-lock surface.
+// Fair-usage entitlement is covered by billing tests, so provide its prior
+// allowed allowance here rather than turning missing mock tables into a quota.
+vi.mock("../lib/billing", () => ({
+  getProjectActionLimit: vi.fn().mockResolvedValue(50),
+}));
+
 import llmCheckRouter, {
   extractJson,
   parseAssessment,

@@ -38,6 +38,12 @@ type SubscriptionInfo = {
   portalAvailable: boolean;
   checkoutAvailable: boolean;
   companyRecordComplete: boolean;
+  trial: {
+    status: "eligible" | "active" | "expired" | "used" | "exempt";
+    startedAt: string | null;
+    endsAt: string | null;
+    daysRemaining: number;
+  };
   projects: BillingProject[];
   unassignedAddons: { tier: ProjectTier; purchasedAt: string }[];
   tierPrices: Record<ProjectTier, { yearlyTotal: number; actionsPerMonth: number }>;
@@ -87,6 +93,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
   const [loaded, setLoaded] = useState(false);
   const [frequency, setFrequency] = useState<"annual" | "quarterly">("annual");
   const [starting, setStarting] = useState(false);
+  const [startingTrial, setStartingTrial] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -136,10 +143,34 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
     }
   }
 
+  async function startTrial() {
+    if (!window.confirm("Start your one-time 60-day beta trial now? No card is required, and the trial cannot be restarted.")) return;
+    setStartingTrial(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase()}/api/platform/billing/trial`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? "Could not start the beta trial.");
+        return;
+      }
+      setRefreshTick((tick) => tick + 1);
+      window.dispatchEvent(new Event("aio:beta-trial-changed"));
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setStartingTrial(false);
+    }
+  }
+
   if (!loaded) return null;
   if (!info) return null;
 
   const planLabel = PLAN_LABELS[info.plan ?? info.applicablePlan] ?? "";
+  const trial = info.trial ?? { status: "eligible" as const, startedAt: null, endsAt: null, daysRemaining: 0 };
   const subscribed = info.status !== "none";
   const status = STATUS_LABELS[info.status];
   const renewal = info.currentPeriodEnd
@@ -160,6 +191,46 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
           <p className="text-[13px] mb-3 px-3 py-2 rounded-lg" style={{ background: vars.g50, color: vars.g600 }}>
             Checkout was cancelled - no payment was taken.
           </p>
+        )}
+
+        {trial.status === "eligible" && (
+          <div className="mb-5 rounded-xl p-4" style={{ background: "#FBE3ED55", border: `1px solid ${accent}55` }}>
+            <p className="text-[14px] font-bold mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
+            <p className="text-[13px] mb-3" style={{ color: vars.g600 }}>
+              No card required. Your one-time trial starts when you confirm and includes two project workspaces.
+            </p>
+            <button
+              type="button"
+              onClick={startTrial}
+              disabled={startingTrial}
+              className="px-5 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-50"
+              style={{ background: accent }}
+            >
+              {startingTrial ? "Starting trial..." : "Start free beta trial"}
+            </button>
+          </div>
+        )}
+
+        {trial.status === "active" && (
+          <div className="mb-5 rounded-xl p-4" style={{ background: "#ECFDF5", border: "1px solid #A7F3D0" }}>
+            <p className="text-[14px] font-bold" style={{ color: "#166534" }}>
+              {trial.daysRemaining <= 1
+                ? "Beta trial ends today"
+                : `Beta trial active - ${trial.daysRemaining} days remaining`}
+            </p>
+            <p className="text-[13px] mt-1" style={{ color: "#166534" }}>
+              Choose a plan below before the trial ends to keep paid features available.
+            </p>
+          </div>
+        )}
+
+        {trial.status === "expired" && (
+          <div className="mb-5 rounded-xl p-4" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+            <p className="text-[14px] font-bold" style={{ color: "#991B1B" }}>Your beta trial has ended</p>
+            <p className="text-[13px] mt-1" style={{ color: "#991B1B" }}>
+              Your account and existing work remain available. Choose a plan below to continue using paid features and project capacity.
+            </p>
+          </div>
         )}
 
         {subscribed ? (
@@ -218,7 +289,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
         ) : (
           <div>
             <p className="text-[13px] mb-4" style={{ color: vars.g500 }}>
-              Subscribe to the {planLabel} plan - {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Prices exclude VAT - tax is calculated at checkout based on your billing country, and business customers can enter a VAT number there.
+              {trial.status === "active" ? "Subscribe when you are ready to continue after the trial." : `Subscribe to the ${planLabel} plan.`} {info.includedProjects} Premium project{info.includedProjects === 1 ? "" : "s"} included. Prices exclude VAT - tax is calculated at checkout based on your billing country, and business customers can enter a VAT number there.
             </p>
             <RestartChooser info={info} frequency={frequency} setFrequency={setFrequency} starting={starting} onStart={startCheckout} error={error} />
           </div>

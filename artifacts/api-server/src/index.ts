@@ -26,6 +26,7 @@ import { sendInviteReminders } from "./lib/invite-reminders";
 import { checkMicrosoftOAuthCredentials } from "./lib/microsoft-oauth-health";
 import { ensurePlatformSchemaV9 } from "./lib/ensure-platform-schema-v9";
 import { ensurePlatformSchemaV10 } from "./lib/ensure-platform-schema-v10";
+import { ensurePlatformSchemaV11 } from "./lib/ensure-platform-schema-v11";
 import { repairKnownWorkspaceNames } from "./lib/repair-known-workspace-names";
 import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
@@ -127,6 +128,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform schema v8 additions", ensurePlatformSchemaV8],
     ["platform schema v9 additions", ensurePlatformSchemaV9],
     ["platform schema v10 additions", ensurePlatformSchemaV10],
+    ["platform schema v11 additions", ensurePlatformSchemaV11],
     ["platform_password_resets table", ensurePasswordResetsTable],
     ["known workspace names", repairKnownWorkspaceNames],
     ["Insights editorial schema", ensureInsightsSchema],

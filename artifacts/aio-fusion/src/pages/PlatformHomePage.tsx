@@ -14,6 +14,7 @@ import { type Session as LocalSession, type SessionInfo, type MfaChallenge, serv
 import { MfaLoginStep, MfaSecuritySection } from "../components/MfaPanels";
 import { apiBase } from "../lib/apiHelpers";
 import { roleLabel } from "../lib/accountLabels";
+import { BetaTrialBanner } from "../components/BetaTrialBanner";
 
 function membershipRoleLabel(role: NonNullable<LocalSession["membershipRole"]>): string {
   if (role === "content") return "Content Team Member";
@@ -355,6 +356,8 @@ function PlatformHomePage({
               : "Sign in to manage your PR and marketing projects, then move through The AIO Fusion Approach to grow business AI authority."}
           </p>
         </div>
+
+        {session && session.role !== "admin" && <BetaTrialBanner onViewPlans={onManageSubAccounts} />}
 
         {/* LOGIN / SIGN-UP / SESSION - full-width across the page */}
         {/* resetToken is checked first so a logged-in SSO user who clicked the

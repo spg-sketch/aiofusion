@@ -7,6 +7,7 @@ import {
   getCompanyBySlug,
   type PlatformAccount,
 } from "../lib/platform-auth";
+import { getBetaTrialSummary, getBillingState, isEntitled, resolveBillingSlug } from "../lib/billing";
 
 // Re-export the resolved user and company shapes for downstream use.
 export type ResolvedPlatformUser = typeof platformUsersTable.$inferSelect;
@@ -117,4 +118,36 @@ export function requirePlatformAuth(
     return;
   }
   next();
+}
+
+export async function requirePaidOrTrial(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.account) {
+    next();
+    return;
+  }
+  if (req.account.role === "admin") {
+    next();
+    return;
+  }
+  try {
+    const billingSlug = await resolveBillingSlug(req.account.username);
+    const state = await getBillingState(billingSlug);
+    if (isEntitled(state)) {
+      next();
+      return;
+    }
+    const trial = getBetaTrialSummary(state);
+    res.status(402).json({
+      error: trial.status === "expired"
+        ? "Your 60-day beta trial has ended. Choose a plan to continue."
+        : "Start your free 60-day beta trial or choose a plan to continue.",
+      code: trial.status === "expired" ? "BETA_TRIAL_EXPIRED" : "BETA_TRIAL_REQUIRED",
+    });
+  } catch {
+    res.status(503).json({ error: "Could not verify account access. Please try again." });
+  }
 }

@@ -46,9 +46,61 @@ export interface BillingState {
   stripeSubscriptionId: string | null;
   currentPeriodEnd: Date | null;
   includedProjects: number;
+  freeAccess: boolean;
+  betaTrialStartedAt: Date | null;
+  betaTrialEndsAt: Date | null;
+}
+
+export type BetaTrialStatus = "eligible" | "active" | "expired" | "used" | "exempt";
+
+export interface BetaTrialSummary {
+  status: BetaTrialStatus;
+  startedAt: Date | null;
+  endsAt: Date | null;
+  daysRemaining: number;
+}
+
+export const BETA_TRIAL_DAYS = 60;
+export const BETA_TRIAL_ACTION_LIMIT = 50;
+export const BETA_TRIAL_PROJECT_CAP = 2;
+const DAY_MS = 24 * 60 * 60 * 1000;
+let ensureBetaTrialColumnsPromise: Promise<unknown> | null = null;
+
+async function ensureBetaTrialColumns(): Promise<void> {
+  ensureBetaTrialColumnsPromise ??= db.execute(sql`
+    ALTER TABLE platform_companies
+      ADD COLUMN IF NOT EXISTS beta_trial_started_at timestamptz,
+      ADD COLUMN IF NOT EXISTS beta_trial_ends_at timestamptz
+  `);
+  await ensureBetaTrialColumnsPromise;
+}
+
+export function getBetaTrialSummary(
+  state: Pick<BillingState, "status" | "freeAccess" | "betaTrialStartedAt" | "betaTrialEndsAt"> | null,
+  now = new Date(),
+): BetaTrialSummary {
+  if (state?.freeAccess || state?.status === "active" || state?.status === "past_due") {
+    return { status: "exempt", startedAt: state?.betaTrialStartedAt ?? null, endsAt: state?.betaTrialEndsAt ?? null, daysRemaining: 0 };
+  }
+  if (!state?.betaTrialStartedAt || !state.betaTrialEndsAt) {
+    return {
+      status: state?.status === "none" || !state ? "eligible" : "used",
+      startedAt: null,
+      endsAt: null,
+      daysRemaining: 0,
+    };
+  }
+  const remainingMs = state.betaTrialEndsAt.getTime() - now.getTime();
+  return {
+    status: remainingMs > 0 ? "active" : "expired",
+    startedAt: state.betaTrialStartedAt,
+    endsAt: state.betaTrialEndsAt,
+    daysRemaining: Math.max(0, Math.ceil(remainingMs / DAY_MS)),
+  };
 }
 
 export async function getBillingState(slug: string): Promise<BillingState | null> {
+  await ensureBetaTrialColumns();
   const [row] = await db
     .select({
       subscriptionStatus: platformCompaniesTable.subscriptionStatus,
@@ -57,6 +109,9 @@ export async function getBillingState(slug: string): Promise<BillingState | null
       stripeCustomerId: platformCompaniesTable.stripeCustomerId,
       stripeSubscriptionId: platformCompaniesTable.stripeSubscriptionId,
       currentPeriodEnd: platformCompaniesTable.currentPeriodEnd,
+      freeAccess: platformCompaniesTable.freeAccess,
+      betaTrialStartedAt: sql<Date | null>`beta_trial_started_at`,
+      betaTrialEndsAt: sql<Date | null>`beta_trial_ends_at`,
     })
     .from(platformCompaniesTable)
     .where(eq(platformCompaniesTable.slug, normUsername(slug)))
@@ -77,14 +132,50 @@ export async function getBillingState(slug: string): Promise<BillingState | null
     stripeSubscriptionId: row.stripeSubscriptionId ?? null,
     currentPeriodEnd: row.currentPeriodEnd ?? null,
     includedProjects: plan ? INCLUDED_PROJECTS[plan] : 0,
+    freeAccess: row.freeAccess === true,
+    betaTrialStartedAt: row.betaTrialStartedAt ? new Date(row.betaTrialStartedAt) : null,
+    betaTrialEndsAt: row.betaTrialEndsAt ? new Date(row.betaTrialEndsAt) : null,
   };
 }
 
 // An account is "entitled" while its subscription is active or in dunning
 // (past_due keeps access during the retry window - Stripe cancels it, and we
 // flip to cancelled, if payment never recovers).
-export function isEntitled(state: Pick<BillingState, "status"> | null): boolean {
+export function isEntitled(
+  state: Pick<BillingState, "status" | "freeAccess" | "betaTrialStartedAt" | "betaTrialEndsAt"> | null,
+  now = new Date(),
+): boolean {
+  return !!state && (
+    state.freeAccess ||
+    state.status === "active" ||
+    state.status === "past_due" ||
+    getBetaTrialSummary(state, now).status === "active"
+  );
+}
+
+export function hasPaidSubscription(
+  state: Pick<BillingState, "status"> | null,
+): boolean {
   return !!state && (state.status === "active" || state.status === "past_due");
+}
+
+export async function startBetaTrial(slug: string, plan: PlanKey): Promise<BillingState | null> {
+  await ensureBetaTrialColumns();
+  const startedAt = new Date();
+  const endsAt = new Date(startedAt.getTime() + BETA_TRIAL_DAYS * DAY_MS);
+  const result = await db.execute(sql`
+    UPDATE platform_companies
+    SET beta_trial_started_at = ${startedAt},
+        beta_trial_ends_at = ${endsAt},
+        plan = ${plan}
+    WHERE slug = ${normUsername(slug)}
+      AND free_access = false
+      AND beta_trial_started_at IS NULL
+      AND (subscription_status IS NULL OR subscription_status = 'none')
+    RETURNING slug
+  `);
+  if (result.rows.length === 0) return null;
+  return getBillingState(slug);
 }
 
 // Walk up the account hierarchy to the top-level account that carries the
@@ -109,13 +200,14 @@ export async function resolveBillingSlug(slug: string): Promise<string> {
 // Per-project action limits
 // ---------------------------------------------------------------------------
 
-export const NO_SUBSCRIPTION_ACTION_LIMIT = 50;
+export const NO_SUBSCRIPTION_ACTION_LIMIT = 0;
 
 // Derives the 30-day action limit for a project:
 //  - subscribed account + explicit project tier  -> that tier's limit
 //  - subscribed account + no tier (included)     -> Premium (75)
-//  - unsubscribed account (Beta grandfathering)  -> flat 50, as today
-// Fail-soft: any DB error returns the legacy flat limit.
+//  - active beta trial                           -> its plan/project tier limit
+//  - unstarted or expired trial                  -> no paid actions
+// Fail closed: any DB error denies paid actions.
 export async function getProjectActionLimit(
   accountId: string,
   projectId?: string | null,
@@ -123,7 +215,8 @@ export async function getProjectActionLimit(
   try {
     const billingSlug = await resolveBillingSlug(accountId);
     const state = await getBillingState(billingSlug);
-    if (!isEntitled(state)) return NO_SUBSCRIPTION_ACTION_LIMIT;
+    if (!isEntitled(state)) return 0;
+    if (getBetaTrialSummary(state).status === "active") return BETA_TRIAL_ACTION_LIMIT;
     if (projectId) {
       const [proj] = await db
         .select({ tier: projectsTable.tier, owner: projectsTable.owner })
@@ -145,7 +238,7 @@ export async function getProjectActionLimit(
     }
     return TIER_ACTION_LIMITS[INCLUDED_PROJECT_TIER];
   } catch (err) {
-    logger.warn({ err, accountId, projectId }, "billing: getProjectActionLimit failed - using legacy limit");
+    logger.warn({ err, accountId, projectId }, "billing: getProjectActionLimit failed - denying paid actions");
     return NO_SUBSCRIPTION_ACTION_LIMIT;
   }
 }
@@ -412,24 +505,23 @@ export async function saveProjectAddons(slug: string, addons: ProjectAddon[]): P
 }
 
 // The account's total project allowance: plan-included projects plus purchased
-// add-ons. Unsubscribed accounts get the legacy flat cap of 2.
+// add-ons. Unstarted and expired trial accounts get no additional capacity.
 export const LEGACY_PROJECT_CAP = 2;
 
 export async function getProjectAllowance(slug: string): Promise<number> {
   try {
     const billingSlug = await resolveBillingSlug(slug);
     const state = await getBillingState(billingSlug);
-    if (!isEntitled(state)) return LEGACY_PROJECT_CAP;
+    if (!isEntitled(state)) return 0;
+    if (getBetaTrialSummary(state).status === "active") return BETA_TRIAL_PROJECT_CAP;
     const addons = await getProjectAddons(billingSlug);
-    // Entitled accounts get exactly what they pay for: the plan's included
-    // projects plus purchased add-ons. The legacy cap of 2 applies ONLY to
-    // unsubscribed accounts (and as a defensive fallback for malformed state
-    // where the plan is missing).
+    // Entitled accounts get exactly their plan's included projects plus
+    // purchased add-ons. A plan-less legacy free-access row keeps the old cap.
     if (!state!.plan) return LEGACY_PROJECT_CAP;
     return INCLUDED_PROJECTS[state!.plan] + addons.length;
   } catch (err) {
-    logger.warn({ err, slug }, "billing: getProjectAllowance failed - using legacy cap");
-    return LEGACY_PROJECT_CAP;
+    logger.warn({ err, slug }, "billing: getProjectAllowance failed - denying additional capacity");
+    return 0;
   }
 }
 
@@ -1618,7 +1710,7 @@ async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<str
         await syncStripeBillingDetails(slug);
         return state.stripeCustomerId;
       }
-      if (isEntitled(state)) {
+      if (hasPaidSubscription(state)) {
         throw new Error("Stored Stripe customer was deleted for an entitled account");
       }
     } catch (err) {
@@ -1630,7 +1722,7 @@ async function ensureStripeCustomerId(stripe: Stripe, slug: string): Promise<str
       // Stripe account. It is safe to replace only before any subscription is
       // active; entitled accounts must be repaired manually to avoid detaching
       // a real subscription from its customer.
-      if (code !== "resource_missing" || isEntitled(state)) throw err;
+      if (code !== "resource_missing" || hasPaidSubscription(state)) throw err;
       logger.info(
         { slug, customerId: state.stripeCustomerId },
         "billing: replacing stale Stripe customer before first live checkout",

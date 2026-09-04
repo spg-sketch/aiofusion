@@ -392,6 +392,8 @@ import {
   releaseCheckout,
   CHECKOUT_PENDING_TTL_MS,
   warnIfTaxDeactivated,
+  getBetaTrialSummary,
+  isEntitled,
 } from "../lib/billing";
 
 // ---------------------------------------------------------------------------
@@ -479,6 +481,93 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+describe("card-free beta trial", () => {
+  it("derives exact trial boundaries and entitlement from server time", () => {
+    const startedAt = new Date("2026-09-01T12:00:00.000Z");
+    const endsAt = new Date("2026-10-31T12:00:00.000Z");
+    const base = {
+      status: "none" as const,
+      freeAccess: false,
+      betaTrialStartedAt: startedAt,
+      betaTrialEndsAt: endsAt,
+    };
+
+    expect(getBetaTrialSummary(base, new Date("2026-10-31T11:59:59.999Z"))).toMatchObject({
+      status: "active",
+      daysRemaining: 1,
+    });
+    expect(isEntitled(base, new Date("2026-10-31T11:59:59.999Z"))).toBe(true);
+    expect(getBetaTrialSummary(base, endsAt)).toMatchObject({ status: "expired", daysRemaining: 0 });
+    expect(isEntitled(base, endsAt)).toBe(false);
+    expect(getBetaTrialSummary({ ...base, betaTrialStartedAt: null, betaTrialEndsAt: null }).status).toBe("eligible");
+    expect(getBetaTrialSummary({ ...base, freeAccess: true }).status).toBe("exempt");
+    expect(getBetaTrialSummary({ ...base, status: "active" }).status).toBe("exempt");
+  });
+
+  it("starts once without checkout and immediately grants the beta allowances", async () => {
+    const { sid } = await seedWorkspace("trial-owner", "owner@trial-owner.test", { accountRole: "client" });
+
+    const before = await api("/api/platform/billing/subscription", { sid });
+    expect(before.status).toBe(200);
+    expect(before.json.trial.status).toBe("eligible");
+    expect(before.json.projectAllowance).toBe(0);
+
+    const started = await api("/api/platform/billing/trial", { sid, method: "POST" });
+    expect(started.status).toBe(201);
+    expect(started.json.trial.status).toBe("active");
+    expect(started.json.trial.daysRemaining).toBe(60);
+    expect(await getProjectAllowance("trial-owner")).toBe(2);
+    expect(await getProjectActionLimit("trial-owner")).toBe(50);
+
+    const repeated = await api("/api/platform/billing/trial", { sid, method: "POST" });
+    expect(repeated.status).toBe(409);
+  });
+
+  it("allows only one of two simultaneous activation requests to win", async () => {
+    const { sid } = await seedWorkspace("trial-race", "owner@trial-race.test", { accountRole: "agency" });
+    const results = await Promise.all([
+      api("/api/platform/billing/trial", { sid, method: "POST" }),
+      api("/api/platform/billing/trial", { sid, method: "POST" }),
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+  });
+
+  it("allows billing members, rejects other members, and applies the agency trial to managed clients", async () => {
+    const billing = await seedWorkspace("trial-billing", "billing@trial.test", {
+      accountRole: "agency",
+      membershipRole: "billing",
+    });
+    expect((await api("/api/platform/billing/trial", { sid: billing.sid, method: "POST" })).status).toBe(201);
+
+    const adminMember = await seedWorkspace("trial-team-admin", "team-admin@trial.test", {
+      accountRole: "client",
+      membershipRole: "admin",
+    });
+    expect((await api("/api/platform/billing/trial", { sid: adminMember.sid, method: "POST" })).status).toBe(403);
+
+    await seedWorkspace("trial-managed-client", "managed@trial.test", {
+      accountRole: "client",
+      parent: "trial-billing",
+    });
+    expect(await getProjectAllowance("trial-managed-client")).toBe(2);
+    expect(await getProjectActionLimit("trial-managed-client")).toBe(50);
+  });
+
+  it("does not offer a new trial to subscribed or free-access accounts", async () => {
+    const subscribed = await seedWorkspace("trial-subscriber", "subscriber@trial.test", { accountRole: "client" });
+    await db.update(platformCompaniesTable)
+      .set({ subscriptionStatus: "active", plan: "inhouse" })
+      .where(eq(platformCompaniesTable.slug, "trial-subscriber"));
+    expect((await api("/api/platform/billing/trial", { sid: subscribed.sid, method: "POST" })).status).toBe(409);
+
+    const free = await seedWorkspace("trial-free", "free@trial.test", { accountRole: "client" });
+    await db.update(platformCompaniesTable)
+      .set({ freeAccess: true })
+      .where(eq(platformCompaniesTable.slug, "trial-free"));
+    expect((await api("/api/platform/billing/trial", { sid: free.sid, method: "POST" })).status).toBe(409);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -630,9 +719,9 @@ describe("stripe webhook handlers", () => {
 // Per-project action limits
 // ---------------------------------------------------------------------------
 describe("getProjectActionLimit", () => {
-  it("unsubscribed accounts keep the legacy flat 50 limit", async () => {
+  it("unstarted trial accounts receive no paid action allowance", async () => {
     await seedWorkspace("legacy-co", "owner@legacy.test", { accountRole: "client" });
-    expect(await getProjectActionLimit("legacy-co")).toBe(50);
+    expect(await getProjectActionLimit("legacy-co")).toBe(0);
   });
 
   it("subscribed accounts get Premium 75 for included projects and tier limits for add-ons", async () => {
@@ -707,7 +796,7 @@ describe("billing routes", () => {
     expect(res.json.status).toBe("none");
     expect(res.json.applicablePlan).toBe("agency");
     expect(res.json.includedProjects).toBe(3);
-    expect(res.json.projectAllowance).toBe(2);
+    expect(res.json.projectAllowance).toBe(0);
     expect(res.json.projectsUsed).toBe(0);
     expect(res.json.prices.annual.yearlyTotal).toBe(500000);
     expect(res.json.prices.quarterly.perQuarter).toBe(143750);
@@ -764,6 +853,25 @@ describe("billing routes", () => {
       .where(eq(platformCompaniesTable.slug, "buyer-co"));
     const again = await api("/api/platform/billing/checkout", { sid, body: { frequency: "annual" } });
     expect(again.status).toBe(409);
+  });
+
+  it("lets an active beta customer choose a paid plan before the trial ends", async () => {
+    const { sid } = await seedWorkspace("trial-convert", "owner@trial-convert.test", { accountRole: "client" });
+    expect((await api("/api/platform/billing/trial", { sid, method: "POST" })).status).toBe(201);
+
+    const checkout = await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "annual" },
+    });
+    expect(checkout.status).toBe(200);
+    expect(checkout.json.url).toBe("https://checkout.stripe.com/test-session");
+
+    const addOn = await api("/api/platform/billing/project-checkout", {
+      sid,
+      body: { tier: "max" },
+    });
+    expect(addOn.status).toBe(409);
+    expect(addOn.json.error).toMatch(/active subscription/i);
   });
 
   it("checkout enables Stripe Tax with address and VAT collection", async () => {
@@ -1038,13 +1146,13 @@ describe("project add-ons", () => {
     return seeded;
   }
 
-  it("allowance is exactly what's paid for: In-House 1, Agency 3, unsubscribed 2", async () => {
+  it("allowance is exactly what's paid for: In-House 1, Agency 3, unstarted trial 0", async () => {
     await seedSubscribed("allow-ih", "owner@allowih.test");
     expect(await getProjectAllowance("allow-ih")).toBe(1);
     await seedSubscribed("allow-ag", "owner@allowag.test", "agency");
     expect(await getProjectAllowance("allow-ag")).toBe(3);
     await seedWorkspace("allow-none", "owner@allownone.test", { accountRole: "client" });
-    expect(await getProjectAllowance("allow-none")).toBe(2);
+    expect(await getProjectAllowance("allow-none")).toBe(0);
   });
 
   it("project-checkout requires an active subscription and a valid tier", async () => {

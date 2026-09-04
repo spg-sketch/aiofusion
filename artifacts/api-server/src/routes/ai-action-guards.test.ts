@@ -638,6 +638,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "POST /platform/billing-details",
   "GET /platform/billing/subscription",
   "POST /platform/billing/checkout",
+  "POST /platform/billing/trial",
   "GET /platform/billing/invoices",
   "POST /platform/billing/portal",
   "POST /platform/billing/project-checkout",
@@ -906,6 +907,13 @@ describe("blockReadOnlyMembers - AI action routes", () => {
     // Also confirm the response is NOT carrying the read-only guard message.
     expect(res.json?.error ?? "").not.toMatch(/read-only/i);
     expect(res.json?.error ?? "").not.toMatch(/billing members/i);
+  });
+
+  it("blocks paid AI actions until the owner starts a trial or subscribes", async () => {
+    const { sid: ownerSid } = await seedAgency("guard-unstarted-trial", "owner@guard-trial.test");
+    const res = await api("/api/ai-assist/draft-field", { sid: ownerSid, body: {} });
+    expect(res.status).toBe(402);
+    expect(res.json.code).toBe("BETA_TRIAL_REQUIRED");
   });
 });
 

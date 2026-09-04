@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { blockReadOnlyMembers } from "../middleware/platform-auth";
+import { blockReadOnlyMembers, requirePaidOrTrial } from "../middleware/platform-auth";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import diagnosticRouter from "./diagnostic";
@@ -34,6 +34,7 @@ router.use(adminRouter);
 router.use(
   ["/diagnostic", "/seo-audit", "/llm-check", "/ai-assist", "/content"],
   blockReadOnlyMembers,
+  requirePaidOrTrial,
 );
 router.use(diagnosticRouter);
 router.use(seoAuditRouter);
