@@ -17,14 +17,15 @@ import {
 } from "@workspace/db";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { InsightObjectStorage } from "../lib/insight-object-storage";
+import { canAccessInsightsCms } from "../lib/insights-cms-access";
 
 const router = Router();
 const storage = new InsightObjectStorage();
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 function requireInsightsAdmin(req: Request, res: Response): boolean {
-  if (req.account?.role !== "admin") {
-    res.status(403).json({ error: "Admin access required" });
+  if (!canAccessInsightsCms(req.account?.role, req.platformUser)) {
+    res.status(403).json({ error: "Insights CMS access required" });
     return false;
   }
   return true;

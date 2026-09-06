@@ -78,6 +78,7 @@ import {
   lastSignInKey,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
+import { canAccessInsightsCms } from "../lib/insights-cms-access";
 import { cspHeaderWithScriptNonce } from "../middleware/csp";
 import { fetchGoogleAvatarDataUrl } from "../lib/google-avatar";
 import {
@@ -605,6 +606,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     masterOwner,
     agencyManagedClient,
     emailVerified,
+    insightsCmsAccess: canAccessInsightsCms(req.account?.role, req.platformUser),
     setupComplete,
     hasPassword,
     sessionIdentity: req.account

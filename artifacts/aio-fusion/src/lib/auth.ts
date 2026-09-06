@@ -64,6 +64,9 @@ export type Session = {
   // parent. Billing sits entirely with the agency, so billing/payment
   // sections must never be shown in this session.
   agencyManagedClient?: boolean;
+  // Server-authoritative access to the Insights CMS. This includes platform
+  // admins and verified AIO Fusion Google/Microsoft identities.
+  insightsCmsAccess?: boolean;
 };
 
 export type MembershipRole = "owner" | "admin" | "billing" | "content" | "viewer";
@@ -435,6 +438,7 @@ async function hydrateSessionIdentity(fallback: Session): Promise<Session> {
         projectAccess?: string[] | null;
       }) | null;
       agencyManagedClient?: boolean;
+      insightsCmsAccess?: boolean;
       sessionIdentity?: {
         userName?: string | null;
         userEmail?: string | null;
@@ -451,6 +455,7 @@ async function hydrateSessionIdentity(fallback: Session): Promise<Session> {
       userEmail: me.sessionIdentity?.userEmail ?? null,
       companyName: me.sessionIdentity?.companyName ?? me.account.username,
       ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
+      insightsCmsAccess: me.insightsCmsAccess === true,
     };
   } catch {
     return fallback;
@@ -486,6 +491,7 @@ export async function bootstrapAuth(): Promise<{
         setupComplete?: boolean | null;
         hasPassword?: boolean;
         agencyManagedClient?: boolean;
+        insightsCmsAccess?: boolean;
         sessionIdentity?: {
           userName?: string | null;
           userEmail?: string | null;
@@ -508,6 +514,7 @@ export async function bootstrapAuth(): Promise<{
           userEmail: me.sessionIdentity?.userEmail ?? null,
           companyName: me.sessionIdentity?.companyName ?? acct.username,
           ...(me.agencyManagedClient ? { agencyManagedClient: true } : {}),
+          insightsCmsAccess: me.insightsCmsAccess === true,
         };
         setSession(session);
         // setupComplete === false (not null, not true) means the user signed up

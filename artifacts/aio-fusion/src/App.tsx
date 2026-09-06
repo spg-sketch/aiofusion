@@ -1158,7 +1158,7 @@ function App() {
     transitionToView("sub-accounts");
   }, [accountSection, authLoading, session]);
 
-  // Access guard for the admin-only users page. Done in an effect (not during
+  // Access guard for the protected admin pages. Done in an effect (not during
   // render) and as a history-replacing redirect so Back does not loop back
   // onto the denied page.
   // Guard is suppressed while authLoading is true - the session is still being
@@ -1166,7 +1166,9 @@ function App() {
   // user is logged out.
   useEffect(() => {
     if (authLoading) return;
-    if ((view === "users-admin" || view === "insights-admin") && (!session || session.role !== "admin")) {
+    const deniedUsersAdmin = view === "users-admin" && (!session || session.role !== "admin");
+    const deniedInsightsAdmin = view === "insights-admin" && (!session || session.insightsCmsAccess !== true);
+    if (deniedUsersAdmin || deniedInsightsAdmin) {
       replaceNextNav.current = true;
       transitionToView("platform-home");
     }
