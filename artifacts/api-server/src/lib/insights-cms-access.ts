@@ -7,6 +7,10 @@ type InsightsCmsUser = {
 
 const AIO_FUSION_EMAIL_SUFFIX = "@aiofusion.ai";
 
+export function isAioFusionStaffEmail(email: string | null | undefined): boolean {
+  return email?.trim().toLowerCase().endsWith(AIO_FUSION_EMAIL_SUFFIX) === true;
+}
+
 export function canAccessInsightsCms(
   accountRole: string | null | undefined,
   user: InsightsCmsUser | null | undefined,
@@ -15,5 +19,5 @@ export function canAccessInsightsCms(
   if (!user || user.emailVerified !== true) return false;
   if (!user.googleId && !user.microsoftId) return false;
 
-  return user.email?.trim().toLowerCase().endsWith(AIO_FUSION_EMAIL_SUFFIX) === true;
+  return isAioFusionStaffEmail(user.email);
 }

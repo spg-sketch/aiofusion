@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessInsightsCms } from "./insights-cms-access";
+import { canAccessInsightsCms, isAioFusionStaffEmail } from "./insights-cms-access";
 
 describe("canAccessInsightsCms", () => {
   it("keeps existing platform admins eligible without a modern user row", () => {
@@ -39,5 +39,13 @@ describe("canAccessInsightsCms", () => {
       emailVerified: true,
       microsoftId: "microsoft-1",
     })).toBe(false);
+  });
+});
+
+describe("isAioFusionStaffEmail", () => {
+  it("normalizes case and whitespace but rejects subdomains and lookalikes", () => {
+    expect(isAioFusionStaffEmail(" Staff@AIOFUSION.AI ")).toBe(true);
+    expect(isAioFusionStaffEmail("staff@sub.aiofusion.ai")).toBe(false);
+    expect(isAioFusionStaffEmail("staff@aiofusion.ai.example")).toBe(false);
   });
 });
