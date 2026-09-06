@@ -8,6 +8,7 @@
  * marketing route to static HTML, injects the markup + per-page head tags,
  * and writes:
  *   dist/public/index.html              (landing page in-place)
+ *   dist/public/admin/index.html        (authenticated CMS app shell)
  *   dist/public/<route>/index.html      (one per public route)
  *   dist/public/insights/<id>/index.html (one per complete article)
  *   dist/public/sitemap.xml
@@ -252,6 +253,10 @@ function assertRealPage(slug: string, html: string, meta: PageMeta | ArticleMeta
 
 // Render every canonical public route. Never skip a definition because of
 // missing metadata or a missing component: both are fatal SEO regressions.
+// The static deployment has no history fallback, so authenticated deep links
+// also need a concrete app-shell file. React takes over routing after load.
+writeRoute(path.join(distPublic, "admin", "index.html"), template);
+
 for (const { view, slug } of PUBLIC_PAGE_DEFINITIONS) {
   const meta: PageMeta = PAGE_META[view];
   if (!meta) {
