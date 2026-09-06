@@ -1355,6 +1355,7 @@ function App() {
             onManageUsers={() => { if (session?.role === "admin") transitionToView("users-admin"); }}
             onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
             onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); transitionToView("token-usage"); } }}
+            onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
             onCreateProject={beginCreateProject}
             onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
             onArchivedProjects={() => requireSessionThen(() => transitionToView("archived-projects"))}
@@ -1386,7 +1387,7 @@ function App() {
     return <UsersAdminPage session={session} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
   }
   if (view === "insights-admin") {
-    if (!session || session.role !== "admin") return null;
+    if (!session || session.insightsCmsAccess !== true) return null;
     return <InsightsAdminPage onBack={() => transitionToView("platform-home")} />;
   }
   if ((view as string) === "leads-admin") {

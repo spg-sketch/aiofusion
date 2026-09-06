@@ -267,6 +267,7 @@ import {
   db,
   platformAccountsTable,
   platformMetaTable,
+  platformMembershipsTable,
   platformSessionsTable,
   platformUsersTable,
 } from "@workspace/db";
@@ -334,6 +335,7 @@ function makeGoogleStub(opts: {
   googleId?: string;
   name?: string;
   picture?: string;
+  verifiedEmail?: boolean;
   avatarBytes?: Uint8Array;
   /** If true, track whether the token endpoint was ever called. */
   trackTokenCalls?: { called: boolean };
@@ -346,6 +348,7 @@ function makeGoogleStub(opts: {
     googleId = "google-id-123",
     name = "Test User",
     picture,
+    verifiedEmail = false,
     avatarBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x43]),
     trackTokenCalls,
   } = opts;
@@ -364,7 +367,7 @@ function makeGoogleStub(opts: {
       });
     }
     if (u.includes("googleapis.com/oauth2/v2/userinfo")) {
-      return new Response(JSON.stringify({ id: googleId, email, name, picture }), {
+      return new Response(JSON.stringify({ id: googleId, email, name, picture, verified_email: verifiedEmail }), {
         status: 200, headers: { "content-type": "application/json" },
       });
     }
@@ -697,6 +700,40 @@ describe("Google POST callback - code redemption", () => {
     expect(cookies["aio_sid"]).toBeTruthy();
   });
 
+  it("routes a verified AIO Fusion Google identity into Master as support", async () => {
+    const staffEmail = "google.staff@aiofusion.ai";
+    await db.insert(platformAccountsTable).values({
+      username: "admin",
+      passwordHash: hashPassword("unused"),
+      role: "admin",
+      status: "active",
+    }).onConflictDoNothing();
+    vi.stubGlobal("fetch", makeGoogleStub({
+      email: staffEmail,
+      googleId: "google-aio-staff",
+      verifiedEmail: true,
+    }));
+
+    const postRes = await postCallback("valid_aio_staff_code", STATE);
+    expect(postRes.status).toBe(302);
+    expect(postRes.headers.get("location")).toContain("oauth_status=mfa");
+    expect(postRes.headers.get("location")).toContain("mfa_mode=enroll");
+    expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
+
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
+    const [membership] = await db
+      .select()
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user!.id))
+      .limit(1);
+    expect(user?.emailVerified).toBe(true);
+    expect(membership).toMatchObject({ companySlug: "admin", role: "viewer" });
+
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, user!.id));
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, user!.id));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, user!.id));
+  });
+
   it("imports the Google picture as a user avatar without touching the workspace logo", async () => {
     vi.stubGlobal("fetch", makeGoogleStub({
       email: EMAIL,
@@ -957,6 +994,40 @@ describe("Microsoft POST callback - code redemption", () => {
     expect(postRes.headers.get("location")).toContain("oauth_status=ok");
     const cookies = parseCookies(postRes.headers);
     expect(cookies["aio_sid"]).toBeTruthy();
+  });
+
+  it("routes an AIO Fusion Microsoft identity into Master as support", async () => {
+    const staffEmail = "microsoft.staff@aiofusion.ai";
+    await db.insert(platformAccountsTable).values({
+      username: "admin",
+      passwordHash: hashPassword("unused"),
+      role: "admin",
+      status: "active",
+    }).onConflictDoNothing();
+    vi.stubGlobal("fetch", makeMicrosoftStub({
+      email: staffEmail,
+      microsoftId: "microsoft-aio-staff",
+    }));
+
+    const postRes = await postMsCallback("valid_ms_aio_staff_code", STATE);
+    expect(postRes.status).toBe(302);
+    expect(postRes.headers.get("location")).toContain("oauth_status=mfa");
+    expect(postRes.headers.get("location")).toContain("mfa_mode=enroll");
+    expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
+
+    const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
+    const [membership] = await db
+      .select()
+      .from(platformMembershipsTable)
+      .where(eq(platformMembershipsTable.userId, user!.id))
+      .limit(1);
+    expect(user?.emailVerified).toBe(true);
+    expect(user?.microsoftId).toBe("microsoft-aio-staff");
+    expect(membership).toMatchObject({ companySlug: "admin", role: "viewer" });
+
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, user!.id));
+    await db.delete(platformSessionsTable).where(eq(platformSessionsTable.userId, user!.id));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, user!.id));
   });
 });
 

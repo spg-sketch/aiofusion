@@ -14,3 +14,9 @@ The Insights CMS allows existing platform admins plus users with an exact `@aiof
 **Why:** Email text alone is not proof that the company controls the identity, and a frontend-only guard would leave editorial APIs exposed.
 
 **How to apply:** Keep CMS article and media mutations behind the shared server predicate. Password-only, unverified, subdomain, lookalike-domain and missing-user identities must fail closed.
+
+Verified Google or Microsoft `@aiofusion.ai` identities sign into the existing Master workspace (`admin`) instead of creating customer workspaces. New staff receive the restricted Support membership and must complete Master MFA.
+
+**Why:** The legacy Master data already belongs to `admin`; creating another Master would split client/project ownership. Automatic owner access would give every employee destructive privileges.
+
+**How to apply:** Run staff routing after explicit invitation handling but before ordinary SSO account resolution. Preserve existing higher membership roles and expose a direct CMS entry point to eligible staff.

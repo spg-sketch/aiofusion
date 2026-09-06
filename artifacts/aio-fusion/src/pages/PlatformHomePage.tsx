@@ -51,6 +51,7 @@ function PlatformHomePage({
   onManageUsers,
   onManageSubAccounts,
   onTokenUsage,
+  onInsightsAdmin,
   onOpenGeorge,
   initialNotice,
   resetToken: resetTokenProp,
@@ -75,6 +76,7 @@ function PlatformHomePage({
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
   onTokenUsage: () => void;
+  onInsightsAdmin?: () => void;
   onOpenGeorge?: () => void;
   initialNotice?: string;
   resetToken?: string | null;
@@ -891,6 +893,15 @@ function PlatformHomePage({
                 </div>
               </div>
               <div data-testid="platform-home-project-controls" className="grid w-full grid-cols-1 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+                {session.insightsCmsAccess && onInsightsAdmin && (
+                  <button
+                    onClick={onInsightsAdmin}
+                    className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
+                    style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+                  >
+                    <FileEdit size={15} /> Edit Insights CMS
+                  </button>
+                )}
                 {session.role === "admin" ? (
                   <>
                     <button

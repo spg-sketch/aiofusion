@@ -76,9 +76,10 @@ import {
   createSignedInSession,
   LAST_SIGN_IN_PREFIX,
   lastSignInKey,
+  DEFAULT_ADMIN_USERNAME,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
-import { canAccessInsightsCms } from "../lib/insights-cms-access";
+import { canAccessInsightsCms, isAioFusionStaffEmail } from "../lib/insights-cms-access";
 import { cspHeaderWithScriptNonce } from "../middleware/csp";
 import { fetchGoogleAvatarDataUrl } from "../lib/google-avatar";
 import {
@@ -333,6 +334,46 @@ async function pickLoginMembership(
   return primary;
 }
 
+async function provisionAioFusionStaffMembership(opts: {
+  email: string;
+  name: string;
+  googleId?: string;
+  microsoftId?: string;
+}): Promise<{ username: string; role: Role; userId: string; activeCompanyId: string }> {
+  const masterAccount = await getAccount(DEFAULT_ADMIN_USERNAME);
+  if (!masterAccount || normalizeRole(masterAccount.role) !== "admin" || masterAccount.status === "suspended") {
+    throw new Error("The Master workspace is unavailable.");
+  }
+
+  const userId = await ensurePlatformUser({
+    email: opts.email,
+    name: opts.name,
+    googleId: opts.googleId ?? null,
+    companyUsername: masterAccount.username,
+    companyRole: "admin",
+    companyStatus: "active",
+    // New AIO Fusion staff start in the restricted Master support tier. An
+    // existing higher-privilege membership is preserved by the idempotent
+    // membership insert.
+    membershipRole: "viewer",
+  });
+  if (opts.microsoftId) await linkMicrosoftId(userId, opts.microsoftId);
+  await db
+    .update(platformUsersTable)
+    .set({ emailVerified: true })
+    .where(eq(platformUsersTable.id, userId));
+
+  const masterCompany = await getCompanyBySlug(masterAccount.username);
+  if (!masterCompany) throw new Error("The Master workspace company record is unavailable.");
+
+  return {
+    username: masterAccount.username,
+    role: "admin",
+    userId,
+    activeCompanyId: masterCompany.id,
+  };
+}
+
 const MANAGED_LOGIN_ERROR =
   "This account is managed by your agency. Contact them for access.";
 
@@ -487,6 +528,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let signedInUserName: string | null = null;
   let signedInUserEmail: string | null = null;
   let activeCompanyName: string | null = null;
+  let resolvedUser: typeof platformUsersTable.$inferSelect | null = null;
   if (req.account) {
     try {
       // Prefer the session's own userId so member sessions reflect the
@@ -508,6 +550,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         if (acc?.email) u = await getUserByEmail(acc.email);
       }
       if (u) {
+        resolvedUser = u;
         googleLinked = !!(u.googleId);
         microsoftLinked = !!(u.microsoftId);
         hasPassword = !!(u.passwordHash);
@@ -606,14 +649,16 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     masterOwner,
     agencyManagedClient,
     emailVerified,
-    insightsCmsAccess: canAccessInsightsCms(req.account?.role, req.platformUser),
+    insightsCmsAccess: canAccessInsightsCms(req.account?.role, resolvedUser ?? req.platformUser),
     setupComplete,
     hasPassword,
     sessionIdentity: req.account
       ? {
           userName: signedInUserName,
           userEmail: signedInUserEmail,
-          companyName: activeCompanyName || accountDisplayName || req.account.username,
+          companyName: activeCompanyName
+            || accountDisplayName
+            || (normalizeRole(req.account.role) === "admin" ? "Master" : req.account.username),
         }
       : null,
     // Returned for client-side intake prefill. The client performs its own
@@ -2863,7 +2908,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=userinfo_failed`);
       return;
     }
-    const userInfo = await userInfoRes.json() as { email?: string; name?: string; given_name?: string; id?: string; picture?: string };
+    const userInfo = await userInfoRes.json() as { email?: string; verified_email?: boolean; name?: string; given_name?: string; id?: string; picture?: string };
     if (!userInfo.email) {
       res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`);
       return;
@@ -2934,6 +2979,21 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     let existingUser = googleId ? await getUserByGoogleId(googleId) : null;
     if (!existingUser) {
       existingUser = await getUserByEmail(userInfo.email);
+    }
+
+    // AIO Fusion staff use the existing Master workspace rather than creating
+    // a customer workspace or entering account-type setup.
+    if (userInfo.verified_email === true && isAioFusionStaffEmail(userInfo.email)) {
+      const staff = await provisionAioFusionStaffMembership({
+        email: userInfo.email,
+        name: userInfo.name || userInfo.given_name || userInfo.email.split("@")[0],
+        googleId: googleId || undefined,
+      });
+      await finishOauthLoginOrChallenge(req, res, origin, {
+        ...staff,
+        needsSetup: false,
+      });
+      return;
     }
 
     // Step 2: if an existing user is found, route them to their active workspace
@@ -3293,6 +3353,19 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     }
 
     // --- Login / signup action ------------------------------------------------
+    if (isAioFusionStaffEmail(msEmail)) {
+      const staff = await provisionAioFusionStaffMembership({
+        email: msEmail,
+        name: displayName,
+        microsoftId,
+      });
+      await finishOauthLoginOrChallenge(req, res, origin, {
+        ...staff,
+        needsSetup: false,
+      });
+      return;
+    }
+
     // Step 1: look up by Microsoft ID (fastest path for returning users)
     const byMsId = await getUserByMicrosoftId(microsoftId);
     if (byMsId) {
