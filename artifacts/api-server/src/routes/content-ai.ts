@@ -907,12 +907,12 @@ contentAiRouter.post(
 
     const contactNote = hasDbContext
       ? `CONTACT RULES:\n` +
-        `1. Publications marked [VERIFIED] in the Media Database above MUST be prioritised. Use those outlet names and contacts exactly as supplied; set confidence "V" for any journalist listed there.\n` +
-        `2. If the database supplies fewer than 5 relevant publications, supplement with training-knowledge to reach 5 total. Any contact drawn from training knowledge MUST carry confidence "U" (Unverified).\n` +
-        `3. Do NOT fabricate journalist names. If you have no training-knowledge of a relevant beat reporter for a supplementary outlet, leave journalists empty and provide a noBeatContactNote.\n`
+        `1. Publications marked [VERIFIED] in the Media Database above MUST be prioritised. Use outlet names and any listed contact exactly as supplied.\n` +
+        `2. If the database supplies fewer than 5 relevant publications, supplement publications only - do not supply any journalist/contact for them.\n` +
+        `3. Do NOT infer, invent, or use training-knowledge journalist names, job titles, or email addresses. Leave journalists empty unless the exact verified contact is shown above.\n`
       : `CONTACT RULES:\n` +
-        `1. You do not have live web access in this run. You MAY draw on training-knowledge to supply beat journalists for UK outlets, but every contact MUST carry confidence "U" (Unverified).\n` +
-        `2. Do NOT fabricate journalist names. If you have no training-knowledge of a relevant beat reporter for an outlet, leave journalists empty and provide a noBeatContactNote.\n`;
+        `1. You do not have a verified contact source in this run. Return publications only and leave journalists empty.\n` +
+        `2. Do NOT infer, invent, or use training-knowledge journalist names, job titles, or email addresses.\n`;
 
     const prompt =
       `${reviewedPrompt || "You are a senior UK PR media-list builder. Build a target media list for the content item below."}\n\n` +
@@ -954,7 +954,14 @@ contentAiRouter.post(
         res.end();
         return;
       }
-      const items = normaliseMediaList(parsed.items);
+      // Model output is never a contact source. Even with a strict prompt, make
+      // the guarantee at the response boundary: callers can only obtain
+      // contacts through the media database/recommendation endpoints.
+      const items = normaliseMediaList(parsed.items).map((item) => ({
+        ...item,
+        journalists: [],
+        noBeatContactNote: "Contact details are available only from the verified media database.",
+      }));
       if (items.length === 0) {
         sse(res, "error", { error: "The AI did not return a usable media list. Please try again." });
         res.end();

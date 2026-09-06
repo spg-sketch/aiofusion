@@ -421,6 +421,7 @@ import {
   platformAccountsTable,
   platformCompaniesTable,
   platformMembershipsTable,
+  mediaCategoriesTable,
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -501,6 +502,30 @@ beforeAll(async () => {
       baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       resolve();
     });
+  });
+});
+
+describe("media category account isolation", () => {
+  it("does not let account B delete account A's category", async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const accountA = `category-owner-${suffix}`;
+    const accountB = `category-attacker-${suffix}`;
+    await seedAgency(accountA, `${accountA}@example.test`);
+    const { sid: accountBSid } = await seedAgency(accountB, `${accountB}@example.test`);
+    const [category] = await db.insert(mediaCategoriesTable).values({
+      name: `Private category ${suffix}`,
+      accountId: accountA,
+    }).returning();
+
+    const response = await api(`/api/store/media-categories/${category!.id}`, {
+      method: "DELETE",
+      sid: accountBSid,
+    });
+
+    expect(response.status).toBe(403);
+    const [remaining] = await db.select().from(mediaCategoriesTable)
+      .where(eq(mediaCategoriesTable.id, category!.id));
+    expect(remaining).toMatchObject({ id: category!.id, accountId: accountA });
   });
 });
 
@@ -754,6 +779,9 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "PUT /store/media-db/contacts/:id",
   "DELETE /store/media-db/contacts/:id",
   "POST /store/media-db/import",
+  "POST /store/media-db/recommendations",
+  "GET /store/media-db/recommendations/decisions",
+  "PUT /store/media-db/recommendations/decisions",
 
   // ── contact forms (contact.ts) - public, no auth required ────────────────
   "POST /contact/book-demo",

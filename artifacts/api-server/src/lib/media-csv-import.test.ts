@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMediaImportCsv, planMediaImport } from "./media-csv-import";
+import { canonicalMediaEmail, classifyMediaReconciliation, filterVisibleRecommendationItems, mediaOverrideOwner, parseMediaImportCsv, planMediaImport } from "./media-csv-import";
 
 describe("parseMediaImportCsv", () => {
   it("finds Patrick's second-row headers and maps contacts", () => {
@@ -67,5 +67,44 @@ describe("planMediaImport", () => {
     expect(plan.importRows).toHaveLength(1);
     expect(plan.newOutletCount).toBe(1);
     expect(plan.duplicatesSkipped).toBe(1);
+  });
+});
+
+describe("canonicalMediaEmail", () => {
+  it("normalises case and the common comma TLD typo deterministically", () => {
+    expect(canonicalMediaEmail(" Jane@Example,COM ")).toBe("jane@example.com");
+    expect(canonicalMediaEmail("not an email")).toBe("");
+  });
+});
+
+describe("classifyMediaReconciliation", () => {
+  it("supports refresh-only workbooks and reports protected source changes as conflicts", () => {
+    const changed = parseMediaImportCsv("First Name,Last Name,Publication,Email,Role,Confidence\nJane,Doe,New Outlet,jane@example.com,Editor,verified").rows[0]!;
+    expect(classifyMediaReconciliation([changed], [{ id: 7, outletId: 1, firstName: "Jane", lastName: "Doe", email: changed.email, role: "Reporter", confidence: "" }])).toMatchObject({ refreshed: 1, new: 0 });
+    expect(classifyMediaReconciliation([changed], [{ id: 7, outletId: 1, firstName: "Jane", lastName: "Doe", email: changed.email, role: "Reporter", confidence: "" }], new Set(["7:role"]))).toMatchObject({ conflicted: 1 });
+  });
+});
+
+describe("workspace import ownership", () => {
+  it("does not treat a global canonical email as an account import match", () => {
+    // The route deliberately supplies only active-account contacts to this
+    // planner; a global record therefore results in a private new contact.
+    const imported = parseMediaImportCsv("First Name,Last Name,Publication,Email\nJane,Doe,Outlet,jane@example.com").rows[0]!;
+    expect(planMediaImport([imported], [], []).importRows).toHaveLength(1);
+  });
+
+  it("keys an admin edit override to the contact workspace", () => {
+    expect(mediaOverrideOwner("customer-a")).toBe("customer-a");
+    expect(mediaOverrideOwner(null)).toBe("__global_admin__");
+  });
+});
+
+describe("recommendation item visibility", () => {
+  it("excludes soft-deleted and currently non-visible contacts", () => {
+    const active = { id: 1, contact: { accountId: "account-a", deletedAt: null } };
+    const deleted = { id: 2, contact: { accountId: "account-a", deletedAt: new Date() } };
+    const privateOther = { id: 3, contact: { accountId: "account-b", deletedAt: null } };
+    const global = { id: 4, contact: { accountId: null, deletedAt: null } };
+    expect(filterVisibleRecommendationItems([active, deleted, privateOther, global], ["account-a"]).map((item) => item.id)).toEqual([1, 4]);
   });
 });

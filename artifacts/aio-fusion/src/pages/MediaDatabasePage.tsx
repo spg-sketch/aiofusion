@@ -99,12 +99,18 @@ export function SearchableOutletPicker({
 // Media Database page - outlets, contacts and custom categories
 // ---------------------------------------------------------------------------
 type Outlet = { id: number; name: string; category: string; website: string; description: string; country: string; reachBand: string; accountId: string | null };
-type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string; outletName?: string; outletCategory?: string };
+export type Contact = { id: number; outletId: number | null; firstName: string; lastName: string; role: string; email: string; phone: string; notes: string; accountId: string | null; outletName?: string; outletCategory?: string; mobile?: string; linkedinUrl?: string; twitterHandle?: string; beats?: string[]; sectors?: string[]; geography?: string; language?: string; seniority?: string; editorialStatus?: string; sourceUrl?: string; sourceRef?: string; lastVerifiedAt?: string | null; reach?: string; reachBand?: string; authority?: number; authorityScore?: number; confidence?: string; confidenceLevel?: string };
 type ImportPreview = {
   validRows: number;
   importableRows: number;
   duplicateRows: number;
   invalidRows: number;
+  new?: number;
+  refreshed?: number;
+  unchanged?: number;
+  duplicate?: number;
+  invalid?: number;
+  conflicted?: number;
   outletCount: number;
   errors: Array<{ row: number; message: string }>;
   sample: Array<{ sourceRow: number; firstName: string; lastName: string; role: string; outletName: string; email: string }>;
@@ -120,6 +126,12 @@ function MediaDatabasePage() {
   const [outletCatFilter, setOutletCatFilter] = useState("");
   const [contactSearch, setContactSearch] = useState("");
   const [contactOutletFilter, setContactOutletFilter] = useState("");
+  const [contactCategoryFilter, setContactCategoryFilter] = useState("");
+  const [contactCountryFilter, setContactCountryFilter] = useState("");
+  const [contactSort, setContactSort] = useState("lastName");
+  const [contactDirection, setContactDirection] = useState<"asc" | "desc">("asc");
+  const [contactPage, setContactPage] = useState(1);
+  const [contactTotal, setContactTotal] = useState(0);
 
   const [showOutletModal, setShowOutletModal] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
@@ -136,7 +148,8 @@ function MediaDatabasePage() {
   const [showCatPicker, setShowCatPicker] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFileName, setImportFileName] = useState("");
-  const [importCsv, setImportCsv] = useState("");
+  const [importPayload, setImportPayload] = useState<{ csv?: string; xlsxBase64?: string } | null>(null);
+  const [importIdempotencyKey, setImportIdempotencyKey] = useState("");
   const [importCategory, setImportCategory] = useState("");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importError, setImportError] = useState("");
@@ -149,11 +162,11 @@ function MediaDatabasePage() {
     try {
       const [outR, conR, catR] = await Promise.all([
         fetch(`${apiBase()}/api/store/media-db/outlets`, { credentials: "include" }),
-        fetch(`${apiBase()}/api/store/media-db/contacts`, { credentials: "include" }),
+        fetch(`${apiBase()}/api/store/media-db/contacts?page=1&pageSize=200`, { credentials: "include" }),
         fetch(`${apiBase()}/api/store/media-categories`, { credentials: "include" }),
       ]);
       if (outR.ok) { const d = await outR.json(); setOutlets(d.outlets ?? []); }
-      if (conR.ok) { const d = await conR.json(); setContacts(d.contacts ?? []); }
+       if (conR.ok) { const d = await conR.json(); setContacts(d.contacts ?? []); setContactTotal(d.total ?? d.contacts?.length ?? 0); }
       if (catR.ok) {
         const d = await catR.json();
         const custom: string[] = (d.custom ?? []).map((c: { name: string }) => c.name);
@@ -168,9 +181,25 @@ function MediaDatabasePage() {
 
   useEffect(() => { void loadData(); }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ page: String(contactPage), pageSize: "50", sort: contactSort, direction: contactDirection });
+      if (contactSearch.trim()) params.set("q", contactSearch.trim());
+      if (contactCategoryFilter) params.set("category", contactCategoryFilter);
+      if (contactCountryFilter) params.set("country", contactCountryFilter);
+      fetch(`${apiBase()}/api/store/media-db/contacts?${params}`, { credentials: "include", signal: controller.signal })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("Could not search contacts.")))
+        .then((data) => { setContacts(data.contacts ?? []); setContactTotal(data.total ?? 0); })
+        .catch((error) => { if (error.name !== "AbortError") console.error(error); });
+    }, 200);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [contactSearch, contactCategoryFilter, contactCountryFilter, contactSort, contactDirection, contactPage]);
+
   const resetImport = () => {
     setImportFileName("");
-    setImportCsv("");
+    setImportPayload(null);
+    setImportIdempotencyKey("");
     setImportCategory("");
     setImportPreview(null);
     setImportError("");
@@ -182,7 +211,7 @@ function MediaDatabasePage() {
     setShowImportModal(true);
   };
 
-  const previewImport = async (csv: string, fileName: string) => {
+  const previewImport = async (payload: { csv?: string; xlsxBase64?: string }, fileName: string) => {
     setImportBusy(true);
     setImportError("");
     setImportPreview(null);
@@ -192,12 +221,13 @@ function MediaDatabasePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, category: importCategory, commit: false }),
+        body: JSON.stringify({ ...payload, category: importCategory, filename: fileName, commit: false }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "Could not read this CSV.");
-      setImportCsv(csv);
+      setImportPayload(payload);
       setImportFileName(fileName);
+      setImportIdempotencyKey(`media-import:${fileName}:${crypto.randomUUID()}`);
       setImportPreview(data.preview);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Could not read this CSV.");
@@ -206,7 +236,7 @@ function MediaDatabasePage() {
   };
 
   const importContacts = async () => {
-    if (!importCsv || importBusy) return;
+    if (!importPayload || importBusy) return;
     setImportBusy(true);
     setImportError("");
     try {
@@ -214,7 +244,7 @@ function MediaDatabasePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv: importCsv, category: importCategory, commit: true }),
+        body: JSON.stringify({ ...importPayload, category: importCategory, filename: importFileName, idempotencyKey: importIdempotencyKey, commit: true }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || "Could not import these contacts.");
@@ -266,8 +296,6 @@ function MediaDatabasePage() {
   // Contacts
   const filteredContacts = contacts.filter((c) => {
     if (contactOutletFilter && String(c.outletId) !== contactOutletFilter) return false;
-    const q = contactSearch.toLowerCase();
-    if (q && !`${c.firstName} ${c.lastName}`.toLowerCase().includes(q) && !(c.role || "").toLowerCase().includes(q) && !(c.outletName || "").toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -416,11 +444,19 @@ function MediaDatabasePage() {
       {activeTab === "contacts" && (
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-5">
-            <input value={contactSearch} onChange={(e) => setContactSearch(e.target.value)} placeholder="Search contacts..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white text-white" style={{ borderColor: vars.g200 }} />
+            <input value={contactSearch} onChange={(e) => { setContactSearch(e.target.value); setContactPage(1); }} placeholder="Search contacts..." className="px-3 py-2 rounded-lg border text-[13px] flex-1 min-w-[180px] placeholder-white text-white" style={{ borderColor: vars.g200 }} />
+            <select value={contactCategoryFilter} onChange={(e) => { setContactCategoryFilter(e.target.value); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
+              <option value="">All categories</option>{allCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input value={contactCountryFilter} onChange={(e) => { setContactCountryFilter(e.target.value); setContactPage(1); }} placeholder="Country" className="px-3 py-2 rounded-lg border text-[13px] w-28" style={{ borderColor: vars.g200 }} />
             <select value={contactOutletFilter} onChange={(e) => setContactOutletFilter(e.target.value)} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200, color: contactOutletFilter ? vars.navy : "#ffffff" }}>
               <option value="">All outlets</option>
               {outletOptions.map((o) => <option key={o.id} value={String(o.id)}>{o.name}</option>)}
             </select>
+            <select value={`${contactSort}:${contactDirection}`} onChange={(e) => { const [sort, direction] = e.target.value.split(":"); setContactSort(sort); setContactDirection(direction as "asc" | "desc"); setContactPage(1); }} className="px-3 py-2 rounded-lg border text-[13px]" style={{ borderColor: vars.g200 }}>
+              <option value="lastName:asc">Name A-Z</option><option value="lastName:desc">Name Z-A</option><option value="outletName:asc">Outlet A-Z</option><option value="createdAt:desc">Newest</option>
+            </select>
+            {(contactSearch || contactCategoryFilter || contactCountryFilter || contactOutletFilter) && <button onClick={() => { setContactSearch(""); setContactCategoryFilter(""); setContactCountryFilter(""); setContactOutletFilter(""); setContactPage(1); }} className="px-3 py-2 rounded-lg text-[12px] border" style={{ borderColor: vars.g200, color: vars.g600 }}>Clear filters</button>}
             <button onClick={openAddContact} className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold text-white" style={{ background: vars.accent }}>
               <Plus size={14} /> Add contact
             </button>
@@ -444,6 +480,7 @@ function MediaDatabasePage() {
             </div>
           ) : (
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: vars.g200, background: "white" }}>
+              <div className="px-4 py-2 text-[12px]" style={{ color: vars.g500, background: vars.g50 }}>Showing {filteredContacts.length} of {contactTotal} contacts</div>
               <table className="w-full text-[12px]">
                 <thead>
                   <tr style={{ background: vars.g50 }}>
@@ -462,11 +499,17 @@ function MediaDatabasePage() {
                       <td className="px-4 py-3">
                         <p className="font-semibold" style={{ color: vars.navy }}>{`${c.firstName} ${c.lastName}`.trim()}</p>
                         {c.outletCategory && <p className="text-[11px] font-light" style={{ color: vars.g500 }}>{c.outletCategory}</p>}
+                         {(c.beats?.length || c.sectors?.length || c.seniority || c.editorialStatus) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.beats?.length ? `Beats: ${c.beats.join(", ")}` : "", c.sectors?.length ? `Sectors: ${c.sectors.join(", ")}` : "", c.seniority, c.editorialStatus].filter(Boolean).join(" · ")}</p>}
+                         {(c.reach || c.reachBand || c.authority !== undefined || c.authorityScore !== undefined || c.confidence || c.confidenceLevel) && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>{[c.reach || c.reachBand ? `Reach: ${c.reach || c.reachBand}` : "", c.authority ?? c.authorityScore !== undefined ? `Authority: ${c.authority ?? c.authorityScore}` : "", c.confidence || c.confidenceLevel ? `Confidence: ${c.confidence || c.confidenceLevel}` : ""].filter(Boolean).join(" · ")}</p>}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell" style={{ color: vars.g600 }}>{c.role}</td>
                       <td className="px-4 py-3 hidden md:table-cell" style={{ color: vars.g600 }}>{c.outletName}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
                         {c.email && <a href={`mailto:${c.email}`} className="underline" style={{ color: vars.accent }}>{c.email}</a>}
+                         {c.mobile && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>Mobile: {c.mobile}</p>}
+                         {c.linkedinUrl && <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="block text-[10px] underline mt-1" style={{ color: vars.accent }}>LinkedIn</a>}
+                         {c.sourceUrl && <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="block text-[10px] underline mt-1" style={{ color: vars.accent }}>Source</a>}
+                         {c.lastVerifiedAt && <p className="text-[10px] mt-1" style={{ color: vars.g500 }}>Verified {new Date(c.lastVerifiedAt).toLocaleDateString()}</p>}
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell" style={{ color: vars.g600 }}>{c.phone}</td>
                       <td className="px-4 py-3 hidden xl:table-cell max-w-[180px]">
@@ -484,6 +527,7 @@ function MediaDatabasePage() {
               </table>
             </div>
           )}
+          {contactTotal > 50 && <div className="flex justify-end items-center gap-3 mt-3 text-[12px]" style={{ color: vars.navy }}><button disabled={contactPage === 1} onClick={() => setContactPage((page) => page - 1)} className="px-3 py-1 border rounded disabled:opacity-40">Previous</button><span>Page {contactPage} of {Math.ceil(contactTotal / 50)}</span><button disabled={contactPage * 50 >= contactTotal} onClick={() => setContactPage((page) => page + 1)} className="px-3 py-1 border rounded disabled:opacity-40">Next</button></div>}
         </div>
       )}
 
@@ -493,7 +537,7 @@ function MediaDatabasePage() {
             <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
               <div>
                 <h2 className="text-[17px] font-semibold" style={{ color: vars.navy, fontFamily: "'Alice', Georgia, serif" }}>Import media contacts</h2>
-                <p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Review the CSV before anything is added. Existing contacts are not overwritten.</p>
+                <p className="text-[12px] mt-1" style={{ color: vars.g500 }}>Review the CSV or XLSX before anything is added. Existing contacts are not overwritten.</p>
               </div>
               <button onClick={() => setShowImportModal(false)} className="text-[20px] leading-none px-2" style={{ color: vars.g400 }}>&times;</button>
             </div>
@@ -502,20 +546,32 @@ function MediaDatabasePage() {
                 <>
                   <label className="block rounded-xl border-2 border-dashed p-6 text-center cursor-pointer" style={{ borderColor: vars.g200, background: vars.g50 }}>
                     <Upload size={24} className="mx-auto mb-2" color={vars.accent} />
-                    <span className="block text-[13px] font-semibold" style={{ color: vars.navy }}>{importFileName || "Choose a CSV file"}</span>
-                    <span className="block text-[11px] mt-1" style={{ color: vars.g500 }}>Up to 2 MB and 5,000 rows</span>
+                    <span className="block text-[13px] font-semibold" style={{ color: vars.navy }}>{importFileName || "Choose a CSV or XLSX file"}</span>
+                    <span className="block text-[11px] mt-1" style={{ color: vars.g500 }}>CSV up to 2 MB. XLSX up to 12 MB and 50,000 rows.</span>
                     <input
                       type="file"
-                      accept=".csv,text/csv"
+                      accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       className="sr-only"
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 2 * 1024 * 1024) {
-                          setImportError("CSV files must be 2 MB or smaller.");
+                        const isXlsx = file.name.toLowerCase().endsWith(".xlsx");
+                        const maximumSize = isXlsx ? 12 * 1024 * 1024 : 2 * 1024 * 1024;
+                        if (file.size > maximumSize) {
+                          setImportError(isXlsx ? "XLSX files must be 12 MB or smaller." : "CSV files must be 2 MB or smaller.");
                           return;
                         }
-                        void file.text().then((csv) => previewImport(csv, file.name));
+                        if (isXlsx) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const result = reader.result;
+                            if (typeof result !== "string") { setImportError("Could not read this XLSX file."); return; }
+                            const base64 = result.includes(",") ? result.split(",")[1] : result;
+                            void previewImport({ xlsxBase64: base64 }, file.name);
+                          };
+                          reader.onerror = () => setImportError("Could not read this XLSX file.");
+                          reader.readAsDataURL(file);
+                        } else void file.text().then((csv) => previewImport({ csv }, file.name));
                       }}
                     />
                   </label>
@@ -537,10 +593,12 @@ function MediaDatabasePage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      ["Valid contacts", importPreview.validRows],
-                      ["Outlets found", importPreview.outletCount],
-                      ["Already in database", importPreview.duplicateRows],
-                      ["Rows needing attention", importPreview.invalidRows],
+                      ["New", importPreview.new ?? importPreview.importableRows],
+                      ["Refreshed", importPreview.refreshed ?? 0],
+                      ["Unchanged", importPreview.unchanged ?? importPreview.duplicateRows],
+                      ["Duplicate", importPreview.duplicate ?? importPreview.duplicateRows],
+                      ["Invalid", importPreview.invalid ?? importPreview.invalidRows],
+                      ["Conflicted", importPreview.conflicted ?? 0],
                     ].map(([label, value]) => (
                       <div key={String(label)} className="rounded-xl border p-3" style={{ borderColor: vars.g200 }}>
                         <p className="text-[20px] font-semibold" style={{ color: vars.navy }}>{value}</p>
@@ -705,4 +763,4 @@ function MediaDatabasePage() {
 }
 
 export { MediaDatabasePage };
-export type { Outlet, Contact };
+export type { Outlet };

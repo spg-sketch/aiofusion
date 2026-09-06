@@ -31,6 +31,7 @@ import { repairKnownWorkspaceNames } from "./lib/repair-known-workspace-names";
 import { assertCanonicalDomainIsSafeForDeployment } from "./lib/app-url";
 import { ensureInsightsSchema } from "./lib/ensure-insights-schema";
 import { seedInsights } from "./lib/seed-insights";
+import { ensureMediaSchema } from "./lib/ensure-media-schema";
 
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const MICROSOFT_HEALTH_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -132,6 +133,7 @@ async function runStartupMigrations(): Promise<void> {
     ["platform_password_resets table", ensurePasswordResetsTable],
     ["known workspace names", repairKnownWorkspaceNames],
     ["Insights editorial schema", ensureInsightsSchema],
+    ["media contacts and recommendations schema", ensureMediaSchema],
   ];
   for (const [label, step] of steps) {
     try {

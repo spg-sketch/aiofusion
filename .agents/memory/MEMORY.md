@@ -59,7 +59,7 @@
 - [Discount invites + admin subscriptions](aio-fusion-discount-invites.md) — meta keys, CAS single-use claim, email-bound redemption, `aio-invite-<pct>pct` coupons, end-at-renewal semantics.
 - [Invite token robustness](aio-fusion-invite-token-robustness.md) — all invite lookups normalise mangled tokens + log failure reason; "replaced" reason; getAppBaseUrl prod fallback logs a warning.
 - [Live invitation uniqueness](live-invite-uniqueness.md) — expire/retire invitation rows before applying the state-based one-live-invite-per-email invariant.
-- [Media CSV import safety](aio-fusion-media-csv-import.md) — customer uploads stay active-account scoped, including admin; preview and commit must share dedupe planning, with commit serialized per account.
+- [Media workbook import safety](aio-fusion-media-csv-import.md) — active-account scoping, shared reconciliation, true edit overrides, and relationship-aware bounded OOXML parsing.
 - [pnpm audit override ranges](pnpm-audit-override-ranges.md) — broad lower-bound replacements can resolve to a different vulnerable major; pin legacy-major fixes exactly and re-scan the lockfile.
 - [Orval and Zod compatibility](orval-zod-compatibility.md) — pin Orval output to Zod 3 while the workspace catalog uses Zod 3; auto-detection can emit Zod 4 calls that crash API startup.
 - [Insights publishing and prerendering](aio-fusion-insights-publishing.md) — published stories live in PostgreSQL; static builds snapshot the public API and fall back to checked-in content if unavailable.
