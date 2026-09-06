@@ -8,7 +8,7 @@ import {
 import type { InsightArticle, InsightArticleInput, InsightBlock, InsightMedia } from "@workspace/api-client-react";
 import {
   ChevronUp, ChevronDown, Trash2, Plus, X, UploadCloud, Settings, Image as ImageIcon,
-  FileText, Loader2, Check, Search, ArrowLeft, Type, Quote, BarChart, List as ListIcon
+  FileText, Loader2, Check, Search, ArrowLeft, Type, Quote, BarChart, List as ListIcon, ExternalLink
 } from "lucide-react";
 
 // --- Helpers ---
@@ -318,8 +318,30 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
               value={data.excerpt}
               onChange={(val: string) => setData({ ...data, excerpt: val })}
               placeholder="Write a brief excerpt or subtitle..."
-              className="w-full text-xl text-gray-400 font-serif italic mb-16 leading-relaxed placeholder-gray-200"
+              className={`w-full text-xl text-gray-400 font-serif italic leading-relaxed placeholder-gray-200 ${data.externalUrl ? 'mb-8' : 'mb-16'}`}
             />
+
+            {data.externalUrl && (
+              <div className="mb-12 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <ExternalLink size={18} className="mt-0.5 shrink-0 text-blue-700" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[#0a1628]">External article</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Visitors are sent to an external page, so this story may not have content blocks in the CMS.
+                    </p>
+                    <a
+                      href={data.externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block truncate text-sm font-semibold text-blue-700 underline underline-offset-2"
+                    >
+                      {data.externalUrl}
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               {data.body.map((block, idx) => {
@@ -447,7 +469,19 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
                 <Input label="URL Slug" value={data.slug} onChange={(e: any) => setData({...data, slug: e.target.value})} placeholder="e.g. the-future-of-pr" />
                 <Input label="Category Tag" value={data.tag} onChange={(e: any) => setData({...data, tag: e.target.value})} placeholder="e.g. Product Update" />
                 
-                <Input label="External URL (Optional)" value={data.externalUrl || ''} onChange={(e: any) => setData({...data, externalUrl: e.target.value})} placeholder="Redirects story to an external link" className="col-span-2" />
+                <div className="col-span-2 mb-6">
+                  <label className="block text-sm font-semibold text-[#0a1628] mb-2">External Link (Optional)</label>
+                  <input
+                    type="url"
+                    value={data.externalUrl || ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setData({...data, externalUrl: e.target.value})}
+                    placeholder="https://example.com/article"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#4f8fff]/20 focus:border-[#4f8fff] transition-all"
+                  />
+                  <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                    When set, visitors are sent to this URL instead of a native AIO Fusion article page.
+                  </p>
+                </div>
                 
                 <Input label="Override Publish Date" type="date" value={data.datePublished ? data.datePublished.substring(0,10) : ''} onChange={(e: any) => setData({...data, datePublished: e.target.value ? e.target.value + "T00:00:00Z" : null})} />
               </div>
@@ -613,10 +647,18 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
                   }`}
                 >
                   <h4 className="font-bold text-[#0a1628] text-sm line-clamp-2 leading-snug mb-3">{story.title || 'Untitled Story'}</h4>
-                  <div className="flex items-center justify-between mt-1 text-xs">
-                    <span className={`px-2 py-1 rounded font-bold tracking-wide ${story.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {story.status === 'published' ? 'PUBLISHED' : 'DRAFT'}
-                    </span>
+                  <div className="flex items-center justify-between gap-2 mt-1 text-xs">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={`px-2 py-1 rounded font-bold tracking-wide ${story.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {story.status === 'published' ? 'PUBLISHED' : 'DRAFT'}
+                      </span>
+                      {story.externalUrl && (
+                        <span className="flex items-center gap-1 rounded bg-blue-100 px-2 py-1 font-bold tracking-wide text-blue-700">
+                          <ExternalLink size={11} />
+                          EXTERNAL
+                        </span>
+                      )}
+                    </div>
                     <span className="text-gray-400 font-semibold">{new Date(story.updatedAt || story.createdAt || Date.now()).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</span>
                   </div>
                 </button>
