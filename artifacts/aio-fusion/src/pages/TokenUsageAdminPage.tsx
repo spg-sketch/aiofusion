@@ -5,6 +5,8 @@ import { apiBase } from "../lib/contentAi";
 
 export type TokenUsageRow = {
   accountId: string;
+  projectId?: string | null;
+  projectName?: string | null;
   month: string;
   operation: string;
   model: string;

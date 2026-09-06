@@ -29,7 +29,8 @@ import {
   isDiscountAccountType,
   isValidDiscountPercent,
 } from "../lib/discount-invites";
-import { getProjectAddons } from "../lib/billing";
+import { getBetaTrialSummary, getProjectAddons, getProjectAllowance } from "../lib/billing";
+import { buildAdminGenerationClassification } from "../lib/admin-generation";
 import { classifySavedAssessmentResult } from "../lib/assessment-outcome";
 
 const adminRouter = Router();
@@ -56,7 +57,7 @@ adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request
   if (!requireMasterAdmin(req, res)) return;
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const [companies, actionRows, lastPayRows, discounts] = await Promise.all([
+    const [companies, actionRows, projectCountRows, lastPayRows, discounts] = await Promise.all([
       db
         .select({
           slug: platformCompaniesTable.slug,
@@ -68,6 +69,8 @@ adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request
           billingFrequency: platformCompaniesTable.billingFrequency,
           currentPeriodEnd: platformCompaniesTable.currentPeriodEnd,
           freeAccess: platformCompaniesTable.freeAccess,
+          betaTrialStartedAt: sql<Date | null>`beta_trial_started_at`,
+          betaTrialEndsAt: sql<Date | null>`beta_trial_ends_at`,
         })
         .from(platformCompaniesTable),
       // Rolling 30-day content-action counts, attributed to the project
@@ -82,12 +85,23 @@ adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request
         .where(and(gte(tokenUsageTable.createdAt, thirtyDaysAgo), sql`${tokenUsageTable.operation} LIKE 'content-%'`))
         .groupBy(sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`),
       db
+        .select({
+          account: projectsTable.owner,
+          projects: sql<number>`count(*)::int`,
+        })
+        .from(projectsTable)
+        .where(and(isNull(projectsTable.deletedAt), sql`${projectsTable.owner} IS NOT NULL`))
+        .groupBy(projectsTable.owner),
+      db
         .select()
         .from(platformMetaTable)
         .where(sql`${platformMetaTable.key} LIKE 'billing:last-payment:%'`),
       getAllAccountDiscounts(),
     ]);
     const actionsByAccount = new Map(actionRows.map((r) => [String(r.account).toLowerCase(), r.actions]));
+    const projectsByAccount = new Map(
+      projectCountRows.map((r) => [String(r.account).toLowerCase(), r.projects]),
+    );
     const lastPaymentByAccount = new Map(
       lastPayRows.map((r) => [r.key.slice("billing:last-payment:".length), r.value]),
     );
@@ -95,10 +109,22 @@ adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request
       companies.map(async (c) => {
         const slug = c.slug.toLowerCase();
         const discount = discounts.get(slug) ?? null;
+        const betaTrial = getBetaTrialSummary({
+          status:
+            c.subscriptionStatus === "active" ||
+            c.subscriptionStatus === "past_due" ||
+            c.subscriptionStatus === "cancelled"
+              ? c.subscriptionStatus
+              : "none",
+          freeAccess: c.freeAccess === true,
+          betaTrialStartedAt: c.betaTrialStartedAt ? new Date(c.betaTrialStartedAt) : null,
+          betaTrialEndsAt: c.betaTrialEndsAt ? new Date(c.betaTrialEndsAt) : null,
+        });
         let addons = 0;
         try {
           addons = (await getProjectAddons(slug)).length;
         } catch { /* non-fatal */ }
+        const projectAllowance = await getProjectAllowance(slug);
         return {
           slug,
           displayName: c.displayName || slug,
@@ -110,8 +136,14 @@ adminRouter.get("/admin/subscriptions", requirePlatformAuth, async (req: Request
           currentPeriodEnd: c.currentPeriodEnd ? c.currentPeriodEnd.toISOString() : null,
           lastPaymentAt: lastPaymentByAccount.get(slug) ?? null,
           actionsLast30Days: actionsByAccount.get(slug) ?? 0,
+          projectCount: projectsByAccount.get(slug) ?? 0,
+          projectAllowance,
           projectAddons: addons,
           freeAccess: c.freeAccess === true,
+          betaTrialStartedAt: betaTrial.startedAt?.toISOString() ?? null,
+          betaTrialEndsAt: betaTrial.endsAt?.toISOString() ?? null,
+          betaTrialStatus: betaTrial.status,
+          betaDaysRemaining: betaTrial.daysRemaining,
           discount: discount
             ? { percent: discount.percent, label: discount.label, redeemedAt: discount.redeemedAt, endedAt: discount.endedAt ?? null }
             : null,
@@ -387,6 +419,11 @@ adminRouter.post(
       typeof req.body?.companyName === "string"
         ? req.body.companyName.trim().slice(0, 200)
         : "";
+    if (req.body?.isDemo !== undefined && typeof req.body.isDemo !== "boolean") {
+      res.status(400).json({ error: "isDemo must be true or false." });
+      return;
+    }
+    const isDemo = req.body?.isDemo === true;
 
     if (!rawUrl) {
       res.status(400).json({ error: "URL is required." });
@@ -724,13 +761,12 @@ Rules:
         initials: deriveInitials(companyName),
         color: projectColor,
         website: normalised,
-        generatedFromUrl: true,
+        ...buildAdminGenerationClassification(isDemo),
         contentCount: 0,
         avgScore: 0,
         scoreTrend: 0,
         activePlans: 0,
         lastActive: "Just now",
-        recentActivity: "Generated from URL",
         owner,
       };
 
@@ -801,6 +837,8 @@ adminRouter.get(
       const rows = await db
         .select({
           accountId: sql<string>`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+          projectId: tokenUsageTable.projectId,
+          projectName: projectsTable.name,
           month: sql<string>`to_char(date_trunc('month', ${tokenUsageTable.createdAt}), 'YYYY-MM')`,
           operation: tokenUsageTable.operation,
           model: tokenUsageTable.model,
@@ -813,6 +851,8 @@ adminRouter.get(
         .leftJoin(projectsTable, eq(tokenUsageTable.projectId, projectsTable.id))
         .groupBy(
           sql`coalesce(${projectsTable.owner}, ${tokenUsageTable.accountId})`,
+          tokenUsageTable.projectId,
+          projectsTable.name,
           sql`date_trunc('month', ${tokenUsageTable.createdAt})`,
           tokenUsageTable.operation,
           tokenUsageTable.model,

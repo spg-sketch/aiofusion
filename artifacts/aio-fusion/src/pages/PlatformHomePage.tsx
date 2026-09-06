@@ -50,7 +50,6 @@ function PlatformHomePage({
   onSignOut,
   onManageUsers,
   onManageSubAccounts,
-  onTokenUsage,
   onInsightsAdmin,
   onOpenGeorge,
   initialNotice,
@@ -75,7 +74,8 @@ function PlatformHomePage({
   onSignOut: () => void;
   onManageUsers: () => void;
   onManageSubAccounts: () => void;
-  onTokenUsage: () => void;
+  /** Retained for compatibility with older callers; Token Usage now lives inside Manage Accounts. */
+  onTokenUsage?: () => void;
   onInsightsAdmin?: () => void;
   onOpenGeorge?: () => void;
   initialNotice?: string;
@@ -910,13 +910,6 @@ function PlatformHomePage({
                       style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
                     >
                       <Users size={15} /> Manage Accounts
-                    </button>
-                    <button
-                      onClick={onTokenUsage}
-                      className="flex min-w-0 items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:bg-white/10"
-                      style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
-                    >
-                      Token Usage
                     </button>
                   </>
                 ) : (

@@ -13,4 +13,6 @@ export type Client = {
   logo?: string;
   owner?: string;
   createdAt?: string;
+  generatedFromUrl?: boolean;
+  demo?: boolean;
 };

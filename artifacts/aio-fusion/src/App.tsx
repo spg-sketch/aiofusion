@@ -125,7 +125,6 @@ import type {
   Outlet, Contact,
 } from "./types";
 import { loadCycle, recordCycle, type CycleHistory } from "./lib/cycles";
-import { TokenUsageAdminPage, type TokenUsageRow, type TokenDailyRow, type TokenUserInfo, type SpikeInfo } from "./pages/TokenUsageAdminPage";
 import type { Client } from "./lib/projectTypes";
 import { CREATED_PROJECTS_KEY, loadStoredProjects, saveStoredProjects } from "./lib/projectStore";
 import {
@@ -408,7 +407,7 @@ function viewToUrl(v: string, insightsArticleId?: string | null): string {
 
 
 function App() {
-  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "token-usage" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => directViewFromLocation() ?? "landing");
+  const [view, setView] = useState<"landing" | "platform-home" | "platform" | "guidance" | "archived-projects" | "users-admin" | "insights-admin" | "sub-accounts" | "for-agents" | "for-agencies" | "for-inhouse" | "insights" | "about" | "contact" | "pricing" | "trust-security" | "privacy-policy" | "terms-conditions">(() => directViewFromLocation() ?? "landing");
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [currentPage, setCurrentPage] = useState("dashboard");
   // Lazy route chunks can take a moment on their first visit. Navigation is a
@@ -502,54 +501,6 @@ function App() {
     };
   }, []);
 
-  const [tokenUsageRows, setTokenUsageRows] = useState<TokenUsageRow[] | null>(null);
-  const [tokenDailyRows, setTokenDailyRows] = useState<TokenDailyRow[] | null>(null);
-  const [tokenUsageUsersByAccount, setTokenUsageUsersByAccount] = useState<Record<string, TokenUserInfo> | undefined>(undefined);
-  const [tokenStatusByAccount, setTokenStatusByAccount] = useState<Record<string, string> | undefined>(undefined);
-  const [tokenFreeAccessByAccount, setTokenFreeAccessByAccount] = useState<Record<string, boolean> | undefined>(undefined);
-  const [tokenSpikeFlags, setTokenSpikeFlags] = useState<Record<string, SpikeInfo> | undefined>(undefined);
-  const [tokenThirtyDayCosts, setTokenThirtyDayCosts] = useState<Record<string, number> | undefined>(undefined);
-  const [tokenCurrentMonthSpends, setTokenCurrentMonthSpends] = useState<Record<string, number> | undefined>(undefined);
-  const [tokenSpendLimits, setTokenSpendLimits] = useState<Record<string, number | null> | undefined>(undefined);
-  const [tokenDefaultLimit, setTokenDefaultLimit] = useState<number | undefined>(undefined);
-  const [tokenDefaultMonthlySpendLimitGbp, setTokenDefaultMonthlySpendLimitGbp] = useState<number | undefined>(undefined);
-  const [tokenUsageLoading, setTokenUsageLoading] = useState(false);
-  const [tokenUsageError, setTokenUsageError] = useState<string | null>(null);
-
-  const loadTokenUsage = () => {
-    setTokenUsageLoading(true);
-    setTokenUsageError(null);
-    void fetch(`${apiBase()}/api/admin/token-usage`, { credentials: "include" })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("Failed to load token usage");
-        const data = await r.json() as {
-          rows: TokenUsageRow[];
-          dailyRows?: TokenDailyRow[];
-          usersByAccount?: Record<string, TokenUserInfo>;
-          statusByAccount?: Record<string, string>;
-          freeAccessByAccount?: Record<string, boolean>;
-          spikeFlags?: Record<string, SpikeInfo>;
-          thirtyDayCosts?: Record<string, number>;
-          currentMonthSpends?: Record<string, number>;
-          spendLimits?: Record<string, number | null>;
-          defaultLimit?: number;
-          defaultMonthlySpendLimitGbp?: number;
-        };
-        setTokenUsageRows(data.rows ?? []);
-        setTokenDailyRows(data.dailyRows ?? []);
-        setTokenUsageUsersByAccount(data.usersByAccount ?? {});
-        setTokenStatusByAccount(data.statusByAccount ?? {});
-        setTokenFreeAccessByAccount(data.freeAccessByAccount ?? {});
-        setTokenSpikeFlags(data.spikeFlags ?? {});
-        setTokenThirtyDayCosts(data.thirtyDayCosts ?? {});
-        setTokenCurrentMonthSpends(data.currentMonthSpends ?? {});
-        setTokenSpendLimits(data.spendLimits ?? {});
-        setTokenDefaultLimit(data.defaultLimit);
-        setTokenDefaultMonthlySpendLimitGbp(data.defaultMonthlySpendLimitGbp);
-      })
-      .catch(() => setTokenUsageError("Could not load token usage data. Please try again."))
-      .finally(() => setTokenUsageLoading(false));
-  };
 
   // Pull the shared project list and refresh the hub. Used on first load and
   // again whenever the tab regains focus, so a project a colleague created on
@@ -943,9 +894,21 @@ function App() {
   // before the history-sync effect rewrites the URL and drops the query string.
   // Also kept in sync while the settings page is open so the section survives
   // a refresh and participates in Back/Forward history navigation.
-  const [accountSection, setAccountSection] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get("account_section"),
-  );
+  const [accountSection, setAccountSection] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("account_section");
+    if (fromUrl) return fromUrl;
+    if (!params.has("aio_exit_impersonation")) return null;
+    try {
+      const raw = sessionStorage.getItem("aio:master-account-return");
+      sessionStorage.removeItem("aio:master-account-return");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { section?: unknown };
+      return typeof parsed.section === "string" ? parsed.section : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Stripe Checkout return flag (/?checkout=success|cancelled). Captured once
   // on load, before the history-sync effect rewrites the URL and drops the
@@ -1092,7 +1055,7 @@ function App() {
     const navState = { __aioNav: true, view, currentPage, insightsArticleId, accountSection };
     // Reflect the active settings section in the URL so a refresh restores it
     // (matches the email deep-link format /?account_section=security).
-    const url = view === "sub-accounts" && accountSection
+    const url = (view === "sub-accounts" || view === "users-admin") && accountSection
       ? viewToUrl(view, insightsArticleId) + "?account_section=" + encodeURIComponent(accountSection)
       : viewToUrl(view, insightsArticleId);
     if (!navInitDone.current) {
@@ -1155,7 +1118,11 @@ function App() {
     // account_section param is a leftover from the page the shortcut was
     // clicked on, not a deep link to follow.
     if (suppressAccountSectionNav.current) return;
-    transitionToView("sub-accounts");
+    if (session.role === "admin" && ["masters", "agencies", "clients", "archived", "demo", "beta", "usage", "audit"].includes(accountSection)) {
+      transitionToView("users-admin");
+    } else {
+      transitionToView("sub-accounts");
+    }
   }, [accountSection, authLoading, session]);
 
   // Access guard for the protected admin pages. Done in an effect (not during
@@ -1352,9 +1319,13 @@ function App() {
             }}
             onSignOut={handleSignOut}
             onNeedsSetup={() => setNeedsSetup(true)}
-            onManageUsers={() => { if (session?.role === "admin") transitionToView("users-admin"); }}
+            onManageUsers={() => {
+              if (session?.role === "admin") {
+                setAccountSection("agencies");
+                transitionToView("users-admin");
+              }
+            }}
             onManageSubAccounts={() => requireSessionThen(() => transitionToView("sub-accounts"))}
-            onTokenUsage={() => { if (session?.role === "admin") { loadTokenUsage(); transitionToView("token-usage"); } }}
             onInsightsAdmin={() => { if (session?.insightsCmsAccess) transitionToView("insights-admin"); }}
             onCreateProject={beginCreateProject}
             onContinueToProjects={() => requireSessionThen(() => transitionToView("platform"))}
@@ -1384,7 +1355,7 @@ function App() {
     if (!session || session.role !== "admin") {
       return null;
     }
-    return <UsersAdminPage session={session} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
+    return <UsersAdminPage session={session} initialSection={accountSection ?? undefined} onSectionChange={setAccountSection} onBack={() => transitionToView("platform-home")} onAssignProjectOwner={handleAssignProjectOwner} onProjectCreated={() => { void resyncProjects(); }} onSupportAdmin={() => transitionToView("support-admin" as any)} onLeadsAdmin={() => transitionToView("leads-admin" as any)} onInsightsAdmin={() => transitionToView("insights-admin")} />;
   }
   if (view === "insights-admin") {
     if (!session || session.insightsCmsAccess !== true) return null;
@@ -1412,28 +1383,6 @@ function App() {
       <Suspense fallback={<RouteLoading fullScreen />}>
         <ContactSubmissionsAdminPage onBack={() => transitionToView("users-admin")} />
       </Suspense>
-    );
-  }
-  if (view === "token-usage") {
-    if (!session || session.role !== "admin") return null;
-    return (
-      <TokenUsageAdminPage
-        rows={tokenUsageRows}
-        dailyRows={tokenDailyRows}
-        usersByAccount={tokenUsageUsersByAccount}
-        statusByAccount={tokenStatusByAccount}
-        freeAccessByAccount={tokenFreeAccessByAccount}
-        spikeFlags={tokenSpikeFlags}
-        thirtyDayCosts={tokenThirtyDayCosts}
-        currentMonthSpends={tokenCurrentMonthSpends}
-        spendLimits={tokenSpendLimits}
-        defaultLimit={tokenDefaultLimit}
-        defaultMonthlySpendLimitGbp={tokenDefaultMonthlySpendLimitGbp}
-        loading={tokenUsageLoading}
-        error={tokenUsageError}
-        onBack={() => transitionToView("platform-home")}
-        onRefresh={loadTokenUsage}
-      />
     );
   }
   if (view === "sub-accounts") {

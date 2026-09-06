@@ -13,10 +13,11 @@ vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
 // where forwarding unknown[] to a narrowly typed mock produces a "never" error.
 // Return type is inferred from mockReturnValue calls.
 const mockGetLocalUsers = vi.fn();
+const mockGetPendingAccounts = vi.fn();
 
 vi.mock("../lib/auth", () => ({
   getUsers: () => mockGetLocalUsers(),   // no args forwarding - getUsers takes none
-  serverGetPendingAccounts: async () => ({ ok: true as const, accounts: [] }),
+  serverGetPendingAccounts: () => mockGetPendingAccounts(),
   serverGetMasterOwners: async () => ({ ok: true as const, usernames: [] }),
   serverAddUser: async () => ({ ok: true as const }),
   serverDeleteUser: async () => ({ ok: true as const }),
@@ -42,6 +43,7 @@ vi.mock("../lib/auth", () => ({
 
 // Silence fetch calls from the admin useEffects (token-usage, audit-locks).
 beforeEach(() => {
+  mockGetPendingAccounts.mockResolvedValue({ ok: true as const, accounts: [] });
   vi.spyOn(global, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ rows: [] }), {
       status: 200,
@@ -109,6 +111,7 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
 
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
     expect(screen.getByText("bob")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     expect(screen.getByText("carol")).toBeInTheDocument();
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
@@ -125,8 +128,9 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
     fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
 
     expect(screen.queryByText("alice")).not.toBeInTheDocument();
-    expect(screen.queryByText("carol")).not.toBeInTheDocument();
     expect(screen.getByText("bob")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
+    expect(screen.queryByText("carol")).not.toBeInTheDocument();
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
 
@@ -139,7 +143,8 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
 
-    expect(screen.getByText(/all active accounts have 2fa enabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/no active agency accounts/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     expect(screen.getByText("dave")).toBeInTheDocument();
   });
 
@@ -150,10 +155,10 @@ describe("UsersAdminPage - 2FA filter: top-level accounts", () => {
     ]);
 
     await waitFor(() => expect(screen.getByText("bob")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
 
-    expect(screen.getByText(/all archived accounts have 2fa enabled/i)).toBeInTheDocument();
-    expect(screen.getByText("bob")).toBeInTheDocument();
+    expect(screen.getByText(/no archived accounts match these filters/i)).toBeInTheDocument();
   });
 
   it("restores all accounts when the filter is toggled off again", async () => {
@@ -222,8 +227,7 @@ describe("UsersAdminPage - 2FA filter: nested accounts", () => {
 
     await waitFor(() => expect(screen.getByText("parent")).toBeInTheDocument());
 
-    // Archived section heading "Archived (1)" must appear.
-    expect(screen.getByText(/^archived \(/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     // The archived child appears in the archived section.
     expect(screen.getByText("archivedchild")).toBeInTheDocument();
     // With filter on, archived child (no mfa) stays visible.
@@ -246,7 +250,9 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
     await waitFor(() => expect(screen.getByText("activechild")).toBeInTheDocument());
     // activechild is non-archived so it must be in the active section.
     expect(screen.getByText("activechild")).toBeInTheDocument();
-    // archivedparent is archived so it must also appear (in the archived section).
+    expect(screen.queryByText("archivedparent")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
+    // archivedparent is archived and appears in the dedicated archived view.
     expect(screen.getByText("archivedparent")).toBeInTheDocument();
   });
 
@@ -274,6 +280,7 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
       mkUser("activechild", { parent: "archivedparent" }),
     ]);
 
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
     await waitFor(() => expect(screen.getByText("archivedparent")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
 
@@ -290,14 +297,80 @@ describe("UsersAdminPage - hierarchy: archived parent / active child", () => {
 
     await waitFor(() => expect(screen.getByText("a")).toBeInTheDocument());
 
-    // All three visible with filter off.
-    expect(screen.getByText("b")).toBeInTheDocument();
+    // Active descendants stay in the active view, even across an archived link.
     expect(screen.getByText("c")).toBeInTheDocument();
+    expect(screen.queryByText("b")).not.toBeInTheDocument();
 
     // With filter on: none have mfaEnabled so all remain visible.
     fireEvent.click(screen.getByRole("button", { name: /only without 2fa/i }));
     expect(screen.getByText("a")).toBeInTheDocument();
-    expect(screen.getByText("b")).toBeInTheDocument();
     expect(screen.getByText("c")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived accounts" }));
+    expect(screen.getByText("b")).toBeInTheDocument();
+  });
+});
+
+describe("UsersAdminPage - URL-backed section prop", () => {
+  it("opens usage directly and responds when browser history changes the prop", async () => {
+    mockGetLocalUsers.mockReturnValue([]);
+    const props = {
+      session: ADMIN_SESSION,
+      onBack: () => {},
+      onAssignProjectOwner: async () => ({ ok: true }),
+    };
+    const { rerender } = render(<UsersAdminPage {...props} initialSection="usage" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Token & AI Usage" })).toBeInTheDocument();
+    });
+
+    rerender(<UsersAdminPage {...props} initialSection="beta" />);
+    expect(screen.getByRole("heading", { name: "Beta Participants" })).toBeInTheDocument();
+  });
+
+  it("keeps legacy pending-account recovery available under System Audit", async () => {
+    mockGetLocalUsers.mockReturnValue([]);
+    mockGetPendingAccounts.mockResolvedValue({
+      ok: true as const,
+      accounts: [{
+        username: "legacy-client",
+        email: "legacy@example.com",
+        website: "https://example.com",
+        displayName: "Legacy Client",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }],
+    });
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="audit"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Legacy Client")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Approve legacy account" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
+  });
+
+  it("keeps active Master accounts visible and manageable", async () => {
+    mockGetLocalUsers.mockReturnValue([
+      { ...mkUser("admin"), role: "admin" },
+      { ...mkUser("second-master"), role: "admin" },
+    ]);
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="masters"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+
+    expect(screen.getByText("second-master")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View account" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "More actions" }).length).toBeGreaterThan(0);
   });
 });

@@ -85,7 +85,7 @@ export function SubscriptionsAdminCard() {
     setCreatedUrl(null);
     const pct = Number.parseInt(invPercent, 10);
     if (!Number.isInteger(pct) || pct < 1 || pct > 99) {
-      setInvError("Discount must be a whole number between 1 and 99. For 100%, use the free-access toggle on the Token Usage page instead.");
+      setInvError("Discount must be a whole number between 1 and 99. For 100%, use the free-access toggle in Token & AI Usage instead.");
       return;
     }
     setInvLoading(true);
@@ -230,7 +230,7 @@ export function SubscriptionsAdminCard() {
       {/* Invite form */}
       <h3 className="text-[14px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Send a discount invitation</h3>
       <p className="text-[12px] font-light mb-4 leading-[1.6]" style={{ color: vars.g600 }}>
-        Creates a single-use link (valid 30 days) that pre-loads the account type and applies the discount automatically at checkout - the discount persists on every renewal until you end it. For 100% free access, use the free-access toggle on the Token Usage page.
+        Creates a single-use link (valid 30 days) that pre-loads the account type and applies the discount automatically at checkout - the discount persists on every renewal until you end it. For 100% free access, use the free-access toggle in Token & AI Usage.
       </p>
       <form onSubmit={handleCreateInvite} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3 items-end">
         <div className="lg:col-span-2">

@@ -10,6 +10,10 @@ import {
   Undo2, ArchiveRestore, RefreshCw, MonitorSmartphone, MoreVertical, ShieldOff,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
+import { TokenUsageSection } from "./TokenUsageSection";
+import { BetaParticipantsSection } from "./BetaParticipantsSection";
+import { UsersAdminDemoSection } from "./UsersAdminDemoSection";
+
 import { type Session as LocalSession, type SessionInfo, type User as LocalUser, type Role as LocalRole, type PendingAccount, getUsers as getLocalUsers, serverAddUser, serverDeleteUser, serverChangePassword, serverResetMfa, serverAssignOwner, serverSetDisplayName, serverArchiveUser, serverChangeRole, serverSetSeatCap, serverGetAccountSessions, serverRevokeSession, serverImpersonate, serverGetPendingAccounts, serverApproveAccount, serverRejectAccount, refreshAccountsCache, canCreateSubAccounts, serverSetMasterOwner, serverGetMasterOwners } from "../lib/auth";
 import { roleLabel, accountLabel } from "../lib/accountLabels";
 import { loadStoredProjects } from "../lib/projectStore";
@@ -17,7 +21,7 @@ import { apiBase } from "../lib/contentAi";
 import { SubscriptionsAdminCard } from "../components/SubscriptionsAdminCard";
 import { pushProjectMeta } from "../lib/projectSync";
 import type { Client } from "../lib/projectTypes";
-function UsersAdminPage({
+export function UsersAdminPage({
   session,
   onBack,
   onAssignProjectOwner,
@@ -25,6 +29,8 @@ function UsersAdminPage({
   onSupportAdmin,
   onLeadsAdmin,
   onInsightsAdmin,
+  initialSection,
+  onSectionChange,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -33,6 +39,8 @@ function UsersAdminPage({
   onSupportAdmin?: () => void;
   onLeadsAdmin?: () => void;
   onInsightsAdmin?: () => void;
+  initialSection?: string;
+  onSectionChange?: (section: string) => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -174,6 +182,7 @@ function UsersAdminPage({
 
   // ── 2FA filter + active/archived section split ────────────────────────────
   const [only2FAOff, setOnly2FAOff] = useState(false);
+  const [accountSearch, setAccountSearch] = useState("");
 
   // Two section-scoped mfa filter sets - propagation never crosses the
   // archived/active boundary, so an archived parent is not surfaced because
@@ -335,6 +344,11 @@ function UsersAdminPage({
   const handleViewAccount = (username: string) => {
     setImpersonateError(null);
     setImpersonatingUsername(username);
+    try {
+      sessionStorage.setItem("aio:master-account-return", JSON.stringify({ section }));
+    } catch {
+      // Navigation still works if storage is unavailable.
+    }
     void serverImpersonate(username)
       .then((result) => {
         if (!result.ok) {
@@ -346,7 +360,7 @@ function UsersAdminPage({
         // in step with the rest of the app's session-bootstrap flow (project
         // lists, cached account list, etc.) rather than trying to patch every
         // piece of local state in place.
-        window.location.reload();
+        window.location.replace("/");
       })
       .catch(() => {
         setImpersonateError("Failed to view this account.");
@@ -992,6 +1006,11 @@ function UsersAdminPage({
                         <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[8px] font-bold text-white shrink-0" style={{ background: p.color }}>{p.initials}</span>
                           <span className="text-[12px] font-medium truncate" style={{ color: ink }}>{p.name}</span>
+                          {isDemoProject(p) && (
+                            <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]" style={{ background: "#FFF4D8", color: "#9A5A00" }}>
+                              Demo
+                            </span>
+                          )}
                           <select
                             value={(p.owner || "").toLowerCase()}
                             onChange={(e) => handleAssign(p.id, e.target.value)}
@@ -1202,9 +1221,112 @@ function UsersAdminPage({
     );
   }
 
+
+  type MasterSection = "masters" | "agencies" | "clients" | "archived" | "demo" | "beta" | "usage" | "audit";
+  const navGroups = [
+    {
+      label: "Account Management",
+      items: [
+        { id: "masters" as const, label: "Master accounts", icon: Shield },
+        { id: "agencies" as const, label: "Agency / Partner accounts", icon: Building2 },
+        { id: "clients" as const, label: "Direct Client accounts", icon: User },
+        { id: "archived" as const, label: "Archived accounts", icon: Archive },
+      ],
+    },
+    {
+      label: "Growth & Access",
+      items: [
+        { id: "demo" as const, label: "Create Demo Client", icon: Play },
+        { id: "beta" as const, label: "Beta Participants", icon: Sparkles },
+      ],
+    },
+    {
+      label: "Platform Metrics",
+      items: [
+        { id: "usage" as const, label: "Token & AI Usage", icon: Activity },
+        { id: "audit" as const, label: "System Audit", icon: Shield },
+      ],
+    },
+  ];
+  
+  const allowedSections = navGroups.flatMap((g) => g.items.map((i) => i.id));
+  const [section, setSection] = useState<MasterSection>(() =>
+    initialSection && allowedSections.includes(initialSection as MasterSection)
+      ? (initialSection as MasterSection)
+      : "agencies"
+  );
+
+  useEffect(() => {
+    if (initialSection && allowedSections.includes(initialSection as MasterSection)) {
+      setSection(initialSection as MasterSection);
+    }
+  }, [initialSection]);
+  
+  const selectSection = (s: MasterSection) => {
+    setSection(s);
+    if (s === "agencies") setNewRole("agency");
+    if (s === "clients") setNewRole("client");
+    onSectionChange?.(s);
+  };
+
+  const accountMatchesSearch = useCallback((u: LocalUser, seen = new Set<string>()): boolean => {
+    const key = u.username.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const needle = accountSearch.trim().toLowerCase();
+    if (!needle) return true;
+    if (
+      key.includes(needle) ||
+      (u.displayName ?? "").toLowerCase().includes(needle)
+    ) return true;
+    return (childrenByParent.get(key) ?? []).some((child) => accountMatchesSearch(child, seen));
+  }, [accountSearch, childrenByParent]);
+
+  const filterAccountRoots = useCallback(
+    (roots: LocalUser[]) => roots.filter((user) => accountMatchesSearch(user)),
+    [accountMatchesSearch],
+  );
+
+  const renderAccountFilters = () => (
+    <div className="flex flex-col sm:flex-row gap-3 rounded-2xl border bg-white p-4" style={{ borderColor: vars.g200 }}>
+      <label className="relative flex-1">
+        <span className="sr-only">Search accounts</span>
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" color={vars.g400} />
+        <input
+          value={accountSearch}
+          onChange={(e) => setAccountSearch(e.target.value)}
+          placeholder="Search name, username, email or website"
+          className="w-full rounded-xl border py-2.5 pl-9 pr-3 text-[13px] outline-none focus:ring-2"
+          style={{ borderColor: vars.g200, ["--tw-ring-color" as string]: accent }}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => setOnly2FAOff((value) => !value)}
+        className="rounded-xl border px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.12em]"
+        style={{
+          borderColor: only2FAOff ? accent : vars.g200,
+          background: only2FAOff ? accentSoft : "white",
+          color: only2FAOff ? accent : vars.g600,
+        }}
+      >
+        {only2FAOff ? "Without 2FA (on)" : "Only without 2FA"}
+      </button>
+    </div>
+  );
+
+  function isDemoProject(project: Client): boolean {
+    return project.demo === true;
+  }
+
+  const agenciesUsers = filterAccountRoots(visibleActiveTopLevel.filter((u) => u.role === "agency"));
+  const clientsUsers = filterAccountRoots(visibleActiveTopLevel.filter((u) => u.role === "client" || u.role === "user"));
+  const masterUsers = filterAccountRoots(visibleActiveTopLevel.filter((u) => u.role === "admin"));
+
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: "white", borderBottom: `1px solid ${vars.g200}` }}>
+    <div className="min-h-screen flex flex-col font-['Inter',sans-serif]" style={{ background: paper, color: ink }}>
+      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between z-10 shrink-0" style={{ background: "white", borderBottom: `1px solid ${vars.g200}` }}>
+
         <button onClick={onBack} className="flex items-center gap-3.5">
           <img src={`${import.meta.env.BASE_URL}images/logo-navy.png`} alt="AIO Fusion" className="h-16 sm:h-24" onError={(e) => { (e.target as HTMLImageElement).src = `${import.meta.env.BASE_URL}images/logo-white.png`; }} />
         </button>
@@ -1246,319 +1368,315 @@ function UsersAdminPage({
         </div>
       </header>
 
-      <div className="px-4 sm:px-10 py-10 sm:py-14 max-w-5xl mx-auto">
-        <div className="mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft }}>
-            <Users size={12} color={accent} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Admin · User Management</span>
+      <div className="flex-1 md:flex">
+        {/* Sidebar */}
+        <div className="hidden w-64 shrink-0 bg-white border-r md:block" style={{ borderColor: vars.g200 }}>
+          <div className="py-6 px-4 space-y-8">
+            {navGroups.map((group) => (
+              <div key={group.label}>
+                <h3 className="px-3 mb-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: vars.g500 }}>
+                  {group.label}
+                </h3>
+                <nav className="space-y-1">
+                  {group.items.map((item) => {
+                    const isActive = section === item.id;
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => selectSection(item.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all ${
+                          isActive ? 'bg-[#FBE3ED] text-[#C8497A]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        }`}
+                      >
+                        <Icon size={16} className={isActive ? 'text-[#C8497A]' : 'text-gray-400'} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            ))}
           </div>
-          <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            Manage platform accounts
-          </h1>
-          <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
-            Create the accounts that run on the platform. An Agency can sign in and create their own client accounts. A Direct Client signs in to work on their own projects only.
-          </p>
         </div>
 
-        {/* PENDING APPROVALS */}
-        {(pendingLoading || (pendingAccounts && pendingAccounts.length > 0) || pendingError) && (
-          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `2px solid #F59E0B`, boxShadow: "0 8px 24px -12px rgba(245,158,11,0.2)" }}>
-            <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "#FDE68A", background: "#FFFBEB" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "#FEF3C7" }}>
-                  <AlertTriangle size={16} color="#D97706" />
-                </div>
-                <div>
-                  <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-                    Pending approvals {pendingAccounts && pendingAccounts.length > 0 ? `(${pendingAccounts.length})` : ""}
-                  </h2>
-                  <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g500 }}>
-                    These accounts signed up and are waiting for access.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={loadPendingAccounts}
-                disabled={pendingLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5 disabled:opacity-40"
-                style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
+        {/* Main Content */}
+        <div className="min-w-0 flex-1 px-4 py-6 sm:px-10 sm:py-10">
+          <div className="max-w-5xl mx-auto space-y-12">
+            <label className="block md:hidden">
+              <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g500 }}>
+                Manage accounts
+              </span>
+              <select
+                value={section}
+                onChange={(e) => selectSection(e.target.value as MasterSection)}
+                className="w-full rounded-xl border bg-white px-3 py-3 text-[13px] font-semibold"
+                style={{ borderColor: vars.g200, color: ink }}
               >
-                <RefreshCw size={11} className={pendingLoading ? "animate-spin" : ""} /> Refresh
-              </button>
-            </div>
-            {pendingError && (
-              <p className="px-6 py-4 text-[13px] font-semibold" style={{ color: accent }}>{pendingError}</p>
-            )}
-            {pendingLoading && !pendingAccounts && (
-              <div className="px-6 py-4 flex items-center gap-2 text-[13px]" style={{ color: vars.g500 }}>
-                <Loader2 size={14} className="animate-spin" /> Loading…
+                {navGroups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.items.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            
+            {section === "demo" && <UsersAdminDemoSection onProjectCreated={() => { refresh(); onProjectCreated?.(); }} />}
+            {section === "beta" && (
+              <div className="space-y-8">
+                <BetaParticipantsSection />
+                <SubscriptionsAdminCard />
               </div>
             )}
-            {pendingAccounts && pendingAccounts.length > 0 && (
-              <ul className="divide-y" style={{ borderColor: vars.g200 }}>
-                {pendingAccounts.map((a) => (
-                  <li key={a.username} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: "#FEF3C7", color: "#D97706" }}>
-                        <Building2 size={16} />
-                      </div>
-                      <div>
-                        <p className="text-[14px] font-bold" style={{ color: ink }}>{a.displayName ?? a.username}</p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
-                          {a.email && <span className="text-[12px] font-light" style={{ color: vars.g500 }}>{a.email}</span>}
-                          {a.website && <a href={a.website} target="_blank" rel="noopener noreferrer" className="text-[12px] font-light hover:underline" style={{ color: "#1A647B" }}>{a.website.replace(/^https?:\/\//, "")}</a>}
-                          <span className="text-[11px]" style={{ color: vars.g400 }}>Applied {new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+            {section === "usage" && <TokenUsageSection onViewAccount={handleViewAccount} />}
+            
+            {section === "masters" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Master accounts</h2>
+                  <p className="text-sm text-gray-500 mt-1">Manage active Master administrators and their account access.</p>
+                </div>
+                {renderAccountFilters()}
+                <div className="flex flex-col gap-4">
+                  {masterUsers.length === 0 && <p className="text-sm text-gray-500">No active Master accounts match these filters.</p>}
+                  {masterUsers.map((user) => renderAccountNode(user, 0, false))}
+                </div>
+              </div>
+            )}
+
+            {section === "agencies" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Agency / Partner accounts</h2>
+                  <p className="text-sm text-gray-500 mt-1">Manage active agency accounts and their sub-clients.</p>
+                </div>
+                {renderAccountFilters()}
+                <div className="flex flex-col gap-4">
+                  
+              <div className="rounded-2xl p-6 sm:p-8 mb-6 bg-white border shadow-sm" style={{ borderColor: vars.g200 }}>
+                <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
+                <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
+                  <div className="md:col-span-6">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
+                    <input
+                      type="text"
+                      value={newDisplayName}
+                      onChange={(e) => setNewDisplayName(e.target.value)}
+                      placeholder="e.g. Acme Agency Ltd"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-6">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      placeholder="e.g. patrick"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                    <input
+                      type="text"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="min 8 characters"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as any)}
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    >
+                      <option value="agency">Agency</option>
+                      <option value="client">Direct Client</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-4">
+                    <button
+                      type="submit"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                      style={{ background: accent }}
+                    >
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                  {addError && (
+                    <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>
+                  )}
+                  {addSuccess && (
+                    <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>
+                  )}
+                </form>
+              </div>
+
+                  {agenciesUsers.length === 0 && <p className="text-sm text-gray-500">No active agency accounts.</p>}
+                  {agenciesUsers.map(u => renderAccountNode(u, 0, false))}
+                </div>
+              </div>
+            )}
+
+            {section === "clients" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Direct Client accounts</h2>
+                  <p className="text-sm text-gray-500 mt-1">Manage active direct clients and standalone users.</p>
+                </div>
+                {renderAccountFilters()}
+                <div className="flex flex-col gap-4">
+                  
+              <div className="rounded-2xl p-6 sm:p-8 mb-6 bg-white border shadow-sm" style={{ borderColor: vars.g200 }}>
+                <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
+                <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
+                  <div className="md:col-span-6">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
+                    <input
+                      type="text"
+                      value={newDisplayName}
+                      onChange={(e) => setNewDisplayName(e.target.value)}
+                      placeholder="e.g. Acme Agency Ltd"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-6">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
+                    <input
+                      type="text"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      placeholder="e.g. patrick"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
+                    <input
+                      type="text"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="min 8 characters"
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value as any)}
+                      className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
+                      style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
+                    >
+                      <option value="agency">Agency</option>
+                      <option value="client">Direct Client</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-4">
+                    <button
+                      type="submit"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
+                      style={{ background: accent }}
+                    >
+                      <Plus size={14} /> Add
+                    </button>
+                  </div>
+                  {addError && (
+                    <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>
+                  )}
+                  {addSuccess && (
+                    <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>
+                  )}
+                </form>
+              </div>
+
+                  {clientsUsers.length === 0 && <p className="text-sm text-gray-500">No active direct client accounts.</p>}
+                  {clientsUsers.map(u => renderAccountNode(u, 0, false))}
+                </div>
+              </div>
+            )}
+
+            {section === "archived" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Archived accounts</h2>
+                  <p className="text-sm text-gray-500 mt-1">Suspended and archived accounts. They cannot sign in.</p>
+                </div>
+                {renderAccountFilters()}
+                <div className="flex flex-col gap-4">
+                  {filterAccountRoots(visibleArchivedTopLevel).length === 0 && <p className="text-sm text-gray-500">No archived accounts match these filters.</p>}
+                  {filterAccountRoots(visibleArchivedTopLevel).map(u => renderAccountNode(u, 0, true))}
+                </div>
+              </div>
+            )}
+
+            {section === "audit" && (
+              <div className="space-y-12">
+                <div>
+                  <h2 className="text-2xl font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>System Audit</h2>
+                  <p className="text-sm text-gray-500 mt-1">Review system logs and backend assessment outcomes.</p>
+                </div>
+
+                <details className="rounded-2xl border bg-white p-5" style={{ borderColor: vars.g200 }}>
+                  <summary className="cursor-pointer text-[13px] font-bold" style={{ color: ink }}>
+                    Legacy pending-account recovery ({pendingAccounts?.length ?? 0})
+                  </summary>
+                  <p className="mt-2 text-[12px]" style={{ color: vars.g500 }}>
+                    Compatibility access for older applications only. Normal sign-up no longer uses manual approval.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {pendingLoading && <p className="text-[12px]" style={{ color: vars.g500 }}>Loading pending accounts...</p>}
+                    {pendingError && <p className="text-[12px] font-semibold" style={{ color: vars.red }}>{pendingError}</p>}
+                    {!pendingLoading && pendingAccounts?.length === 0 && (
+                      <p className="text-[12px]" style={{ color: vars.g500 }}>No legacy pending accounts.</p>
+                    )}
+                    {pendingAccounts?.map((account) => (
+                      <div key={account.username} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: vars.g200 }}>
+                        <div>
+                          <p className="text-[13px] font-semibold" style={{ color: ink }}>{account.displayName || account.username}</p>
+                          <p className="text-[11px]" style={{ color: vars.g500 }}>
+                            {[account.username, account.email, account.website].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(account.username)}
+                            disabled={approvingUser === account.username || rejectingUser === account.username}
+                            className="rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-40"
+                            style={{ background: green }}
+                          >
+                            {approvingUser === account.username ? "Approving..." : "Approve legacy account"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReject(account.username)}
+                            disabled={approvingUser === account.username || rejectingUser === account.username}
+                            className="rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] disabled:opacity-40"
+                            style={{ borderColor: vars.red, color: vars.red }}
+                          >
+                            {rejectingUser === account.username ? "Rejecting..." : "Reject"}
+                          </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleApprove(a.username)}
-                        disabled={approvingUser === a.username || rejectingUser === a.username}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:brightness-110 disabled:opacity-40"
-                        style={{ background: vars.green, color: "white" }}
-                      >
-                        {approvingUser === a.username ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleReject(a.username)}
-                        disabled={approvingUser === a.username || rejectingUser === a.username}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] transition-all hover:opacity-80 disabled:opacity-40"
-                        style={{ color: accent, border: `1.5px solid ${accent}40` }}
-                      >
-                        {rejectingUser === a.username ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />}
-                        Reject
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* GENERATE FROM URL */}
-        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <div className="flex items-start gap-3 mb-5">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: accentSoft }}>
-              <Globe size={16} color={accent} />
-            </div>
-            <div>
-              <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Generate test project from URL</h2>
-              <p className="text-[13px] font-light mt-0.5 leading-[1.6]" style={{ color: vars.g600 }}>
-                Enter a company website and Claude will scrape the site, generate a fully-populated Project Set-Up, and save it as a new project ready for auditing.
-              </p>
-            </div>
-          </div>
-          <form onSubmit={handleGenerate} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
-            <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company website URL</label>
-              <input
-                type="text"
-                value={genUrl}
-                onChange={(e) => setGenUrl(e.target.value)}
-                placeholder="e.g. ogilvy.com or https://ogilvy.com"
-                disabled={genRunning}
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
-            <div className="md:col-span-4">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name <span className="font-normal normal-case tracking-normal" style={{ color: vars.g500 }}>(optional hint)</span></label>
-              <input
-                type="text"
-                value={genCompany}
-                onChange={(e) => setGenCompany(e.target.value)}
-                placeholder="e.g. Ogilvy"
-                disabled={genRunning}
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 disabled:opacity-50"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                disabled={genRunning || !genUrl.trim()}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: accent }}
-              >
-                {genRunning ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                {genRunning ? "Working..." : "Generate"}
-              </button>
-            </div>
-          </form>
-
-          {/* Progress */}
-          {genRunning && genStep && (
-            <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: accentSoft }}>
-              <Loader2 size={14} color={accent} className="animate-spin shrink-0" />
-              <span className="text-[13px] font-medium" style={{ color: accent }}>{genStep}</span>
-            </div>
-          )}
-
-          {/* Error */}
-          {genError && (
-            <div className="mt-4 flex items-start gap-3 px-4 py-3 rounded-xl" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5" }}>
-              <AlertTriangle size={14} color={vars.red} className="shrink-0 mt-0.5" />
-              <span className="text-[13px] font-medium" style={{ color: vars.red }}>{genError}</span>
-            </div>
-          )}
-
-          {/* Success */}
-          {genResult && (
-            <div className="mt-4 px-4 py-4 rounded-xl" style={{ background: "#F0FDF4", border: "1px solid #86EFAC" }}>
-              <div className="flex items-start gap-3">
-                <CheckCircle2 size={16} color={green} className="shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-bold" style={{ color: vars.navy }}>
-                    Project created: {genResult.companyName}
-                  </p>
-                  <p className="text-[12px] mt-0.5" style={{ color: vars.g600 }}>
-                    ID: {genResult.projectId} - go back to the platform and it will appear in your project list after a sync.
-                  </p>
-                </div>
-                <button
-                  onClick={() => { onBack(); }}
-                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] transition-all hover:opacity-80 text-white"
-                  style={{ background: green }}
-                >
-                  <ArrowLeft size={12} /> Go to platform
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ADD ACCOUNT */}
-        <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Add a new account</h2>
-          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
-            <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Display name</label>
-              <input
-                type="text"
-                value={newDisplayName}
-                onChange={(e) => setNewDisplayName(e.target.value)}
-                placeholder="e.g. Acme Agency Ltd"
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
-            <div className="md:col-span-6">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Username (login)</label>
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="e.g. patrick"
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
-            <div className="md:col-span-4">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Password</label>
-              <input
-                type="text"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="min 8 characters"
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              />
-            </div>
-            <div className="md:col-span-4">
-              <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Account type</label>
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as LocalRole)}
-                className="w-full px-3 py-2.5 rounded-lg border text-[14px] focus:outline-none focus:ring-2 bg-white"
-                style={{ borderColor: vars.g200, ["--tw-ring-color" as any]: accent }}
-              >
-                <option value="agency">Agency</option>
-                <option value="client">Direct Client</option>
-              </select>
-            </div>
-            <div className="md:col-span-4">
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90"
-                style={{ background: accent }}
-              >
-                <Plus size={14} /> Add
-              </button>
-            </div>
-            {addError && (
-              <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: accent }}>{addError}</p>
-            )}
-            {addSuccess && (
-              <p className="md:col-span-12 text-[12px] font-semibold" style={{ color: vars.green }}>{addSuccess}</p>
-            )}
-          </form>
-        </div>
-
-        {/* USERS LIST */}
-        <div className="rounded-2xl overflow-hidden mb-2" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <div className="px-6 sm:px-8 py-5 border-b flex flex-wrap items-center justify-between gap-3" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[18px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-              All accounts ({users.length})
-            </h2>
-            <button
-              onClick={() => setOnly2FAOff((v) => !v)}
-              title={only2FAOff ? "Showing accounts without 2FA - click to clear" : "Show only accounts without 2FA enabled"}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all"
-              style={
-                only2FAOff
-                  ? { background: accent, color: "white" }
-                  : { background: accentSoft, color: accent, border: `1.5px solid ${accent}40` }
-              }
-            >
-              <ShieldOff size={12} />
-              {only2FAOff ? "Without 2FA (on)" : "Only without 2FA"}
-            </button>
-          </div>
-
-          {/* Active accounts */}
-          <div className="p-5 sm:p-6">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g500 }}>
-              Active{only2FAOff ? ` - ${visibleActiveTopLevel.length} without 2FA` : ` (${activeTopLevel.length})`}
-            </p>
-            {visibleActiveTopLevel.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                {visibleActiveTopLevel.map((u) => renderAccountNode(u, 0, false))}
-              </div>
-            ) : (
-              <p className="text-[13px] font-light italic py-2" style={{ color: vars.g400 }}>
-                {only2FAOff
-                  ? "All active accounts have 2FA enabled."
-                  : "No active accounts."}
-              </p>
-            )}
-          </div>
-
-          {/* Archived accounts */}
-          {(archivedTopLevel.length > 0) && (
-            <div className="px-5 sm:px-6 pb-5 sm:pb-6">
-              <div className="pt-4 border-t" style={{ borderColor: vars.g200 }}>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] mb-3" style={{ color: vars.g400 }}>
-                  Archived{only2FAOff ? ` - ${visibleArchivedTopLevel.length} without 2FA` : ` (${archivedTopLevel.length})`}
-                </p>
-                {visibleArchivedTopLevel.length > 0 ? (
-                  <div className="flex flex-col gap-3 opacity-60">
-                    {visibleArchivedTopLevel.map((u) => renderAccountNode(u, 0, true))}
+                    ))}
+                    <button type="button" onClick={loadPendingAccounts} className="text-[11px] font-semibold" style={{ color: accent }}>
+                      Refresh legacy pending accounts
+                    </button>
                   </div>
-                ) : (
-                  <p className="text-[13px] font-light italic py-2" style={{ color: vars.g400 }}>
-                    All archived accounts have 2FA enabled.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* SUBSCRIPTIONS + DISCOUNT INVITES (master admin only) */}
-        {session.role === "admin" && <SubscriptionsAdminCard />}
+                </details>
 
         {/* AUTHORITY ASSESSMENT OUTCOMES */}
         {session.role === "admin" && (
@@ -1833,10 +1951,13 @@ function UsersAdminPage({
             );
           })()}
         </div>
-
+              </div>
+            )}
+            
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export { UsersAdminPage };

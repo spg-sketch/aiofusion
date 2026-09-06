@@ -500,6 +500,12 @@ describe("admin discount-invite routes", () => {
       actionsLast30Days: 2, // content-% only, audits excluded
     });
     expect(row.discount).toMatchObject({ percent: 45, label: "Beta" });
+    expect(row).toHaveProperty("betaTrialStartedAt");
+    expect(row).toHaveProperty("betaTrialEndsAt");
+    expect(row).toHaveProperty("betaTrialStatus");
+    expect(row).toHaveProperty("betaDaysRemaining");
+    expect(row).toHaveProperty("projectCount", 0);
+    expect(row).toHaveProperty("projectAllowance");
   });
 
   it("end-discount route removes the discount", async () => {
