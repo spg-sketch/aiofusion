@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks - must be declared before component import
@@ -109,6 +109,30 @@ describe("SubAccountsPage left-hand navigation", () => {
     expect(screen.queryByRole("button", { name: /team members/i })).toBeNull();
     // Security is still available.
     expect(screen.getAllByRole("button", { name: /sign-in & security/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /go to project/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /edit details/i })).toBeNull();
+  });
+
+  it("lets a direct client owner open their project and edit its details", async () => {
+    const onOpenProject = vi.fn();
+    render(
+      <SubAccountsPage
+        {...baseProps}
+        session={{ ...clientSession, companyName: "Vibe Studio" } as any}
+        onOpenProject={onOpenProject}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /go to project/i }));
+    expect(onOpenProject).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit details/i }));
+    expect(screen.getByDisplayValue("Vibe Studio")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /save details/i })).toBeTruthy();
+
+    fireEvent.change(screen.getByDisplayValue("Vibe Studio"), { target: { value: "Vibe Studio Ltd" } });
+    fireEvent.click(screen.getByRole("button", { name: /save details/i }));
+    await waitFor(() => expect(screen.getByText("Vibe Studio Ltd")).toBeTruthy());
   });
 
   it("shows billing to a billing member but not team", () => {

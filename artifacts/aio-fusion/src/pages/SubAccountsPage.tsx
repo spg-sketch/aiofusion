@@ -38,6 +38,7 @@ function SubAccountsPage({
   checkoutResult,
   onSectionChange,
   backToAgency,
+  onOpenProject,
 }: {
   session: LocalSession;
   onBack: () => void;
@@ -58,6 +59,8 @@ function SubAccountsPage({
   backToAgency?: React.ReactNode;
   /** Reports section changes so the parent can mirror them into the URL/history (refresh + Back support). */
   onSectionChange?: (section: string) => void;
+  /** Opens the current account's project workspace. */
+  onOpenProject?: () => void;
 }) {
   const paper = "#f8fafc";
   const ink = "#0a1628";
@@ -375,6 +378,11 @@ function SubAccountsPage({
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
   const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
   const [accountWebsite, setAccountWebsite] = useState<string | null>(null);
+  const [editingActiveProject, setEditingActiveProject] = useState(false);
+  const [activeProjectName, setActiveProjectName] = useState("");
+  const [activeProjectWebsite, setActiveProjectWebsite] = useState("");
+  const [savingActiveProject, setSavingActiveProject] = useState(false);
+  const [activeProjectError, setActiveProjectError] = useState<string | null>(null);
   const [workspaceNameNeedsReview, setWorkspaceNameNeedsReview] = useState(false);
   const [reviewWorkspaceName, setReviewWorkspaceName] = useState(session.companyName?.trim() || "");
   const [reviewingWorkspaceName, setReviewingWorkspaceName] = useState(false);
@@ -583,6 +591,25 @@ function SubAccountsPage({
       setWorkspaceNameNeedsReview(false);
       onWorkspacesChanged?.();
     });
+  };
+
+  const handleSaveActiveProject = () => {
+    const nextName = activeProjectName.trim();
+    if (!nextName || savingActiveProject) return;
+    setSavingActiveProject(true);
+    setActiveProjectError(null);
+    void serverSetDisplayName(session.username, nextName, activeProjectWebsite.trim())
+      .then((result) => {
+        setSavingActiveProject(false);
+        if (!result.ok) {
+          setActiveProjectError(result.error);
+          return;
+        }
+        setConfirmedWorkspaceName(nextName);
+        setAccountWebsite(activeProjectWebsite.trim() || null);
+        setEditingActiveProject(false);
+        onWorkspacesChanged?.();
+      });
   };
 
   const handleSwitchToMaster = () => {
@@ -1236,7 +1263,36 @@ function SubAccountsPage({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {session.role === "client" && !session.agencyManagedClient && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onOpenProject}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white"
+                    style={{ background: accent }}
+                  >
+                    <FolderOpen size={12} /> Go to project
+                  </button>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingActiveProject) {
+                          setActiveProjectName(confirmedWorkspaceName || session.companyName?.trim() || session.username);
+                          setActiveProjectWebsite(accountWebsite || "");
+                          setActiveProjectError(null);
+                        }
+                        setEditingActiveProject((editing) => !editing);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
+                      style={{ color: ink, border: `1.5px solid ${vars.g200}` }}
+                    >
+                      <FileEdit size={12} /> {editingActiveProject ? "Cancel" : "Edit details"}
+                    </button>
+                  )}
+                </>
+              )}
               {logoUrl && (
                 <button
                   type="button"
@@ -1249,6 +1305,44 @@ function SubAccountsPage({
               )}
             </div>
           </div>
+          {editingActiveProject && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl p-4" style={{ background: vars.g50, border: `1px solid ${vars.g200}` }}>
+              <label className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
+                Project name
+                <input
+                  value={activeProjectName}
+                  onChange={(event) => setActiveProjectName(event.target.value)}
+                  maxLength={64}
+                  className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[14px] font-normal normal-case tracking-normal outline-none"
+                  style={{ background: "white", border: `1px solid ${vars.g300}`, color: ink }}
+                />
+              </label>
+              <label className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: vars.g500 }}>
+                Company website
+                <input
+                  value={activeProjectWebsite}
+                  onChange={(event) => setActiveProjectWebsite(event.target.value)}
+                  placeholder="https://www.example.com"
+                  className="mt-1.5 w-full rounded-xl px-3 py-2.5 text-[14px] font-normal normal-case tracking-normal outline-none"
+                  style={{ background: "white", border: `1px solid ${vars.g300}`, color: ink }}
+                />
+              </label>
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveActiveProject}
+                  disabled={!activeProjectName.trim() || savingActiveProject}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-60"
+                  style={{ background: accent }}
+                >
+                  {savingActiveProject ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                  {savingActiveProject ? "Saving..." : "Save details"}
+                </button>
+                <span className="text-[12px]" style={{ color: vars.g500 }}>Click the logo above to change it.</span>
+              </div>
+              {activeProjectError && <p className="sm:col-span-2 text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{activeProjectError}</p>}
+            </div>
+          )}
           {imageError && (
             <p className="mt-3 text-[12px] font-semibold" style={{ color: accent }}>{imageError}</p>
           )}

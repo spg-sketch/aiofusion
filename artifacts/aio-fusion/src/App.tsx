@@ -1479,6 +1479,7 @@ function App() {
         onSectionChange={(s) => setAccountSection(s)}
         session={session}
         onBack={() => transitionToView("platform-home")}
+        onOpenProject={() => transitionToView("platform")}
         onAssignProjectOwner={handleAssignProjectOwner}
         onRoleChanged={handleRoleChanged}
         onWorkspacesChanged={() => {
