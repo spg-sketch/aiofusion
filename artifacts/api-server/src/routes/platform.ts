@@ -3517,7 +3517,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ }
     }
     if (newUserId) await maybeImportGoogleAvatar(newUserId, username, false, userInfo.picture);
-    void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: displayName, username, method: "google" });
+    void sendNewSignupAlert({ name: displayName, email: userInfo.email, companyName: null, username, method: "google" });
     // Discount invite: redeem any discount token that was carried across the
     // OAuth round-trip in the discount-invite cookie. Fail-soft - a redemption
     // failure must never block the sign-in.
@@ -3873,7 +3873,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     } catch { /* non-fatal */ }
     if (newUserId) { try { await db.update(platformUsersTable).set({ emailVerified: true }).where(eq(platformUsersTable.id, newUserId)); } catch { /* non-fatal */ } }
     if (newActiveCompanyId) { try { await db.update(platformCompaniesTable).set({ setupComplete: false }).where(eq(platformCompaniesTable.id, newActiveCompanyId)); } catch { /* non-fatal */ } }
-    void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: displayName, username, method: "microsoft" });
+    void sendNewSignupAlert({ name: displayName, email: msEmail, companyName: null, username, method: "microsoft" });
     // Discount invite: redeem any discount token carried across the OAuth
     // round-trip in the discount-invite cookie. Fail-soft.
     const msDiscountToken = popDiscountInviteCookie(req, res);

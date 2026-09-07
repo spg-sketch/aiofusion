@@ -596,7 +596,7 @@ export async function sendAccountTypeChangedEmail(opts: {
 export async function sendNewSignupAlert(opts: {
   name: string;
   email: string;
-  companyName: string;
+  companyName: string | null;
   username: string;
   method: "password" | "google" | "microsoft";
 }): Promise<void> {
@@ -607,15 +607,16 @@ export async function sendNewSignupAlert(opts: {
   }
 
   const methodLabel = opts.method === "google" ? "Google OAuth" : opts.method === "microsoft" ? "Microsoft SSO" : "Email & password";
+  const companyLabel = opts.companyName?.trim() || "Unknown (not provided by SSO)";
   const adminPanel = getAppBaseUrl();
 
-  const subject = `[AIO Fusion] New signup - ${opts.companyName}`;
+  const subject = `[AIO Fusion] New signup - ${companyLabel}`;
   const text = [
     `A new account has been registered.`,
     ``,
     `Name:         ${opts.name}`,
     `Email:        ${opts.email}`,
-    `Company:      ${opts.companyName}`,
+    `Company:      ${companyLabel}`,
     `Username:     ${opts.username}`,
     `Sign-up via:  ${methodLabel}`,
     ``,
@@ -629,7 +630,7 @@ export async function sendNewSignupAlert(opts: {
       ${buildDataRows([
         ["Name", opts.name],
         ["Email", opts.email],
-        ["Company", opts.companyName],
+        ["Company", companyLabel],
         ["Username", opts.username],
         ["Sign-up via", methodLabel],
       ])}
