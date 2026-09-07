@@ -9,7 +9,7 @@ import {
   platformMembershipsTable,
   platformMetaTable,
 } from "@workspace/db";
-import { and, eq, ne, desc, sql, isNull } from "drizzle-orm";
+import { and, eq, ne, desc, sql, isNull, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 
 // Platform auth: the AIO Fusion application logins (an agency and the client
@@ -733,6 +733,38 @@ export async function createPlatformSession(
 export const LAST_SIGN_IN_PREFIX = "account:last-sign-in:";
 export const lastSignInKey = (username: string) =>
   `${LAST_SIGN_IN_PREFIX}${normUsername(username)}`;
+
+const WORKSPACE_META_PREFIXES = [
+  "account:last-sign-in:",
+  "account:onboarding:v1:",
+  "account:profile:",
+  "account:archived:",
+  "account:master-owner:",
+  "account:managed:",
+  "account:mfa:",
+  "account:mfa-trusted:",
+  "account:team-seats:",
+  "account:image:logo:",
+  "account:image:avatar:",
+  "account-discount:",
+  "projectAddons:",
+  "checkout:pending:",
+  "billing:last-payment:",
+  "fairUsage:multiplier:",
+  "spendLimit:monthly:gbp:",
+  "suspended-via:",
+] as const;
+
+export async function deleteWorkspaceMetadata(username: string): Promise<void> {
+  const slug = normUsername(username);
+  if (!slug) return;
+  await db
+    .delete(platformMetaTable)
+    .where(inArray(
+      platformMetaTable.key,
+      WORKSPACE_META_PREFIXES.map((prefix) => `${prefix}${slug}`),
+    ));
+}
 
 export async function recordLastSignIn(username: string): Promise<void> {
   const value = new Date().toISOString();

@@ -76,6 +76,7 @@ import {
   createSignedInSession,
   LAST_SIGN_IN_PREFIX,
   lastSignInKey,
+  deleteWorkspaceMetadata,
   DEFAULT_ADMIN_USERNAME,
 } from "../lib/platform-auth";
 import { requirePlatformAuth } from "../middleware/platform-auth";
@@ -5476,7 +5477,7 @@ router.post(
       await db
         .delete(platformAccountsTable)
         .where(eq(platformAccountsTable.username, target));
-      await deleteProfile(target);
+      await deleteWorkspaceMetadata(target);
       void logAdminEvent(
         { username: actor.username, id: actor.userId },
         "account_delete",
@@ -5557,8 +5558,7 @@ router.post(
       await db.delete(mediaCategoriesTable).where(eq(mediaCategoriesTable.accountId, username));
       await db.delete(tokenUsageTable).where(eq(tokenUsageTable.accountId, username));
       await db.delete(platformSessionsTable).where(eq(platformSessionsTable.username, username));
-      await deleteProfile(username);
-      await db.delete(platformMetaTable).where(eq(platformMetaTable.key, archiveKey(username)));
+      await deleteWorkspaceMetadata(username);
       // Clean up membership and company rows so no orphaned references remain
       // in the new user/company layer after the legacy account row is deleted.
       await db

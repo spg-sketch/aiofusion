@@ -100,26 +100,27 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS project_snapshots (
       id varchar PRIMARY KEY,
       project_id varchar,
+      owner varchar,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS archive_items (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      username varchar NOT NULL,
+      owner varchar NOT NULL,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS planner_items (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      username varchar NOT NULL,
+      owner varchar NOT NULL,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS scoring_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      username varchar NOT NULL,
+      owner varchar NOT NULL,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
@@ -127,27 +128,30 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS media_categories (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name varchar NOT NULL,
+      account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_outlets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name varchar NOT NULL,
+      account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_contacts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       name varchar NOT NULL,
+      account_id varchar,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS token_usage (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      username varchar NOT NULL,
+      account_id varchar NOT NULL,
       tokens int,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS audit_locks (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-      username varchar NOT NULL,
+      owner varchar NOT NULL,
       project_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz NOT NULL
@@ -468,6 +472,79 @@ describe("impersonation guardrails", () => {
       });
       expect(res.status).not.toBe(403);
     });
+  });
+});
+
+describe("workspace metadata deletion", () => {
+  const deletedWorkspaceKeys = (slug: string) => [
+    `account:last-sign-in:${slug}`,
+    `account:onboarding:v1:${slug}`,
+    `account:profile:${slug}`,
+    `account:archived:${slug}`,
+    `account:master-owner:${slug}`,
+    `account:managed:${slug}`,
+    `account:mfa:${slug}`,
+    `account:mfa-trusted:${slug}`,
+    `account:team-seats:${slug}`,
+    `account:image:logo:${slug}`,
+    `account:image:avatar:${slug}`,
+    `account-discount:${slug}`,
+    `projectAddons:${slug}`,
+    `checkout:pending:${slug}`,
+    `billing:last-payment:${slug}`,
+    `fairUsage:multiplier:${slug}`,
+    `spendLimit:monthly:gbp:${slug}`,
+    `suspended-via:${slug}`,
+  ];
+
+  async function seedMetadata(slug: string) {
+    for (const key of deletedWorkspaceKeys(slug)) {
+      await db.insert(platformMetaTable).values({ key, value: "test" });
+    }
+  }
+
+  async function expectOnlySimilarWorkspaceMetadataRemains(deletedSlug: string, similarSlug: string) {
+    const deletedRows = await db.select().from(platformMetaTable);
+    expect(deletedRows.map((row) => row.key).sort())
+      .toEqual(deletedWorkspaceKeys(similarSlug).sort());
+    expect(deletedRows.some((row) => row.key.endsWith(deletedSlug))).toBe(false);
+  }
+
+  it("removes all target workspace metadata on parent/admin deletion without touching a similar slug", async () => {
+    await seedAccount("master", { role: "admin" });
+    await seedAccount("vibe-studio", { role: "client", parent: "master" });
+    await seedAccount("vibe-studio-uk", { role: "client", parent: "master" });
+    await seedMetadata("vibe-studio");
+    await seedMetadata("vibe-studio-uk");
+
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/accounts/delete`, {
+        method: "POST",
+        headers: acctHeader({ username: "master", role: "admin" }),
+        body: JSON.stringify({ username: "vibe-studio" }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    await expectOnlySimilarWorkspaceMetadataRemains("vibe-studio", "vibe-studio-uk");
+  });
+
+  it("removes all workspace metadata on self-deletion without touching a similar slug", async () => {
+    const password = await seedAccount("vibe-studio", { role: "client" });
+    await seedAccount("vibe-studio-uk", { role: "client" });
+    await seedMetadata("vibe-studio");
+    await seedMetadata("vibe-studio-uk");
+
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/api/platform/account/self-delete`, {
+        method: "POST",
+        headers: acctHeader({ username: "vibe-studio", role: "client" }),
+        body: JSON.stringify({ password }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    await expectOnlySimilarWorkspaceMetadataRemains("vibe-studio", "vibe-studio-uk");
   });
 });
 
