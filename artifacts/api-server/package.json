@@ -11,6 +11,7 @@
     "test": "vitest run",
     "demo-run": "tsx scripts/demo-run.ts",
     "george-smoke-test": "tsx scripts/george-smoke-test.ts",
+    "cms-smoke-test": "tsx scripts/cms-smoke-test.ts",
     "seed:media-marketing": "tsx scripts/seed-media-marketing.ts"
   },
   "dependencies": {

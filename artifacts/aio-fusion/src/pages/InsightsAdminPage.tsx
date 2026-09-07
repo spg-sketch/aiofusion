@@ -2,35 +2,30 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   useListAdminInsights, getListAdminInsightsQueryKey,
   useCreateAdminInsight, useUpdateAdminInsight, useDeleteAdminInsight,
-  useListAdminInsightMedia, getListAdminInsightMediaQueryKey,
-  useCreateAdminInsightMedia, useRequestInsightUploadUrl
+  useListAdminInsightMedia, getListAdminInsightMediaQueryKey
 } from "@workspace/api-client-react";
 import type { InsightArticle, InsightArticleInput, InsightBlock, InsightMedia } from "@workspace/api-client-react";
 import {
   ChevronUp, ChevronDown, Trash2, Plus, X, UploadCloud, Settings, Image as ImageIcon,
   FileText, Loader2, Check, Search, ArrowLeft, Type, Quote, BarChart, List as ListIcon, ExternalLink
 } from "lucide-react";
+import { apiBase } from "../lib/contentAi";
 
 // --- Helpers ---
 
-const uploadFile = (file: File, uploadURL: string, onProgress: (p: number) => void): Promise<void> => {
+function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the selected image'));
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      const encoded = value.includes(',') ? value.slice(value.indexOf(',') + 1) : '';
+      if (!encoded) reject(new Error('Could not encode the selected image'));
+      else resolve(encoded);
     };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`HTTP ${xhr.status}`));
-    };
-    xhr.onerror = () => reject(new Error('Network error'));
-    xhr.open('PUT', uploadURL);
-    xhr.setRequestHeader('Content-Type', file.type);
-    xhr.send(file);
+    reader.readAsDataURL(file);
   });
-};
+}
 
 const BLOCKS = [
   { id: 'paragraph', label: 'Paragraph', icon: FileText },
@@ -147,6 +142,26 @@ function createNewStory(): InsightArticleInput {
   };
 }
 
+export function buildStoryPayload(
+  storyData: InsightArticleInput,
+  status: 'draft' | 'published',
+): InsightArticleInput {
+  const title = storyData.title.trim() || 'Untitled Story';
+  const generatedSlug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return {
+    ...storyData,
+    slug: storyData.slug.trim() || generatedSlug || 'untitled-story',
+    title,
+    excerpt: storyData.excerpt || '',
+    tag: storyData.tag || 'Uncategorized',
+    coverImageAlt: storyData.coverImageAlt || '',
+    status,
+  };
+}
+
 const AutoResizeTextarea = ({ value, onChange, className, ...props }: any) => {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -186,8 +201,6 @@ const Textarea = ({ label, className, ...props }: any) => (
 
 function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; onSelect?: (media: InsightMedia) => void }) {
   const { data: mediaItems, isLoading, refetch } = useListAdminInsightMedia({ query: { queryKey: getListAdminInsightMediaQueryKey() } });
-  const requestUploadUrl = (useRequestInsightUploadUrl as any)();
-  const createMedia = (useCreateAdminInsightMedia as any)();
 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -200,29 +213,30 @@ function MediaLibraryModal({ onClose, onSelect }: { onClose: () => void; onSelec
     setProgress(0);
 
     try {
-      const res = await requestUploadUrl.mutateAsync({ data: { name: file.name, size: file.size, contentType: file.type } });
-      await uploadFile(file, res.uploadURL, setProgress);
-      
-      const id = res.objectPath.split('/').pop() || res.objectPath;
-      const pathAfterObjects = res.objectPath.includes('/objects/') ? res.objectPath.split('/objects/')[1] : res.objectPath;
-      const publicUrl = `/api/storage/objects/${pathAfterObjects}`;
-
-      const newMedia = await createMedia.mutateAsync({
-        data: {
-          id,
-          fileName: file.name,
+      if (file.size > 6 * 1024 * 1024) throw new Error('Images must be 6 MB or smaller');
+      setProgress(15);
+      const dataBase64 = await readFileAsBase64(file);
+      setProgress(45);
+      const response = await fetch(`${apiBase()}/api/storage/uploads/direct`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
           contentType: file.type,
-          sizeBytes: file.size.toString(),
-          objectPath: res.objectPath,
-          publicUrl,
-          altText: file.name
-        }
+          dataBase64,
+        }),
       });
+      const responseBody = await response.json().catch(() => ({})) as InsightMedia & { error?: string };
+      if (!response.ok) throw new Error(responseBody.error || 'The image could not be uploaded');
+      setProgress(100);
+      const newMedia = responseBody;
       refetch();
       if (onSelect) onSelect(newMedia);
     } catch (err) {
       console.error(err);
-      alert("Upload failed. Please try again.");
+      alert(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -678,15 +692,7 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
   };
 
   const handleSave = async (storyData: InsightArticleInput, status: 'draft' | 'published') => {
-    const payload = {
-      ...storyData,
-      slug: storyData.slug || storyData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      title: storyData.title || "Untitled Story",
-      excerpt: storyData.excerpt || "",
-      tag: storyData.tag || "Uncategorized",
-      coverImageAlt: storyData.coverImageAlt || "",
-      status
-    };
+    const payload = buildStoryPayload(storyData, status);
 
     if (editingId === 'new') {
       const res = await createInsight.mutateAsync({ data: payload });

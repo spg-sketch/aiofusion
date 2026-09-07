@@ -41,6 +41,12 @@ export async function ensureInsightsSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS insight_media_blobs (
+      id varchar PRIMARY KEY REFERENCES insight_media(id) ON DELETE CASCADE,
+      data bytea NOT NULL
+    )
+  `);
+  await db.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS insight_articles_slug_unique
     ON insight_articles (slug)
   `);

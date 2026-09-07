@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { Router, type Request, type Response } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   CreateAdminInsightBody,
   CreateAdminInsightMediaBody,
@@ -22,6 +22,24 @@ import { canAccessInsightsCms } from "../lib/insights-cms-access";
 const router = Router();
 const storage = new InsightObjectStorage();
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const MAX_CMS_IMAGE_BYTES = 6 * 1024 * 1024;
+
+export function detectRasterBytes(bytes: Uint8Array): "image/png" | "image/jpeg" | "image/webp" | null {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) return "image/png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 12 &&
+    Buffer.from(bytes.subarray(0, 4)).toString("ascii") === "RIFF" &&
+    Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP"
+  ) return "image/webp";
+  return null;
+}
 
 function requireInsightsAdmin(req: Request, res: Response): boolean {
   if (!canAccessInsightsCms(req.account?.role, req.platformUser)) {
@@ -283,6 +301,57 @@ router.post("/storage/uploads/request-url", requirePlatformAuth, async (req, res
   res.json(await storage.createUploadTarget());
 });
 
+router.post("/storage/uploads/direct", requirePlatformAuth, async (req, res) => {
+  if (!requireInsightsAdmin(req, res)) return;
+  const input = req.body as Record<string, unknown>;
+  const name = typeof input["name"] === "string" ? input["name"].trim() : "";
+  const contentType = typeof input["contentType"] === "string" ? input["contentType"] : "";
+  const encoded = typeof input["dataBase64"] === "string" ? input["dataBase64"] : "";
+  const declaredSize = typeof input["size"] === "number" ? input["size"] : 0;
+  if (
+    !name ||
+    !ALLOWED_IMAGE_TYPES.has(contentType) ||
+    !Number.isSafeInteger(declaredSize) ||
+    declaredSize < 1 ||
+    declaredSize > MAX_CMS_IMAGE_BYTES ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)
+  ) {
+    res.status(400).json({ error: "Only PNG, JPEG and WEBP images up to 6 MB are allowed" });
+    return;
+  }
+  const bytes = Buffer.from(encoded, "base64");
+  const detectedType = detectRasterBytes(bytes);
+  if (bytes.length !== declaredSize || detectedType !== contentType) {
+    res.status(400).json({ error: "The uploaded file does not match its image type" });
+    return;
+  }
+
+  const id = randomUUID();
+  const objectPath = `/objects/database/${id}`;
+  const publicUrl = `/api/storage/objects/database/${id}`;
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(insightMediaTable)
+      .values({
+        id,
+        fileName: name,
+        contentType: detectedType,
+        sizeBytes: String(bytes.length),
+        objectPath,
+        publicUrl,
+        altText: name,
+        createdByUserId: req.platformUser?.id ?? null,
+      })
+      .returning();
+    await tx.execute(sql`
+      INSERT INTO insight_media_blobs (id, data)
+      VALUES (${id}, ${bytes})
+    `);
+    return created!;
+  });
+  res.status(201).json(row);
+});
+
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   const raw = req.params.path;
   const relative = Array.isArray(raw) ? raw.join("/") : raw;
@@ -294,6 +363,29 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     .limit(1);
   if (!media || !ALLOWED_IMAGE_TYPES.has(media.contentType)) {
     res.status(404).end();
+    return;
+  }
+  if (media.objectPath === `/objects/database/${media.id}`) {
+    const result = await db.execute(sql`
+      SELECT data FROM insight_media_blobs WHERE id = ${media.id} LIMIT 1
+    `);
+    const stored = (result as unknown as { rows: Array<{ data: Uint8Array }> }).rows[0];
+    if (!stored?.data) {
+      res.status(404).end();
+      return;
+    }
+    const bytes = Buffer.from(stored.data);
+    if (detectRasterBytes(bytes) !== media.contentType) {
+      res.status(415).end();
+      return;
+    }
+    res.status(200);
+    res.setHeader("Content-Type", media.contentType);
+    res.setHeader("Content-Length", String(bytes.length));
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.end(bytes);
     return;
   }
   const response = await storage.download(objectPath);

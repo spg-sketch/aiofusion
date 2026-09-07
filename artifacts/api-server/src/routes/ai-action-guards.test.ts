@@ -815,6 +815,7 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /admin/insights/media",
   "POST /admin/insights/media/metadata",
   "POST /storage/uploads/request-url",
+  "POST /storage/uploads/direct",
   "GET /storage/objects/*path",
 
   // ── llm-check audit lock ──────────────────────────────────────────────────
