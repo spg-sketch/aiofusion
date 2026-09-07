@@ -648,6 +648,8 @@ const PUBLIC_ALLOWLIST = new Set<string>([
   "GET /platform/auth/microsoft",
   "GET /platform/auth/microsoft/callback",
   "POST /platform/auth/microsoft/callback",
+  "GET /platform/auth/google/delete-confirmation",
+  "GET /platform/auth/microsoft/delete-confirmation",
 
   // ── platform - admin / account management ────────────────────────────────
   "GET /platform/admin/pending",

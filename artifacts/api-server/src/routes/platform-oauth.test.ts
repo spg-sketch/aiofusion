@@ -100,12 +100,15 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS project_snapshots (
       id varchar PRIMARY KEY,
       project_id varchar,
+      username varchar,
+      owner varchar,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS archive_items (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
+      owner varchar,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
@@ -113,6 +116,7 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS planner_items (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
+      owner varchar,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
@@ -120,34 +124,40 @@ vi.mock("@workspace/db", async () => {
     CREATE TABLE IF NOT EXISTS scoring_configs (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
+      owner varchar,
       project_id varchar NOT NULL,
       data jsonb,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_categories (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      account_id varchar,
       name varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_outlets (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      account_id varchar,
       name varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS media_contacts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      account_id varchar,
       name varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS token_usage (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
+      account_id varchar,
       tokens int,
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE IF NOT EXISTS audit_locks (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       username varchar NOT NULL,
+      owner varchar,
       project_id varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz NOT NULL
@@ -266,6 +276,7 @@ vi.mock("../lib/mfa", () => ({
 import {
   db,
   platformAccountsTable,
+  platformCompaniesTable,
   platformMetaTable,
   platformMembershipsTable,
   platformSessionsTable,
@@ -284,7 +295,11 @@ function buildApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
-  app.use((req: any, _res: any, next: any) => { req.account = null; next(); });
+  app.use((req: any, _res: any, next: any) => {
+    const testAccount = req.headers["x-test-account"];
+    req.account = typeof testAccount === "string" ? JSON.parse(testAccount) : null;
+    next();
+  });
   app.use("/api", platformRouter);
   return app;
 }
@@ -795,6 +810,237 @@ describe("Google POST callback - code redemption", () => {
       .where(eq(platformMetaTable.key, `account:image:avatar:${USERNAME}`))
       .limit(1);
     expect(legacy).toBeUndefined();
+  });
+});
+
+describe("SSO account-deletion re-authentication", () => {
+  let server: Server;
+  let baseUrl: string;
+  const USERNAME = "delete-sso-owner";
+  const EMAIL = "delete-sso@example.com";
+  const GOOGLE_ID = "delete-google-id";
+  const MICROSOFT_ID = "delete-microsoft-id";
+  let userId: string;
+
+  beforeEach(async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-google-client-secret";
+    process.env.MICROSOFT_CLIENT_ID = "test-microsoft-client-id";
+    process.env.MICROSOFT_CLIENT_SECRET = "test-microsoft-client-secret";
+    process.env.NODE_ENV = "test";
+    await db.insert(platformAccountsTable).values({
+      username: USERNAME,
+      passwordHash: hashPassword("unusable-random-sso-password"),
+      role: "client",
+      status: "active",
+      email: EMAIL,
+    });
+    const [user] = await db.insert(platformUsersTable).values({
+      email: EMAIL,
+      name: "Delete SSO Owner",
+      googleId: GOOGLE_ID,
+      microsoftId: MICROSOFT_ID,
+    }).returning();
+    userId = user!.id;
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug: USERNAME,
+      role: "client",
+      status: "active",
+      email: EMAIL,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId,
+      companyId: company!.id,
+      companySlug: USERNAME,
+      role: "owner",
+    });
+    ({ server, baseUrl } = await startServer());
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await stopServer(server);
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.MICROSOFT_CLIENT_ID;
+    delete process.env.MICROSOFT_CLIENT_SECRET;
+    await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account-delete-confirmation:%"));
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.companySlug, USERNAME));
+    await db.delete(platformCompaniesTable).where(eq(platformCompaniesTable.slug, USERNAME));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.email, EMAIL));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, USERNAME));
+  });
+
+  function actorHeader() {
+    return JSON.stringify({ username: USERNAME, role: "client", userId });
+  }
+
+  async function googleConfirmation(googleId = GOOGLE_ID) {
+    const state = `delete:${crypto.randomUUID()}`;
+    vi.stubGlobal("fetch", makeGoogleStub({ email: EMAIL, googleId }));
+    return realFetch(`${baseUrl}/api/platform/auth/google/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_oauth_state=${state}`,
+        "x-test-account": actorHeader(),
+      },
+      body: new URLSearchParams({ code: "fresh-google-code", state }).toString(),
+    });
+  }
+
+  it("issues a deletion confirmation after fresh Google re-authentication", async () => {
+    const response = await googleConfirmation();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("delete_reauth=ok");
+    expect(parseCookies(response.headers)["aio_delete_confirmation"]).toBeTruthy();
+  });
+
+  it("issues a deletion confirmation after fresh Microsoft re-authentication", async () => {
+    const state = `delete:${crypto.randomUUID()}`;
+    vi.stubGlobal("fetch", makeMicrosoftStub({ email: EMAIL, microsoftId: MICROSOFT_ID }));
+    const response = await realFetch(`${baseUrl}/api/platform/auth/microsoft/callback`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "user-agent": "Mozilla/5.0 Chrome/120",
+        cookie: `aio_ms_state=${state}`,
+        "x-test-account": actorHeader(),
+      },
+      body: new URLSearchParams({ code: "fresh-microsoft-code", state }).toString(),
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("delete_reauth=ok");
+    expect(parseCookies(response.headers)["aio_delete_confirmation"]).toBeTruthy();
+  });
+
+  it("rejects a provider identity that does not match the signed-in user", async () => {
+    const response = await googleConfirmation("someone-elses-google-id");
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("delete_reauth=identity_mismatch");
+    expect(parseCookies(response.headers)["aio_delete_confirmation"]).toBeUndefined();
+  });
+
+  it("does not issue SSO deletion confirmation to a non-owner team member", async () => {
+    await db.update(platformMembershipsTable).set({ role: "viewer" })
+      .where(eq(platformMembershipsTable.userId, userId));
+    const response = await googleConfirmation();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("delete_reauth=not_allowed");
+    expect(parseCookies(response.headers)["aio_delete_confirmation"]).toBeUndefined();
+  });
+
+  it("does not let a password-bearing user bypass password confirmation through SSO", async () => {
+    await db.update(platformUsersTable).set({ passwordHash: hashPassword("real-password") })
+      .where(eq(platformUsersTable.id, userId));
+    const response = await googleConfirmation();
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toContain("delete_reauth=not_allowed");
+    expect(parseCookies(response.headers)["aio_delete_confirmation"]).toBeUndefined();
+  });
+
+  it("rejects a confirmation issued for a different signed-in user", async () => {
+    const confirmation = await googleConfirmation();
+    const token = parseCookies(confirmation.headers)["aio_delete_confirmation"]!;
+    await db.insert(platformAccountsTable).values({
+      username: "different-delete-owner",
+      passwordHash: hashPassword("unused"),
+      role: "client",
+      status: "active",
+      email: "different-delete-owner@example.com",
+    });
+    const [differentUser] = await db.insert(platformUsersTable).values({
+      email: "different-delete-owner@example.com",
+      name: "Different owner",
+      googleId: "different-google-id",
+    }).returning();
+
+    const response = await realFetch(`${baseUrl}/api/platform/account/self-delete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `aio_delete_confirmation=${token}`,
+        "x-test-account": JSON.stringify({
+          username: "different-delete-owner",
+          role: "client",
+          userId: differentUser!.id,
+        }),
+      },
+      body: JSON.stringify({ confirmation: "sso" }),
+    });
+    expect(response.status).toBe(401);
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, differentUser!.id));
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, "different-delete-owner"));
+  });
+
+  it("rejects an expired deletion confirmation", async () => {
+    const confirmation = await googleConfirmation();
+    const token = parseCookies(confirmation.headers)["aio_delete_confirmation"]!;
+    const [row] = await db.select().from(platformMetaTable)
+      .where(like(platformMetaTable.key, "account-delete-confirmation:%"))
+      .limit(1);
+    await db.update(platformMetaTable).set({
+      value: JSON.stringify({ userId, provider: "google", expiresAt: Date.now() - 1 }),
+    }).where(eq(platformMetaTable.key, row!.key));
+
+    const response = await realFetch(`${baseUrl}/api/platform/account/self-delete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `aio_delete_confirmation=${token}`,
+        "x-test-account": actorHeader(),
+      },
+      body: JSON.stringify({ confirmation: "sso" }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it("deletes the account after a valid Google confirmation", async () => {
+    const confirmation = await googleConfirmation();
+    const token = parseCookies(confirmation.headers)["aio_delete_confirmation"]!;
+    const response = await realFetch(`${baseUrl}/api/platform/account/self-delete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `aio_delete_confirmation=${token}`,
+        "x-test-account": actorHeader(),
+      },
+      body: JSON.stringify({ confirmation: "sso" }),
+    });
+    expect(response.status).toBe(200);
+    const [account] = await db.select().from(platformAccountsTable)
+      .where(eq(platformAccountsTable.username, USERNAME));
+    expect(account).toBeUndefined();
+  });
+
+  it("consumes a deletion confirmation so it cannot be replayed", async () => {
+    const confirmation = await googleConfirmation();
+    const token = parseCookies(confirmation.headers)["aio_delete_confirmation"]!;
+    await db.insert(platformAccountsTable).values({
+      username: "delete-sso-child",
+      passwordHash: hashPassword("unused"),
+      role: "client",
+      status: "active",
+      parent: USERNAME,
+    });
+    const request = () => realFetch(`${baseUrl}/api/platform/account/self-delete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `aio_delete_confirmation=${token}`,
+        "x-test-account": actorHeader(),
+      },
+      body: JSON.stringify({ confirmation: "sso" }),
+    });
+    const first = await request();
+    expect(first.status).toBe(400);
+    expect((await first.json() as { error: string }).error).toMatch(/client account/i);
+    const replay = await request();
+    expect(replay.status).toBe(401);
+    await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, "delete-sso-child"));
   });
 });
 

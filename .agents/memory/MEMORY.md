@@ -65,3 +65,4 @@
 - [Insights publishing and prerendering](aio-fusion-insights-publishing.md) — published stories live in PostgreSQL; static builds snapshot the public API and fall back to checked-in content if unavailable.
 - [AIO Fusion card-free beta trial](aio-fusion-beta-trial.md) — one-time 60-day trial is top-level billing state; active beta grants 50 actions/project and 2 projects, then paid mutations stop.
 - [PostgreSQL pool disconnect resilience](postgres-pool-disconnect-resilience.md) — idle-client errors must be handled on the shared pool or a database-side recycle can terminate the API mid-request.
+- [SSO destructive-action confirmation](aio-fusion-sso-destructive-confirmation.md) — bind fresh SSO proof to a passwordless owner, provider identity, and one-time server token; recheck eligibility on use.

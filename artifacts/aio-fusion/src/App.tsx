@@ -959,6 +959,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const fromUrl = params.get("account_section");
     if (fromUrl) return fromUrl;
+    if (params.has("delete_reauth")) return "security";
     if (!params.has("aio_exit_impersonation")) return null;
     try {
       const raw = sessionStorage.getItem("aio:master-account-return");
@@ -1017,6 +1018,9 @@ function App() {
     const s = window.location.search;
     return /(?:^|[?&])(?:oauth_status|link_google|verify_status)=/.test(s) ? s : null;
   });
+  const [deleteReauthResult] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("delete_reauth"),
+  );
 
   // Navigate to the platform-home view when returning from a Google OAuth
   // redirect (e.g. /?oauth_status=ok), an impersonation exit, or a
@@ -1470,6 +1474,7 @@ function App() {
       <SubAccountsPage
         backToAgency={agencyImpersonatedBy ? <BackToAgencyLink agencyName={agencyImpersonatedBy} /> : undefined}
         initialSection={accountSection ?? undefined}
+        deleteReauthResult={deleteReauthResult}
         checkoutResult={checkoutResult}
         onSectionChange={(s) => setAccountSection(s)}
         session={session}

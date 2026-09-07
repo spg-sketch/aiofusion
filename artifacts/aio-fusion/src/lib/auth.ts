@@ -846,9 +846,12 @@ export type TeamMember = {
   isSelf: boolean;
 };
 export async function serverSelfDeleteAccount(
-  password: string,
+  confirmation: { password: string } | { sso: true },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { ok, json } = await postJson("/api/platform/account/self-delete", { password });
+  const { ok, json } = await postJson(
+    "/api/platform/account/self-delete",
+    "sso" in confirmation ? { confirmation: "sso" } : { password: confirmation.password },
+  );
   if (!ok) return { ok: false, error: json?.error || "Failed to delete account." };
   clearSession();
   saveUsers([]);

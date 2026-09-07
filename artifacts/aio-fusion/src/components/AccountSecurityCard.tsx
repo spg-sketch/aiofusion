@@ -16,7 +16,15 @@ const accent = "#C8497A";
 
 /** Sessions, two-factor, change/set password and account deletion - rendered
  *  as a white card on the My Account page (moved from the platform home card). */
-export function AccountSecurityCard({ session, onSignOut }: { session: LocalSession; onSignOut: () => void }) {
+export function AccountSecurityCard({
+  session,
+  onSignOut,
+  deleteReauthResult = null,
+}: {
+  session: LocalSession;
+  onSignOut: () => void;
+  deleteReauthResult?: string | null;
+}) {
   // Whether the signed-in user has a password (SSO-only accounts don't),
   // plus which SSO providers are linked - drives the sign-in methods list.
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
@@ -120,13 +128,25 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const ssoDeleteReady = deleteReauthResult === "ok";
+
+  useEffect(() => {
+    const status = deleteReauthResult;
+    if (!status) return;
+    setShowDeleteAccount(true);
+    if (status !== "ok") {
+      setDeleteError(status === "identity_mismatch"
+        ? "That provider account does not match your signed-in account."
+        : "Re-authentication failed. Please try again.");
+    }
+  }, [deleteReauthResult]);
 
   const handleDeleteAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setDeleteError(null);
-    if (!deletePassword) { setDeleteError("Enter your password to confirm."); return; }
+    if (hasPassword !== false && !deletePassword) { setDeleteError("Enter your password to confirm."); return; }
     setDeleting(true);
-    void serverSelfDeleteAccount(deletePassword)
+    void serverSelfDeleteAccount(hasPassword === false ? { sso: true } : { password: deletePassword })
       .then((r) => {
         if (!r.ok) { setDeleteError(r.error); return; }
         onSignOut();
@@ -414,8 +434,36 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
               This permanently deletes your account, all your projects, archive items, planner entries and other data.
               This cannot be undone. {canCreateSubAccounts(session.role) ? "If you have client accounts, remove them first." : ""}
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-              <div className="flex-1">
+            {hasPassword === false ? (
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                {!ssoDeleteReady ? (
+                  <>
+                    {googleLinked && (
+                      <a href={`${apiBase()}/api/platform/auth/google/delete-confirmation`} className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center" style={{ background: accent }}>
+                        Confirm with Google
+                      </a>
+                    )}
+                    {microsoftLinked && (
+                      <a href={`${apiBase()}/api/platform/auth/microsoft/delete-confirmation`} className="px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white text-center" style={{ background: accent }}>
+                        Confirm with Microsoft
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={deleting}
+                    className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[12px] font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"
+                    style={{ background: vars.red }}
+                  >
+                    {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    Permanently delete
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                <div className="flex-1">
                 <label className="text-[10px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: vars.g500 }}>Confirm your password</label>
                 <input
                   type="password"
@@ -434,7 +482,8 @@ export function AccountSecurityCard({ session, onSignOut }: { session: LocalSess
                 {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 Permanently delete
               </button>
-            </div>
+              </div>
+            )}
             {deleteError && <p className="mt-3 text-[13px] font-semibold" style={{ color: vars.red }}>{deleteError}</p>}
           </form>
         )}

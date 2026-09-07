@@ -128,6 +128,71 @@ import { getBillingState, getBetaTrialSummary, hasPaidSubscription, startBetaTri
 import type { PlanKey } from "../lib/billing-plans";
 
 const router: IRouter = Router();
+const DELETE_CONFIRMATION_COOKIE = "aio_delete_confirmation";
+const DELETE_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+
+function deleteConfirmationKey(token: string): string {
+  return `account-delete-confirmation:${crypto.createHash("sha256").update(token).digest("hex")}`;
+}
+
+async function issueDeleteConfirmation(
+  res: Response,
+  userId: string,
+  provider: "google" | "microsoft",
+): Promise<void> {
+  const token = crypto.randomBytes(32).toString("hex");
+  await db.insert(platformMetaTable).values({
+    key: deleteConfirmationKey(token),
+    value: JSON.stringify({
+      userId,
+      provider,
+      expiresAt: Date.now() + DELETE_CONFIRMATION_TTL_MS,
+    }),
+  });
+  res.cookie(DELETE_CONFIRMATION_COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: DELETE_CONFIRMATION_TTL_MS,
+    path: "/",
+  });
+}
+
+async function consumeDeleteConfirmation(req: Request, res: Response, userId: string): Promise<boolean> {
+  const token = (req.cookies as Record<string, string>)?.[DELETE_CONFIRMATION_COOKIE] ?? "";
+  res.clearCookie(DELETE_CONFIRMATION_COOKIE, { path: "/" });
+  if (!token) return false;
+  const key = deleteConfirmationKey(token);
+  const [row] = await db.delete(platformMetaTable)
+    .where(eq(platformMetaTable.key, key))
+    .returning({ value: platformMetaTable.value });
+  if (!row) return false;
+  try {
+    const confirmation = JSON.parse(row.value) as { userId?: string; expiresAt?: number };
+    return confirmation.userId === userId
+      && typeof confirmation.expiresAt === "number"
+      && confirmation.expiresAt > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+async function getPasswordlessOwnerForSsoDelete(account: NonNullable<Request["account"]>) {
+  if (!account.userId) return null;
+  const [user] = await db.select().from(platformUsersTable)
+    .where(eq(platformUsersTable.id, account.userId))
+    .limit(1);
+  if (!user || user.passwordHash) return null;
+  const [ownerMembership] = await db.select({ role: platformMembershipsTable.role })
+    .from(platformMembershipsTable)
+    .where(and(
+      eq(platformMembershipsTable.userId, user.id),
+      eq(platformMembershipsTable.companySlug, normUsername(account.username)),
+      eq(platformMembershipsTable.role, "owner"),
+    ))
+    .limit(1);
+  return ownerMembership ? user : null;
+}
 
 const MIGRATED_FLAG = "accounts_migrated";
 type OnboardingStep = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
@@ -3028,6 +3093,37 @@ router.get("/platform/auth/google/link", requirePlatformAuth, (req: Request, res
   res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
+router.get("/platform/auth/google/delete-confirmation", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (await isImpersonatedRequest(req)) {
+    res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+    return;
+  }
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const actorUser = req.account ? await getPasswordlessOwnerForSsoDelete(req.account) : null;
+  if (!clientId) {
+    res.status(503).json({ error: "Google re-authentication is not available." });
+    return;
+  }
+  if (!actorUser?.googleId) {
+    res.status(403).json({ error: "Google confirmation is only available to passwordless workspace owners." });
+    return;
+  }
+  const state = `delete:${crypto.randomBytes(16).toString("hex")}`;
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/",
+  });
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: getGoogleCallbackUrl(req),
+    response_type: "code",
+    scope: "openid email profile",
+    state,
+    access_type: "online",
+    prompt: "login",
+  });
+  res.redirect(`${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`);
+});
+
 // GET callback: scanner/bot guard + interstitial page.
 // Does NOT redeem the authorization code - only validates the CSRF state and
 // serves a tiny HTML page that auto-submits a POST form. Scanners (Outlook Safe
@@ -3149,6 +3245,22 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
       return;
     }
     const googleId = userInfo.id ?? "";
+
+    if (state.startsWith("delete:")) {
+      const actor = req.account;
+      const actorUser = actor ? await getPasswordlessOwnerForSsoDelete(actor) : null;
+      if (!actor || !actorUser || !googleId || actorUser.googleId !== googleId) {
+        res.redirect(`${origin}/?delete_reauth=${actorUser ? "identity_mismatch" : "not_allowed"}`);
+        return;
+      }
+      if (await isImpersonatedRequest(req)) {
+        res.redirect(`${origin}/?delete_reauth=impersonation_blocked`);
+        return;
+      }
+      await issueDeleteConfirmation(res, actorUser.id, "google");
+      res.redirect(`${origin}/?delete_reauth=ok`);
+      return;
+    }
 
     // --- Google account link flow (logged-in user linking their account) ----
     // linkUsername arrives via the aio_oauth_link cookie which survives the
@@ -3456,6 +3568,38 @@ router.get("/platform/auth/microsoft", (req: Request, res: Response) => {
   res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
 });
 
+router.get("/platform/auth/microsoft/delete-confirmation", requirePlatformAuth, async (req: Request, res: Response) => {
+  if (await isImpersonatedRequest(req)) {
+    res.status(403).json({ error: IMPERSONATION_BLOCKED_MESSAGE });
+    return;
+  }
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const actorUser = req.account ? await getPasswordlessOwnerForSsoDelete(req.account) : null;
+  if (!clientId) {
+    res.status(503).json({ error: "Microsoft re-authentication is not available." });
+    return;
+  }
+  if (!actorUser?.microsoftId) {
+    res.status(403).json({ error: "Microsoft confirmation is only available to passwordless workspace owners." });
+    return;
+  }
+  const state = `delete:${crypto.randomBytes(16).toString("hex")}`;
+  const redirectUri = `${getAppBaseUrl()}/api/platform/auth/microsoft/callback`;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: redirectUri,
+    scope: "openid profile email User.Read",
+    state,
+    response_mode: "query",
+    prompt: "login",
+  });
+  res.cookie(MS_STATE_COOKIE, state, {
+    httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000, path: "/",
+  });
+  res.redirect(`${MICROSOFT_AUTH_ENDPOINT}?${params.toString()}`);
+});
+
 // GET callback: scanner/bot guard + interstitial page (mirrors Google logic).
 // The aio_ms_state cookie is validated but NOT cleared here - the POST clears it.
 // The action flag embedded in state ("login:..." / "link:...") is preserved
@@ -3550,6 +3694,22 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     const msEmail = ((profile.mail || profile.userPrincipalName) ?? "").toLowerCase();
     if (!msEmail || !EMAIL_RE.test(msEmail)) { res.redirect(`${origin}/?oauth_status=error&oauth_msg=no_email`); return; }
     const displayName = profile.displayName || msEmail.split("@")[0];
+
+    if (action === "delete") {
+      const actor = req.account;
+      const actorUser = actor ? await getPasswordlessOwnerForSsoDelete(actor) : null;
+      if (!actor || !actorUser || actorUser.microsoftId !== microsoftId) {
+        res.redirect(`${origin}/?delete_reauth=${actorUser ? "identity_mismatch" : "not_allowed"}`);
+        return;
+      }
+      if (await isImpersonatedRequest(req)) {
+        res.redirect(`${origin}/?delete_reauth=impersonation_blocked`);
+        return;
+      }
+      await issueDeleteConfirmation(res, actorUser.id, "microsoft");
+      res.redirect(`${origin}/?delete_reauth=ok`);
+      return;
+    }
 
     // --- Link action: attach Microsoft to the current session account --------
     // action is extracted from state above; req.account comes from the aio_sid
@@ -5493,8 +5653,8 @@ router.post(
 );
 
 // Self-serve "delete my account and data" (GDPR right to erasure). Any signed-in
-// account may call this on itself. Requires the caller to re-enter their own
-// password as a confirmation step for such a destructive, irreversible action.
+// account may call this on itself. Password accounts re-enter their password;
+// SSO-only accounts provide a fresh, single-use provider confirmation.
 // An account with active (non-archived) sub-accounts must remove or reassign
 // them first - we never silently cascade-delete another account's data as a
 // side effect of someone else's deletion request.
@@ -5511,13 +5671,29 @@ router.post(
       const actor = req.account!;
       const username = normUsername(actor.username);
       const password = typeof req.body?.password === "string" ? req.body.password : "";
-      if (!password) {
-        res.status(400).json({ error: "Enter your password to confirm." });
+      const account = await getAccount(username);
+      if (!account) {
+        res.status(404).json({ error: "Account not found." });
         return;
       }
-      const account = await getAccount(username);
-      if (!account || !verifyPassword(password, account.passwordHash)) {
-        res.status(401).json({ error: "Incorrect password." });
+      let confirmed = password ? verifyPassword(password, account.passwordHash) : false;
+      if (!confirmed && req.body?.confirmation === "sso" && actor.userId) {
+        const tokenConfirmed = await consumeDeleteConfirmation(req, res, actor.userId);
+        const eligibleUser = await getPasswordlessOwnerForSsoDelete(actor);
+        confirmed = tokenConfirmed && !!eligibleUser;
+      }
+      if (!confirmed) {
+        const [actorUser] = actor.userId
+          ? await db.select({ passwordHash: platformUsersTable.passwordHash })
+              .from(platformUsersTable)
+              .where(eq(platformUsersTable.id, actor.userId))
+              .limit(1)
+          : [];
+        if (!password && actorUser?.passwordHash) {
+          res.status(400).json({ error: "Enter your password to confirm." });
+        } else {
+          res.status(401).json({ error: password ? "Incorrect password." : "Re-authentication expired or was already used. Please try again." });
+        }
         return;
       }
       if (account.role === "admin") {
@@ -5571,7 +5747,8 @@ router.post(
 
       clearPlatformCookie(res);
       res.json({ ok: true });
-    } catch {
+    } catch (error) {
+      logger.error({ err: error, username: req.account?.username }, "self-delete: failed");
       res.status(500).json({ error: "Failed to delete account. Please try again or contact info@aiofusion.ai." });
     }
   },

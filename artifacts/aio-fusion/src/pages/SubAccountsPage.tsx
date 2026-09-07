@@ -34,6 +34,7 @@ function SubAccountsPage({
   onInvitationAccepted,
   onSignOut,
   initialSection,
+  deleteReauthResult,
   checkoutResult,
   onSectionChange,
   backToAgency,
@@ -50,6 +51,8 @@ function SubAccountsPage({
   onSignOut?: () => void;
   /** Deep-link target (e.g. from an email link ?account_section=security). Falls back to profile if not allowed. */
   initialSection?: string;
+  /** Result captured before App removes the provider callback query string. */
+  deleteReauthResult?: string | null;
   checkoutResult?: "success" | "cancelled" | null;
   /** "Back to my agency account" control, present while an agency user is working inside a client account. */
   backToAgency?: React.ReactNode;
@@ -1262,7 +1265,13 @@ function SubAccountsPage({
         )}
 
         {/* SIGN-IN & SECURITY (sessions, 2FA, password, deletion) */}
-        {section === "security" && onSignOut && <AccountSecurityCard session={session} onSignOut={onSignOut} />}
+        {section === "security" && onSignOut && (
+          <AccountSecurityCard
+            session={session}
+            onSignOut={onSignOut}
+            deleteReauthResult={deleteReauthResult}
+          />
+        )}
 
         {/* BILLING DETAILS (billing email + VAT) - owner/admin/billing members only */}
         {section === "billing" && canSeeBilling && (

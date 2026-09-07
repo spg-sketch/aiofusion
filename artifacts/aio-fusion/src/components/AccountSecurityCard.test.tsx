@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const serverGetSessions = vi.hoisted(() => vi.fn());
 const serverRevokeSession = vi.hoisted(() => vi.fn());
@@ -27,6 +27,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("AccountSecurityCard sign-in methods", () => {
@@ -53,5 +54,54 @@ describe("AccountSecurityCard sign-in methods", () => {
     expect(screen.queryByText("Microsoft")).toBeNull();
     expect(screen.queryByText("Email & password")).toBeNull();
     expect(screen.getByRole("button", { name: /set a password/i })).toBeTruthy();
+  });
+
+  it("uses a completed Google re-authentication instead of asking an SSO-only user for a password", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      hasPassword: false,
+      account: { googleLinked: true, microsoftLinked: false },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+    serverSelfDeleteAccount.mockResolvedValue({ ok: true });
+    const onSignOut = vi.fn();
+
+    render(
+      <AccountSecurityCard
+        session={{ username: "google-sso-user", role: "client" }}
+        onSignOut={onSignOut}
+        deleteReauthResult="ok"
+      />,
+    );
+
+    await screen.findByText("Google");
+    const deleteButton = screen.getByRole("button", { name: /permanently delete/i });
+    expect(screen.queryByText("Confirm your password")).toBeNull();
+    fireEvent.submit(deleteButton.closest("form")!);
+    await waitFor(() => expect(serverSelfDeleteAccount).toHaveBeenCalledWith({ sso: true }));
+    expect(onSignOut).toHaveBeenCalledOnce();
+  });
+
+  it("retains password confirmation for users who have a password", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      hasPassword: true,
+      account: { googleLinked: true, microsoftLinked: false },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    render(
+      <AccountSecurityCard
+        session={{ username: "password-user", role: "client" }}
+        onSignOut={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Email & password")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /delete my account and data/i }));
+    expect(screen.getByText("Confirm your password")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /confirm with google/i })).toBeNull();
   });
 });
