@@ -869,7 +869,7 @@ function SubAccountsPage({
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            {isAgencyPartner ? "Manage your Client Projects" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
+            {isAgencyPartner ? "Manage your Account, your team and Client's Projects" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {isAgencyPartner

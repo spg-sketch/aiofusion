@@ -121,7 +121,7 @@ describe("settings-section deep link survives refresh (account_section param)", 
     await renderAppAt("/?needs_setup=1&account_section=billing");
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /manage your client projects/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /manage your account, your team and client's projects/i })).toBeInTheDocument();
     });
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
