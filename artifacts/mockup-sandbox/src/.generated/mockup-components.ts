@@ -9,9 +9,9 @@ export const modules: ModuleMap = {
   "./components/mockups/aio-fusion-light/ContentOptimiser.tsx": () => import("../components/mockups/aio-fusion-light/ContentOptimiser.tsx"),
   "./components/mockups/aio-fusion-light/Dashboard.tsx": () => import("../components/mockups/aio-fusion-light/Dashboard.tsx"),
   "./components/mockups/aio-fusion-light/GeoDiagnostic.tsx": () => import("../components/mockups/aio-fusion-light/GeoDiagnostic.tsx"),
-  "./components/mockups/aio-fusion-demo/FullDemo.tsx": () => import("../components/mockups/aio-fusion-demo/FullDemo.tsx"),
   "./components/mockups/feature-cards/Current.tsx": () => import("../components/mockups/feature-cards/Current.tsx"),
   "./components/mockups/feature-cards/Editorial.tsx": () => import("../components/mockups/feature-cards/Editorial.tsx"),
   "./components/mockups/feature-cards/Immersive.tsx": () => import("../components/mockups/feature-cards/Immersive.tsx"),
-  "./components/mockups/feature-cards/Refined.tsx": () => import("../components/mockups/feature-cards/Refined.tsx")
+  "./components/mockups/feature-cards/Refined.tsx": () => import("../components/mockups/feature-cards/Refined.tsx"),
+  "./components/mockups/aio-fusion-demo/FullDemo.tsx": () => import("../components/mockups/aio-fusion-demo/FullDemo.tsx")
 };
