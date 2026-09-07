@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Building2, Check, Loader2, LogOut, Plus, ShieldCheck, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
+import { ArrowRight, Check, Loader2, LogOut, CreditCard, Play, AlertTriangle, AlertCircle } from "lucide-react";
 import AccountTypeSelectPage from "./AccountTypeSelectPage";
 import { BillingDetailsCard } from "../components/BillingDetailsCard";
 import { SubscriptionCard } from "../components/SubscriptionCard";
@@ -209,9 +209,6 @@ export function GuidedOnboardingPage({
     <Layout>
       {state.step === "workspace_basics" && (
         <div className="animate-in fade-in duration-700">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ background: "#F1F5F9", color: vars.g500 }}>
-            <Building2 size={24} />
-          </div>
           <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Set up your workspace
           </h1>
@@ -263,9 +260,6 @@ export function GuidedOnboardingPage({
 
       {state.step === "access" && (
         <div className="animate-in fade-in duration-700">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ background: "#F1F5F9", color: vars.g500 }}>
-            <ShieldCheck size={24} />
-          </div>
           <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Choose how to start
           </h1>
@@ -316,9 +310,6 @@ export function GuidedOnboardingPage({
 
       {state.step === "billing" && (
         <div className="animate-in fade-in duration-700 w-full max-w-3xl mx-auto">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6" style={{ background: "#F1F5F9", color: vars.g500 }}>
-            <CreditCard size={24} />
-          </div>
           <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Billing and payment
           </h1>
@@ -349,9 +340,6 @@ export function GuidedOnboardingPage({
 
       {state.step === "first_project" && (
         <div className="animate-in fade-in duration-700 text-center max-w-xl mx-auto">
-          <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-8" style={{ background: "#FDF0F5", color: vars.accent }}>
-            <Plus size={32} />
-          </div>
           <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
             Create your first project
           </h1>
