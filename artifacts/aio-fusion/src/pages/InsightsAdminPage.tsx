@@ -42,6 +42,111 @@ const BLOCKS = [
   { id: 'image', label: 'Image', icon: ImageIcon },
 ];
 
+type StoryTemplateId = 'standard' | 'news' | 'guide' | 'case-study' | 'opinion';
+
+const STORY_TEMPLATES: Array<{ id: StoryTemplateId; label: string }> = [
+  { id: 'standard', label: 'Standard Article' },
+  { id: 'news', label: 'News or Announcement' },
+  { id: 'guide', label: 'How-to Guide' },
+  { id: 'case-study', label: 'Case Study' },
+  { id: 'opinion', label: 'Opinion or Commentary' },
+];
+
+export function createStoryTemplate(template: StoryTemplateId): Pick<InsightArticleInput, 'tag' | 'body'> {
+  const templates: Record<StoryTemplateId, Pick<InsightArticleInput, 'tag' | 'body'>> = {
+    standard: {
+      tag: 'Insights',
+      body: [
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'The context' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'What this means' },
+        { type: 'paragraph', text: '' },
+        { type: 'pullquote', text: '' },
+        { type: 'heading', text: 'Key takeaways' },
+        { type: 'list', items: ['', '', ''] },
+      ],
+    },
+    news: {
+      tag: 'News',
+      body: [
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'What has been announced' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'Why it matters' },
+        { type: 'paragraph', text: '' },
+        { type: 'pullquote', text: '' },
+        { type: 'heading', text: 'What happens next' },
+        { type: 'paragraph', text: '' },
+      ],
+    },
+    guide: {
+      tag: 'Guidance',
+      body: [
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'Before you begin' },
+        { type: 'list', items: ['', '', ''] },
+        { type: 'heading', text: 'Step-by-step guide' },
+        { type: 'subheading', text: 'Step 1' },
+        { type: 'paragraph', text: '' },
+        { type: 'subheading', text: 'Step 2' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'Key takeaways' },
+        { type: 'list', items: ['', '', ''] },
+      ],
+    },
+    'case-study': {
+      tag: 'Case Study',
+      body: [
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'The challenge' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'The approach' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'The results' },
+        { type: 'stat', text: '', caption: '' },
+        { type: 'paragraph', text: '' },
+        { type: 'pullquote', text: '' },
+        { type: 'heading', text: 'What others can learn' },
+        { type: 'list', items: ['', '', ''] },
+      ],
+    },
+    opinion: {
+      tag: 'Opinion',
+      body: [
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'The argument' },
+        { type: 'paragraph', text: '' },
+        { type: 'heading', text: 'Why the usual view falls short' },
+        { type: 'paragraph', text: '' },
+        { type: 'pullquote', text: '' },
+        { type: 'heading', text: 'A better way forward' },
+        { type: 'paragraph', text: '' },
+      ],
+    },
+  };
+  return {
+    tag: templates[template].tag,
+    body: templates[template].body.map((block) => ({
+      ...block,
+      items: block.items ? [...block.items] : undefined,
+    })),
+  };
+}
+
+function createNewStory(): InsightArticleInput {
+  const template = createStoryTemplate('standard');
+  return {
+    slug: '',
+    title: '',
+    excerpt: '',
+    tag: template.tag,
+    body: template.body,
+    coverImageAlt: '',
+    status: 'draft',
+  };
+}
+
 const AutoResizeTextarea = ({ value, onChange, className, ...props }: any) => {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -195,6 +300,7 @@ interface StoryEditorProps {
 
 function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEditorProps) {
   const [data, setData] = useState<InsightArticleInput>(initialData);
+  const [templateId, setTemplateId] = useState<StoryTemplateId | 'custom'>(id === 'new' ? 'standard' : 'custom');
   const [tab, setTab] = useState<'content' | 'meta'>('content');
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -204,7 +310,22 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
   useEffect(() => {
     setData(initialData);
     setTab('content');
+    setTemplateId(id === 'new' ? 'standard' : 'custom');
   }, [id]);
+
+  const changeTemplate = (nextTemplate: StoryTemplateId) => {
+    const bodyDiffersFromTemplate = templateId === 'custom'
+      ? data.body.some((block) =>
+          Boolean(block.text?.trim() || block.caption?.trim() || block.mediaId || block.items?.some((item) => item.trim())),
+        )
+      : JSON.stringify(data.body) !== JSON.stringify(createStoryTemplate(templateId).body);
+    if (bodyDiffersFromTemplate && !window.confirm('Change template and replace the current story body? Your title, excerpt, images and SEO settings will be kept.')) {
+      return;
+    }
+    const template = createStoryTemplate(nextTemplate);
+    setData((current) => ({ ...current, tag: template.tag, body: template.body }));
+    setTemplateId(nextTemplate);
+  };
 
   const handleSaveAction = async (status: 'draft' | 'published') => {
     setIsSaving(true);
@@ -282,6 +403,23 @@ function StoryEditor({ id, initialData, onSave, onDelete, getMediaUrl }: StoryEd
           </button>
         </div>
         <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-xs font-bold text-gray-500">
+            <span className="hidden xl:inline">PAGE TEMPLATE</span>
+            <select
+              aria-label="Change page template"
+              value={templateId}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next !== 'custom') changeTemplate(next as StoryTemplateId);
+              }}
+              className="max-w-[190px] rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-[#0a1628] outline-none focus:border-[#4f8fff] focus:ring-2 focus:ring-[#4f8fff]/20"
+            >
+              {templateId === 'custom' && <option value="custom">Custom layout</option>}
+              {STORY_TEMPLATES.map((template) => (
+                <option key={template.id} value={template.id}>{template.label}</option>
+              ))}
+            </select>
+          </label>
           <div className="flex items-center gap-2 text-sm font-medium mr-2 min-w-[100px] justify-end">
             {isSaving ? <span className="text-gray-400 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Saving...</span> 
              : isSaved ? <span className="text-green-600 flex items-center gap-2"><Check size={14} /> Saved</span> 
@@ -574,9 +712,7 @@ export function InsightsAdminPage({ onBack }: { onBack: () => void }) {
 
   const currentEditingStory = useMemo(() => {
     if (editingId === 'new') {
-      return {
-        slug: "", title: "", excerpt: "", tag: "News", body: [], coverImageAlt: "", status: 'draft' as const
-      };
+      return createNewStory();
     }
     if (editingId && insights) {
       const found = insights.find((s: InsightArticle) => s.id === editingId);
