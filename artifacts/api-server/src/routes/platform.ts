@@ -700,6 +700,25 @@ interface LoginIdentity {
   needsSetup: boolean;
 }
 
+// MFA is still stored against a workspace for backward compatibility, so only
+// the workspace owner may use that enrolment. Team members must never inherit
+// another person's authenticator merely because they share the same workspace.
+// Legacy userless accounts retain the original behaviour.
+async function workspaceMfaAppliesToIdentity(identity: LoginIdentity): Promise<boolean> {
+  if (!identity.userId) return true;
+  const [membership] = await db
+    .select({ role: platformMembershipsTable.role })
+    .from(platformMembershipsTable)
+    .where(
+      and(
+        eq(platformMembershipsTable.userId, identity.userId),
+        eq(platformMembershipsTable.companySlug, normUsername(identity.username)),
+      ),
+    )
+    .limit(1);
+  return normalizeMembershipRole(membership?.role) === "owner";
+}
+
 // Decide whether to issue a session immediately or return an MFA challenge.
 async function finishLoginOrChallenge(
   res: Response,
@@ -713,11 +732,14 @@ async function finishLoginOrChallenge(
     res.status(403).json({ error: MANAGED_LOGIN_ERROR });
     return;
   }
-  const isMaster = normalizeRole(identity.role) === "admin";
+  const workspaceMfaApplies = await workspaceMfaAppliesToIdentity(identity);
+  const isMaster = normalizeRole(identity.role) === "admin" && workspaceMfaApplies;
   let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
-  try {
-    mfa = await getMfaState(identity.username);
-  } catch { /* non-fatal: fall through to challenge rules below */ }
+  if (workspaceMfaApplies) {
+    try {
+      mfa = await getMfaState(identity.username);
+    } catch { /* non-fatal: fall through to challenge rules below */ }
+  }
 
   if (mfa?.enabled) {
     // "Remember this device": a validly signed, unrevoked trusted-device cookie
@@ -822,11 +844,14 @@ async function finishOauthLoginOrChallenge(
     res.redirect(`${origin}/?oauth_status=managed`);
     return;
   }
-  const isMaster = normalizeRole(identity.role) === "admin";
+  const workspaceMfaApplies = await workspaceMfaAppliesToIdentity(identity);
+  const isMaster = normalizeRole(identity.role) === "admin" && workspaceMfaApplies;
   let mfa: Awaited<ReturnType<typeof getMfaState>> = null;
-  try {
-    mfa = await getMfaState(identity.username);
-  } catch { /* non-fatal: fall through to challenge rules below */ }
+  if (workspaceMfaApplies) {
+    try {
+      mfa = await getMfaState(identity.username);
+    } catch { /* non-fatal: fall through to challenge rules below */ }
+  }
 
   if (mfa?.enabled || isMaster) {
     const mode: "enroll" | "verify" = mfa?.enabled ? "verify" : "enroll";

@@ -716,9 +716,10 @@ describe("Google POST callback - code redemption", () => {
 
     const postRes = await postCallback("valid_aio_staff_code", STATE);
     expect(postRes.status).toBe(302);
-    expect(postRes.headers.get("location")).toContain("oauth_status=mfa");
-    expect(postRes.headers.get("location")).toContain("mfa_mode=enroll");
+    expect(postRes.headers.get("location")).toContain("oauth_status=ok");
+    expect(postRes.headers.get("location")).not.toContain("mfa_mode=");
     expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
+    expect(parseCookies(postRes.headers)["aio_sid"]).toBeTruthy();
 
     const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
     const [membership] = await db
@@ -1011,9 +1012,10 @@ describe("Microsoft POST callback - code redemption", () => {
 
     const postRes = await postMsCallback("valid_ms_aio_staff_code", STATE);
     expect(postRes.status).toBe(302);
-    expect(postRes.headers.get("location")).toContain("oauth_status=mfa");
-    expect(postRes.headers.get("location")).toContain("mfa_mode=enroll");
+    expect(postRes.headers.get("location")).toContain("oauth_status=ok");
+    expect(postRes.headers.get("location")).not.toContain("mfa_mode=");
     expect(postRes.headers.get("location")).not.toContain("needs_setup=1");
+    expect(parseCookies(postRes.headers)["aio_sid"]).toBeTruthy();
 
     const [user] = await db.select().from(platformUsersTable).where(eq(platformUsersTable.email, staffEmail)).limit(1);
     const [membership] = await db

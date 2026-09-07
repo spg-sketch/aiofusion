@@ -902,6 +902,7 @@ const GOOGLE_MASTER = "oauth-master";
 const GOOGLE_AGENCY = "oauth-agency";
 const MASTER_EMAIL = "oauth-master@example.com";
 const AGENCY_EMAIL = "oauth-agency@example.com";
+const MASTER_VIEWER_EMAIL = "oauth-master-viewer@example.com";
 const STATE = "test-oauth-state";
 const MFA_COOKIE = "aio_oauth_mfa_token";
 
@@ -961,6 +962,14 @@ describe("OAuth SSO MFA challenge handoff", () => {
     // identities to the seeded workspaces instead of creating new accounts.
     await ensurePlatformUser({ email: MASTER_EMAIL, name: "OAuth Master", companyUsername: GOOGLE_MASTER, companyRole: "admin", companyStatus: "active" });
     await ensurePlatformUser({ email: AGENCY_EMAIL, name: "OAuth Agency", companyUsername: GOOGLE_AGENCY, companyRole: "agency", companyStatus: "active" });
+    await ensurePlatformUser({
+      email: MASTER_VIEWER_EMAIL,
+      name: "OAuth Master Viewer",
+      companyUsername: GOOGLE_MASTER,
+      companyRole: "admin",
+      companyStatus: "active",
+      membershipRole: "viewer",
+    });
     ({ server, baseUrl } = await startServer());
   });
 
@@ -974,7 +983,7 @@ describe("OAuth SSO MFA challenge handoff", () => {
       await db.delete(platformAccountsTable).where(eq(platformAccountsTable.username, u));
     }
     await db.delete(platformMetaTable).where(like(platformMetaTable.key, "account:mfa%"));
-    for (const e of [MASTER_EMAIL, AGENCY_EMAIL]) {
+    for (const e of [MASTER_EMAIL, AGENCY_EMAIL, MASTER_VIEWER_EMAIL]) {
       await db.delete(platformUsersTable).where(eq(platformUsersTable.email, e));
     }
   });
@@ -1036,6 +1045,18 @@ describe("OAuth SSO MFA challenge handoff", () => {
     expect(good.status).toBe(200);
     expect(good.json.account?.username).toBe(GOOGLE_MASTER);
     expect(good.setCookie).toMatch(/aio_sid=/);
+  });
+
+  it("does not make a Master workspace viewer use the owner's authenticator", async () => {
+    const secret = generateTotpSecret();
+    await saveMfaState(GOOGLE_MASTER, { secret, enabled: true, recoveryHashes: [] });
+
+    stubGoogle(MASTER_VIEWER_EMAIL);
+    const r = await runCallback();
+
+    expect(r.location.searchParams.get("oauth_status")).toBe("ok");
+    expect(mfaCookieValue(r.setCookies)).toBeNull();
+    expect(r.setCookies.join("; ")).toMatch(/aio_sid=/);
   });
 
   it("issues a session directly for a non-master without MFA (no token cookie)", async () => {

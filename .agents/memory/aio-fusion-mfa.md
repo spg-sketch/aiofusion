@@ -7,6 +7,7 @@ description: How two-factor login works — mandatory for master (admin) account
 - MFA state lives in **platform_meta** (`account:mfa:<username>`, JSON {secret, enabled, recoveryHashes}) — NOT platform_users columns. Works uniformly for legacy accounts (incl. seeded master admin with no platform_users row) and needs no schema/PGlite fixture changes.
 - Login two-step: correct password → stateless HMAC pending-token (`mfaToken`, 10-min TTL, signed with SESSION_SECRET) instead of session; `/platform/mfa/verify` or `/mfa/enable` exchanges for cookie. Both platform_users and legacy login branches go through `finishLoginOrChallenge`.
 - Master (`role === "admin"`) = forced enrolment on first login, cannot disable. Others: opt-in.
+- Workspace-keyed MFA applies only to the workspace owner (plus legacy userless accounts). Team members, including Master viewers, must never inherit another person's authenticator.
 - Recovery codes: 10 single-use, sha256-hashed; shown exactly once at enrolment.
 - SSO logins also challenged via `finishOauthLoginOrChallenge`: OAuth callback redirects `/?oauth_status=mfa&mfa_mode=verify|enroll`; pending token delivered via short-lived non-httpOnly cookie `aio_oauth_mfa_token` (10 min) — keeps token out of address bar/proxy logs.
 - SSO→MFA redirect hits the App.tsx URL-param-wipe race: params captured in App state (`oauthRedirectParams` prop → PlatformHomePage) before history-sync strips them. Any NEW redirect query param needs the same App-level capture treatment.
