@@ -489,6 +489,7 @@ export async function bootstrapAuth(): Promise<{
         account?: ServerAccount | null;
         impersonating?: Impersonation | null;
         setupComplete?: boolean | null;
+        onboarding?: { step?: string } | null;
         hasPassword?: boolean;
         agencyManagedClient?: boolean;
         insightsCmsAccess?: boolean;
@@ -519,7 +520,7 @@ export async function bootstrapAuth(): Promise<{
         setSession(session);
         // setupComplete === false (not null, not true) means the user signed up
         // but hasn't chosen Agency/Partner vs Client yet.
-        if (me.setupComplete === false) needsSetup = true;
+        if (me.setupComplete === false && me.onboarding) needsSetup = true;
         hasPassword = me.hasPassword;
         // Only expose profile data when this is a direct account-owner session:
         // impersonation or team-member sessions must not prefill foreign data.

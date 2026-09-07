@@ -37,7 +37,7 @@ import { getImpersonationState } from "./lib/auth";
 import { isInsightsAdminPath } from "./lib/adminRoute";
 import { vars } from "./marketing/vars";
 import { PUBLIC_PAGE_DEFINITIONS } from "./marketing/pageMeta";
-import AccountTypeSelectPage from "./pages/AccountTypeSelectPage";
+import { GuidedOnboardingPage } from "./pages/GuidedOnboardingPage";
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense, startTransition } from "react";
 import {
   ChevronRight,
@@ -646,6 +646,67 @@ function App() {
       return;
     }
   };
+
+  const resumeOnboardingProject = async (
+    projectSummary: { id: string; name: string },
+  ): Promise<{ ok: boolean; error?: string; saved?: boolean }> => {
+    // Do not complete the server-side setup marker until this browser has
+    // loaded the durable project it is about to enter.
+    await resyncProjects();
+    const projects = loadStoredProjects();
+    const project = projects.find((candidate) => candidate.id === projectSummary.id);
+    if (!project) {
+      return { ok: false, error: "Your project is saved, but it is still loading. Refresh and continue setup.", saved: true };
+    }
+    try {
+      const response = await fetch(`${apiBase()}/api/platform/onboarding/complete`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: projectSummary.id }),
+      });
+      const json = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) return { ok: false, error: json.error ?? "Could not finish account setup." };
+    } catch {
+      return { ok: false, error: "Your project was saved, but setup could not finish. Check your connection and try again." };
+    }
+    setKnownProjectIds(projects.map((candidate) => candidate.id));
+    setActiveProjectId(project.id);
+    setActiveClient({ ...project, logo: clientLogos[project.id] });
+    setNeedsSetup(false);
+    warmRoute(loadIntakePage);
+    startTransition(() => {
+      setCurrentPage("intake");
+      setView("platform");
+    });
+    return { ok: true };
+  };
+
+  const confirmOnboardingProject = async (name: string, logo?: string): Promise<{ ok: boolean; error?: string; saved?: boolean }> => {
+    if (!session) return { ok: false, error: "Your session has expired. Sign in again." };
+    const allowance = await fetchProjectAllowance();
+    if (allowance?.atLimit) {
+      return { ok: false, error: "Your project allowance is full. Check your access choice and try again." };
+    }
+    const project = createStoredProject(name);
+    const afterCreate = loadStoredProjects();
+    setStoredProjects(afterCreate);
+    setKnownProjectIds(afterCreate.map((p) => p.id));
+    if (logo) setClientLogos((previous) => ({ ...previous, [project.id]: logo }));
+    const pushed = await pushProjectMeta(
+      project as unknown as Record<string, unknown> & { id: string },
+      logo,
+    );
+    if (!pushed.ok) {
+      const rolled = loadStoredProjects().filter((p) => p.id !== project.id);
+      saveStoredProjects(rolled);
+      setStoredProjects(rolled);
+      setKnownProjectIds(rolled.map((p) => p.id));
+      return { ok: false, error: pushed.error ?? "Could not save the project. Check your connection and try again." };
+    }
+    const completed = await resumeOnboardingProject({ id: project.id, name: project.name });
+    return completed.ok ? completed : { ...completed, saved: true };
+  };
   const [session, setSessionState] = useState<LocalSession | null>(() => {
     if (typeof window === "undefined") return null;
     seedAdminIfEmpty();
@@ -978,9 +1039,8 @@ function App() {
       warmRoute(loadPlatformHomePage);
       startTransition(() => setView("platform-home"));
     }
-    if (params.has("needs_setup")) {
-      setNeedsSetup(true);
-    }
+    // needs_setup is only a routing hint. bootstrapAuth and /platform/me are
+    // authoritative, so a stale callback URL can never restart setup.
     // SSO round-trip succeeded - promote the staged sign-in method to the
     // remembered "last sign-in" record. Failure statuses never promote.
     if (params.get("oauth_status") === "ok") {
@@ -1234,19 +1294,19 @@ function App() {
     );
   }
 
-  // Account type selection - full-page gate for brand-new signups (password or
-  // SSO) that haven't chosen Agency/Partner vs Client yet. Intercepts all views.
+  // Server-authoritative guided setup for genuinely new organic workspace
+  // owners. setupComplete null/true, members, staff, managed workspaces and
+  // impersonated sessions never enter this gate.
   if (needsSetup && session && !authLoading) {
     return (
-      <AccountTypeSelectPage
-        onComplete={(role) => {
-          setNeedsSetup(false);
-          setSessionState({ username: session.username, role });
-          // Role just changed (client/agency now known) - refresh profile so
-          // the intake prefill fires on the first project the user creates.
-          void fetchAccountProfile().then((ap) => setAccountProfile(ap));
+      <GuidedOnboardingPage
+        checkoutResult={checkoutResult}
+        onRoleChanged={(role) => {
+          setSessionState({ ...session, role });
           void refreshAccountsCache();
         }}
+        onCreateFirstProject={confirmOnboardingProject}
+        onResumeFirstProject={resumeOnboardingProject}
         onSignOut={handleSignOut}
       />
     );
@@ -1318,7 +1378,15 @@ function App() {
               void initContentStore().then(() => resyncProjects());
             }}
             onSignOut={handleSignOut}
-            onNeedsSetup={() => setNeedsSetup(true)}
+            // Login and MFA responses contain only a transient hint. Rehydrate
+            // from /platform/me before opening the full-page gate so a stale or
+            // exempt response (member, staff, managed workspace) cannot trap a
+            // user in setup.
+            onNeedsSetup={() => {
+              void bootstrapAuth().then(({ needsSetup: eligible }) => {
+                setNeedsSetup(eligible === true);
+              });
+            }}
             onManageUsers={() => {
               if (session?.role === "admin") {
                 setAccountSection("agencies");

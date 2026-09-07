@@ -855,6 +855,20 @@ describe("billing routes", () => {
     expect(again.status).toBe(409);
   });
 
+  it("uses resumable onboarding URLs when onboarding checkout is requested", async () => {
+    const { sid } = await seedWorkspace("onboarding-buyer", "owner@onboarding-buyer.test", { accountRole: "client" });
+    const res = await api("/api/platform/billing/checkout", {
+      sid,
+      body: { frequency: "annual", onboarding: true },
+    });
+    expect(res.status).toBe(200);
+    const params = stripeCalls.sessions.at(-1) as any;
+    expect(params.success_url).toContain("checkout=success");
+    expect(params.success_url).toContain("onboarding=1");
+    expect(params.cancel_url).toContain("checkout=cancelled");
+    expect(params.cancel_url).toContain("onboarding=1");
+  });
+
   it("lets an active beta customer choose a paid plan before the trial ends", async () => {
     const { sid } = await seedWorkspace("trial-convert", "owner@trial-convert.test", { accountRole: "client" });
     expect((await api("/api/platform/billing/trial", { sid, method: "POST" })).status).toBe(201);

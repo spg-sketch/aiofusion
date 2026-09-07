@@ -207,6 +207,7 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
     if (!ctx) return;
 
     const frequency = req.body?.frequency;
+    const onboarding = req.body?.onboarding === true;
     if (!isBillingFrequency(frequency)) {
       res.status(400).json({ error: "Choose annual or quarterly billing." });
       return;
@@ -386,8 +387,12 @@ router.post("/platform/billing/checkout", requirePlatformAuth, async (req, res) 
         slug: billingSlug,
         plan: ctx.plan,
         frequency,
-        successUrl: `${base}/?account_section=billing&checkout=success`,
-        cancelUrl: `${base}/?account_section=billing&checkout=cancelled`,
+        successUrl: onboarding
+          ? `${base}/?checkout=success&onboarding=1`
+          : `${base}/?account_section=billing&checkout=success`,
+        cancelUrl: onboarding
+          ? `${base}/?checkout=cancelled&onboarding=1`
+          : `${base}/?account_section=billing&checkout=cancelled`,
         claimToken,
       });
       const url = session.url;

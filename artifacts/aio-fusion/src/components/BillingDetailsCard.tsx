@@ -123,7 +123,7 @@ function validate(form: CompanyBillingForm): FieldErrors {
   return errors;
 }
 
-export function BillingDetailsCard() {
+export function BillingDetailsCard({ onSaved }: { onSaved?: () => void } = {}) {
   const [form, setForm] = useState<CompanyBillingForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [loaded, setLoaded] = useState(false);
@@ -201,6 +201,7 @@ export function BillingDetailsCard() {
       setErrors({});
       setMessage({ kind: "ok", text: "Company and billing information saved." });
       window.dispatchEvent(new Event("aio:company-billing-saved"));
+      onSaved?.();
     } catch {
       setMessage({ kind: "error", text: "Network error. Please try again." });
     } finally {

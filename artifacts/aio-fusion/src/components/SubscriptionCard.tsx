@@ -88,7 +88,15 @@ const STATUS_LABELS: Record<string, { text: string; color: string; bg: string }>
   cancelled: { text: "Cancelled", color: "#991B1B", bg: "#FEE2E2" },
 };
 
-export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success" | "cancelled" | null }) {
+export function SubscriptionCard({
+  checkoutResult,
+  onboarding = false,
+  onAccessActivated,
+}: {
+  checkoutResult?: "success" | "cancelled" | null;
+  onboarding?: boolean;
+  onAccessActivated?: () => void;
+}) {
   const [info, setInfo] = useState<SubscriptionInfo | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [frequency, setFrequency] = useState<"annual" | "quarterly">("annual");
@@ -120,6 +128,24 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
     return () => window.removeEventListener("aio:company-billing-saved", refresh);
   }, []);
 
+  useEffect(() => {
+    if (info?.entitled && onboarding) onAccessActivated?.();
+  }, [info?.entitled, onboarding, onAccessActivated]);
+
+  // Checkout can return before Stripe's webhook has applied entitlement. Poll
+  // briefly only on that return path, then stop; a later refresh remains the
+  // normal recovery path if Stripe takes longer than this bounded window.
+  useEffect(() => {
+    if (!onboarding || checkoutResult !== "success" || info?.entitled) return;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      setRefreshTick((tick) => tick + 1);
+      if (attempts >= 10) window.clearInterval(timer);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [checkoutResult, info?.entitled, onboarding]);
+
   async function startCheckout() {
     setStarting(true);
     setError(null);
@@ -128,7 +154,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ frequency }),
+        body: JSON.stringify({ frequency, ...(onboarding ? { onboarding: true } : {}) }),
       });
       const json = await res.json();
       if (!res.ok || !json.url) {
@@ -193,7 +219,7 @@ export function SubscriptionCard({ checkoutResult }: { checkoutResult?: "success
           </p>
         )}
 
-        {trial.status === "eligible" && (
+        {!onboarding && trial.status === "eligible" && (
           <div className="mb-5 rounded-xl p-4" style={{ background: "#FBE3ED55", border: `1px solid ${accent}55` }}>
             <p className="text-[14px] font-bold mb-1" style={{ color: ink }}>Try AIO Fusion free for 60 days</p>
             <p className="text-[13px] mb-3" style={{ color: vars.g600 }}>

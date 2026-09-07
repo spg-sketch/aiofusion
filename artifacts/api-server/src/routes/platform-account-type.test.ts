@@ -102,6 +102,17 @@ vi.mock("@workspace/db", async () => {
       key varchar PRIMARY KEY,
       value text NOT NULL DEFAULT ''
     );
+    CREATE TABLE IF NOT EXISTS projects (
+      id varchar PRIMARY KEY,
+      name varchar NOT NULL DEFAULT '',
+      data jsonb NOT NULL DEFAULT '{}',
+      intake jsonb,
+      logo text,
+      owner varchar,
+      tier varchar(16),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
+    );
   `);
 
   return { db, ...schema };
@@ -119,6 +130,8 @@ import {
   platformCompaniesTable,
   platformInvitationsTable,
   platformMembershipsTable,
+  platformMetaTable,
+  projectsTable,
   platformUsersTable,
 } from "@workspace/db";
 import { sendAccountTypeChangedEmail } from "../lib/notify-email";
@@ -203,7 +216,7 @@ beforeAll(async () => {
 // ─── tests ──────────────────────────────────────────────────────────────────
 
 describe("POST /api/platform/settings/account-type", () => {
-  it("prompts a legacy untyped owner to select an account type at next sign-in", async () => {
+  it("keeps a legacy null setup flag exempt from guided onboarding", async () => {
     await db.insert(platformAccountsTable).values({
       username: "legacy-login",
       passwordHash: "",
@@ -224,7 +237,7 @@ describe("POST /api/platform/settings/account-type", () => {
     srv.close();
     expect(res.status).toBe(200);
     const json = await res.json() as { setupComplete?: boolean | null };
-    expect(json.setupComplete).toBe(false);
+    expect(json.setupComplete).toBeNull();
   });
 
   it("prevents a team member from completing an owner’s account-type setup", async () => {
@@ -273,7 +286,87 @@ describe("POST /api/platform/settings/account-type", () => {
       .where(eq(platformCompaniesTable.slug, "fresh-signup"))
       .limit(1);
     expect(company?.role).toBe("client");
-    expect(company?.setupComplete).toBe(true);
+    expect(company?.setupComplete).toBe(false);
+    const [checkpoint] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, "account:onboarding:v1:fresh-signup"))
+      .limit(1);
+    expect(JSON.parse(checkpoint?.value ?? "{}")).toEqual({ step: "workspace_basics" });
+
+    const resumedServer = app.listen(0);
+    await new Promise<void>((r) => resumedServer.once("listening", r));
+    const resumedPort = (resumedServer.address() as AddressInfo).port;
+    const basics = await fetch(`http://localhost:${resumedPort}/api/platform/onboarding/workspace-basics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: "Fresh Company", website: "fresh.example" }),
+    });
+    expect(basics.status).toBe(200);
+    expect(await basics.json()).toMatchObject({ state: { step: "access" } });
+    const paid = await fetch(`http://localhost:${resumedPort}/api/platform/onboarding/access`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ choice: "paid" }),
+    });
+    resumedServer.close();
+    expect(paid.status).toBe(200);
+    expect(await paid.json()).toMatchObject({ state: { step: "billing", accessChoice: "paid" } });
+  });
+
+  it("recovers beta and paid activation when their checkpoint write was interrupted", async () => {
+    await seed("recover-beta", "agency", false);
+    await seed("recover-paid", "client", false);
+    await db.insert(platformMetaTable).values([
+      { key: "account:onboarding:v1:recover-beta", value: JSON.stringify({ step: "access" }) },
+      { key: "account:onboarding:v1:recover-paid", value: JSON.stringify({ step: "billing", accessChoice: "paid" }) },
+    ]);
+    await db.execute(`UPDATE platform_companies SET beta_trial_started_at = now(), beta_trial_ends_at = now() + interval '60 days' WHERE slug = 'recover-beta'`);
+    await db.update(platformCompaniesTable).set({ subscriptionStatus: "active", plan: "inhouse" }).where(eq(platformCompaniesTable.slug, "recover-paid"));
+    for (const account of [
+      { username: "recover-beta", role: "agency" },
+      { username: "recover-paid", role: "client" },
+    ]) {
+      const app = makeApp({ ...account, membershipRole: "owner" });
+      const srv = app.listen(0);
+      await new Promise<void>((r) => srv.once("listening", r));
+      const res = await fetch(`http://localhost:${(srv.address() as AddressInfo).port}/api/platform/onboarding`);
+      srv.close();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ state: { step: "first_project" } });
+    }
+  });
+
+  it("completes only after a durable owned first project and exempts established, member, and admin sessions", async () => {
+    await seed("durable-first", "agency", false);
+    await db.insert(platformMetaTable).values({ key: "account:onboarding:v1:durable-first", value: JSON.stringify({ step: "first_project" }) });
+    await db.insert(projectsTable).values({ id: "durable-project", name: "Durable", data: {}, owner: "durable-first" });
+    const completeApp = makeApp({ username: "durable-first", role: "agency", membershipRole: "owner" });
+    const completeSrv = completeApp.listen(0);
+    await new Promise<void>((r) => completeSrv.once("listening", r));
+    const complete = await fetch(`http://localhost:${(completeSrv.address() as AddressInfo).port}/api/platform/onboarding/complete`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: "durable-project" }),
+    });
+    completeSrv.close();
+    expect(complete.status).toBe(200);
+    const [finished] = await db.select().from(platformCompaniesTable).where(eq(platformCompaniesTable.slug, "durable-first"));
+    expect(finished?.setupComplete).toBe(true);
+
+    await seed("established", "agency", true);
+    await seed("member-workspace", "agency", false);
+    await seed("admin-workspace", "admin", false);
+    for (const account of [
+      { username: "established", role: "agency", membershipRole: "owner" },
+      { username: "member-workspace", role: "agency", membershipRole: "viewer" },
+      { username: "admin-workspace", role: "admin", membershipRole: "owner" },
+    ]) {
+      const app = makeApp(account);
+      const srv = app.listen(0);
+      await new Promise<void>((r) => srv.once("listening", r));
+      const res = await fetch(`http://localhost:${(srv.address() as AddressInfo).port}/api/platform/onboarding`);
+      srv.close();
+      expect(res.status).toBe(409);
+    }
   });
 
   it("still rejects the setup endpoint after setup is complete", async () => {

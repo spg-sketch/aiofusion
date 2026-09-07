@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { Building2, User, ArrowRight, Loader2, ArrowLeft } from "lucide-react";
+import { Building2, User, ArrowRight, Loader2, AlertCircle, LogOut } from "lucide-react";
 import { apiBase } from "../lib/apiHelpers";
 import { vars } from "../marketing/vars";
-
-const ink = "#0a1628";
-const accent = "#C8497A";
-const teal = "#1A647B";
 
 interface Props {
   onComplete: (role: "agency" | "client") => void;
@@ -41,118 +37,119 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
     }
   };
 
+  const agencySelected = selected === "agency";
+  const clientSelected = selected === "client";
+
   return (
-    <div className="min-h-screen font-['Inter',sans-serif]" style={{ background: "white", color: ink }}>
-      <header className="px-4 sm:px-10 py-4 sm:py-6 flex items-center justify-between" style={{ background: teal, borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
-        <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-20 sm:h-30" />
+    <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
+      <header className="px-6 sm:px-10 py-5 flex items-center justify-between" style={{ background: vars.navy }}>
+        <img src={`${import.meta.env.BASE_URL}images/logo-white-notagline.png`} alt="AIO Fusion" className="h-8 sm:h-10" />
         <button
           onClick={onSignOut}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-white/10 text-white"
-          style={{ border: "1.5px solid rgba(255,255,255,0.5)" }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:bg-white/10 text-white border border-white/20"
         >
-          <ArrowLeft size={14} /> Cancel
+          <LogOut size={16} /> Sign out
         </button>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-14 sm:py-20">
+      <main className="flex-1 max-w-3xl mx-auto px-6 py-12 sm:py-20 w-full animate-in fade-in duration-700">
         {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: accent, color: "white" }}>1</div>
-            <span className="text-[12px] font-semibold" style={{ color: accent }}>Account type</span>
+        <div className="flex items-center gap-3 mb-10">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: vars.accent, color: "white" }}>1</div>
+            <span className="text-sm font-semibold" style={{ color: vars.accent }}>Account type</span>
           </div>
-          <div className="flex-1 h-px mx-2" style={{ background: vars.g200 }} />
-          <div className="flex items-center gap-1.5 opacity-40">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: vars.g300, color: "white" }}>2</div>
-            <span className="text-[12px] font-semibold" style={{ color: vars.g500 }}>Dashboard</span>
+          <div className="w-12 h-px" style={{ background: vars.g200 }} />
+          <div className="flex items-center gap-2 opacity-60">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: vars.g200, color: vars.g600 }}>2</div>
+            <span className="text-sm font-semibold text-slate-500">Workspace details</span>
           </div>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-bold mb-3 leading-tight" style={{ fontFamily: "'Alice', Georgia, serif", color: ink }}>
+        <h1 className="text-3xl sm:text-4xl mb-4 font-bold" style={{ fontFamily: "'Alice', Georgia, serif", color: vars.navy }}>
           Thank you for signing up to AIO Fusion
         </h1>
-        <p className="text-[16px] leading-[1.7] mb-2" style={{ color: vars.g600 }}>
-          We offer two types of account: a <strong style={{ color: ink }}>Direct Client</strong> account, for managing your own company or brand, and an <strong style={{ color: ink }}>Agency / Partner</strong> account, for managing PR and marketing on behalf of multiple clients.
+        <p className="text-base sm:text-lg mb-2 leading-relaxed text-slate-600">
+          We offer two types of account: a <strong className="font-semibold text-slate-900">Direct Client</strong> account for managing your own company or brand, and an <strong className="font-semibold text-slate-900">Agency / Partner</strong> account for managing PR and marketing on behalf of multiple clients.
         </p>
-        <p className="text-[16px] leading-[1.7] mb-10" style={{ color: vars.g600 }}>
+        <p className="text-base sm:text-lg mb-10 leading-relaxed text-slate-600">
           Which would suit you best? You can update this in your account settings at a later stage.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
-          {/* Agency / Partner */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
+          {/* agency button */}
           <button
             type="button"
             onClick={() => setSelected("agency")}
-            className="text-left p-6 rounded-2xl border-2 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            className="text-left p-6 rounded-2xl border-2 transition-all duration-300 relative overflow-hidden group hover:-translate-y-0.5 hover:shadow-lg"
             style={{
-              borderColor: selected === "agency" ? accent : vars.g200,
-              background: selected === "agency" ? "#FDF0F5" : "white",
-              boxShadow: selected === "agency" ? `0 0 0 1px ${accent}` : undefined,
+              borderColor: agencySelected ? vars.accent : "var(--color-slate-200, #e2e8f0)",
+              background: agencySelected ? "#FDF0F5" : "white",
             }}
           >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: selected === "agency" ? accent : vars.g100 }}>
-              <Building2 size={22} color={selected === "agency" ? "white" : vars.g500} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-colors"
+                 style={{ background: agencySelected ? vars.accent : "#F1F5F9", color: agencySelected ? "white" : vars.g500 }}>
+              <Building2 size={24} />
             </div>
-            <div className="text-[17px] font-bold mb-2" style={{ color: ink }}>Agency / Partner</div>
-            <p className="text-[13.5px] leading-[1.65]" style={{ color: vars.g600 }}>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Agency / Partner</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
               For agencies and consultants working on behalf of clients. Add client accounts, manage their projects, and view every dashboard from one place.
             </p>
-            {selected === "agency" && (
-              <div className="mt-4 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>
-                <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: accent }}>
-                  <div className="w-2 h-2 rounded-full" style={{ background: accent }} />
+            {agencySelected && (
+              <div className="absolute top-6 right-6" style={{ color: vars.accent }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center bg-white shadow-sm">
+                  <div className="w-3 h-3 rounded-full" style={{ background: vars.accent }} />
                 </div>
-                Selected
               </div>
             )}
           </button>
 
-          {/* Client */}
+          {/* client button */}
           <button
             type="button"
             onClick={() => setSelected("client")}
-            className="text-left p-6 rounded-2xl border-2 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+            className="text-left p-6 rounded-2xl border-2 transition-all duration-300 relative overflow-hidden group hover:-translate-y-0.5 hover:shadow-lg"
             style={{
-              borderColor: selected === "client" ? teal : vars.g200,
-              background: selected === "client" ? "#EDF6F9" : "white",
-              boxShadow: selected === "client" ? `0 0 0 1px ${teal}` : undefined,
+              borderColor: clientSelected ? vars.teal : "var(--color-slate-200, #e2e8f0)",
+              background: clientSelected ? "#EDF6F9" : "white",
             }}
           >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: selected === "client" ? teal : vars.g100 }}>
-              <User size={22} color={selected === "client" ? "white" : vars.g500} />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 transition-colors"
+                 style={{ background: clientSelected ? vars.teal : "#F1F5F9", color: clientSelected ? "white" : vars.g500 }}>
+              <User size={24} />
             </div>
-            <div className="text-[17px] font-bold mb-2" style={{ color: ink }}>Direct Client</div>
-            <p className="text-[13.5px] leading-[1.65]" style={{ color: vars.g600 }}>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Direct Client</h2>
+            <p className="text-sm text-slate-600 leading-relaxed">
               For businesses managing PR and marketing for their own company or brand. One focused workspace with all your projects in one place.
             </p>
-            {selected === "client" && (
-              <div className="mt-4 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.12em]" style={{ color: teal }}>
-                <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: teal }}>
-                  <div className="w-2 h-2 rounded-full" style={{ background: teal }} />
+            {clientSelected && (
+              <div className="absolute top-6 right-6" style={{ color: vars.teal }}>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center bg-white shadow-sm">
+                  <div className="w-3 h-3 rounded-full" style={{ background: vars.teal }} />
                 </div>
-                Selected
               </div>
             )}
           </button>
         </div>
 
         {error && (
-          <p className="mb-5 text-[13px] font-semibold text-center py-2.5 px-4 rounded-xl" style={{ color: "white", background: "rgba(220,38,38,0.85)" }}>
-            {error}
-          </p>
+          <div className="mb-8 p-4 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-100 flex items-start gap-3">
+            <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-500" />
+            <p>{error}</p>
+          </div>
         )}
 
         <button
           type="button"
           onClick={handleConfirm}
           disabled={!selected || loading}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-[15px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
-          style={{ background: accent }}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl px-10 py-4 text-white text-sm font-bold uppercase tracking-wider transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110"
+          style={{ background: vars.accent }}
         >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
-          {loading ? "Setting up your account…" : "Continue to dashboard"}
+          {loading ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
+          {!loading && <ArrowRight size={18} />}
         </button>
-      </div>
+      </main>
     </div>
   );
 }

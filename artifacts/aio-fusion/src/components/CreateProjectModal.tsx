@@ -7,7 +7,7 @@ const accent = "#C8497A";
 
 export function CreateProjectModal({ onCancel, onCreate, initialName, forClientName }: {
   onCancel: () => void;
-  onCreate: (name: string, logo?: string) => void;
+  onCreate: (name: string, logo?: string) => void | Promise<void | { ok?: boolean }>;
   /** Pre-fills the project name (e.g. the client's company name when starting from a hub placeholder card). */
   initialName?: string;
   /** When set, the modal notes the project will be created under this client's account. */
@@ -15,8 +15,20 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [logo, setLogo] = useState<string | null>(null);
-  const canSubmit = name.trim().length > 0;
-  const submit = () => { if (canSubmit) onCreate(name.trim(), logo ?? undefined); };
+  const [submitting, setSubmitting] = useState(false);
+  const canSubmit = name.trim().length > 0 && !submitting;
+  const submit = async () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      const result = await onCreate(name.trim(), logo ?? undefined);
+      // Existing Project Hub callers return void and have always expected the
+      // modal to close. Onboarding returns { ok: false } when retry is needed.
+      if (!result || result.ok !== false) onCancel();
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const pickLogo = () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -117,7 +129,7 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.15em] text-white transition-all"
             style={{ background: accent, opacity: canSubmit ? 1 : 0.45, cursor: canSubmit ? "pointer" : "not-allowed" }}
           >
-            <ArrowRight size={14} /> Create &amp; set up
+            <ArrowRight size={14} /> {submitting ? "Creating..." : "Create & set up"}
           </button>
         </div>
       </div>

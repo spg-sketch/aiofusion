@@ -351,6 +351,40 @@ describe("POST /api/platform/login - new user-table auth path", () => {
     expect(setCookie).toMatch(/aio_sid=/);
   });
 
+  it("only returns needsSetup for the incomplete workspace owner, not an invited viewer", async () => {
+    // Establish the legacy owner's user/company records, then make this a
+    // genuinely incomplete organic workspace.
+    await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+    });
+    await db.update(platformCompaniesTable).set({ setupComplete: false })
+      .where(eq(platformCompaniesTable.slug, USERNAME));
+    const viewerPassword = "viewer-secure-password";
+    const [viewer] = await db.insert(platformUsersTable).values({
+      email: "incomplete-viewer@example.com", passwordHash: hashPassword(viewerPassword), name: "Viewer",
+    }).returning();
+    const [company] = await db.select().from(platformCompaniesTable)
+      .where(eq(platformCompaniesTable.slug, USERNAME));
+    await db.insert(platformMembershipsTable).values({
+      userId: viewer!.id, companyId: company!.id, companySlug: USERNAME, role: "viewer",
+    });
+
+    const owner = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+    });
+    expect((await owner.json() as { needsSetup?: boolean }).needsSetup).toBe(true);
+    const invited = await fetch(`${baseUrl}/api/platform/login`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "incomplete-viewer@example.com", password: viewerPassword }),
+    });
+    expect(invited.status).toBe(200);
+    expect((await invited.json() as { needsSetup?: boolean }).needsSetup).toBeUndefined();
+    await db.delete(platformMembershipsTable).where(eq(platformMembershipsTable.userId, viewer!.id));
+    await db.delete(platformUsersTable).where(eq(platformUsersTable.id, viewer!.id));
+  });
+
   it("creates a platform_sessions row with userId set after legacy login with email", async () => {
     const res = await fetch(`${baseUrl}/api/platform/login`, {
       method: "POST",

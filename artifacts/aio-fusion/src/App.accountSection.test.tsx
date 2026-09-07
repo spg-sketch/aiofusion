@@ -125,6 +125,28 @@ describe("settings-section deep link survives refresh (account_section param)", 
     });
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
+
+  it("does not gate an exempt member when a stale needs_setup URL is present", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/platform/me")) {
+        return makeResponse({
+          account: { username: "member-workspace", role: "agency", membershipRole: "viewer" },
+          impersonating: null, setupComplete: false, onboarding: null,
+          hasPassword: true, emailVerified: true, masterOwner: false,
+        });
+      }
+      if (url.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
+      return makeResponse({ error: "unavailable" }, 404);
+    }));
+    await renderAppAt("/?needs_setup=1&account_section=security");
+    // The normal settings destination renders; the stale query parameter and
+    // incomplete flag cannot substitute for the server onboarding object.
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /sign-in & security/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
+  });
 });
 
 describe("browser Back restores the previous settings section (popstate)", () => {

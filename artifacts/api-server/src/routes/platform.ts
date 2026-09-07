@@ -123,10 +123,82 @@ import {
   saveCompanyBillingRecord,
   validateCompanyBillingFields,
 } from "../lib/company-billing-record";
+import { getBillingState, getBetaTrialSummary, hasPaidSubscription, startBetaTrial } from "../lib/billing";
+import type { PlanKey } from "../lib/billing-plans";
 
 const router: IRouter = Router();
 
 const MIGRATED_FLAG = "accounts_migrated";
+type OnboardingStep = "account_type" | "workspace_basics" | "access" | "billing" | "first_project";
+type OnboardingState = { step: OnboardingStep; accessChoice?: "beta" | "paid" };
+const ONBOARDING_PREFIX = "account:onboarding:v1:";
+const onboardingKey = (username: string) => `${ONBOARDING_PREFIX}${normUsername(username)}`;
+
+async function readOnboardingState(username: string): Promise<OnboardingState> {
+  const [row] = await db.select().from(platformMetaTable)
+    .where(eq(platformMetaTable.key, onboardingKey(username))).limit(1);
+  if (row?.value) {
+    try {
+      const parsed = JSON.parse(row.value) as Partial<OnboardingState>;
+      if (["account_type", "workspace_basics", "access", "billing", "first_project"].includes(parsed.step ?? "")) {
+        return parsed as OnboardingState;
+      }
+    } catch { /* corrupt state safely restarts at the first durable checkpoint */ }
+  }
+  return { step: "account_type" };
+}
+
+async function writeOnboardingState(username: string, state: OnboardingState): Promise<void> {
+  const key = onboardingKey(username);
+  const value = JSON.stringify(state);
+  await db.insert(platformMetaTable).values({ key, value })
+    .onConflictDoUpdate({ target: platformMetaTable.key, set: { value } });
+}
+
+async function isEligibleForOnboarding(
+  identity: Pick<LoginIdentity, "username" | "role" | "userId"> & { membershipRole?: string | null },
+  impersonated = false,
+): Promise<boolean> {
+  const account = await getAccount(normUsername(identity.username));
+  const company = await getCompanyBySlug(identity.username);
+  let membershipRole = identity.membershipRole;
+  if (identity.userId && membershipRole === undefined) {
+    const [membership] = await db.select({ role: platformMembershipsTable.role })
+      .from(platformMembershipsTable)
+      .where(and(eq(platformMembershipsTable.userId, identity.userId), eq(platformMembershipsTable.companySlug, normUsername(identity.username))))
+      .limit(1);
+    membershipRole = membership?.role;
+  }
+  return !!account
+    && !account.parent
+    && !impersonated
+    && !(await isManaged(identity.username))
+    && (membershipRole === undefined || membershipRole === null || normalizeMembershipRole(membershipRole) === "owner")
+    && company?.setupComplete === false
+    && normalizeRole(identity.role) !== "admin";
+}
+
+async function isOnboardingOwner(req: Request, _company?: typeof platformCompaniesTable.$inferSelect | null): Promise<boolean> {
+  if (!req.account) return false;
+  return isEligibleForOnboarding({
+    username: req.account.username,
+    role: req.account.role,
+    userId: req.account.userId,
+    membershipRole: req.account.membershipRole,
+  }, await isImpersonatedRequest(req));
+}
+
+async function resolvedOnboardingState(username: string): Promise<OnboardingState> {
+  const stored = await readOnboardingState(username);
+  if (stored.step === "access" || stored.step === "billing") {
+    const billing = await getBillingState(username);
+    if (hasPaidSubscription(billing)) return { step: "first_project", accessChoice: "paid" };
+    if (getBetaTrialSummary(billing).status === "active") {
+      return { step: "first_project", accessChoice: "beta" };
+    }
+  }
+  return stored;
+}
 
 type AccountTypeTransitionResult =
   | { ok: true }
@@ -528,6 +600,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let signedInUserName: string | null = null;
   let signedInUserEmail: string | null = null;
   let activeCompanyName: string | null = null;
+  let organicWorkspace = false;
   let resolvedUser: typeof platformUsersTable.$inferSelect | null = null;
   if (req.account) {
     try {
@@ -545,6 +618,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       // Load the account row unconditionally - website lives on platform_accounts
       // and must be available for both modern (userId) and legacy sessions.
       const acc = await getAccount(normUsername(req.account.username));
+      organicWorkspace = !!acc && !acc.parent;
       // Legacy fallback: sessions created before userId was stored.
       if (!u) {
         if (acc?.email) u = await getUserByEmail(acc.email);
@@ -570,15 +644,6 @@ router.get("/platform/me", async (req: Request, res: Response) => {
        const co = await getCompanyBySlug(normUsername(req.account.username));
        setupComplete = co?.setupComplete ?? null;
        activeCompanyName = co?.displayName?.trim() || null;
-       // Legacy accounts still use the old "user" role and have no stored
-       // setup flag. Prompt their owner once to choose an explicit account
-       // type, but never put a teammate or an impersonating admin through a
-       // setup flow they cannot safely complete.
-       const isLegacyUntyped = normalizeRole(req.account.role) === "user";
-       const isOwner = req.account.membershipRole === undefined
-         || req.account.membershipRole === null
-         || req.account.membershipRole === "owner";
-       if (isLegacyUntyped && isOwner && !stashSid) setupComplete = false;
     } catch { /* non-fatal */ }
     // displayName lives in platform_meta
     try {
@@ -643,6 +708,12 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   }
 
   res.setHeader("Cache-Control", "no-store");
+  let onboarding: OnboardingState | null = null;
+  if (req.account && await isOnboardingOwner(req)) {
+    try {
+      onboarding = await resolvedOnboardingState(normUsername(req.account.username));
+    } catch { /* setup gate remains active even if its detail cannot be read */ }
+  }
   res.json({
     account: accountWithGoogle,
     impersonating,
@@ -651,6 +722,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
     emailVerified,
     insightsCmsAccess: canAccessInsightsCms(req.account?.role, resolvedUser ?? req.platformUser),
     setupComplete,
+    onboarding,
     hasPassword,
     sessionIdentity: req.account
       ? {
@@ -809,13 +881,18 @@ async function completeMfaLogin(
     res.status(403).json({ error: MANAGED_LOGIN_ERROR });
     return;
   }
+  // The MFA token is only a transport hint. Recompute eligibility after the
+  // code so a role/workspace change during MFA cannot open the setup gate.
+  const needsSetup = await isEligibleForOnboarding({
+    username: payload.u, role: payload.role, userId: payload.uid,
+  });
   // Full authentication complete: clear the MFA-stage lockout counter.
   try { await clearLoginFailures("mfa:" + payload.u); } catch { /* non-fatal */ }
   const sid = await createSignedInSession(payload.u, rawIp, payload.uid, payload.cid);
   setPlatformCookie(res, sid);
   res.json({
     account: { username: payload.u, role: payload.role },
-    ...(payload.needsSetup ? { needsSetup: true } : {}),
+    ...(needsSetup ? { needsSetup: true } : {}),
     ...(extra ?? {}),
   });
 }
@@ -974,11 +1051,9 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
           const company = await getCompanyBySlug(acct.username);
           activeCompanyId = company?.id;
         } catch { /* non-fatal */ }
-        let loginNeedsSetup = false;
-        try {
-          const loginCo = await getCompanyBySlug(acct.username);
-          if (loginCo?.setupComplete === false) loginNeedsSetup = true;
-        } catch { /* non-fatal */ }
+        const loginNeedsSetup = await isEligibleForOnboarding({
+          username: acct.username, role: acct.role, userId: newUser.id, membershipRole: membership?.role,
+        });
         await clearLoginFailures(identifier);
         await finishLoginOrChallenge(res, {
           username: acct.username,
@@ -1035,11 +1110,9 @@ router.post("/platform/login", loginLimiter, async (req: Request, res: Response)
         // Non-fatal: session still works, userId/activeCompanyId just won't be set.
       }
     }
-    let legacyNeedsSetup = false;
-    try {
-      const legacyCo = await getCompanyBySlug(account.username);
-      if (legacyCo?.setupComplete === false) legacyNeedsSetup = true;
-    } catch { /* non-fatal */ }
+    const legacyNeedsSetup = await isEligibleForOnboarding({
+      username: account.username, role: account.role, userId, membershipRole: account.role === "admin" ? "admin" : "owner",
+    });
     await clearLoginFailures(identifier);
     await finishLoginOrChallenge(res, {
       username: account.username,
@@ -2329,16 +2402,16 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
     const account = req.account!;
     const username = normUsername(account.username);
     const setupCompany = await getCompanyBySlug(username);
-    // New signups historically start with the default agency role before email
-    // verification marks setupComplete=false. The setup flag, not that default
-    // role, is therefore the authority on whether this one-time choice is open.
-    if (normalizeRole(account.role) !== "user" && setupCompany?.setupComplete !== false) {
-      res.status(409).json({ error: "Your account type has already been selected." });
-      return;
-    }
     const membershipRole = account.membershipRole;
     if (membershipRole !== undefined && membershipRole !== null && membershipRole !== "owner") {
       res.status(403).json({ error: "Only the account owner can choose the account type." });
+      return;
+    }
+    // New signups historically start with the default agency role before email
+    // verification marks setupComplete=false. The setup flag, not that default
+    // role, is therefore the authority on whether this one-time choice is open.
+    if (!(await isOnboardingOwner(req, setupCompany ?? null))) {
+      res.status(409).json({ error: "Your account type has already been selected." });
       return;
     }
     const accountType = typeof req.body?.accountType === "string" ? req.body.accountType : "";
@@ -2346,7 +2419,7 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
       res.status(400).json({ error: "accountType must be 'agency' or 'client'." });
       return;
     }
-    const transition = await transitionWorkspaceAccountType(username, accountType, true);
+    const transition = await transitionWorkspaceAccountType(username, accountType);
     if (!transition.ok) {
       res.status(transition.reason === "missing" ? 404 : 400).json({
         error: transition.reason === "seat_limit"
@@ -2362,11 +2435,147 @@ router.post("/platform/setup/account-type", requirePlatformAuth, async (req: Req
         id: account.userId,
       });
     }
+    await writeOnboardingState(username, { step: "workspace_basics" });
     logger.info({ username, accountType }, "setup/account-type: role set");
     res.json({ ok: true, role: accountType });
   } catch (err) {
     logger.error({ err }, "setup/account-type: unexpected error");
     res.status(500).json({ error: "Failed to set account type." });
+  }
+});
+
+router.get("/platform/onboarding", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const username = normUsername(req.account!.username);
+    const company = await getCompanyBySlug(username);
+    if (!(await isOnboardingOwner(req, company))) {
+      res.status(409).json({ error: "This workspace does not require onboarding." });
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    const state = await resolvedOnboardingState(username);
+    let existingProject: { id: string; name: string } | null = null;
+    if (state.step === "first_project") {
+      const [project] = await db.select({ id: projectsTable.id, name: projectsTable.name })
+        .from(projectsTable)
+        .where(and(eq(projectsTable.owner, username), isNull(projectsTable.deletedAt)))
+        .orderBy(desc(projectsTable.updatedAt))
+        .limit(1);
+      existingProject = project ?? null;
+    }
+    res.json({ state, existingProject, role: normalizeRole(req.account!.role) });
+  } catch (err) {
+    logger.error({ err }, "onboarding: failed to load state");
+    res.status(500).json({ error: "Could not load account setup." });
+  }
+});
+
+router.post("/platform/onboarding/workspace-basics", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const username = normUsername(req.account!.username);
+    const company = await getCompanyBySlug(username);
+    if (!(await isOnboardingOwner(req, company))) {
+      res.status(409).json({ error: "This workspace does not require onboarding." });
+      return;
+    }
+    const current = await resolvedOnboardingState(username);
+    if (current.step !== "workspace_basics") {
+      res.status(409).json({ error: "Complete the current setup step first.", state: current });
+      return;
+    }
+    const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 64) : "";
+    let website = typeof req.body?.website === "string" ? req.body.website.trim().slice(0, 200) : "";
+    if (!displayName || !website) {
+      res.status(400).json({ error: "Enter your workspace name and website." });
+      return;
+    }
+    if (!/^https?:\/\//i.test(website)) website = `https://${website}`;
+    try {
+      new URL(website);
+    } catch {
+      res.status(400).json({ error: "Enter a valid website address." });
+      return;
+    }
+    await setDisplayName(username, displayName);
+    await db.update(platformAccountsTable).set({ website }).where(eq(platformAccountsTable.username, username));
+    await db.update(platformCompaniesTable).set({ displayName, website }).where(eq(platformCompaniesTable.slug, username));
+    const state: OnboardingState = { step: "access" };
+    await writeOnboardingState(username, state);
+    res.json({ ok: true, state });
+  } catch (err) {
+    logger.error({ err }, "onboarding: failed to save workspace basics");
+    res.status(500).json({ error: "Could not save workspace details." });
+  }
+});
+
+router.post("/platform/onboarding/access", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const username = normUsername(req.account!.username);
+    const company = await getCompanyBySlug(username);
+    if (!(await isOnboardingOwner(req, company))) {
+      res.status(409).json({ error: "This workspace does not require onboarding." });
+      return;
+    }
+    const current = await resolvedOnboardingState(username);
+    if (current.step !== "access") {
+      res.status(409).json({ error: "Complete the current setup step first.", state: current });
+      return;
+    }
+    const choice = req.body?.choice;
+    if (choice !== "beta" && choice !== "paid") {
+      res.status(400).json({ error: "Choose free beta or paid access." });
+      return;
+    }
+    let state: OnboardingState;
+    if (choice === "beta") {
+      const plan: PlanKey = normalizeRole(req.account!.role) === "agency" ? "agency" : "inhouse";
+      const billing = await startBetaTrial(username, plan);
+      if (!billing || getBetaTrialSummary(billing).status !== "active") {
+        res.status(409).json({ error: "This workspace is not eligible for a new beta trial." });
+        return;
+      }
+      state = { step: "first_project", accessChoice: "beta" };
+    } else {
+      state = { step: "billing", accessChoice: "paid" };
+    }
+    await writeOnboardingState(username, state);
+    res.json({ ok: true, state });
+  } catch (err) {
+    logger.error({ err }, "onboarding: failed to choose access");
+    res.status(500).json({ error: "Could not activate your access choice." });
+  }
+});
+
+router.post("/platform/onboarding/complete", requirePlatformAuth, async (req: Request, res: Response) => {
+  try {
+    const username = normUsername(req.account!.username);
+    const company = await getCompanyBySlug(username);
+    if (!(await isOnboardingOwner(req, company))) {
+      res.status(409).json({ error: "This workspace does not require onboarding." });
+      return;
+    }
+    const current = await resolvedOnboardingState(username);
+    if (current.step !== "first_project") {
+      res.status(409).json({ error: "Complete the current setup step first.", state: current });
+      return;
+    }
+    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+    const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.owner, username), isNull(projectsTable.deletedAt)))
+      .limit(1);
+    if (!project) {
+      res.status(409).json({ error: "Your project must be saved before setup can finish." });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx.update(platformCompaniesTable).set({ setupComplete: true })
+        .where(and(eq(platformCompaniesTable.slug, username), eq(platformCompaniesTable.setupComplete, false)));
+      await tx.delete(platformMetaTable).where(eq(platformMetaTable.key, onboardingKey(username)));
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "onboarding: failed to complete");
+    res.status(500).json({ error: "Could not finish account setup." });
   }
 });
 
@@ -3071,7 +3280,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
             role: account.role,
             userId,
             activeCompanyId,
-            needsSetup: oauthCo?.setupComplete === false,
+            needsSetup: await isEligibleForOnboarding({ username: account.username, role: account.role, userId, membershipRole: membership.role }),
           });
           return;
         }
@@ -3116,7 +3325,7 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
         role: existing.role,
         userId,
         activeCompanyId,
-        needsSetup: legacyOauthCo?.setupComplete === false,
+        needsSetup: await isEligibleForOnboarding({ username: existing.username, role: existing.role, userId, membershipRole: existing.role === "admin" ? "admin" : "owner" }),
       });
       return;
     }
@@ -3411,7 +3620,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
             role: account.role,
             userId,
             activeCompanyId,
-            needsSetup: co?.setupComplete === false,
+            needsSetup: await isEligibleForOnboarding({ username: account.username, role: account.role, userId, membershipRole: membership.role }),
           });
           return;
         }
@@ -3438,7 +3647,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
             role: account.role,
             userId,
             activeCompanyId,
-            needsSetup: co?.setupComplete === false,
+            needsSetup: await isEligibleForOnboarding({ username: account.username, role: account.role, userId, membershipRole: membership.role }),
           });
           return;
         }
@@ -3461,7 +3670,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
         role: legacyMs.role,
         userId,
         activeCompanyId,
-        needsSetup: co?.setupComplete === false,
+        needsSetup: await isEligibleForOnboarding({ username: legacyMs.username, role: legacyMs.role, userId, membershipRole: legacyMs.role === "admin" ? "admin" : "owner" }),
       });
       return;
     }
