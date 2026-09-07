@@ -1416,6 +1416,105 @@ describe("GET /platform/me - accountProfile carries displayName and website", ()
     expect(me.status).toBe(200);
     expect(me.json.accountProfile.website).toBe("https://legacy-brand.example");
   });
+
+  it("flags an exact legacy SSO person/workspace name match until the owner confirms it", async () => {
+    const slug = "sso-name-review";
+    await db.insert(platformAccountsTable).values({
+      username: slug,
+      passwordHash: hashPassword("unused-sso-password"),
+      role: "client",
+      status: "active",
+      email: "owner@sso-name-review.test",
+    });
+    const [company] = await db.insert(platformCompaniesTable).values({
+      slug,
+      displayName: "Morgan Owner",
+      role: "client",
+      status: "active",
+      setupComplete: true,
+    }).returning();
+    const [user] = await db.insert(platformUsersTable).values({
+      email: "owner@sso-name-review.test",
+      name: "Morgan Owner",
+      googleId: "google-sso-name-review",
+      emailVerified: true,
+    }).returning();
+    await db.insert(platformMembershipsTable).values({
+      userId: user!.id,
+      companyId: company!.id,
+      companySlug: slug,
+      role: "owner",
+    });
+    await db.insert(platformMetaTable).values({
+      key: `account:profile:${slug}`,
+      value: JSON.stringify({ ownerName: "Morgan Owner" }),
+    });
+    const sid = await createPlatformSession(slug, null, user!.id, company!.id);
+
+    const before = await api("/api/platform/me", { sid });
+    expect(before.json.account.googleLinked).toBe(true);
+    expect(before.json.account.membershipRole).toBe("owner");
+    expect(before.json.setupComplete).toBe(true);
+    expect(before.json.sessionIdentity.userName).toBe("Morgan Owner");
+    expect(before.json.accountProfile.workspaceNameNeedsReview).toBe(true);
+    expect(before.json.sessionIdentity.companyName).toBe("Morgan Owner");
+
+    const confirmed = await api("/api/platform/accounts/profile", {
+      sid,
+      body: {
+        username: slug,
+        displayName: "Morgan Communications",
+        confirmWorkspaceNameReview: true,
+      },
+    });
+    expect(confirmed.status).toBe(200);
+
+    const after = await api("/api/platform/me", { sid });
+    expect(after.json.accountProfile.workspaceNameNeedsReview).toBe(false);
+    expect(after.json.accountProfile.displayName).toBe("Morgan Communications");
+    expect(after.json.sessionIdentity.companyName).toBe("Morgan Communications");
+  });
+
+  it("does not flag a different workspace name or an unfinished new SSO signup", async () => {
+    for (const seed of [
+      { slug: "sso-name-legit", companyName: "Morgan Communications", setupComplete: true },
+      { slug: "sso-name-new", companyName: "Morgan Owner", setupComplete: false },
+    ]) {
+      await db.insert(platformAccountsTable).values({
+        username: seed.slug,
+        passwordHash: hashPassword(`unused-${seed.slug}`),
+        role: "client",
+        status: "active",
+        email: `${seed.slug}@example.test`,
+      });
+      const [company] = await db.insert(platformCompaniesTable).values({
+        slug: seed.slug,
+        displayName: seed.companyName,
+        role: "client",
+        status: "active",
+        setupComplete: seed.setupComplete,
+      }).returning();
+      const [user] = await db.insert(platformUsersTable).values({
+        email: `${seed.slug}@example.test`,
+        name: "Morgan Owner",
+        microsoftId: `microsoft-${seed.slug}`,
+        emailVerified: true,
+      }).returning();
+      await db.insert(platformMembershipsTable).values({
+        userId: user!.id,
+        companyId: company!.id,
+        companySlug: seed.slug,
+        role: "owner",
+      });
+      await db.insert(platformMetaTable).values({
+        key: `account:profile:${seed.slug}`,
+        value: JSON.stringify({ ownerName: seed.companyName }),
+      });
+      const sid = await createPlatformSession(seed.slug, null, user!.id, company!.id);
+      const me = await api("/api/platform/me", { sid });
+      expect(me.json.accountProfile.workspaceNameNeedsReview).toBe(false);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

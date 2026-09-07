@@ -147,6 +147,57 @@ describe("settings-section deep link survives refresh (account_section param)", 
     });
     expect(screen.queryByRole("heading", { name: /thank you for signing up to AIO Fusion/i })).toBeNull();
   });
+
+  it("lets an owner explicitly correct a flagged imported workspace name", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/platform/me")) {
+        return makeResponse({
+          account: { username: "morgan-owner", role: "client", googleLinked: true },
+          impersonating: null,
+          setupComplete: true,
+          hasPassword: false,
+          sessionIdentity: {
+            userName: "Morgan Owner",
+            userEmail: "morgan@example.test",
+            companyName: "Morgan Owner",
+          },
+          accountProfile: {
+            displayName: "Morgan Owner",
+            website: null,
+            workspaceNameNeedsReview: true,
+          },
+        });
+      }
+      if (url.includes("/api/platform/accounts/profile") && init?.method === "POST") {
+        return makeResponse({ ok: true });
+      }
+      if (url.includes("/api/store/projects")) return makeResponse({ projects: [], deletedIds: [] });
+      return makeResponse({ error: "unavailable" }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await renderAppAt("/?account_section=profile");
+    const input = await screen.findByLabelText(/workspace name/i);
+    expect(input).toHaveValue("Morgan Owner");
+    fireEvent.change(input, { target: { value: "Morgan Communications" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm name/i }));
+
+    await waitFor(() => {
+      const profileCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).includes("/api/platform/accounts/profile"));
+      expect(profileCall).toBeTruthy();
+      expect(JSON.parse(String(profileCall?.[1]?.body))).toEqual({
+        username: "morgan-owner",
+        displayName: "Morgan Communications",
+        confirmWorkspaceNameReview: true,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: /please check your workspace name/i })).toBeNull();
+      expect(screen.getByText("Morgan Communications")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("browser Back restores the previous settings section (popstate)", () => {

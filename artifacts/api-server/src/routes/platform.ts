@@ -389,6 +389,9 @@ async function getLastSignIns(): Promise<Map<string, string>> {
 // is needed. The value is JSON, currently just { displayName }.
 const PROFILE_PREFIX = "account:profile:";
 const profileKey = (username: string) => `${PROFILE_PREFIX}${normUsername(username)}`;
+const WORKSPACE_NAME_REVIEW_PREFIX = "workspace-name-reviewed:";
+const workspaceNameReviewKey = (username: string) =>
+  `${WORKSPACE_NAME_REVIEW_PREFIX}${normUsername(username)}`;
 
 // Archived accounts are soft-deactivated: they cannot log in and are shown
 // in a separate section. The flag is stored as a platform_meta row.
@@ -687,6 +690,7 @@ router.get("/platform/me", async (req: Request, res: Response) => {
   let signedInUserName: string | null = null;
   let signedInUserEmail: string | null = null;
   let activeCompanyName: string | null = null;
+  let workspaceNameNeedsReview = false;
   let organicWorkspace = false;
   let resolvedUser: typeof platformUsersTable.$inferSelect | null = null;
   if (req.account) {
@@ -741,6 +745,29 @@ router.get("/platform/me", async (req: Request, res: Response) => {
         .limit(1);
       accountDisplayName = parseDisplayName(profileRow?.value) ?? null;
     } catch { /* non-fatal */ }
+    // Older SSO signups could copy the person's name into the workspace-name
+    // field. Flag only the narrow, high-confidence case: a completed,
+    // top-level workspace viewed by its owner, with an SSO identity and an
+    // exact personal/workspace-name match. Never alter the name here.
+    const currentWorkspaceName = accountDisplayName || activeCompanyName;
+    if (
+      organicWorkspace
+      && setupComplete !== false
+      && (req.account.membershipRole == null || req.account.membershipRole === "owner")
+      && (googleLinked || microsoftLinked)
+      && signedInUserName
+      && currentWorkspaceName
+      && signedInUserName.localeCompare(currentWorkspaceName, undefined, { sensitivity: "accent" }) === 0
+    ) {
+      try {
+        const [reviewed] = await db
+          .select({ key: platformMetaTable.key })
+          .from(platformMetaTable)
+          .where(eq(platformMetaTable.key, workspaceNameReviewKey(req.account.username)))
+          .limit(1);
+        workspaceNameNeedsReview = !reviewed;
+      } catch { /* fail closed: do not show an uncertain prompt */ }
+    }
   }
   const accountWithGoogle = req.account
     ? {
@@ -822,7 +849,11 @@ router.get("/platform/me", async (req: Request, res: Response) => {
       : null,
     // Returned for client-side intake prefill. The client performs its own
     // role + impersonation guard before using these values.
-    accountProfile: { displayName: accountDisplayName, website: accountWebsite },
+    accountProfile: {
+      displayName: accountDisplayName,
+      website: accountWebsite,
+      workspaceNameNeedsReview,
+    },
     workspaces,
   });
 });
@@ -5338,6 +5369,7 @@ router.post(
       const displayName =
         typeof req.body?.displayName === "string" ? req.body.displayName : "";
       const websiteProvided = typeof req.body?.website === "string";
+      const confirmsWorkspaceNameReview = req.body?.confirmWorkspaceNameReview === true;
       let website = websiteProvided ? req.body.website.trim().slice(0, 200) : "";
       if (website && !/^https?:\/\//i.test(website)) website = `https://${website}`;
       if (!target) {
@@ -5352,6 +5384,13 @@ router.post(
       const existing = await getAccount(target);
       if (!existing) {
         res.status(404).json({ error: "Account not found." });
+        return;
+      }
+      if (
+        confirmsWorkspaceNameReview
+        && (!isSelf || (actor.membershipRole != null && actor.membershipRole !== "owner"))
+      ) {
+        res.status(403).json({ error: "Only the workspace owner can confirm its name." });
         return;
       }
       await setDisplayName(target, displayName);
@@ -5371,6 +5410,18 @@ router.post(
           .update(platformCompaniesTable)
           .set({ website: website || null })
           .where(eq(platformCompaniesTable.slug, target));
+      }
+      if (confirmsWorkspaceNameReview) {
+        await db
+          .insert(platformMetaTable)
+          .values({
+            key: workspaceNameReviewKey(target),
+            value: JSON.stringify({ reviewedAt: new Date().toISOString() }),
+          })
+          .onConflictDoUpdate({
+            target: platformMetaTable.key,
+            set: { value: JSON.stringify({ reviewedAt: new Date().toISOString() }) },
+          });
       }
       res.json({ ok: true });
     } catch {

@@ -375,6 +375,11 @@ function SubAccountsPage({
   const [googleLinked, setGoogleLinked] = useState<boolean | null>(null);
   const [microsoftLinked, setMicrosoftLinked] = useState<boolean | null>(null);
   const [accountWebsite, setAccountWebsite] = useState<string | null>(null);
+  const [workspaceNameNeedsReview, setWorkspaceNameNeedsReview] = useState(false);
+  const [reviewWorkspaceName, setReviewWorkspaceName] = useState(session.companyName?.trim() || "");
+  const [reviewingWorkspaceName, setReviewingWorkspaceName] = useState(false);
+  const [workspaceNameReviewError, setWorkspaceNameReviewError] = useState<string | null>(null);
+  const [confirmedWorkspaceName, setConfirmedWorkspaceName] = useState<string | null>(null);
   // Profile images - value is a cache-busted URL when an image exists, null when none.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -543,8 +548,12 @@ function SubAccountsPage({
   useEffect(() => {
     fetch(`${apiBase()}/api/platform/me`, { credentials: "include" })
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null; masterOwner?: boolean; accountProfile?: { website?: string | null } | null } | null) => {
+      .then((data: { account?: { googleLinked?: boolean; microsoftLinked?: boolean } | null; masterOwner?: boolean; accountProfile?: { displayName?: string | null; website?: string | null; workspaceNameNeedsReview?: boolean } | null } | null) => {
         if (data?.accountProfile?.website) setAccountWebsite(data.accountProfile.website);
+        if (data?.accountProfile?.workspaceNameNeedsReview === true) {
+          setWorkspaceNameNeedsReview(true);
+          setReviewWorkspaceName(data.accountProfile.displayName?.trim() || session.companyName?.trim() || "");
+        }
         if (data?.account) {
           setGoogleLinked(data.account.googleLinked ?? false);
           setMicrosoftLinked(data.account.microsoftLinked ?? false);
@@ -553,6 +562,28 @@ function SubAccountsPage({
       })
       .catch(() => { /* non-fatal */ });
   }, []);
+
+  const handleWorkspaceNameReview = () => {
+    const nextName = reviewWorkspaceName.trim();
+    if (!nextName || reviewingWorkspaceName) return;
+    setReviewingWorkspaceName(true);
+    setWorkspaceNameReviewError(null);
+    void serverSetDisplayName(
+      session.username,
+      nextName,
+      undefined,
+      { confirmWorkspaceNameReview: true },
+    ).then((result) => {
+      setReviewingWorkspaceName(false);
+      if (!result.ok) {
+        setWorkspaceNameReviewError(result.error);
+        return;
+      }
+      setConfirmedWorkspaceName(nextName);
+      setWorkspaceNameNeedsReview(false);
+      onWorkspacesChanged?.();
+    });
+  };
 
   const handleSwitchToMaster = () => {
     setSwitchToMasterError(null);
@@ -1003,6 +1034,43 @@ function SubAccountsPage({
         </div>
 
         {/* SIGNED-IN PROFILE AND ACTIVE WORKSPACE */}
+        {workspaceNameNeedsReview && isOwner && (
+          <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "#FEF9EC", border: "1px solid #F5D57A" }}>
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" style={{ color: "#A0720A" }} />
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Please check your workspace name</h2>
+                <p className="text-[13px] leading-[1.65] mb-4" style={{ color: "#7A5500" }}>
+                  An earlier Google or Microsoft sign-up may have used your personal name here. Confirm it if it is correct, or enter your organisation's name.
+                </p>
+                <label className="block text-[11px] font-bold uppercase tracking-[0.14em] mb-1.5" style={{ color: vars.g500 }} htmlFor="workspace-name-review">
+                  Workspace name
+                </label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    id="workspace-name-review"
+                    value={reviewWorkspaceName}
+                    onChange={(event) => setReviewWorkspaceName(event.target.value)}
+                    maxLength={64}
+                    className="flex-1 rounded-xl px-4 py-2.5 text-[14px] outline-none"
+                    style={{ border: `1px solid ${vars.g300}`, color: ink, background: "white" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleWorkspaceNameReview}
+                    disabled={!reviewWorkspaceName.trim() || reviewingWorkspaceName}
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] text-white disabled:opacity-60"
+                    style={{ background: accent }}
+                  >
+                    {reviewingWorkspaceName ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    {reviewingWorkspaceName ? "Saving..." : "Confirm name"}
+                  </button>
+                </div>
+                {workspaceNameReviewError && <p className="mt-2 text-[12px] font-semibold" style={{ color: "rgb(185,28,28)" }}>{workspaceNameReviewError}</p>}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Your profile</h2>
           <p className="text-[13px] leading-[1.6] mb-4" style={{ color: vars.g500 }}>
@@ -1142,7 +1210,7 @@ function SubAccountsPage({
                     ? session.agencyManagedClient ? "Active client project" : "Active project"
                     : "Active workspace"}
                 </p>
-                <p className="text-[14px] font-bold truncate" style={{ color: ink }}>{session.companyName?.trim() || session.username}</p>
+                <p className="text-[14px] font-bold truncate" style={{ color: ink }}>{confirmedWorkspaceName || session.companyName?.trim() || session.username}</p>
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>
                     {session.role === "agency"

@@ -469,6 +469,7 @@ export async function serverLogout(): Promise<void> {
 export type AccountProfile = {
   displayName: string | null;
   website: string | null;
+  workspaceNameNeedsReview?: boolean;
 };
 export async function bootstrapAuth(): Promise<{
   session: Session | null;
@@ -706,11 +707,13 @@ export async function serverSetDisplayName(
   username: string,
   displayName: string,
   website?: string,
+  options?: { confirmWorkspaceNameReview?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { ok, json } = await postJson("/api/platform/accounts/profile", {
     username,
     displayName,
     ...(website !== undefined ? { website } : {}),
+    ...(options?.confirmWorkspaceNameReview ? { confirmWorkspaceNameReview: true } : {}),
   });
   if (!ok) return { ok: false, error: json?.error || "Failed to update account." };
   await refreshAccountsCache();
