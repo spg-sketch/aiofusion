@@ -346,6 +346,11 @@ export function UsersAdminPage({
     setImpersonatingUsername(username);
     try {
       sessionStorage.setItem("aio:master-account-return", JSON.stringify({ section }));
+      const ownedProjects = projectsByOwner(username);
+      sessionStorage.setItem(
+        "aio:open-client-projects",
+        JSON.stringify({ projectId: ownedProjects.length === 1 ? ownedProjects[0]!.id : null }),
+      );
     } catch {
       // Navigation still works if storage is unavailable.
     }
@@ -356,10 +361,9 @@ export function UsersAdminPage({
           setImpersonatingUsername(null);
           return;
         }
-        // Reload into the target account's own view. A full reload keeps this
-        // in step with the rest of the app's session-bootstrap flow (project
-        // lists, cached account list, etc.) rather than trying to patch every
-        // piece of local state in place.
+        // App.tsx consumes aio:open-client-projects after the reload, skips the
+        // viewed account's platform/login screen, and opens its sole project
+        // directly (or its project hub when there is no unambiguous target).
         window.location.replace("/");
       })
       .catch(() => {

@@ -6,7 +6,8 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 // ---------------------------------------------------------------------------
 
 vi.mock("../lib/contentAi", () => ({ apiBase: () => "" }));
-vi.mock("../lib/projectStore", () => ({ loadStoredProjects: () => [] }));
+const mockLoadStoredProjects = vi.fn();
+vi.mock("../lib/projectStore", () => ({ loadStoredProjects: () => mockLoadStoredProjects() }));
 vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
 
 // Plain vi.fn() - no tuple-style generic - avoids the Vitest 3.x incompatibility
@@ -14,6 +15,7 @@ vi.mock("../lib/projectSync", () => ({ pushProjectMeta: async () => ({}) }));
 // Return type is inferred from mockReturnValue calls.
 const mockGetLocalUsers = vi.fn();
 const mockGetPendingAccounts = vi.fn();
+const mockServerImpersonate = vi.fn();
 
 vi.mock("../lib/auth", () => ({
   getUsers: () => mockGetLocalUsers(),   // no args forwarding - getUsers takes none
@@ -30,10 +32,7 @@ vi.mock("../lib/auth", () => ({
   serverSetSeatCap: async () => ({ ok: true as const }),
   serverGetAccountSessions: async () => ({ ok: true as const, sessions: [] }),
   serverRevokeSession: async () => ({ ok: true as const }),
-  serverImpersonate: async () => ({
-    ok: true as const,
-    session: { username: "x", role: "admin" as const },
-  }),
+  serverImpersonate: (...args: unknown[]) => mockServerImpersonate(...args),
   serverApproveAccount: async () => ({ ok: true as const }),
   serverRejectAccount: async () => ({ ok: true as const }),
   refreshAccountsCache: async () => {},
@@ -43,6 +42,12 @@ vi.mock("../lib/auth", () => ({
 
 // Silence fetch calls from the admin useEffects (token-usage, audit-locks).
 beforeEach(() => {
+  sessionStorage.clear();
+  mockLoadStoredProjects.mockReturnValue([]);
+  mockServerImpersonate.mockResolvedValue({
+    ok: true as const,
+    session: { username: "x", role: "admin" as const },
+  });
   mockGetPendingAccounts.mockResolvedValue({ ok: true as const, accounts: [] });
   vi.spyOn(global, "fetch").mockResolvedValue(
     new Response(JSON.stringify({ rows: [] }), {
@@ -372,5 +377,29 @@ describe("UsersAdminPage - URL-backed section prop", () => {
     expect(screen.getByText("second-master")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View account" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "More actions" }).length).toBeGreaterThan(0);
+  });
+
+  it("stashes an account's sole project so View account opens it directly", async () => {
+    mockGetLocalUsers.mockReturnValue([
+      { ...mkUser("admin"), role: "admin" },
+      { ...mkUser("client-one"), role: "client" },
+    ]);
+    mockLoadStoredProjects.mockReturnValue([
+      { id: "project-one", name: "Project One", owner: "client-one" },
+    ]);
+    render(
+      <UsersAdminPage
+        session={ADMIN_SESSION}
+        initialSection="clients"
+        onBack={() => {}}
+        onAssignProjectOwner={async () => ({ ok: true })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View account" }));
+    await waitFor(() => expect(mockServerImpersonate).toHaveBeenCalledWith("client-one"));
+    expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({
+      projectId: "project-one",
+    });
   });
 });
