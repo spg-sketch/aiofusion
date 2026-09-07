@@ -681,6 +681,59 @@ describe("POST /platform/my-invites/:token/accept", () => {
   });
 });
 
+describe("POST /platform/accounts/profile", () => {
+  it("preserves owner and contact metadata when a workspace is renamed", async () => {
+    const { sid } = await seedAgency("profile-rename", "profile-rename@test.local");
+    const key = "account:profile:profile-rename";
+    await db.insert(platformMetaTable).values({
+      key,
+      value: JSON.stringify({
+        displayName: "Original Workspace",
+        ownerName: "Alex Owner",
+        contactRole: "Founder",
+      }),
+    });
+
+    const res = await api("/api/platform/accounts/profile", {
+      sid,
+      body: { username: "profile-rename", displayName: "Renamed Workspace" },
+    });
+
+    expect(res.status).toBe(200);
+    const [stored] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, key));
+    expect(JSON.parse(stored!.value)).toEqual({
+      displayName: "Renamed Workspace",
+      ownerName: "Alex Owner",
+      contactRole: "Founder",
+    });
+  });
+
+  it("clears only the workspace name and keeps unrelated profile fields", async () => {
+    const { sid } = await seedAgency("profile-clear", "profile-clear@test.local");
+    const key = "account:profile:profile-clear";
+    await db.insert(platformMetaTable).values({
+      key,
+      value: JSON.stringify({
+        displayName: "Workspace To Clear",
+        ownerName: "Sam Owner",
+        contactEmail: "contact@test.local",
+      }),
+    });
+
+    const res = await api("/api/platform/accounts/profile", {
+      sid,
+      body: { username: "profile-clear", displayName: "" },
+    });
+
+    expect(res.status).toBe(200);
+    const [stored] = await db.select().from(platformMetaTable).where(eq(platformMetaTable.key, key));
+    expect(JSON.parse(stored!.value)).toEqual({
+      ownerName: "Sam Owner",
+      contactEmail: "contact@test.local",
+    });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // POST /platform/switch-workspace
 // ---------------------------------------------------------------------------

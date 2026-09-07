@@ -591,15 +591,36 @@ async function getDisplayNames(): Promise<Map<string, string>> {
   return map;
 }
 
-// Set (or, when blank, clear) an account's display name.
+// Set (or, when blank, clear) only an account's display name while preserving
+// other profile metadata such as the account holder's preferred name.
 async function setDisplayName(username: string, displayName: string): Promise<void> {
   const key = profileKey(username);
   const dn = displayName.trim().slice(0, 64);
-  if (!dn) {
+  const [stored] = await db
+    .select({ value: platformMetaTable.value })
+    .from(platformMetaTable)
+    .where(eq(platformMetaTable.key, key))
+    .limit(1);
+  let profile: Record<string, unknown> = {};
+  if (stored?.value) {
+    try {
+      const parsed = JSON.parse(stored.value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        profile = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Invalid legacy metadata cannot be merged safely; replace it below.
+    }
+  }
+
+  if (dn) profile.displayName = dn;
+  else delete profile.displayName;
+
+  if (Object.keys(profile).length === 0) {
     await db.delete(platformMetaTable).where(eq(platformMetaTable.key, key));
     return;
   }
-  const value = JSON.stringify({ displayName: dn });
+  const value = JSON.stringify(profile);
   await db
     .insert(platformMetaTable)
     .values({ key, value })
