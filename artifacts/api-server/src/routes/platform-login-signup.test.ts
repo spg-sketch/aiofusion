@@ -254,6 +254,7 @@ import {
   platformUsersTable,
   platformAccountsTable,
   platformCompaniesTable,
+  platformMetaTable,
   platformMembershipsTable,
   platformSessionsTable,
 } from "@workspace/db";
@@ -870,7 +871,20 @@ describe("GET /api/platform/auth/google/callback", () => {
     const allCookies = res.headers.getSetCookie?.() ?? [];
     expect(allCookies.some((c) => c.startsWith("aio_sid="))).toBe(true);
 
+    const [createdAccount] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, "brand-new@example.com"))
+      .limit(1);
+    const [profile] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:profile:${createdAccount!.username}`))
+      .limit(1);
+    expect(JSON.parse(profile!.value)).toEqual({ ownerName: "Brand New" });
+
     // Cleanup the auto-created account row.
+    await db.delete(platformMetaTable).where(eq(platformMetaTable.key, `account:profile:${createdAccount!.username}`));
     await db.delete(platformAccountsTable).where(eq(platformAccountsTable.email, "brand-new@example.com"));
     await db.delete(platformUsersTable).where(eq(platformUsersTable.email, "brand-new@example.com"));
   });

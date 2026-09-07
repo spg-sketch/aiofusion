@@ -1438,6 +1438,18 @@ describe("SSO discount invite email binding", () => {
     // Email matches the invite - sign-in must succeed.
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("oauth_status=ok");
+
+    const [createdAccount] = await db
+      .select()
+      .from(platformAccountsTable)
+      .where(eq(platformAccountsTable.email, INVITE_EMAIL))
+      .limit(1);
+    const [profile] = await db
+      .select()
+      .from(platformMetaTable)
+      .where(eq(platformMetaTable.key, `account:profile:${createdAccount!.username}`))
+      .limit(1);
+    expect(JSON.parse(profile!.value)).toEqual({ ownerName: "Disc Sso Ms Match Co" });
   });
 
   it("Microsoft SSO new-account: mismatched email does NOT redeem invite (sign-in still succeeds)", async () => {

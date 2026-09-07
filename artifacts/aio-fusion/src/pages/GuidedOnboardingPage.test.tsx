@@ -24,6 +24,33 @@ function renderSetup(checkoutResult?: "success" | "cancelled" | null) {
 }
 
 describe("GuidedOnboardingPage", () => {
+  it("leaves the workspace name blank when only the signed-in person's name exists", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({ state: { step: "workspace_basics" } }))
+      .mockResolvedValueOnce(response({
+        accountProfile: { website: null },
+        sessionIdentity: { userName: "Spencer Gallagher", companyName: "Spencer Gallagher" },
+      })));
+    renderSetup();
+
+    const workspaceName = await screen.findByLabelText("Workspace name");
+    expect(workspaceName).toHaveValue("");
+    expect(workspaceName).toHaveAttribute("placeholder", "e.g. Acme Corp");
+  });
+
+  it("prefills a genuine existing workspace profile", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(response({ state: { step: "workspace_basics" } }))
+      .mockResolvedValueOnce(response({
+        accountProfile: { displayName: "Acme Corp", website: "https://acme.example" },
+        sessionIdentity: { userName: "Spencer Gallagher", companyName: "Acme Corp" },
+      })));
+    renderSetup();
+
+    expect(await screen.findByLabelText("Workspace name")).toHaveValue("Acme Corp");
+    expect(screen.getByLabelText("Company website")).toHaveValue("https://acme.example");
+  });
+
   it("shows the access sequence and beta skips billing", async () => {
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(response({ state: { step: "access" } }))

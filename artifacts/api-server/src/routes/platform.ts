@@ -3467,10 +3467,10 @@ router.post("/platform/auth/google/callback", async (req: Request, res: Response
     });
     await db.insert(platformMetaTable).values({
       key: `account:profile:${username}`,
-      value: JSON.stringify({ displayName, ownerName: displayName }),
+      value: JSON.stringify({ ownerName: displayName }),
     }).onConflictDoUpdate({
       target: platformMetaTable.key,
-      set: { value: JSON.stringify({ displayName, ownerName: displayName }) },
+      set: { value: JSON.stringify({ ownerName: displayName }) },
     });
     // Create the human user record for this Google sign-up and start a session.
     let newUserId: string | undefined;
@@ -3843,7 +3843,7 @@ router.post("/platform/auth/microsoft/callback", async (req: Request, res: Respo
     let username = baseSlug;
     for (let i = 1; ; i++) { if (!(await getAccount(username))) break; username = `${baseSlug}-${i}`; }
     await db.insert(platformAccountsTable).values({ username, passwordHash: hashPassword(crypto.randomBytes(32).toString("hex")), role: "agency", status: "active", email: msEmail, website: null });
-    await db.insert(platformMetaTable).values({ key: `account:profile:${username}`, value: JSON.stringify({ displayName, ownerName: displayName }) }).onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify({ displayName, ownerName: displayName }) } });
+    await db.insert(platformMetaTable).values({ key: `account:profile:${username}`, value: JSON.stringify({ ownerName: displayName }) }).onConflictDoUpdate({ target: platformMetaTable.key, set: { value: JSON.stringify({ ownerName: displayName }) } });
     let newUserId: string | undefined; let newActiveCompanyId: string | undefined;
     try {
       newUserId = await ensurePlatformUser({ email: msEmail, name: displayName, companyUsername: username, membershipRole: "owner" });

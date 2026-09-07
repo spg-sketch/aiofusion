@@ -55,9 +55,8 @@ export function GuidedOnboardingPage({
       if (meRes.ok) {
         const me = await meRes.json() as {
           accountProfile?: { displayName?: string | null; website?: string | null };
-          sessionIdentity?: { companyName?: string | null };
         };
-        setDisplayName((current) => current || me.accountProfile?.displayName || me.sessionIdentity?.companyName || "");
+        setDisplayName((current) => current || me.accountProfile?.displayName || "");
         setWebsite((current) => current || me.accountProfile?.website || "");
       }
     } catch (cause) {
@@ -218,8 +217,9 @@ export function GuidedOnboardingPage({
 
           <div className="space-y-6 mb-10">
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Workspace name</label>
+              <label htmlFor="workspace-name" className="block text-sm font-semibold text-slate-900 mb-2">Workspace name</label>
               <input 
+                id="workspace-name"
                 className="w-full rounded-xl border px-4 py-3.5 text-base focus:outline-none focus:ring-1 focus:ring-[#C8497A] focus:border-[#C8497A] transition-all bg-white"
                 style={{ borderColor: vars.g200 }}
                 value={displayName} 
@@ -228,8 +228,9 @@ export function GuidedOnboardingPage({
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Company website</label>
+              <label htmlFor="company-website" className="block text-sm font-semibold text-slate-900 mb-2">Company website</label>
               <input 
+                id="company-website"
                 className="w-full rounded-xl border px-4 py-3.5 text-base focus:outline-none focus:ring-1 focus:ring-[#C8497A] focus:border-[#C8497A] transition-all bg-white"
                 style={{ borderColor: vars.g200 }}
                 value={website} 
