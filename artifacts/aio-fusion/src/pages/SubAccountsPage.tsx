@@ -92,10 +92,10 @@ function SubAccountsPage({
     },
     ...(isClientManager
       ? [{
-          label: isAgencyPartner ? "My Clients" : "My Client Accounts",
+          label: isAgencyPartner ? "My Client Projects" : "My Client Accounts",
           items: [
-            { id: "clients" as const, label: isAgencyPartner ? "Clients" : "Client accounts", icon: Building2 },
-            { id: "archived" as const, label: "Archived clients", icon: Archive },
+            { id: "clients" as const, label: isAgencyPartner ? "Client Projects" : "Client accounts", icon: Building2 },
+            { id: "archived" as const, label: isAgencyPartner ? "Archived Client Projects" : "Archived clients", icon: Archive },
             { id: "assign" as const, label: "Assign projects", icon: FolderOpen },
           ],
         }]
@@ -612,7 +612,7 @@ function SubAccountsPage({
         // the client received a working sign-in link.
         const linkFailed = !effectiveManaged && !!contactEmail && result.welcomeLinkCreated === false;
         setAddSuccess(
-          `Created client account '${result.username}' for ${companyName}.` +
+          `Created ${isAgencyPartner ? "Client Project" : "client account"} '${result.username}' for ${companyName}.` +
           (effectiveManaged
             ? (isAgencyPartner
                 ? " Use 'Client projects' to work on their behalf."
@@ -680,9 +680,10 @@ function SubAccountsPage({
   };
 
   const handleArchive = (username: string, archive: boolean) => {
+    const accountTerm = isAgencyPartner ? "client project" : "client account";
     const msg = archive
-      ? `Archive client account '${username}'? They will not be able to sign in until restored. Their projects remain visible to you.`
-      : `Restore client account '${username}'? They will be able to sign in again.`;
+      ? `Archive ${accountTerm} '${username}'? They will not be able to sign in until restored. Their projects remain visible to you.`
+      : `Restore ${accountTerm} '${username}'? They will be able to sign in again.`;
     if (!confirm(msg)) return;
     void (async () => {
       const result = await serverArchiveUser(username, archive);
@@ -692,7 +693,8 @@ function SubAccountsPage({
   };
 
   const handleDelete = (username: string) => {
-    if (!confirm(`Delete client account '${username}'? They will no longer be able to sign in. Their projects are kept and stay visible to you.`)) return;
+    const accountTerm = isAgencyPartner ? "client project" : "client account";
+    if (!confirm(`Delete ${accountTerm} '${username}'? They will no longer be able to sign in. Their projects are kept and stay visible to you.`)) return;
     // Reassign the deleted account's projects to the parent first, so they
     // remain visible after the account (and its place in the user graph) is
     // gone. Visibility is derived from current ownership, so an orphaned owner
@@ -802,15 +804,15 @@ function SubAccountsPage({
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: accentSoft, border: `1px solid ${accent}40` }}>
             {canCreateSubAccounts(session.role) ? <Users size={12} color={accent} /> : <User size={12} color={accent} />}
             <span className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>
-              {isAgencyPartner ? "Clients" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
+              {isAgencyPartner ? "Client Projects" : canCreateSubAccounts(session.role) ? "Client accounts" : "Account settings"}
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl leading-[1.1]" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>
-            {isAgencyPartner ? "Manage your clients" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
+            {isAgencyPartner ? "Manage your Client Projects" : canCreateSubAccounts(session.role) ? "Manage your client accounts" : "Account settings"}
           </h1>
           <p className="text-[14px] font-light mt-3 max-w-2xl leading-[1.7]" style={{ color: vars.g600 }}>
             {isAgencyPartner
-              ? "Add the clients your agency manages and open their projects directly. These clients do not need a separate AIO Fusion login."
+              ? "Add the Client Projects your agency manages and open their projects directly. These clients do not need a separate AIO Fusion login."
               : canCreateSubAccounts(session.role)
               ? "Give a client their own login so they can sign in and work on their own projects. They only ever see their own projects, while you still see everything across all of your clients."
               : "Manage your account settings, team members, and security options."}
@@ -1132,10 +1134,20 @@ function SubAccountsPage({
                 />
               </label>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Active workspace</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>
+                  {session.role === "client"
+                    ? session.agencyManagedClient ? "Active client project" : "Active project"
+                    : "Active workspace"}
+                </p>
                 <p className="text-[14px] font-bold truncate" style={{ color: ink }}>{session.companyName?.trim() || session.username}</p>
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{session.role === "agency" ? "Agency Partner" : session.role === "client" ? "Client Workspace" : session.role}</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>
+                    {session.role === "agency"
+                      ? "Agency Partner"
+                      : session.role === "client"
+                      ? session.agencyManagedClient ? "Client Project" : "Client Account"
+                      : session.role}
+                  </span>
                   {accountWebsite && (
                     <a
                       href={accountWebsite}
@@ -1267,7 +1279,7 @@ function SubAccountsPage({
 
         {/* ADD CLIENT ACCOUNT - agency/admin only */}
         {section === "clients" && isClientManager && <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a client" : "Create a client account"}</h2>
+          <h2 className="text-[16px] font-bold mb-4" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Add a Client Project" : "Create a client account"}</h2>
           <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-6">
               <label className="text-[11px] font-bold uppercase tracking-[0.18em] block mb-1.5" style={{ color: ink }}>Company name</label>
@@ -1390,7 +1402,7 @@ function SubAccountsPage({
                 className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-2.5 rounded-full text-[12px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:opacity-90 disabled:opacity-60"
                 style={{ background: accent }}
               >
-                {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add client
+                {addingClient ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} {isAgencyPartner ? "Add Client Project" : "Add client"}
               </button>
             </div>
             <p className="md:col-span-12 text-[12px] font-light" style={{ color: vars.g500 }}>
@@ -1410,11 +1422,11 @@ function SubAccountsPage({
         {section === "clients" && (
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your clients" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
+            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
           </div>
           {subAccounts.length === 0 ? (
             <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>
-              {isAgencyPartner ? "No clients yet. Add one above, then start their first project." : "No client accounts yet. Create one above to give a client their own login."}
+              {isAgencyPartner ? "No Client Projects yet. Add one above, then start its first project." : "No client accounts yet. Create one above to give a client their own login."}
             </p>
           ) : (
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>
@@ -1445,7 +1457,7 @@ function SubAccountsPage({
                               <p className="text-[11px] font-light" style={{ color: vars.g500 }}>@{u.username}</p>
                             )}
                             <span className="inline-flex items-center gap-1.5">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>Client</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: accentSoft, color: accent }}>{isAgencyPartner ? "Client Project" : "Client"}</span>
                               {u.managed && !isAgencyPartner && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.16em]" style={{ background: vars.g200, color: vars.g500 }}>Managed</span>
                               )}
@@ -1476,7 +1488,7 @@ function SubAccountsPage({
                           {checkingAllowanceFor === u.username
                             ? "Checking allowance"
                             : isAgencyPartner
-                            ? "Go to client"
+                            ? "Go to Client Project"
                             : u.managed
                             ? "Open account"
                             : "Login as client"}
@@ -1676,13 +1688,13 @@ function SubAccountsPage({
         {section === "archived" && (
           archivedSubAccounts.length === 0 ? (
             <div className="rounded-2xl p-6 sm:p-8 mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
-              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>Archived clients</h2>
-              <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived clients. When you archive a client, they appear here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
+              <h2 className="text-[16px] font-bold mb-1" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"}</h2>
+              <p className="text-[13px] font-light italic" style={{ color: vars.g500 }}>{isAgencyPartner ? "No archived Client Projects. When you archive a Client Project, it appears here and can be restored at any time." : "No archived client accounts. When you archive a client, they appear here and can be restored at any time."}</p>
             </div>
           ) : (
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
             <div className="px-6 py-4 border-b" style={{ borderColor: vars.g200 }}>
-              <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>Archived clients ({archivedSubAccounts.length})</h2>
+              <h2 className="text-[16px] font-bold" style={{ color: vars.g400, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Archived Client Projects" : "Archived clients"} ({archivedSubAccounts.length})</h2>
               <p className="text-[12px] font-light mt-0.5" style={{ color: vars.g400 }}>These accounts cannot sign in. Their projects remain visible to you.</p>
             </div>
             <ul className="divide-y" style={{ borderColor: vars.g200 }}>

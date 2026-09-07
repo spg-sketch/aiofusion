@@ -96,13 +96,13 @@ const agencySession = { username: "acme-agency", role: "agency" as const };
 
 function openClientsSection() {
   render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
-  fireEvent.click(screen.getAllByRole("button", { name: /^clients$/i })[0]);
+  fireEvent.click(screen.getAllByRole("button", { name: /^client projects$/i })[0]);
 }
 
 describe("agency partner client rows", () => {
   it("presents managed clients with direct project actions and no login status or credential controls", () => {
     openClientsSection();
-    expect(screen.getAllByRole("button", { name: /^go to client$/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^go to client project$/i })).toHaveLength(2);
     expect(screen.queryByText(/never signed in/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /change password/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /login as client/i })).toBeNull();
@@ -129,7 +129,7 @@ describe("agency partner client rows", () => {
 
   it("Go to client stashes the sole project id and enters the managed workspace", async () => {
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client project$/i })[0]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-one"));
     const raw = sessionStorage.getItem("aio:open-client-projects");
     expect(raw).toBeTruthy();
@@ -138,7 +138,7 @@ describe("agency partner client rows", () => {
 
   it("Go to client opens the client's project hub when it has no project", async () => {
     openClientsSection();
-    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client project$/i })[1]);
     await vi.waitFor(() => expect(serverImpersonate).toHaveBeenCalledWith("client-two"));
     expect(JSON.parse(sessionStorage.getItem("aio:open-client-projects")!)).toEqual({ projectId: null });
   });
@@ -159,7 +159,7 @@ describe("agency partner client rows", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: /^go to client$/i })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: /^go to client project$/i })[1]);
 
     await vi.waitFor(() => expect(onSectionChange).toHaveBeenCalledWith("billing"));
     expect(serverImpersonate).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ describe("agency partner client rows", () => {
 describe("agency partner create-client form", () => {
   it("has no password field and no managed checkbox", () => {
     openClientsSection();
-    expect(screen.getByText("Add a client")).toBeTruthy();
+    expect(screen.getByText("Add a Client Project")).toBeTruthy();
     expect(screen.queryByText(/^password$/i)).toBeNull();
     expect(screen.queryByText(/managed account/i)).toBeNull();
     // Partner-specific footnote instead.
@@ -228,7 +228,7 @@ describe("agency partner create-client form", () => {
     openClientsSection();
     fireEvent.change(screen.getByPlaceholderText(/acme ltd/i), { target: { value: "New Client Co" } });
     fireEvent.change(screen.getByPlaceholderText(/www\.acme\.com/i), { target: { value: "newclient.example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: /add client/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add client project/i }));
     await vi.waitFor(() => expect(serverAddUser).toHaveBeenCalled());
     const [, password, role, , opts] = serverAddUser.mock.calls[0] as unknown as [
       string, string, string, string, Record<string, unknown>,
