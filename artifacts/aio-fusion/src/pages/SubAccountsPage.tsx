@@ -68,6 +68,7 @@ function SubAccountsPage({
   const accentSoft = "#FBE3ED";
   const [tick, setTick] = useState(0);
   const [checkingAllowanceFor, setCheckingAllowanceFor] = useState<string | null>(null);
+  const [projectAllowanceSummary, setProjectAllowanceSummary] = useState<{ used: number; total: number } | null>(null);
   const [reconciliationAudit, setReconciliationAudit] = useState<ProjectReconciliationAudit | null>(null);
   const [reconciliationError, setReconciliationError] = useState<string | null>(null);
   const [reconciliationLoading, setReconciliationLoading] = useState(false);
@@ -81,6 +82,16 @@ function SubAccountsPage({
   // behalf: client rows get a simplified button set (no passwords, no
   // sign-in access) and new clients are always created as managed.
   const isAgencyPartner = session.role === "agency";
+  useEffect(() => {
+    if (!isAgencyPartner) return;
+    void fetchProjectAllowance().then((allowance) => {
+      if (!allowance) return;
+      setProjectAllowanceSummary({
+        used: allowance.projectsUsed,
+        total: allowance.projectAllowance,
+      });
+    });
+  }, [isAgencyPartner]);
   // Clients under an agency partner never see billing - the agency is billed.
   const canSeeBilling = !session.agencyManagedClient && (session.membershipRole == null || session.membershipRole === "owner" || session.membershipRole === "admin" || session.membershipRole === "billing");
   // Agency-managed partner clients have no team of their own - collaboration
@@ -1593,7 +1604,14 @@ function SubAccountsPage({
         {section === "clients" && (
         <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "white", border: `1px solid ${vars.g200}`, boxShadow: "0 8px 24px -12px rgba(16,43,54,0.08)" }}>
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: vars.g200 }}>
-            <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-[16px] font-bold" style={{ color: ink, fontFamily: "'Alice', Georgia, serif" }}>{isAgencyPartner ? "Your Client Projects" : "Your client accounts"} ({subAccounts.length}{archivedSubAccounts.length > 0 ? ` + ${archivedSubAccounts.length} archived` : ""})</h2>
+              {isAgencyPartner && projectAllowanceSummary && (
+                <span className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold" style={{ background: accentSoft, color: accent }}>
+                  {projectAllowanceSummary.used} of {projectAllowanceSummary.total} project slots used · {Math.max(0, projectAllowanceSummary.total - projectAllowanceSummary.used)} remaining
+                </span>
+              )}
+            </div>
           </div>
           {subAccounts.length === 0 ? (
             <p className="px-6 py-6 text-[13px] font-light italic" style={{ color: vars.g500 }}>

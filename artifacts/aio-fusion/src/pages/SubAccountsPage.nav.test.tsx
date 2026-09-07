@@ -79,6 +79,19 @@ describe("SubAccountsPage left-hand navigation", () => {
     expect(screen.queryByText("Add a Client Project")).toBeNull();
   });
 
+  it("shows an agency how many paid project slots are used and remain", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/platform/billing/subscription")) {
+        return new Response(JSON.stringify({ projectsUsed: 2, projectAllowance: 6 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+
+    render(<SubAccountsPage {...baseProps} session={agencySession as any} initialSection="clients" />);
+
+    expect(await screen.findByText("2 of 6 project slots used · 4 remaining")).toBeTruthy();
+  });
+
   it("switches sections when a nav item is clicked (one section at a time)", () => {
     render(<SubAccountsPage {...baseProps} session={agencySession as any} />);
     fireEvent.click(screen.getAllByRole("button", { name: /sign-in & security/i })[0]);
