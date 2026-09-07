@@ -140,6 +140,18 @@ async function fetchServerAudits(projectId: string): Promise<ServerFetchResult<S
   } catch { return { ok: false }; }
 }
 
+/**
+ * Server-authoritative audit reader for cross-session summary surfaces.
+ * Unlike syncAuditsForProject(), this never reads or updates localStorage.
+ */
+export async function loadServerAuditsForProject(
+  projectId: string,
+): Promise<SavedAudit[] | null> {
+  const fetched = await fetchServerAudits(projectId);
+  if (!fetched.ok) return null;
+  return [...fetched.items].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+}
+
 export async function pushServerAudit(projectId: string, audit: SavedAudit): Promise<boolean> {
   try {
     const resp = await fetch(

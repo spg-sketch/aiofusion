@@ -1,17 +1,23 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, Building2, Plus, Archive, BookOpen, ArrowRight,
   Trash2, Activity, Zap, Upload, LogIn,
 } from "lucide-react";
 import { vars } from "../marketing/vars";
 import { useContentStore, loadArchive, loadPlannerProjects } from "../lib/contentStore";
-import { loadSavedAudits, authorityIndexFor } from "../LlmCheckPage";
+import { authorityIndexFor } from "../LlmCheckPage";
+import { loadServerAuditsForProject } from "../lib/auditSync";
 import type { Client } from "../types";
 
 const teal = "#1A647B";
 const ink = "#0a1628";
 const accent = "#C8497A";
 const accentSoft = "#FBE3ED";
+
+type AuditScoreState =
+  | { status: "loading" }
+  | { status: "ready"; score: number | null }
+  | { status: "error" };
 
 function ClientLogoBox({ logoUrl, alt }: { logoUrl: string; alt: string }) {
   const [wide, setWide] = useState(false);
@@ -62,7 +68,45 @@ export default function ClientSelectorPage({
   workspaceSwitcher?: React.ReactNode;
 }) {
   useContentStore();
-  const displayClients = projects;
+  const displayClients = useMemo(
+    () => [...projects].sort((a, b) => {
+      const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      return byName || a.id.localeCompare(b.id);
+    }),
+    [projects],
+  );
+  const [auditScores, setAuditScores] = useState<Record<string, AuditScoreState>>({});
+  const projectIdsKey = displayClients.map((client) => client.id).join("\u0000");
+
+  useEffect(() => {
+    let cancelled = false;
+    const projectIds = displayClients.map((client) => client.id);
+    if (projectIds.length === 0) return;
+    setAuditScores(Object.fromEntries(projectIds.map((id) => [id, { status: "loading" }])));
+
+    void Promise.all(
+      projectIds.map(async (projectId) => {
+        const audits = await loadServerAuditsForProject(projectId);
+        return {
+          projectId,
+          state: audits === null
+            ? { status: "error" } as const
+            : {
+                status: "ready",
+                score: audits[0] ? authorityIndexFor(audits[0].result) : null,
+              } as const,
+        };
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setAuditScores(Object.fromEntries(results.map(({ projectId, state }) => [projectId, state])));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectIdsKey]);
+
   const isAdmin = session?.role === "admin";
   const isClient = session?.role === "client";
 
@@ -201,9 +245,7 @@ export default function ClientSelectorPage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
             {displayClients.map((client) => {
-              const clientAudits = loadSavedAudits(client.id);
-              const latestEarnedAudit = clientAudits[0] ?? null;
-              const liveScore = latestEarnedAudit ? authorityIndexFor(latestEarnedAudit.result) : 0;
+              const auditScore = auditScores[client.id] ?? { status: "loading" };
               const livePlans = loadPlannerProjects(client.id).length;
               const liveContent = loadArchive(client.id).length;
               const logoUrl = clientLogos[client.id];
@@ -275,10 +317,14 @@ export default function ClientSelectorPage({
 
                     <div className="flex flex-col items-center justify-center mb-5 px-4 py-5 rounded-xl" style={{ background: vars.g50 }}>
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: vars.g400 }}>Earned Media Audit Score</span>
-                      {latestEarnedAudit ? (
-                        <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{liveScore}</p>
-                      ) : (
+                      {auditScore.status === "loading" ? (
+                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>Loading score...</p>
+                      ) : auditScore.status === "error" ? (
+                        <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>Score unavailable</p>
+                      ) : auditScore.score === null ? (
                         <p className="text-[13px] font-medium leading-tight mt-1.5" style={{ color: vars.g400 }}>No audit yet</p>
+                      ) : (
+                        <p className="text-[38px] font-bold leading-tight mt-1" style={{ color: ink }}>{auditScore.score}</p>
                       )}
                     </div>
 

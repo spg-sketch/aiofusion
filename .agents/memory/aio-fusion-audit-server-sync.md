@@ -34,6 +34,7 @@ New tables must have a `CREATE TABLE IF NOT EXISTS` ensure function called from 
 - LlmCheckPage, DiagnosticPage, GeoContentPage, SeoAuditPage, ReportPage: sync on mount via `syncXForProject`.
 - DashboardPage: useState + useEffect calling `syncAuditsForProject` + `syncDiagnosticsForProject` on mount.
 - Sidebar (SidebarContent): useState + useEffect calling all four sync functions on mount; also listens to `aio:saved-audits-changed` event for reactive updates.
+- Project Hub summaries must read Earned Media audits directly from the server without consulting or updating localStorage, so scores are identical across browsers before a project is opened.
 
 ## `savedAuditsKey` must be exported from LlmCheckPage
 `auditSync.ts` imports this key to write merged audit list back to localStorage.
