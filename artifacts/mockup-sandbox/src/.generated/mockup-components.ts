@@ -13,6 +13,5 @@ export const modules: ModuleMap = {
   "./components/mockups/feature-cards/Current.tsx": () => import("../components/mockups/feature-cards/Current.tsx"),
   "./components/mockups/feature-cards/Editorial.tsx": () => import("../components/mockups/feature-cards/Editorial.tsx"),
   "./components/mockups/feature-cards/Immersive.tsx": () => import("../components/mockups/feature-cards/Immersive.tsx"),
-  "./components/mockups/feature-cards/Refined.tsx": () => import("../components/mockups/feature-cards/Refined.tsx"),
-  "./components/mockups/aio-fusion-demo/FullDemo.tsx": () => import("../components/mockups/aio-fusion-demo/FullDemo.tsx")
+  "./components/mockups/feature-cards/Refined.tsx": () => import("../components/mockups/feature-cards/Refined.tsx")
 };
