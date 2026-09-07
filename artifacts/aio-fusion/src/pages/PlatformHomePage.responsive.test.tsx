@@ -45,4 +45,33 @@ describe("PlatformHomePage responsive account home", () => {
     expect(screen.getByRole("button", { name: /project hub/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /back to my agency account/i })).toBeTruthy();
   });
+
+  it("labels an agency-managed client workspace as a Client Project", () => {
+    render(
+      <PlatformHomePage
+        session={{
+          username: "managed-client",
+          role: "client",
+          membershipRole: "owner",
+          userName: "Agency Owner",
+          userEmail: "owner@example.test",
+          companyName: "Managed Client",
+          agencyManagedClient: true,
+        }}
+        onCreateProject={noop}
+        onContinueToProjects={noop}
+        onArchivedProjects={noop}
+        onGuidance={noop}
+        onBackToLanding={noop}
+        onLoginSuccess={noop}
+        onSignOut={noop}
+        onManageUsers={noop}
+        onManageSubAccounts={noop}
+        onTokenUsage={noop}
+      />,
+    );
+
+    expect(screen.getByTestId("platform-home-account-identity")).toHaveTextContent("Client Project");
+    expect(screen.queryByText("Client Account")).toBeNull();
+  });
 });

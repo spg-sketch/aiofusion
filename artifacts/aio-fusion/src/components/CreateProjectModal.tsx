@@ -67,7 +67,7 @@ export function CreateProjectModal({ onCancel, onCreate, initialName, forClientN
         </p>
         {forClientName && (
           <p className="text-[13px] font-medium mb-5 px-4 py-3 rounded-xl" style={{ background: "#FBE3ED", color: accent }}>
-            This project will be created under <strong>{forClientName}</strong>'s client account.
+            This project will be created in the Client Project for <strong>{forClientName}</strong>.
           </p>
         )}
         <label className="block text-[11px] font-bold uppercase tracking-[0.15em] mb-2" style={{ color: vars.g500 }}>

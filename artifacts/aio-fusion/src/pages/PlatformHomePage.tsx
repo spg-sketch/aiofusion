@@ -880,7 +880,9 @@ function PlatformHomePage({
                 </div>
                 <div className="min-w-0 flex-1">
                   <span className="inline-flex max-w-full items-center mb-1.5 px-3 sm:px-5 py-2 rounded-md text-[15px] sm:text-[20px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em] break-words" style={{ background: session.role === "admin" ? ink : "rgba(255,255,255,0.18)", color: "white" }}>
-                    {session.role === "client" ? "Client Account" : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
+                    {session.role === "client"
+                      ? session.agencyManagedClient ? "Client Project" : "Client Account"
+                      : session.role === "agency" ? "Agency Partner Account" : roleLabel(session.role)}
                   </span>
                   <p className="text-[12px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.7)" }}>Signed in as</p>
                   <h2 className="text-[22px] font-bold leading-tight mt-0.5 break-words" style={{ color: "white", fontFamily: "'Alice', Georgia, serif" }}>

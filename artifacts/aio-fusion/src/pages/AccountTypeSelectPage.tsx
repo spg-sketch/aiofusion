@@ -93,7 +93,7 @@ export default function AccountTypeSelectPage({ onComplete, onSignOut }: Props) 
             </div>
             <h2 className="text-lg font-bold text-slate-900 mb-2">Agency / Partner</h2>
             <p className="text-sm text-slate-600 leading-relaxed">
-              For agencies and consultants working on behalf of clients. Add client accounts, manage their projects, and view every dashboard from one place.
+              For agencies and consultants working on behalf of clients. Add Client Projects, manage their projects, and view every dashboard from one place.
             </p>
             {agencySelected && (
               <div className="absolute top-6 right-6" style={{ color: vars.accent }}>

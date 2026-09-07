@@ -14,6 +14,7 @@ import {
   syncAuditsForProject, syncDiagnosticsForProject, syncContentGeoForProject, syncTechGeoForProject,
   deleteServerDiagnostic, deleteServerContentGeo, deleteServerTechGeo,
 } from "../lib/auditSync";
+import { getSession } from "../lib/auth";
 import type { Client, NavItem, NavSection } from "../types";
 
 export const navSections: NavSection[] = [
@@ -495,14 +496,24 @@ function SidebarContent({
           type="button"
           onClick={() => { onOpenAccount?.(); onItemClick?.(); }}
           className="w-full flex items-center gap-3 px-1 py-1 rounded-lg text-left transition-colors hover:bg-black/5"
-          title="Go to your account - your details and client accounts"
+          title={getSession()?.role === "agency"
+            ? "Go to your account - your details and Client Projects"
+            : getSession()?.role === "client"
+              ? "Go to your account details"
+              : "Go to your account - your details and client accounts"}
         >
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #4f8fff, #7c5cff)" }}>
             <UserRound size={15} />
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-semibold truncate" style={{ color: vars.navy }}>My account</span>
-            <span className="text-[11px] font-medium" style={{ color: vars.g400 }}>Your details & client accounts</span>
+            <span className="text-[11px] font-medium" style={{ color: vars.g400 }}>
+              {getSession()?.role === "agency"
+                ? "Your details & Client Projects"
+                : getSession()?.role === "client"
+                  ? "Your account details"
+                  : "Your details & client accounts"}
+            </span>
           </div>
         </button>
       </div>

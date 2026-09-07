@@ -768,7 +768,7 @@ function SubAccountsPage({
     const targetOwner = owner.toLowerCase();
     if (currentOwner === targetOwner) return;
     const targetLabel = ownerLabel(owner);
-    if (!confirm(`Move '${project.name}' from ${ownerLabel(project.owner)} to ${targetLabel}? This changes which client workspace owns and opens the project.`)) {
+    if (!confirm(`Move '${project.name}' from ${ownerLabel(project.owner)} to ${targetLabel}? This changes which ${isAgencyPartner ? "Client Project" : "client workspace"} owns and opens the project.`)) {
       refresh();
       return;
     }
@@ -931,7 +931,7 @@ function SubAccountsPage({
                     </div>
                   </div>
                   <p className="text-[12px] leading-[1.6]" style={{ color: vars.g600 }}>
-                    Manage PR for multiple clients. Create client accounts and view all dashboards from one place.
+                    Manage PR for multiple clients. Create Client Projects and view all dashboards from one place.
                   </p>
                 </button>
 
@@ -1556,7 +1556,9 @@ function SubAccountsPage({
                             </button>
                             <button
                               onClick={() => handleMarkManaged(u.username)}
-                              title="Use this if the client account is run by your agency and was never given sign-in access."
+                              title={isAgencyPartner
+                                ? "Use this if the Client Project is run by your agency and was never given sign-in access."
+                                : "Use this if the client account is run by your organisation and was never given sign-in access."}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.14em] transition-all hover:bg-black/5"
                               style={{ color: vars.g500, border: `1.5px solid ${vars.g200}` }}
                             >

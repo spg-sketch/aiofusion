@@ -432,7 +432,11 @@ export function AccountSecurityCard({
           <form onSubmit={handleDeleteAccount} className="mt-4 rounded-xl p-5 border" style={panelStyle}>
             <p className="text-[13px] font-light leading-[1.7] mb-4" style={{ color: vars.g600 }}>
               This permanently deletes your account, all your projects, archive items, planner entries and other data.
-              This cannot be undone. {canCreateSubAccounts(session.role) ? "If you have client accounts, remove them first." : ""}
+              This cannot be undone. {canCreateSubAccounts(session.role)
+                ? session.role === "agency"
+                  ? "If you have Client Projects, remove them first."
+                  : "If you have client accounts, remove them first."
+                : ""}
             </p>
             {hasPassword === false ? (
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">

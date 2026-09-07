@@ -73,7 +73,7 @@ export function ImpersonationBanner() {
     </span>
   ) : isAgencyViewingClient ? (
     <span>
-      Viewing client account <strong>{getSession()?.username ?? "this account"}</strong> · signed in as {state.by}
+      Viewing Client Project <strong>{getSession()?.username ?? "this account"}</strong> · signed in as {state.by}
     </span>
   ) : (
     <span>
