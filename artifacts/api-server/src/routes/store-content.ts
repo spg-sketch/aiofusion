@@ -6,7 +6,7 @@ import {
   scoringConfigsTable,
   projectsTable,
 } from "@workspace/db";
-import { and, eq, isNull, or, inArray } from "drizzle-orm";
+import { and, eq, isNull, or, inArray, sql } from "drizzle-orm";
 import { requirePlatformAuth } from "../middleware/platform-auth";
 import { getVisibleUsernames, normUsername } from "../lib/platform-auth";
 import {
@@ -84,7 +84,7 @@ router.get(
         projectIds === null
           ? undefined // admin: no project filter
           : projectIds.length === 0
-            ? isNull(null as never) // no visible projects → return nothing
+            ? sql<boolean>`false` // no visible projects → return nothing
             : inArray(archiveItemsTable.projectId, projectIds);
 
       const projectScopeClause = projectId
@@ -104,7 +104,8 @@ router.get(
         .orderBy(archiveItemsTable.createdAt);
 
       res.json({ items: rows });
-    } catch {
+    } catch (error) {
+      req.log.error({ error }, "Failed to load archive");
       res.status(500).json({ error: "Failed to load archive" });
     }
   },
@@ -362,7 +363,7 @@ router.get(
         projectIds === null
           ? undefined // admin: no project filter
           : projectIds.length === 0
-            ? isNull(null as never) // no visible projects → return nothing
+            ? sql<boolean>`false` // no visible projects → return nothing
             : inArray(plannerItemsTable.projectId, projectIds);
 
       const projectScopeClause = projectId
@@ -382,7 +383,8 @@ router.get(
         .orderBy(plannerItemsTable.week, plannerItemsTable.createdAt);
 
       res.json({ items: rows });
-    } catch {
+    } catch (error) {
+      req.log.error({ error }, "Failed to load planner");
       res.status(500).json({ error: "Failed to load planner" });
     }
   },

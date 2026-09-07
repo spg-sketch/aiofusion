@@ -728,6 +728,18 @@ describe("team invitations", () => {
     expect(rows.find((row) => row.token === replacement.json.token)?.revokedAt).toBeNull();
   });
 
+  it("returns empty archive and planner lists for a brand-new workspace", async () => {
+    const { sid } = await seedAgency("empty-surface-agency", "owner@empty-surface.test");
+
+    const archive = await api("/api/store/archive", { sid });
+    const planner = await api("/api/store/planner", { sid });
+
+    expect(archive.status).toBe(200);
+    expect(archive.json.items).toEqual([]);
+    expect(planner.status).toBe(200);
+    expect(planner.json.items).toEqual([]);
+  });
+
   it("enforces scoping and roles on archive, planner and audit surfaces", async () => {
     const { sid } = await seedAgency("surface-agency", "owner@surface.test");
     await api("/api/store/projects/upsert", { sid, body: { id: "sp-1", name: "P1", data: {} } });
